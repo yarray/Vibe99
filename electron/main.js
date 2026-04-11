@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -181,6 +181,67 @@ ipcMain.handle('vibe99:terminal-resize', (_event, payload) => {
 
 ipcMain.handle('vibe99:terminal-destroy', (_event, payload) => {
   destroyTerminalSession(payload.paneId);
+});
+
+ipcMain.handle('vibe99:show-context-menu', (event, payload) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window) {
+    return;
+  }
+
+  const sendMenuAction = (action) => {
+    if (!event.sender.isDestroyed()) {
+      event.sender.send('vibe99:menu-action', {
+        action,
+        paneId: payload.paneId ?? null,
+      });
+    }
+  };
+
+  let template = [];
+
+  if (payload.kind === 'terminal') {
+    template = [
+      {
+        label: 'Copy',
+        enabled: Boolean(payload.hasSelection),
+        click: () => sendMenuAction('terminal-copy'),
+      },
+      {
+        label: 'Paste',
+        click: () => sendMenuAction('terminal-paste'),
+      },
+      {
+        type: 'separator',
+      },
+      {
+        label: 'Select All',
+        click: () => sendMenuAction('terminal-select-all'),
+      },
+    ];
+  } else if (payload.kind === 'tab') {
+    template = [
+      {
+        label: 'Rename Tab',
+        click: () => sendMenuAction('tab-rename'),
+      },
+      {
+        label: 'Close Tab',
+        enabled: Boolean(payload.canClose),
+        click: () => sendMenuAction('tab-close'),
+      },
+    ];
+  }
+
+  if (template.length === 0) {
+    return;
+  }
+
+  Menu.buildFromTemplate(template).popup({
+    window,
+    x: Number.isFinite(payload.x) ? Math.round(payload.x) : undefined,
+    y: Number.isFinite(payload.y) ? Math.round(payload.y) : undefined,
+  });
 });
 
 function createWindow() {
