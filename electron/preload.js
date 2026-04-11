@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('vibe99', {
   readClipboardText: () => clipboard.readText(),
   writeClipboardText: (text) => clipboard.writeText(text),
   showContextMenu: (payload) => ipcRenderer.invoke('vibe99:show-context-menu', payload),
+  loadSettings: () => ipcRenderer.invoke('vibe99:settings-load'),
+  saveSettings: (payload) => ipcRenderer.invoke('vibe99:settings-save', payload),
   onTerminalData: (handler) => {
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on('vibe99:terminal-data', listener);

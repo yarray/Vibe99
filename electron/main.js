@@ -5,6 +5,12 @@ const path = require('path');
 const pty = require('@homebridge/node-pty-prebuilt-multiarch');
 
 const PTY_PACKAGE_NAME = '@homebridge/node-pty-prebuilt-multiarch';
+const SETTINGS_FILE_NAME = 'settings.json';
+const DEFAULT_SETTINGS = Object.freeze({
+  fontSize: 13,
+  paneOpacity: 0.8,
+  paneWidth: 720,
+});
 
 const isCaptureMode = process.env.VIBE99_CAPTURE === '1';
 const terminalSessions = new Map();
@@ -15,6 +21,42 @@ function getDefaultWorkingDirectory() {
 
 function getCaptureOutputPath() {
   return path.join(os.tmpdir(), 'vibe99-prototype.png');
+}
+
+function getSettingsFilePath() {
+  return path.join(app.getPath('userData'), SETTINGS_FILE_NAME);
+}
+
+function sanitizeSettings(candidate = {}) {
+  const nextSettings = {
+    fontSize: Number.isFinite(candidate.fontSize) ? candidate.fontSize : DEFAULT_SETTINGS.fontSize,
+    paneOpacity: Number.isFinite(candidate.paneOpacity)
+      ? candidate.paneOpacity
+      : DEFAULT_SETTINGS.paneOpacity,
+    paneWidth: Number.isFinite(candidate.paneWidth) ? candidate.paneWidth : DEFAULT_SETTINGS.paneWidth,
+  };
+
+  return {
+    fontSize: Math.max(10, Math.min(24, Math.round(nextSettings.fontSize))),
+    paneOpacity: Math.max(0.55, Math.min(1, Number(nextSettings.paneOpacity.toFixed(2)))),
+    paneWidth: Math.max(520, Math.min(1000, Math.round(nextSettings.paneWidth / 10) * 10)),
+  };
+}
+
+function loadSettings() {
+  try {
+    const fileContents = fs.readFileSync(getSettingsFilePath(), 'utf8');
+    return sanitizeSettings(JSON.parse(fileContents));
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(nextSettings) {
+  const sanitizedSettings = sanitizeSettings(nextSettings);
+  fs.mkdirSync(path.dirname(getSettingsFilePath()), { recursive: true });
+  fs.writeFileSync(getSettingsFilePath(), JSON.stringify(sanitizedSettings, null, 2));
+  return sanitizedSettings;
 }
 
 function ensurePtyHelperExecutable() {
@@ -182,6 +224,10 @@ ipcMain.handle('vibe99:terminal-resize', (_event, payload) => {
 ipcMain.handle('vibe99:terminal-destroy', (_event, payload) => {
   destroyTerminalSession(payload.paneId);
 });
+
+ipcMain.handle('vibe99:settings-load', () => loadSettings());
+
+ipcMain.handle('vibe99:settings-save', (_event, payload) => saveSettings(payload));
 
 ipcMain.handle('vibe99:show-context-menu', (event, payload) => {
   const window = BrowserWindow.fromWebContents(event.sender);

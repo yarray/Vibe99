@@ -17,6 +17,8 @@ function createUnavailableBridge() {
     readClipboardText: () => Promise.reject(new Error('Clipboard bridge is unavailable')),
     writeClipboardText: fail,
     showContextMenu: fail,
+    loadSettings: () => Promise.resolve({}),
+    saveSettings: () => Promise.resolve({}),
     onTerminalData: () => () => {},
     onTerminalExit: () => () => {},
     onMenuAction: () => () => {},
@@ -92,6 +94,7 @@ const settings = {
   paneOpacity: 0.8,
   paneWidth: 720,
 };
+let pendingSettingsSave = null;
 
 const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
   const node = paneNodeMap.get(paneId);
@@ -153,6 +156,43 @@ function applySettings() {
   paneOpacityRangeEl.value = settings.paneOpacity.toFixed(2);
   paneOpacityInputEl.value = settings.paneOpacity.toFixed(2);
   paneOpacityValueEl.textContent = settings.paneOpacity.toFixed(2);
+}
+
+function applyPersistedSettings(nextSettings) {
+  if (!nextSettings || typeof nextSettings !== 'object') {
+    return;
+  }
+
+  if (Number.isFinite(nextSettings.fontSize)) {
+    settings.fontSize = nextSettings.fontSize;
+  }
+
+  if (Number.isFinite(nextSettings.paneOpacity)) {
+    settings.paneOpacity = nextSettings.paneOpacity;
+  }
+
+  if (Number.isFinite(nextSettings.paneWidth)) {
+    settings.paneWidth = nextSettings.paneWidth;
+  }
+}
+
+function scheduleSettingsSave() {
+  if (pendingSettingsSave !== null) {
+    window.clearTimeout(pendingSettingsSave);
+  }
+
+  pendingSettingsSave = window.setTimeout(() => {
+    pendingSettingsSave = null;
+    void bridge.saveSettings(settings).catch(reportError);
+  }, 150);
+}
+
+function flushSettingsSave() {
+  if (pendingSettingsSave !== null) {
+    window.clearTimeout(pendingSettingsSave);
+    pendingSettingsSave = null;
+    void bridge.saveSettings(settings).catch(reportError);
+  }
 }
 
 function createTerminalTheme(accent) {
@@ -963,6 +1003,7 @@ fontSizeInputEl.addEventListener('change', () => {
   settings.fontSize = Math.max(10, Math.min(24, Math.round(nextValue)));
   applySettings();
   render(true);
+  scheduleSettingsSave();
 });
 
 function updatePaneWidth(nextValue) {
@@ -975,6 +1016,7 @@ function updatePaneWidth(nextValue) {
   settings.paneWidth = Math.max(520, Math.min(1000, Math.round(parsedValue / 10) * 10));
   applySettings();
   render(true);
+  scheduleSettingsSave();
 }
 
 function updatePaneOpacity(nextValue) {
@@ -986,6 +1028,7 @@ function updatePaneOpacity(nextValue) {
 
   settings.paneOpacity = Math.max(0.55, Math.min(1, Number(parsedValue.toFixed(2))));
   applySettings();
+  scheduleSettingsSave();
 }
 
 paneWidthRangeEl.addEventListener('input', () => {
@@ -1028,8 +1071,9 @@ window.addEventListener('resize', () => {
   }
 });
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   try {
+    applyPersistedSettings(await bridge.loadSettings());
     applySettings();
     render(true);
   } catch (error) {
@@ -1038,6 +1082,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('beforeunload', () => {
+  flushSettingsSave();
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();
