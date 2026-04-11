@@ -5,7 +5,7 @@
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Electron interaction proof of concept for Vibe99",
-  "main": "main.js",
+  "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
     "capture": "VIBE99_CAPTURE=1 electron .",

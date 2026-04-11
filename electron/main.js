@@ -209,7 +209,7 @@ function createWindow() {
     console.error(`preload-error ${preloadPath}`, error);
   });
 
-  window.loadFile(path.join(__dirname, 'src', 'index.html'));
+  window.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
 
   if (isCaptureMode) {
     window.webContents.once('did-finish-load', () => {
