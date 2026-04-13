@@ -1,4 +1,12 @@
-# Vibe99
+<p align="center">
+  <img src="./assets/icons/png/512x512.png" alt="Vibe99 icon" width="128" height="128">
+</p>
+
+<h1 align="center">Vibe99</h1>
+
+<p align="center">
+  Desktop terminal workspace for agentic coding.
+</p>
 
 Vibe99 is a desktop terminal workspace for agentic coding. It is built for the common case where one terminal needs full attention while several others only need peripheral visibility, so the UI keeps one pane readable and stacks the rest so you can still see what the agents are doing.
 
