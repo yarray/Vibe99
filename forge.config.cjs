@@ -38,7 +38,7 @@ const makers = [
     },
   }),
   {
-    name: 'electron-installer-appimage',
+    name: './electron/maker-appimage.cjs',
     config: {},
     platforms: ['linux'],
   },
