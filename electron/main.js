@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, nativeImage } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -7,6 +7,7 @@ const { loadConfig, saveConfig } = require('./dist/config.js');
 
 const PTY_PACKAGE_NAME = '@homebridge/node-pty-prebuilt-multiarch';
 const SETTINGS_FILE_NAME = 'settings.json';
+const APP_ICON_PATH = path.join(__dirname, '..', 'assets', 'icons', 'icon.png');
 
 const isCaptureMode = process.env.VIBE99_CAPTURE === '1';
 const terminalSessions = new Map();
@@ -264,6 +265,7 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: '#111111',
     autoHideMenuBar: true,
+    icon: process.platform === 'linux' ? APP_ICON_PATH : undefined,
     show: !isCaptureMode,
     webPreferences: {
       additionalArguments: [`--vibe99-default-cwd=${getDefaultWorkingDirectory()}`],
@@ -310,6 +312,11 @@ function createWindow() {
 
 app.whenReady().then(() => {
   ensurePtyHelperExecutable();
+
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(nativeImage.createFromPath(APP_ICON_PATH));
+  }
+
   createWindow();
 
   app.on('activate', () => {
