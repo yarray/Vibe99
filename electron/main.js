@@ -2,12 +2,14 @@ const { app, BrowserWindow, ipcMain, Menu, nativeImage } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const pty = require('@homebridge/node-pty-prebuilt-multiarch');
+const pty = require('./pty.js');
 const { loadConfig, saveConfig } = require('./dist/config.js');
 
 const PTY_PACKAGE_NAME = '@homebridge/node-pty-prebuilt-multiarch';
 const SETTINGS_FILE_NAME = 'settings.json';
-const APP_ICON_PATH = path.join(__dirname, '..', 'assets', 'icons', 'icon.png');
+const APP_ID = 'com.vibe99.app';
+const APP_ICON_PNG_PATH = path.join(__dirname, '..', 'assets', 'icons', 'icon.png');
+const APP_ICON_ICO_PATH = path.join(__dirname, '..', 'assets', 'icons', 'icon.ico');
 
 const isCaptureMode = process.env.VIBE99_CAPTURE === '1';
 const terminalSessions = new Map();
@@ -63,7 +65,13 @@ function isExecutableFile(filePath) {
 
 function getShellLaunchConfigs() {
   if (process.platform === 'win32') {
-    return [{ shell: 'powershell.exe', args: [] }];
+    return [
+      { shell: process.env.VIBE99_WINDOWS_SHELL, args: [] },
+      { shell: 'powershell.exe', args: [] },
+      { shell: 'pwsh.exe', args: [] },
+      { shell: process.env.ComSpec, args: [] },
+      { shell: 'cmd.exe', args: [] },
+    ].filter((candidate) => typeof candidate.shell === 'string' && candidate.shell.length > 0);
   }
 
   const candidates = [];
@@ -131,6 +139,11 @@ ipcMain.handle('vibe99:terminal-create', (event, payload) => {
         cols: Math.max(20, cols || 80),
         rows: Math.max(8, rows || 24),
         cwd: spawnCwd,
+        ...(process.platform === 'win32'
+          ? {
+              useConpty: false,
+            }
+          : {}),
         env: {
           ...process.env,
           COLORTERM: 'truecolor',
@@ -190,6 +203,13 @@ ipcMain.handle('vibe99:terminal-destroy', (_event, payload) => {
   destroyTerminalSession(payload.paneId);
 });
 
+ipcMain.handle('vibe99:window-close', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) {
+    window.close();
+  }
+});
+
 ipcMain.handle('vibe99:settings-load', () => loadConfig(getSettingsFilePath()));
 
 ipcMain.handle('vibe99:settings-save', (_event, payload) =>
@@ -222,7 +242,13 @@ ipcMain.handle('vibe99:show-context-menu', (event, payload) => {
       },
       {
         label: 'Paste',
+        enabled: Boolean(payload.hasClipboardText),
         click: () => sendMenuAction('terminal-paste'),
+      },
+      {
+        label: 'Paste Image',
+        enabled: Boolean(payload.hasClipboardImage),
+        click: () => sendMenuAction('terminal-paste-image'),
       },
       {
         type: 'separator',
@@ -265,7 +291,12 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: '#111111',
     autoHideMenuBar: true,
-    icon: process.platform === 'linux' ? APP_ICON_PATH : undefined,
+    icon:
+      process.platform === 'win32'
+        ? APP_ICON_ICO_PATH
+        : process.platform === 'linux'
+          ? APP_ICON_PNG_PATH
+          : undefined,
     show: !isCaptureMode,
     webPreferences: {
       additionalArguments: [`--vibe99-default-cwd=${getDefaultWorkingDirectory()}`],
@@ -313,8 +344,12 @@ function createWindow() {
 app.whenReady().then(() => {
   ensurePtyHelperExecutable();
 
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(APP_ID);
+  }
+
   if (process.platform === 'darwin') {
-    app.dock.setIcon(nativeImage.createFromPath(APP_ICON_PATH));
+    app.dock.setIcon(nativeImage.createFromPath(APP_ICON_PNG_PATH));
   }
 
   createWindow();

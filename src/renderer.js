@@ -15,8 +15,10 @@ function createUnavailableBridge() {
     writeTerminal: fail,
     resizeTerminal: fail,
     destroyTerminal: fail,
+    closeWindow: fail,
     readClipboardText: () => Promise.reject(new Error('Clipboard bridge is unavailable')),
     writeClipboardText: fail,
+    getClipboardSnapshot: () => ({ text: '', hasImage: false }),
     openExternalUrl: fail,
     showContextMenu: fail,
     loadSettings: () => Promise.resolve({}),
@@ -114,6 +116,18 @@ const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode }) 
   node.sessionReady = false;
   node.terminal.writeln('');
   node.terminal.writeln(`\x1b[38;5;244m[process exited with code ${exitCode}]\x1b[0m`);
+
+  const paneIndex = getPaneIndex(paneId);
+  if (paneIndex === -1) {
+    return;
+  }
+
+  if (panes.length === 1) {
+    void bridge.closeWindow().catch(reportError);
+    return;
+  }
+
+  closePane(paneIndex, { destroyTerminal: false });
 });
 
 const removeMenuActionListener = bridge.onMenuAction(({ action, paneId }) => {
@@ -394,6 +408,14 @@ function createPane(pane) {
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(webLinksAddon);
   terminal.open(terminalHost);
+  terminal.attachCustomKeyEventHandler((event) => {
+    if (!isWindowsCtrlVPasteHotkey(event)) {
+      return true;
+    }
+
+    const clipboardSnapshot = getClipboardSnapshot();
+    return shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot);
+  });
 
   const node = {
     paneId: pane.id,
@@ -532,7 +554,9 @@ function addPane() {
   render(true);
 }
 
-function closePane(index) {
+function closePane(index, options = {}) {
+  const { destroyTerminal = true } = options;
+
   if (panes.length === 1) {
     return;
   }
@@ -554,7 +578,9 @@ function closePane(index) {
     clearPendingTabFocus();
   }
 
-  bridge.destroyTerminal({ paneId: closingPane.id });
+  if (destroyTerminal) {
+    bridge.destroyTerminal({ paneId: closingPane.id });
+  }
 
   const remainingPanes = panes.filter((_, paneIndex) => paneIndex !== index);
   if (closingPane.id === focusedPaneId) {
@@ -801,6 +827,25 @@ function getPaneNode(paneId) {
   return paneNodeMap.get(paneId) ?? null;
 }
 
+function getClipboardSnapshot() {
+  return bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+}
+
+function isWindowsCtrlVPasteHotkey(event) {
+  return (
+    bridge.platform === 'win32' &&
+    event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.key.toLowerCase() === 'v'
+  );
+}
+
+function shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot) {
+  return Boolean(clipboardSnapshot.hasImage && !clipboardSnapshot.text);
+}
+
 function copyTerminalSelection(paneId = focusedPaneId) {
   const node = getPaneNode(paneId);
   if (!node) {
@@ -816,18 +861,22 @@ function copyTerminalSelection(paneId = focusedPaneId) {
   return true;
 }
 
-async function pasteIntoTerminal(paneId = focusedPaneId) {
+async function pasteIntoTerminal(paneId = focusedPaneId, options = {}) {
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
     return false;
   }
 
-  const text = await bridge.readClipboardText();
+  const text = options.clipboardSnapshot?.text ?? (await bridge.readClipboardText());
   if (!text) {
     return false;
   }
 
-  bridge.writeTerminal({ paneId: node.paneId, data: text });
+  if (bridge.platform === 'win32') {
+    node.terminal.paste(text);
+  } else {
+    bridge.writeTerminal({ paneId: node.paneId, data: text });
+  }
   return true;
 }
 
@@ -842,10 +891,13 @@ function selectAllInTerminal(paneId = focusedPaneId) {
 }
 
 async function showTerminalContextMenu(node, event) {
+  const clipboardSnapshot = getClipboardSnapshot();
   await bridge.showContextMenu({
     kind: 'terminal',
     paneId: node.paneId,
     hasSelection: node.terminal.hasSelection(),
+    hasClipboardText: Boolean(clipboardSnapshot.text),
+    hasClipboardImage: clipboardSnapshot.hasImage,
     x: event.x,
     y: event.y,
   });
@@ -869,6 +921,21 @@ async function showTabContextMenu(paneId, event) {
   });
 }
 
+function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
+  const node = getPaneNode(paneId);
+  if (!node?.sessionReady) {
+    return false;
+  }
+
+  const clipboardSnapshot = options.clipboardSnapshot ?? getClipboardSnapshot();
+  if (!clipboardSnapshot.hasImage) {
+    return false;
+  }
+
+  bridge.writeTerminal({ paneId: node.paneId, data: '\u0016' });
+  return true;
+}
+
 function handleMenuAction(action, paneId) {
   if (action === 'terminal-copy') {
     copyTerminalSelection(paneId);
@@ -877,6 +944,11 @@ function handleMenuAction(action, paneId) {
 
   if (action === 'terminal-paste') {
     void pasteIntoTerminal(paneId);
+    return;
+  }
+
+  if (action === 'terminal-paste-image') {
+    pasteImageIntoTerminal(paneId);
     return;
   }
 
@@ -949,6 +1021,7 @@ window.addEventListener(
     const pasteHotkey = isMac
       ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'v'
       : event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && key === 'v';
+    const windowsCtrlVPasteHotkey = isWindowsCtrlVPasteHotkey(event);
 
     if (openTabHotkey) {
       event.preventDefault();
@@ -969,9 +1042,17 @@ window.addEventListener(
       return;
     }
 
-    if (pasteHotkey && document.activeElement?.tagName !== 'INPUT') {
+    if ((pasteHotkey || windowsCtrlVPasteHotkey) && document.activeElement?.tagName !== 'INPUT') {
+      const clipboardSnapshot = getClipboardSnapshot();
+      if (
+        windowsCtrlVPasteHotkey &&
+        shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot)
+      ) {
+        return;
+      }
+
       event.preventDefault();
-      void pasteIntoTerminal();
+      void pasteIntoTerminal(undefined, { clipboardSnapshot });
       return;
     }
 

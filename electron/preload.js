@@ -29,8 +29,13 @@ contextBridge.exposeInMainWorld('vibe99', {
   writeTerminal: (payload) => ipcRenderer.invoke('vibe99:terminal-write', payload),
   resizeTerminal: (payload) => ipcRenderer.invoke('vibe99:terminal-resize', payload),
   destroyTerminal: (payload) => ipcRenderer.invoke('vibe99:terminal-destroy', payload),
+  closeWindow: () => ipcRenderer.invoke('vibe99:window-close'),
   readClipboardText: () => clipboard.readText(),
   writeClipboardText: (text) => clipboard.writeText(text),
+  getClipboardSnapshot: () => ({
+    text: clipboard.readText(),
+    hasImage: !clipboard.readImage().isEmpty(),
+  }),
   openExternalUrl,
   showContextMenu: (payload) => ipcRenderer.invoke('vibe99:show-context-menu', payload),
   loadSettings: () => ipcRenderer.invoke('vibe99:settings-load'),
