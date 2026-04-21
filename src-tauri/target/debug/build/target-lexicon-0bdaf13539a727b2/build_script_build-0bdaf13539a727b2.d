@@ -1,8 +1,0 @@
-/var/tmp/vibe-kanban/worktrees/b841-initialize-tauri/vibe99/src-tauri/target/debug/build/target-lexicon-0bdaf13539a727b2/build_script_build-0bdaf13539a727b2.d: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/build.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/data_model.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/triple.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/targets.rs
-
-/var/tmp/vibe-kanban/worktrees/b841-initialize-tauri/vibe99/src-tauri/target/debug/build/target-lexicon-0bdaf13539a727b2/build_script_build-0bdaf13539a727b2: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/build.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/data_model.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/triple.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/targets.rs
-
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/build.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/data_model.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/triple.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/target-lexicon-0.12.16/src/targets.rs:

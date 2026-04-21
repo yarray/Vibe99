@@ -1,8 +1,0 @@
-/var/tmp/vibe-kanban/worktrees/b841-initialize-tauri/vibe99/src-tauri/target/debug/deps/gtk3_macros-6b9cebba21e9e004.d: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/lib.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/attribute_parser.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/composite_template_derive.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/util.rs
-
-/var/tmp/vibe-kanban/worktrees/b841-initialize-tauri/vibe99/src-tauri/target/debug/deps/libgtk3_macros-6b9cebba21e9e004.so: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/lib.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/attribute_parser.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/composite_template_derive.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/util.rs
-
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/lib.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/attribute_parser.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/composite_template_derive.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/gtk3-macros-0.18.2/src/util.rs:
