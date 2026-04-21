@@ -1,9 +1,13 @@
 [package]
 name = "vibe99"
 version = "0.4.5"
-description = "Vibe99 desktop terminal workspace"
+description = "Vibe99 terminal workspace"
 authors = [""]
 edition = "2021"
+
+[lib]
+name = "vibe99_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
