@@ -1,0 +1,9 @@
+/var/tmp/vibe-kanban/worktrees/b841-initialize-tauri/vibe99/src-tauri/target/debug/deps/powerfmt-d2b944a9793538d9.d: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/lib.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/buf.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/ext.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/smart_display.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/smart_display_impls.rs
+
+/var/tmp/vibe-kanban/worktrees/b841-initialize-tauri/vibe99/src-tauri/target/debug/deps/libpowerfmt-d2b944a9793538d9.rmeta: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/lib.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/buf.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/ext.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/smart_display.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/smart_display_impls.rs
+
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/lib.rs:
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/buf.rs:
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/ext.rs:
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/smart_display.rs:
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/powerfmt-0.2.0/src/smart_display_impls.rs:
