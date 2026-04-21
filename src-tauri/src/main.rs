@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use vibe99_lib::commands::settings;
 use vibe99_lib::commands::terminal::{self, AppState};
 use vibe99_lib::pty::PtyManager;
 
@@ -17,6 +18,8 @@ fn main() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_destroy,
+            settings::settings_load,
+            settings::settings_save,
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
