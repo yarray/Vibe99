@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use vibe99_lib::commands::settings;
+use std::sync::Arc;
 use vibe99_lib::commands::terminal::{self, AppState};
 use vibe99_lib::pty::PtyManager;
 
@@ -11,7 +12,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
-            pty: PtyManager::new(),
+            pty: Arc::new(PtyManager::new()),
         })
         .invoke_handler(tauri::generate_handler![
             terminal::terminal_create,
