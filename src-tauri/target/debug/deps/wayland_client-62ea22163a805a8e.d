@@ -1,8 +1,0 @@
-/var/tmp/vibe-kanban/worktrees/d447-implement-pty-ma/vibe99/src-tauri/target/debug/deps/wayland_client-62ea22163a805a8e.d: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/lib.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/conn.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/event_queue.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/globals.rs
-
-/var/tmp/vibe-kanban/worktrees/d447-implement-pty-ma/vibe99/src-tauri/target/debug/deps/libwayland_client-62ea22163a805a8e.rmeta: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/lib.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/conn.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/event_queue.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/globals.rs
-
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/lib.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/conn.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/event_queue.rs:
-/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/wayland-client-0.31.14/src/globals.rs:
