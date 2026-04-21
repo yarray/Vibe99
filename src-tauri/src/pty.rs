@@ -1,8 +1,10 @@
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Emitter};
 
 /// Minimum column count for a PTY session.
 const MIN_COLS: u16 = 20;
@@ -22,6 +24,22 @@ struct ShellCandidate {
     args: Vec<String>,
 }
 
+/// Payload emitted on `vibe99:terminal-data`.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalDataPayload {
+    pane_id: String,
+    data: String,
+}
+
+/// Payload emitted on `vibe99:terminal-exit`.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalExitPayload {
+    pane_id: String,
+    exit_code: u32,
+}
+
 /// Holds the live resources for a single PTY session.
 struct PtySession {
     /// The master end of the PTY pair. Kept alive so the child process
@@ -32,11 +50,10 @@ struct PtySession {
     writer: Box<dyn Write + Send>,
     /// Killer handle to terminate the child process.
     killer: Box<dyn ChildKiller + Send + Sync>,
-    /// Join handle for the background reader task that forwards PTY output
-    /// to the caller via the provided callback.
+    /// Join handle for the background reader task.
     _reader_task: Arc<tokio::task::JoinHandle<()>>,
     /// Join handle for the exit-watcher task.
-    _exit_task: tokio::task::JoinHandle<()>,
+    _exit_task: Arc<tokio::task::JoinHandle<()>>,
 }
 
 /// Manages a collection of PTY sessions keyed by pane ID.
@@ -57,29 +74,21 @@ impl PtyManager {
 
     /// Spawn a new PTY session for the given `pane_id`.
     ///
-    /// * `pane_id`  – unique identifier for this terminal pane.
-    /// * `cols`     – requested column count (clamped to `MIN_COLS`).
-    /// * `rows`     – requested row count (clamped to `MIN_ROWS`).
-    /// * `cwd`      – preferred working directory (may be `None`).
-    /// * `on_data`  – callback invoked with raw bytes read from the PTY
-    ///                master. Called from a dedicated tokio blocking task.
-    /// * `on_exit`  – callback invoked when the child process exits with
-    ///                the exit code.
+    /// Emits `vibe99:terminal-data` events with `{ paneId, data }` for
+    /// each chunk of output, and `vibe99:terminal-exit` with
+    /// `{ paneId, exitCode }` when the child process exits. On exit the
+    /// session is automatically removed from the internal map, matching
+    /// the Electron behaviour.
     ///
     /// If a session already exists for `pane_id` it is destroyed first.
-    pub fn spawn<F, G>(
-        &self,
+    pub fn spawn(
+        self: &Arc<Self>,
+        app: AppHandle,
         pane_id: &str,
         cols: Option<u16>,
         rows: Option<u16>,
         cwd: Option<&str>,
-        on_data: F,
-        on_exit: G,
-    ) -> Result<(), String>
-    where
-        F: Fn(Vec<u8>) + Send + Sync + 'static,
-        G: Fn(u32) + Send + Sync + 'static,
-    {
+    ) -> Result<(), String> {
         // Kill any previous session for this pane.
         self.destroy(pane_id);
 
@@ -145,37 +154,68 @@ impl PtyManager {
         // Clone a killer handle before moving the child into the exit task.
         let killer = child.clone_killer();
 
-        // Read PTY output on a blocking thread and forward via callback.
-        let on_data = Arc::new(on_data);
-        let reader_cb = on_data.clone();
-        let reader_handle = tokio::task::spawn_blocking(move || {
+        let pane_id_owned = pane_id.to_string();
+
+        // Read PTY output on a blocking thread and emit Tauri events.
+        let app_reader = app.clone();
+        let pane_id_reader = pane_id_owned.clone();
+        let _reader_task = tokio::task::spawn_blocking(move || {
             let mut buf = [0u8; 8192];
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        let data = buf[..n].to_vec();
-                        reader_cb(data);
+                        // Convert bytes to a UTF-8 string, replacing
+                        // invalid sequences so the JSON payload stays
+                        // valid. PTY output is almost always valid
+                        // UTF-8, but binary garbage can appear.
+                        let text = String::from_utf8_lossy(&buf[..n]);
+                        let _ = app_reader.emit(
+                            "vibe99:terminal-data",
+                            TerminalDataPayload {
+                                pane_id: pane_id_reader.clone(),
+                                data: text.into_owned(),
+                            },
+                        );
                     }
-                    Err(_) => break,
+                    Err(_) => {
+                        // Reader errors (e.g. EIO when the child
+                        // exits) are expected – treat as EOF.
+                        break;
+                    }
                 }
             }
         });
-        let _reader_task = Arc::new(reader_handle);
 
-        // Watch for child exit on a blocking thread.
-        let exit_cb = Arc::new(on_exit);
+        // Watch for child exit on a blocking thread. Emit the exit event
+        // and remove the session from the map, matching Electron behaviour.
+        let manager = Arc::clone(self);
         let _exit_task = tokio::task::spawn_blocking(move || {
             let exit_code = child.wait().map(|s| s.exit_code()).unwrap_or(1);
-            exit_cb(exit_code);
+
+            // Emit the exit event before removing the session so the
+            // frontend always receives it.
+            let _ = app.emit(
+                "vibe99:terminal-exit",
+                TerminalExitPayload {
+                    pane_id: pane_id_owned.clone(),
+                    exit_code,
+                },
+            );
+
+            // Remove the session from the map (matches Electron's
+            // `terminalSessions.delete(paneId)`).
+            if let Ok(mut sessions) = manager.sessions.lock() {
+                sessions.remove(&pane_id_owned);
+            }
         });
 
         let session = PtySession {
             master,
             writer,
             killer,
-            _reader_task,
-            _exit_task,
+            _reader_task: Arc::new(_reader_task),
+            _exit_task: Arc::new(_exit_task),
         };
 
         self.sessions
