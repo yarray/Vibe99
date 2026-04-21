@@ -5,7 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 
 function createUnavailableBridge() {
   const fail = () => {
-    throw new Error('Electron preload bridge is unavailable');
+    throw new Error('Tauri bridge is unavailable');
   };
 
   return {
@@ -30,7 +30,73 @@ function createUnavailableBridge() {
   };
 }
 
-const bridge = window.vibe99 ?? createUnavailableBridge();
+function createTauriBridge(tauri) {
+  const { invoke } = tauri.core;
+  const { getCurrentWindow } = tauri.window;
+  const { readText: clipboardReadText, writeText: clipboardWriteText } =
+    tauri.clipboardManager;
+  const { open: shellOpen } = tauri.shell;
+
+  function base64Encode(str) {
+    const bytes = new TextEncoder().encode(str);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  function onTauriEvent(event, handler) {
+    const unlisten = tauri.event.listen(event, (e) => handler(e.payload));
+    return () => unlisten.then((fn) => fn());
+  }
+
+  return {
+    platform: navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'linux',
+    defaultCwd: '.',
+    defaultTabTitle: '.',
+    createTerminal: (payload) =>
+      invoke('terminal_create', {
+        paneId: payload.paneId,
+        cols: payload.cols,
+        rows: payload.rows,
+        cwd: payload.cwd,
+      }),
+    writeTerminal: (payload) =>
+      invoke('terminal_write', {
+        paneId: payload.paneId,
+        data: base64Encode(payload.data),
+      }),
+    resizeTerminal: (payload) =>
+      invoke('terminal_resize', {
+        paneId: payload.paneId,
+        cols: payload.cols,
+        rows: payload.rows,
+      }),
+    destroyTerminal: (payload) =>
+      invoke('terminal_destroy', { paneId: payload.paneId }),
+    closeWindow: () => getCurrentWindow().close(),
+    readClipboardText: () => clipboardReadText(),
+    writeClipboardText: (text) => clipboardWriteText(text),
+    getClipboardSnapshot: async () => {
+      const text = await clipboardReadText();
+      return { text: text ?? '', hasImage: false };
+    },
+    openExternalUrl: (url) => shellOpen(url),
+    showContextMenu: () => {
+      throw new Error('Context menu is not yet implemented in Tauri');
+    },
+    loadSettings: () => invoke('settings_load'),
+    saveSettings: (payload) => invoke('settings_save', { settings: payload }),
+    onTerminalData: (handler) => onTauriEvent('vibe99:terminal-data', handler),
+    onTerminalExit: (handler) => onTauriEvent('vibe99:terminal-exit', handler),
+    onMenuAction: (handler) => onTauriEvent('vibe99:menu-action', handler),
+  };
+}
+
+const bridge = window.__TAURI__
+  ? createTauriBridge(window.__TAURI__)
+  : window.vibe99 ?? createUnavailableBridge();
 
 const initialPanes = [
   {
