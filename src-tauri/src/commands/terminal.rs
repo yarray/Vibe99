@@ -1,10 +1,11 @@
-use tauri::{AppHandle, Emitter, State};
+use std::sync::Arc;
+use tauri::{AppHandle, State};
 
 use crate::pty::PtyManager;
 
 /// Managed state holding the PTY session manager.
 pub struct AppState {
-    pub pty: PtyManager,
+    pub pty: Arc<PtyManager>,
 }
 
 /// Create a new PTY session for a terminal pane.
@@ -12,14 +13,14 @@ pub struct AppState {
 /// If a session already exists for the given `pane_id` it is destroyed
 /// before the new one is spawned.
 ///
-/// PTY output is forwarded to the frontend via the `pty-output` event:
+/// PTY output is forwarded to the frontend via the `vibe99:terminal-data` event:
 /// ```json
-/// { "pane_id": "...", "data": "<base64>" }
+/// { "paneId": "...", "data": "<utf8>" }
 /// ```
 ///
-/// When the child process exits, a `pty-exit` event is emitted:
+/// When the child process exits, a `vibe99:terminal-exit` event is emitted:
 /// ```json
-/// { "pane_id": "...", "exit_code": 0 }
+/// { "paneId": "...", "exitCode": 0 }
 /// ```
 #[tauri::command]
 pub fn terminal_create(
@@ -30,26 +31,7 @@ pub fn terminal_create(
     rows: Option<u16>,
     cwd: Option<String>,
 ) -> Result<(), String> {
-    state.pty.spawn(
-        &pane_id,
-        cols,
-        rows,
-        cwd.as_deref(),
-        move |data| {
-            let payload = PtyOutputPayload {
-                pane_id: pane_id.clone(),
-                data: base64_encode(&data),
-            };
-            let _ = app.emit("pty-output", payload);
-        },
-        move |exit_code| {
-            let payload = PtyExitPayload {
-                pane_id: pane_id.clone(),
-                exit_code,
-            };
-            let _ = app.emit("pty-exit", payload);
-        },
-    )
+    state.pty.spawn(app, &pane_id, cols, rows, cwd.as_deref())
 }
 
 /// Write raw bytes to the PTY for the given pane.
@@ -90,32 +72,11 @@ pub fn destroy_all_terminals(state: &AppState) {
 }
 
 // ----------------------------------------------------------------
-// Event payloads
+// Base64 helpers
 // ----------------------------------------------------------------
-
-#[derive(serde::Serialize)]
-struct PtyOutputPayload {
-    pane_id: String,
-    data: String,
-}
-
-#[derive(serde::Serialize)]
-struct PtyExitPayload {
-    pane_id: String,
-    exit_code: u32,
-}
-
-// ----------------------------------------------------------------
-// Base64 helpers (no external dependency)
-// ----------------------------------------------------------------
-
-fn base64_encode(data: &[u8]) -> String {
-    use base64::Engine;
-    base64::engine::general_purpose::STANDARD.encode(data)
-}
 
 fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
-    use base64::engine::Engine;
+    use base64::Engine;
     base64::engine::general_purpose::STANDARD
         .decode(data)
         .map_err(|e| format!("{e}"))
