@@ -12,13 +12,16 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Vibe99",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 640,
-        "minHeight": 400,
+        "width": 1600,
+        "height": 920,
+        "minWidth": 960,
+        "minHeight": 640,
         "resizable": true,
-        "center": true
+        "center": true,
+        "backgroundColor": "#111111",
+        "decorations": true
       }
     ],
     "security": {
