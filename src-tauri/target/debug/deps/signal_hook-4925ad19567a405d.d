@@ -1,0 +1,9 @@
+/var/tmp/vibe-kanban/worktrees/d447-implement-pty-ma/vibe99/src-tauri/target/debug/deps/signal_hook-4925ad19567a405d.d: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/lib.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/flag.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/mod.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/pipe.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/signal_details.rs
+
+/var/tmp/vibe-kanban/worktrees/d447-implement-pty-ma/vibe99/src-tauri/target/debug/deps/libsignal_hook-4925ad19567a405d.rmeta: /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/lib.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/flag.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/mod.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/pipe.rs /home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/signal_details.rs
+
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/lib.rs:
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/flag.rs:
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/mod.rs:
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/pipe.rs:
+/home/yar/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-4dc01642fd091eda/signal-hook-0.3.18/src/low_level/signal_details.rs:
