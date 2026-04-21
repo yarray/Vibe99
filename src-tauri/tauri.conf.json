@@ -4,10 +4,10 @@
   "version": "0.4.5",
   "identifier": "com.vibe99.app",
   "build": {
-    "frontendDist": "../src",
+    "frontendDist": "../src/dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "npm run vite:dev",
+    "beforeBuildCommand": "npm run vite:build"
   },
   "app": {
     "windows": [
