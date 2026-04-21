@@ -83,9 +83,7 @@ function createTauriBridge(tauri) {
       return { text: text ?? '', hasImage: false };
     },
     openExternalUrl: (url) => shellOpen(url),
-    showContextMenu: () => {
-      throw new Error('Context menu is not yet implemented in Tauri');
-    },
+    showContextMenu: () => {},
     loadSettings: () => invoke('settings_load'),
     saveSettings: (payload) => invoke('settings_save', { settings: payload }),
     onTerminalData: (handler) => onTauriEvent('vibe99:terminal-data', handler),
@@ -957,20 +955,99 @@ function selectAllInTerminal(paneId = focusedPaneId) {
   return true;
 }
 
-async function showTerminalContextMenu(node, event) {
-  const clipboardSnapshot = getClipboardSnapshot();
-  await bridge.showContextMenu({
-    kind: 'terminal',
-    paneId: node.paneId,
-    hasSelection: node.terminal.hasSelection(),
-    hasClipboardText: Boolean(clipboardSnapshot.text),
-    hasClipboardImage: clipboardSnapshot.hasImage,
-    x: event.x,
-    y: event.y,
+function showContextMenu(items, x, y, paneId) {
+  hideContextMenu();
+
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.setAttribute('role', 'menu');
+
+  for (const item of items) {
+    if (item.type === 'separator') {
+      const sep = document.createElement('div');
+      sep.className = 'context-menu-separator';
+      menu.appendChild(sep);
+      continue;
+    }
+
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'context-menu-item';
+    row.setAttribute('role', 'menuitem');
+    row.disabled = item.disabled || false;
+
+    const label = document.createElement('span');
+    label.className = 'context-menu-label';
+    label.textContent = item.label;
+    row.appendChild(label);
+
+    if (item.shortcut) {
+      const shortcut = document.createElement('span');
+      shortcut.className = 'context-menu-shortcut';
+      shortcut.textContent = item.shortcut;
+      row.appendChild(shortcut);
+    }
+
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      handleMenuAction(item.action, paneId);
+    });
+
+    menu.appendChild(row);
+  }
+
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  document.body.appendChild(menu);
+
+  requestAnimationFrame(() => {
+    const rect = menu.getBoundingClientRect();
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+
+    if (rect.right > winW) {
+      menu.style.left = `${Math.max(0, x - rect.width)}px`;
+    }
+    if (rect.bottom > winH) {
+      menu.style.top = `${Math.max(0, y - rect.height)}px`;
+    }
+  });
+
+  queueMicrotask(() => {
+    document.addEventListener('pointerdown', dismissContextMenuOnOutside);
+    window.addEventListener('blur', hideContextMenu);
   });
 }
 
-async function showTabContextMenu(paneId, event) {
+function hideContextMenu() {
+  const menu = document.querySelector('.context-menu');
+  if (menu) {
+    menu.remove();
+  }
+  document.removeEventListener('pointerdown', dismissContextMenuOnOutside);
+  window.removeEventListener('blur', hideContextMenu);
+}
+
+function dismissContextMenuOnOutside(event) {
+  if (!event.target.closest('.context-menu')) {
+    hideContextMenu();
+  }
+}
+
+function showTerminalContextMenu(node, event) {
+  const clipboardSnapshot = getClipboardSnapshot();
+  const items = [
+    { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
+    { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
+    { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
+    { type: 'separator' },
+    { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
+  ];
+  showContextMenu(items, event.clientX, event.clientY, node.paneId);
+}
+
+function showTabContextMenu(paneId, event) {
   const paneIndex = getPaneIndex(paneId);
   if (paneIndex === -1) {
     return;
@@ -979,13 +1056,11 @@ async function showTabContextMenu(paneId, event) {
   focusedPaneId = paneId;
   render();
 
-  await bridge.showContextMenu({
-    kind: 'tab',
-    paneId,
-    canClose: panes.length > 1,
-    x: event.x,
-    y: event.y,
-  });
+  const items = [
+    { label: 'Rename Tab', action: 'tab-rename' },
+    { label: 'Close Tab', action: 'tab-close', disabled: panes.length <= 1 },
+  ];
+  showContextMenu(items, event.clientX, event.clientY, paneId);
 }
 
 function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
