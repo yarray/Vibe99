@@ -1,6 +1,7 @@
-import { Terminal } from '../node_modules/@xterm/xterm/lib/xterm.mjs';
-import { FitAddon } from '../node_modules/@xterm/addon-fit/lib/addon-fit.mjs';
-import { WebLinksAddon } from '../node_modules/@xterm/addon-web-links/lib/addon-web-links.mjs';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import '@xterm/xterm/css/xterm.css';
 
 function createUnavailableBridge() {
   const fail = () => {
