@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use vibe99_lib::commands::context_menu;
 use vibe99_lib::commands::settings;
 use std::sync::Arc;
 use vibe99_lib::commands::terminal::{self, AppState};
@@ -21,6 +22,8 @@ fn main() {
             terminal::terminal_destroy,
             settings::settings_load,
             settings::settings_save,
+            context_menu::show_context_menu,
+            context_menu::emit_menu_action,
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
