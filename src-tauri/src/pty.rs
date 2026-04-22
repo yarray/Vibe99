@@ -50,10 +50,10 @@ struct PtySession {
     writer: Box<dyn Write + Send>,
     /// Killer handle to terminate the child process.
     killer: Box<dyn ChildKiller + Send + Sync>,
-    /// Join handle for the background reader task.
-    _reader_task: Arc<tokio::task::JoinHandle<()>>,
-    /// Join handle for the exit-watcher task.
-    _exit_task: Arc<tokio::task::JoinHandle<()>>,
+    /// Join handle for the background reader thread.
+    _reader_thread: std::thread::JoinHandle<()>,
+    /// Join handle for the exit-watcher thread.
+    _exit_thread: std::thread::JoinHandle<()>,
 }
 
 /// Manages a collection of PTY sessions keyed by pane ID.
@@ -159,7 +159,7 @@ impl PtyManager {
         // Read PTY output on a blocking thread and emit Tauri events.
         let app_reader = app.clone();
         let pane_id_reader = pane_id_owned.clone();
-        let _reader_task = tokio::task::spawn_blocking(move || {
+        let _reader_thread = std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
             loop {
                 match reader.read(&mut buf) {
@@ -190,7 +190,7 @@ impl PtyManager {
         // Watch for child exit on a blocking thread. Emit the exit event
         // and remove the session from the map, matching Electron behaviour.
         let manager = Arc::clone(self);
-        let _exit_task = tokio::task::spawn_blocking(move || {
+        let _exit_thread = std::thread::spawn(move || {
             let exit_code = child.wait().map(|s| s.exit_code()).unwrap_or(1);
 
             // Emit the exit event before removing the session so the
@@ -214,8 +214,8 @@ impl PtyManager {
             master,
             writer,
             killer,
-            _reader_task: Arc::new(_reader_task),
-            _exit_task: Arc::new(_exit_task),
+            _reader_thread,
+            _exit_thread,
         };
 
         self.sessions

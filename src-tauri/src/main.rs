@@ -3,6 +3,7 @@
 use vibe99_lib::commands::context_menu;
 use vibe99_lib::commands::settings;
 use std::sync::Arc;
+use tauri::Manager;
 use vibe99_lib::commands::terminal::{self, AppState};
 use vibe99_lib::pty::PtyManager;
 
@@ -20,6 +21,7 @@ fn main() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_destroy,
+            terminal::get_cwd,
             settings::settings_load,
             settings::settings_save,
             context_menu::show_context_menu,

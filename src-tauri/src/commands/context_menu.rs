@@ -27,7 +27,7 @@ pub struct ShowContextMenuPayload {
 /// ```json
 /// { "action": "terminal-copy", "paneId": "pane-1" }
 /// ```
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 pub struct MenuActionPayload {
     pub action: String,
     #[serde(rename = "paneId", skip_serializing_if = "Option::is_none")]

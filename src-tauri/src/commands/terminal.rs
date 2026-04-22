@@ -71,6 +71,16 @@ pub fn destroy_all_terminals(state: &AppState) {
     state.pty.destroy_all();
 }
 
+/// Return the current working directory as a string.
+///
+/// Used by the frontend to derive the default tab title (directory basename).
+#[tauri::command]
+pub fn get_cwd() -> Result<String, String> {
+    std::env::current_dir()
+        .map(|p| p.display().to_string())
+        .map_err(|e| format!("failed to get cwd: {e}"))
+}
+
 // ----------------------------------------------------------------
 // Base64 helpers
 // ----------------------------------------------------------------

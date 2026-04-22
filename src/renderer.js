@@ -3,15 +3,21 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 
+function basename(path) {
+  return path.replace(/\/+$/, '').split('/').pop() || '/';
+}
+
 function createUnavailableBridge() {
   const fail = () => {
     throw new Error('Tauri bridge is unavailable');
   };
 
+  const defaultCwd = '/';
+
   return {
     platform: navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'linux',
-    defaultCwd: '.',
-    defaultTabTitle: '.',
+    defaultCwd,
+    defaultTabTitle: basename(defaultCwd),
     createTerminal: fail,
     writeTerminal: fail,
     resizeTerminal: fail,
@@ -27,6 +33,7 @@ function createUnavailableBridge() {
     onTerminalData: () => () => {},
     onTerminalExit: () => () => {},
     onMenuAction: () => () => {},
+    cwdReady: Promise.resolve(),
   };
 }
 
@@ -51,10 +58,17 @@ function createTauriBridge(tauri) {
     return () => unlisten.then((fn) => fn());
   }
 
+  // Resolve the real CWD from the Tauri backend so the initial tab title
+  // shows the directory basename (e.g. "/home/yar/projects" → "projects").
+  let _resolvedCwd = '.';
+  const _cwdReady = invoke('get_cwd')
+    .then((cwd) => { _resolvedCwd = cwd; })
+    .catch(() => {});
+
   return {
     platform: navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'linux',
-    defaultCwd: '.',
-    defaultTabTitle: '.',
+    get defaultCwd() { return _resolvedCwd; },
+    get defaultTabTitle() { return basename(_resolvedCwd); },
     createTerminal: (payload) =>
       invoke('terminal_create', {
         paneId: payload.paneId,
@@ -89,6 +103,7 @@ function createTauriBridge(tauri) {
     onTerminalData: (handler) => onTauriEvent('vibe99:terminal-data', handler),
     onTerminalExit: (handler) => onTauriEvent('vibe99:terminal-exit', handler),
     onMenuAction: (handler) => onTauriEvent('vibe99:menu-action', handler),
+    cwdReady: _cwdReady,
   };
 }
 
@@ -1319,6 +1334,12 @@ window.addEventListener('resize', () => {
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
+    await bridge.cwdReady;
+    panes = panes.map((p) =>
+      p.title === null
+        ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
+        : p
+    );
     applyPersistedSettings(await bridge.loadSettings());
     applySettings();
     render(true);

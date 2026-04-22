@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 const CURRENT_CONFIG_VERSION: u8 = 1;
 
@@ -12,7 +12,7 @@ fn settings_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
         .app_data_dir()
         .map_err(|e| format!("failed to resolve app data dir: {e}"))
-        .map(|p| p.join("settings.json"))
+        .map(|p: std::path::PathBuf| p.join("settings.json"))
 }
 
 /// Clamp a UI field from an arbitrary JSON value, falling back to `default`.
