@@ -1558,7 +1558,7 @@ function updatePaneWidth(nextValue) {
     return;
   }
 
-  settings.paneWidth = Math.max(520, Math.min(1000, Math.round(parsedValue / 10) * 10));
+  settings.paneWidth = Math.max(520, Math.min(2000, Math.round(parsedValue / 10) * 10));
   applySettings();
   render(true);
   scheduleSettingsSave();

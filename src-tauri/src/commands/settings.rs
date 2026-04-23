@@ -140,7 +140,7 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
     let pane_opacity = ((pane_opacity * 100.0).round() / 100.0).clamp(0.55, 1.0);
 
     let pane_width = get_number(ui, "paneWidth", DEFAULT_PANE_WIDTH as f64);
-    let pane_width = ((pane_width / 10.0).round() * 10.0).clamp(520.0, 1000.0) as u32;
+    let pane_width = ((pane_width / 10.0).round() * 10.0).clamp(520.0, 2000.0) as u32;
 
     serde_json::json!({
         "fontSize": font_size,
