@@ -5,21 +5,13 @@
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Vibe99 terminal application",
-  "engines": {
-    "node": ">=22 <23"
-  },
   "scripts": {
-    "check:node": "node ./scripts/check-supported-node.mjs",
-    "build:config": "tsc -p tsconfig.config.json",
     "release:notes": "node ./scripts/extract-release-notes.mjs",
-    "vite:dev": "vite",
-    "vite:build": "vite build",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
-    "typescript": "^5.9.3",
     "vite": "^6.4.2"
   },
   "dependencies": {
