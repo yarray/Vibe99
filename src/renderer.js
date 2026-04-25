@@ -229,14 +229,16 @@ const fontFamilyInputEl = document.getElementById('font-family-input');
 const paneWidthRangeEl = document.getElementById('pane-width-range');
 const paneWidthInputEl = document.getElementById('pane-width-input');
 const paneWidthValueEl = document.getElementById('pane-width-value');
-const paneOpacityRangeEl = document.getElementById('pane-opacity-range');
-const paneOpacityInputEl = document.getElementById('pane-opacity-input');
-const paneOpacityValueEl = document.getElementById('pane-opacity-value');
+const paneMaskColorInputEl = document.getElementById('pane-mask-color-input');
+const paneMaskAlphaRangeEl = document.getElementById('pane-mask-alpha-range');
+const paneMaskAlphaInputEl = document.getElementById('pane-mask-alpha-input');
+const paneMaskAlphaValueEl = document.getElementById('pane-mask-alpha-value');
 
 const settings = {
   fontSize: 13,
   fontFamily: getDefaultFontFamily(bridge.platform),
-  paneOpacity: 0.8,
+  paneMaskColor: '#000000',
+  paneMaskAlpha: 0.25,
   paneWidth: 720,
 };
 let pendingSettingsSave = null;
@@ -343,16 +345,18 @@ function getPaneLabel(pane) {
 
 function applySettings() {
   document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
-  document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
+  document.documentElement.style.setProperty('--pane-bg-mask-color', settings.paneMaskColor);
+  document.documentElement.style.setProperty('--pane-bg-mask-alpha', settings.paneMaskAlpha.toFixed(2));
   document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
   fontSizeInputEl.value = String(settings.fontSize);
   fontFamilyInputEl.value = settings.fontFamily;
   paneWidthRangeEl.value = String(settings.paneWidth);
   paneWidthInputEl.value = String(settings.paneWidth);
   paneWidthValueEl.textContent = `${settings.paneWidth}px`;
-  paneOpacityRangeEl.value = settings.paneOpacity.toFixed(2);
-  paneOpacityInputEl.value = settings.paneOpacity.toFixed(2);
-  paneOpacityValueEl.textContent = settings.paneOpacity.toFixed(2);
+  paneMaskColorInputEl.value = settings.paneMaskColor;
+  paneMaskAlphaRangeEl.value = settings.paneMaskAlpha.toFixed(2);
+  paneMaskAlphaInputEl.value = settings.paneMaskAlpha.toFixed(2);
+  paneMaskAlphaValueEl.textContent = settings.paneMaskAlpha.toFixed(2);
 }
 
 function applyPersistedSettings(nextSettings) {
@@ -373,8 +377,12 @@ function applyPersistedSettings(nextSettings) {
     settings.fontFamily = uiSettings.fontFamily;
   }
 
-  if (Number.isFinite(uiSettings.paneOpacity)) {
-    settings.paneOpacity = uiSettings.paneOpacity;
+  if (typeof uiSettings.paneMaskColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(uiSettings.paneMaskColor)) {
+    settings.paneMaskColor = uiSettings.paneMaskColor;
+  }
+
+  if (Number.isFinite(uiSettings.paneMaskAlpha)) {
+    settings.paneMaskAlpha = Math.max(0, Math.min(0.8, uiSettings.paneMaskAlpha));
   }
 
   if (Number.isFinite(uiSettings.paneWidth)) {
@@ -1759,14 +1767,25 @@ function updatePaneWidth(nextValue) {
   scheduleSettingsSave();
 }
 
-function updatePaneOpacity(nextValue) {
+function updatePaneMaskAlpha(nextValue) {
   const parsedValue = Number(nextValue);
   if (!Number.isFinite(parsedValue)) {
     applySettings();
     return;
   }
 
-  settings.paneOpacity = Math.max(0.55, Math.min(1, Number(parsedValue.toFixed(2))));
+  settings.paneMaskAlpha = Math.max(0, Math.min(0.8, Number(parsedValue.toFixed(2))));
+  applySettings();
+  scheduleSettingsSave();
+}
+
+function updatePaneMaskColor(nextValue) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(nextValue)) {
+    applySettings();
+    return;
+  }
+
+  settings.paneMaskColor = nextValue.toLowerCase();
   applySettings();
   scheduleSettingsSave();
 }
@@ -1779,12 +1798,16 @@ paneWidthInputEl.addEventListener('change', () => {
   updatePaneWidth(paneWidthInputEl.value);
 });
 
-paneOpacityRangeEl.addEventListener('input', () => {
-  updatePaneOpacity(paneOpacityRangeEl.value);
+paneMaskColorInputEl.addEventListener('input', () => {
+  updatePaneMaskColor(paneMaskColorInputEl.value);
 });
 
-paneOpacityInputEl.addEventListener('change', () => {
-  updatePaneOpacity(paneOpacityInputEl.value);
+paneMaskAlphaRangeEl.addEventListener('input', () => {
+  updatePaneMaskAlpha(paneMaskAlphaRangeEl.value);
+});
+
+paneMaskAlphaInputEl.addEventListener('change', () => {
+  updatePaneMaskAlpha(paneMaskAlphaInputEl.value);
 });
 
 window.addEventListener('pointerdown', (event) => {
