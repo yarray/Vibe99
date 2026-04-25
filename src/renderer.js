@@ -1502,8 +1502,9 @@ function showTerminalContextMenu(node, event) {
     isDefault: p.id === defaultShellProfileId,
   }));
 
+  const hasSelection = Boolean(node.terminal.getSelection()?.trim());
   const items = [
-    { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
+    { label: 'Copy', action: 'terminal-copy', disabled: !hasSelection, shortcut: '⇧⌘C' },
     { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
     { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
     { type: 'separator' },
