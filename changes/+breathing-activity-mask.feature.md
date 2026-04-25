@@ -1,0 +1,1 @@
+Backgrounded panes now pulse with a soft "breathing" overlay after they receive new output that has settled, so it's easier to spot work happening in panes you've switched away from. The animation stops the moment you bring the pane back into focus.

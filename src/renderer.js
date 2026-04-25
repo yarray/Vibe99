@@ -262,6 +262,35 @@ function flushTerminalWrites() {
   terminalWriteBuffer.clear();
 }
 
+const PANE_ACTIVITY_SETTLE_MS = 1500;
+const PANE_BREATHING_CLASS = 'has-pending-activity';
+
+function isPaneFocused(node) {
+  return node.paneId === focusedPaneId;
+}
+
+function isPaneBreathing(node) {
+  return node.root.classList.contains(PANE_BREATHING_CLASS);
+}
+
+function notePaneActivity(node) {
+  if (!node.hasBeenFocused) return;
+  if (isPaneFocused(node)) return;
+  if (isPaneBreathing(node)) return;
+  window.clearTimeout(node.activityTimer);
+  node.activityTimer = window.setTimeout(() => {
+    node.activityTimer = null;
+    if (isPaneFocused(node)) return;
+    node.root.classList.add(PANE_BREATHING_CLASS);
+  }, PANE_ACTIVITY_SETTLE_MS);
+}
+
+function clearPaneActivity(node) {
+  window.clearTimeout(node.activityTimer);
+  node.activityTimer = null;
+  node.root.classList.remove(PANE_BREATHING_CLASS);
+}
+
 const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
   const node = paneNodeMap.get(paneId);
   if (!node) return;
@@ -274,6 +303,7 @@ const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
   if (!terminalWriteRaf) {
     terminalWriteRaf = requestAnimationFrame(flushTerminalWrites);
   }
+  notePaneActivity(node);
 });
 
 const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode }) => {
@@ -861,6 +891,11 @@ function createPane(pane) {
   terminalHost.className = 'terminal-host';
   surface.append(terminalHost);
   body.append(surface);
+
+  const activityMask = document.createElement('div');
+  activityMask.className = 'pane-activity-mask';
+  body.append(activityMask);
+
   shell.append(body);
   paneEl.append(shell);
 
@@ -902,6 +937,8 @@ function createPane(pane) {
     sizeKey: '',
     needsFit: true,
     accent: pane.accent,
+    hasBeenFocused: false,
+    activityTimer: null,
   };
 
   terminalHost.addEventListener('contextmenu', (event) => {
@@ -983,6 +1020,7 @@ function ensurePaneNodes() {
 
   for (const [paneId, node] of paneNodeMap.entries()) {
     if (!activeIds.has(paneId)) {
+      clearPaneActivity(node);
       bridge.destroyTerminal({ paneId });
       node.terminal.dispose();
       node.root.remove();
@@ -1263,6 +1301,10 @@ function renderPanes(refit = false) {
 
     node.root.classList.toggle('is-focused', isFocused);
     node.root.classList.toggle('is-navigation-target', isFocused && isNavigationMode);
+    if (isFocused) {
+      node.hasBeenFocused = true;
+      clearPaneActivity(node);
+    }
     node.root.style.setProperty('--pane-accent', pane.accent);
     node.root.style.left = `${left}px`;
     node.root.style.zIndex = String(index + 1);
