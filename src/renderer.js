@@ -143,8 +143,12 @@ function createTauriBridge(tauri) {
     readClipboardText: () => clipboardReadText(),
     writeClipboardText: (text) => clipboardWriteText(text),
     getClipboardSnapshot: async () => {
-      const text = await clipboardReadText();
-      return { text: text ?? '', hasImage: false };
+      try {
+        const text = await clipboardReadText();
+        return { text: text ?? '', hasImage: false };
+      } catch {
+        return { text: '', hasImage: false };
+      }
     },
     openExternalUrl: (url) => shellOpen(url),
     showContextMenu: () => {},
@@ -886,9 +890,7 @@ function createPane(pane) {
     if (!isWindowsCtrlVPasteHotkey(event)) {
       return true;
     }
-
-    const clipboardSnapshot = getClipboardSnapshot();
-    return shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot);
+    return false;
   });
 
   const node = {
@@ -927,6 +929,32 @@ function createPane(pane) {
     if (entryNeedsTabRefresh(pane.id)) {
       renderTabs();
     }
+  });
+
+  terminal.onSelectionChange(() => {
+    const selection = terminal.getSelection();
+    if (selection) {
+      bridge.writeClipboardText(selection);
+    }
+  });
+
+  terminal.parser.registerOscHandler(52, (data) => {
+    const semicolon = data.indexOf(';');
+    if (semicolon === -1) {
+      return true;
+    }
+    const base64Text = data.slice(semicolon + 1);
+    if (!base64Text || base64Text === '?') {
+      return true;
+    }
+    try {
+      const bytes = atob(base64Text);
+      const text = new TextDecoder().decode(
+        Uint8Array.from(bytes, (c) => c.charCodeAt(0))
+      );
+      bridge.writeClipboardText(text);
+    } catch {}
+    return true;
   });
 
   return node;
@@ -1314,8 +1342,12 @@ function getPaneNode(paneId) {
   return paneNodeMap.get(paneId) ?? null;
 }
 
-function getClipboardSnapshot() {
-  return bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+async function getClipboardSnapshot() {
+  try {
+    return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+  } catch {
+    return { text: '', hasImage: false };
+  }
 }
 
 function isWindowsCtrlVPasteHotkey(event) {
@@ -1327,10 +1359,6 @@ function isWindowsCtrlVPasteHotkey(event) {
     !event.shiftKey &&
     event.key.toLowerCase() === 'v'
   );
-}
-
-function shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot) {
-  return Boolean(clipboardSnapshot.hasImage && !clipboardSnapshot.text);
 }
 
 function copyTerminalSelection(paneId = focusedPaneId) {
@@ -1492,8 +1520,8 @@ function dismissContextMenuOnOutside(event) {
   }
 }
 
-function showTerminalContextMenu(node, event) {
-  const clipboardSnapshot = getClipboardSnapshot();
+async function showTerminalContextMenu(node, event) {
+  const clipboardSnapshot = await getClipboardSnapshot();
 
   const shellChildren = shellProfiles.map((p) => ({
     label: p.name || p.id,
@@ -1535,13 +1563,13 @@ function showTabContextMenu(paneId, event) {
   showContextMenu(items, event.clientX, event.clientY, paneId);
 }
 
-function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
+async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
     return false;
   }
 
-  const clipboardSnapshot = options.clipboardSnapshot ?? getClipboardSnapshot();
+  const clipboardSnapshot = options.clipboardSnapshot ?? (await getClipboardSnapshot());
   if (!clipboardSnapshot.hasImage) {
     return false;
   }
@@ -1656,23 +1684,14 @@ window.addEventListener(
     }
 
     if (copyHotkey && document.activeElement?.tagName !== 'INPUT') {
-      if (copyTerminalSelection()) {
-        event.preventDefault();
-      }
+      event.preventDefault();
+      copyTerminalSelection();
       return;
     }
 
     if ((pasteHotkey || windowsCtrlVPasteHotkey) && document.activeElement?.tagName !== 'INPUT') {
-      const clipboardSnapshot = getClipboardSnapshot();
-      if (
-        windowsCtrlVPasteHotkey &&
-        shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot)
-      ) {
-        return;
-      }
-
       event.preventDefault();
-      void pasteIntoTerminal(undefined, { clipboardSnapshot });
+      void pasteIntoTerminal();
       return;
     }
 
