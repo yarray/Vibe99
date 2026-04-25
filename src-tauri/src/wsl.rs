@@ -48,7 +48,7 @@ pub fn is_wsl_available() -> bool {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = &Path::new(""); // suppress unused-import warning
+        let _ = "";
         false
     }
 }
