@@ -248,10 +248,31 @@ let editingShellProfile = null; // null or { id?, name, command, args }
 const shellProfileListEl = document.getElementById('shell-profile-list');
 const shellProfileAddBtn = document.getElementById('shell-profile-add');
 
+// Batch terminal writes within a single animation frame so that rapid TUI
+// updates (cursor move → clear → rewrite) are parsed as one coherent chunk
+// instead of many tiny fragments that can leave stale cells in the renderer.
+const terminalWriteBuffer = new Map();
+let terminalWriteRaf = null;
+
+function flushTerminalWrites() {
+  terminalWriteRaf = null;
+  for (const [node, chunks] of terminalWriteBuffer) {
+    node.terminal.write(chunks.join(''));
+  }
+  terminalWriteBuffer.clear();
+}
+
 const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
   const node = paneNodeMap.get(paneId);
-  if (node) {
-    node.terminal.write(data);
+  if (!node) return;
+  const chunks = terminalWriteBuffer.get(node);
+  if (chunks) {
+    chunks.push(data);
+  } else {
+    terminalWriteBuffer.set(node, [data]);
+  }
+  if (!terminalWriteRaf) {
+    terminalWriteRaf = requestAnimationFrame(flushTerminalWrites);
   }
 });
 
