@@ -2,6 +2,22 @@
 
 <!-- towncrier release notes start -->
 
+## 0.5.0 - 2026-04-25
+
+### Added
+
+- Rewrote the app with Tauri 2 (Rust backend + vanilla JS frontend), replacing the previous Electron stack. The app now launches faster, uses significantly less memory, and produces native installers (.msi/.exe on Windows, .deb/.AppImage on Linux).
+- WSL integration now auto-detects all installed distributions and creates a shell profile for each one. Distribution names are correctly decoded from UTF-16LE output.
+- Shell profiles are fully editable: users can create, modify, and switch profiles per pane via the right-click context menu. All profiles (auto-detected and user-created) support editing.
+- Session state (pane layout, directories, shell profiles, tab titles) is now restored on app restart.
+- Added font family selection in settings, allowing users to pick any installed monospace font.
+- Terminal rendering now uses the WebGL renderer for crisp, properly aligned box-drawing characters and better performance.
+
+### Misc
+
+- Added `scripts/bump-version.mjs` to synchronize version numbers across package.json, tauri.conf.json, and Cargo.toml from a single command.
+
+
 ## 0.4.5 - 2026-04-20
 
 ### Fixed

@@ -7,39 +7,38 @@ on:
       - main
 
 jobs:
-  windows-smoke:
+  windows-build:
     runs-on: windows-latest
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: Verify Windows npm run path
-        shell: pwsh
-        run: |
-          npm run capture
-          $capture = Join-Path $env:TEMP 'vibe99-prototype.png'
-          if (-not (Test-Path -LiteralPath $capture)) {
-            throw "Expected capture output at $capture"
-          }
-
-      - name: Build Windows release packages
-        run: npm run make
+      - name: Build Tauri app
+        run: npx tauri build
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-package
           path: |
-            out/builder/Vibe99-*-windows-portable-*.exe
-            out/builder/Vibe99-*-windows-*.zip
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
