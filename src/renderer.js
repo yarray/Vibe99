@@ -876,6 +876,9 @@ function createPane(pane) {
     lineHeight: 1.2,
     scrollback: 5000,
     theme: createTerminalTheme(pane.accent),
+    windowOptions: {
+      getCopiedText: (terminal, selection) => selection || '',
+    },
   });
   const fitAddon = new FitAddon();
   const webLinksAddon = new WebLinksAddon(handleTerminalLinkActivation);
@@ -927,6 +930,13 @@ function createPane(pane) {
     );
     if (entryNeedsTabRefresh(pane.id)) {
       renderTabs();
+    }
+  });
+
+  terminal.onSelectionChange(() => {
+    const selection = terminal.getSelection();
+    if (selection) {
+      bridge.writeClipboardText(selection);
     }
   });
 
@@ -1495,6 +1505,7 @@ function dismissContextMenuOnOutside(event) {
 
 function showTerminalContextMenu(node, event) {
   const clipboardSnapshot = getClipboardSnapshot();
+  const hasSelection = Boolean(node.terminal.getSelection()?.trim());
 
   const shellChildren = shellProfiles.map((p) => ({
     label: p.name || p.id,
@@ -1503,7 +1514,7 @@ function showTerminalContextMenu(node, event) {
   }));
 
   const items = [
-    { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
+    { label: 'Copy', action: 'terminal-copy', disabled: !hasSelection, shortcut: '⇧⌘C' },
     { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
     { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
     { type: 'separator' },
