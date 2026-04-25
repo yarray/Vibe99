@@ -7,6 +7,7 @@
   --text: #f4f1e8;
   --app-font-size: 13px;
   --pane-opacity: 0.8;
+  --pane-bg-mask-opacity: 0.25;
   --pane-width: 720px;
   --tabs-height: 34px;
   --status-height: 20px;
@@ -259,6 +260,23 @@ body {
   font: inherit;
 }
 
+.settings-color {
+  width: 56px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.settings-color::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.settings-color::-webkit-color-swatch {
+  border: none;
+}
+
 .settings-section {
   padding: 8px;
   display: grid;
@@ -459,6 +477,20 @@ body {
   will-change: left;
 }
 
+/* Overlay mask: solid pane-accent board on top.
+   opacity=0  → fully opaque (nothing underneath visible)
+   opacity→1 → increasingly transparent */
+.pane::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--pane-accent);
+  opacity: calc(1 - var(--pane-bg-mask-opacity));
+  transition: opacity 80ms ease;
+  z-index: 10;
+}
+
 .pane-shell {
   height: 100%;
 }
@@ -482,6 +514,11 @@ body {
     0 24px 54px rgba(0, 0, 0, 0.42),
     0 0 0 1px color-mix(in srgb, var(--pane-accent) 22%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pane.is-focused::after,
+.pane.is-navigation-target::after {
+  opacity: 0;
 }
 
 .pane.is-navigation-target {
