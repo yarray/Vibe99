@@ -720,6 +720,10 @@ function isLinkOpenModifierPressed(event) {
 }
 
 function handleTerminalLinkActivation(event, uri) {
+  if (!isLinkOpenModifierPressed(event)) {
+    return;
+  }
+
   event.preventDefault();
   event.stopPropagation();
   void bridge.openExternalUrl(uri).catch(reportError);
