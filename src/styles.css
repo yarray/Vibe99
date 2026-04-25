@@ -78,9 +78,9 @@ body {
 }
 
 .tab.is-focused {
-  color: var(--text);
-  background: color-mix(in srgb, var(--pane-accent) 10%, #1b1b1b);
-  box-shadow: inset 0 1px 0 0 var(--pane-accent);
+  color: #fff;
+  background: color-mix(in srgb, var(--pane-accent) 50%, #1a1a1a);
+  box-shadow: none;
 }
 
 .tab.is-dragging {
@@ -159,6 +159,10 @@ body {
   transform: translateY(-50%);
   background: var(--pane-accent);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.tab.is-focused .tab-swatch {
+  display: none;
 }
 
 .tab-label {
