@@ -210,6 +210,7 @@ let panes = initialPanes.map((pane) => ({ ...pane }));
 let focusedPaneId = panes[0].id;
 let nextPaneNumber = panes.length + 1;
 let renamingPaneId = null;
+let isRenderingTabs = false; // Guard against re-entrant renderTabs calls
 let dragState = null;
 let isNavigationMode = false;
 let pendingTabFocus = null;
@@ -1240,6 +1241,10 @@ function getTabDropIndex(clientX) {
 }
 
 function renderTabs() {
+  if (isRenderingTabs) {
+    return;
+  }
+  isRenderingTabs = true;
   const focusedIndex = getFocusedIndex();
   const draggedPaneId = dragState?.paneId ?? null;
   let slot = 0;
@@ -1259,6 +1264,7 @@ function renderTabs() {
       return createTab(pane, index, focusedIndex, dragMeta);
     })
   );
+  isRenderingTabs = false;
 }
 
 function renderPanes(refit = false) {
