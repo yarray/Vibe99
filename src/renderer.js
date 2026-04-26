@@ -831,14 +831,14 @@ function handleCtrlTabPress() {
     clearTimeout(ctrlTabState.timerId);
   }
 
-  // The pane to switch to is at index (pressCount) in history
-  // pressCount 0 → index 1 (second most recent, i.e., "previous")
-  // pressCount 1 → index 2 (third most recent)
-  const targetIndex = ctrlTabPressCount % paneHistory.length;
+  // Calculate target index with proper wrapping
+  // Start from index 1 (skip current pane at index 0)
+  // When we reach the end, wrap back to index 1
+  const targetIndex = (ctrlTabPressCount % (paneHistory.length - 1)) + 1;
   const targetPaneId = paneHistory[targetIndex];
 
-  if (targetPaneId && targetPaneId !== focusedPaneId) {
-    focusPane(targetPaneId);
+  if (targetPaneId) {
+    focusPane(targetPaneId, { updateHistory: false });
   }
 }
 
@@ -1837,6 +1837,7 @@ window.addEventListener(
 
     if (ctrlTabHotkey && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();
+      event.stopPropagation();
       if (!ctrlTabState.ctrlPressed) {
         handleCtrlTabStart();
       }
