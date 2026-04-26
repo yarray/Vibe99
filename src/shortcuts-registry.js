@@ -1,127 +1,147 @@
 /**
- * Keyboard Shortcuts Registry Module
+ * Keyboard Shortcuts Registry
  *
- * Manages keyboard shortcut definitions, validation, and persistence.
- * This module handles the core shortcut logic independently of UI concerns.
+ * Compatibility wrapper for the legacy `shortcuts-ui.js` consumer. The single
+ * source of truth for shortcuts now lives in `input/keymap.js` — this module
+ * tracks user overrides on top of that table and exposes an `id`-keyed map in
+ * the legacy `{ key, modifiers, action }` shape so the existing settings UI
+ * keeps working unchanged.
+ *
+ * The dispatcher reads its keymap through `getActiveKeymap()` so overrides are
+ * picked up without rebinding event listeners.
  */
 
-/**
- * Default keyboard shortcuts configuration
- * Keys use platform-agnostic notation:
- * - "ctrl" represents Ctrl on Windows/Linux and Cmd on macOS
- * - "shift" represents Shift key
- * - "alt" represents Alt/Option key
- * - Single character represents the key to press
- */
-export const DEFAULT_SHORTCUTS = {
-  'new-tab': { key: 'n', modifiers: ['ctrl'], platform: 'all', action: 'addPane' },
-  'navigation-mode': { key: 'b', modifiers: ['ctrl'], platform: 'all', action: 'enterNavigationMode' },
-  'copy': { key: 'c', modifiers: ['ctrl', 'shift'], platform: 'all', action: 'copyTerminalSelection' },
-  'paste': { key: 'v', modifiers: ['ctrl', 'shift'], platform: 'all', action: 'pasteIntoTerminal' },
-  'move-left': { key: 'ArrowLeft', modifiers: [], platform: 'all', action: 'moveFocusLeft' },
-  'move-right': { key: 'ArrowRight', modifiers: [], platform: 'all', action: 'moveFocusRight' },
-  'navigate-left': { key: 'ArrowLeft', modifiers: ['ctrl'], platform: 'all', action: 'navigateLeft' },
-  'navigate-right': { key: 'ArrowRight', modifiers: ['ctrl'], platform: 'all', action: 'navigateRight' },
-  'focus-terminal': { key: 'Enter', modifiers: [], platform: 'all', action: 'focusTerminal' },
-};
+import { KEYMAP, parseChord, formatChord } from './input/keymap.js';
+
+// Customizable rows are those with an `id` field. Non-customizable rows
+// (palette, cycle-recent) live in the keymap but are not exposed through this
+// legacy API.
+function customizableRows() {
+  return KEYMAP.filter((row) => typeof row.id === 'string');
+}
+
+function chordToLegacy(chord) {
+  const [first] = parseChord(chord);
+  const modifiers = [];
+  if (first.ctrl)  modifiers.push('ctrl');
+  if (first.shift) modifiers.push('shift');
+  if (first.alt)   modifiers.push('alt');
+  return { key: normalizeLegacyKey(first.key), modifiers };
+}
+
+function legacyToChord({ key, modifiers }) {
+  const tokens = [];
+  if (modifiers.includes('ctrl'))  tokens.push('Ctrl');
+  if (modifiers.includes('shift')) tokens.push('Shift');
+  if (modifiers.includes('alt'))   tokens.push('Alt');
+  tokens.push(key);
+  return tokens.join('+');
+}
+
+function normalizeLegacyKey(key) {
+  // Legacy storage keeps single letters lowercase (e.g. 'b'); other keys
+  // (ArrowLeft, Enter, Tab) are preserved verbatim.
+  return typeof key === 'string' && key.length === 1 ? key.toLowerCase() : key;
+}
+
+// Default legacy-shape map derived from KEYMAP defaults.
+const DEFAULTS_BY_ID = {};
+for (const row of customizableRows()) {
+  DEFAULTS_BY_ID[row.id] = {
+    ...chordToLegacy(row.chord),
+    action: row.action,
+    platform: 'all',
+  };
+}
 
 /**
- * Current keyboard shortcuts (loaded from settings or defaults)
+ * Public for tests / external introspection — same shape as the old constant
+ * even though it's now derived from the keymap table.
  */
-let keyboardShortcuts = { ...DEFAULT_SHORTCUTS };
+export const DEFAULT_SHORTCUTS = { ...DEFAULTS_BY_ID };
+
+let overrides = {}; // id -> { key, modifiers }
+
+function legacyShortcut(row) {
+  const override = overrides[row.id];
+  const base = chordToLegacy(row.chord);
+  return {
+    key: override?.key ?? base.key,
+    modifiers: override?.modifiers ?? base.modifiers,
+    action: row.action,
+    platform: 'all',
+  };
+}
 
 /**
- * Get the current keyboard shortcuts
+ * The active keymap, with user overrides applied. Re-computed whenever
+ * overrides change so the dispatcher's parsed-chord cache invalidates.
  */
+let activeKeymap = computeActiveKeymap();
+
+function computeActiveKeymap() {
+  return KEYMAP.map((row) => {
+    if (!row.id) return row;
+    const override = overrides[row.id];
+    if (!override) return row;
+    return { ...row, chord: legacyToChord(override) };
+  });
+}
+
+function refreshActiveKeymap() {
+  activeKeymap = computeActiveKeymap();
+}
+
+/**
+ * Returns the active keymap (defaults + overrides). Used by the dispatcher.
+ * Returns a new array reference whenever overrides change.
+ */
+export function getActiveKeymap() {
+  return activeKeymap;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy public API consumed by `shortcuts-ui.js`
+// ---------------------------------------------------------------------------
+
 export function getKeyboardShortcuts() {
-  return { ...keyboardShortcuts };
-}
-
-/**
- * Update a keyboard shortcut
- */
-export function updateKeyboardShortcut(id, shortcut) {
-  if (DEFAULT_SHORTCUTS[id]) {
-    keyboardShortcuts[id] = { ...DEFAULT_SHORTCUTS[id], ...shortcut };
+  const out = {};
+  for (const row of customizableRows()) {
+    out[row.id] = legacyShortcut(row);
   }
+  return out;
 }
 
-/**
- * Parse a keyboard event into a shortcut identifier
- */
+export function updateKeyboardShortcut(id, shortcut) {
+  if (!DEFAULTS_BY_ID[id]) return;
+  overrides[id] = {
+    key: shortcut.key,
+    modifiers: [...(shortcut.modifiers ?? [])],
+  };
+  refreshActiveKeymap();
+}
+
 export function parseShortcutEvent(event) {
   const modifiers = [];
   if (event.ctrlKey) modifiers.push('ctrl');
-  if (event.metaKey) modifiers.push('ctrl'); // Treat Cmd as ctrl on macOS
+  if (event.metaKey && !event.ctrlKey) modifiers.push('ctrl'); // Cmd ≡ Ctrl
   if (event.shiftKey) modifiers.push('shift');
   if (event.altKey) modifiers.push('alt');
-
-  const key = event.key;
-  return { key, modifiers };
+  return { key: event.key, modifiers };
 }
 
-/**
- * Check if a keyboard event matches a shortcut definition
- */
-export function matchesShortcut(event, shortcut) {
-  const parsed = parseShortcutEvent(event);
-
-  // Check key match
-  if (parsed.key !== shortcut.key) {
-    return false;
-  }
-
-  // Check modifiers match
-  const shortcutModifiers = new Set(shortcut.modifiers);
-  const eventModifiers = new Set(parsed.modifiers);
-
-  // Check if all required modifiers are present
-  for (const mod of shortcutModifiers) {
-    if (!eventModifiers.has(mod)) {
-      return false;
-    }
-  }
-
-  // Check if no extra modifiers are present
-  for (const mod of eventModifiers) {
-    if (!shortcutModifiers.has(mod)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Format a shortcut for display (e.g., "Ctrl+Shift+C")
- */
 export function formatShortcut(shortcut, platform = 'linux') {
-  const modifiers = shortcut.modifiers.map(m => {
-    switch (m) {
-      case 'ctrl': return platform === 'darwin' ? '⌘' : 'Ctrl';
-      case 'shift': return platform === 'darwin' ? '⇧' : 'Shift';
-      case 'alt': return platform === 'darwin' ? '⌥' : 'Alt';
-      default: return m;
-    }
-  });
-
-  const key = shortcut.key === ' ' ? 'Space' : shortcut.key;
-  return [...modifiers, key].join(platform === 'darwin' ? '' : '+');
+  return formatChord(legacyToChord(shortcut), platform);
 }
 
-/**
- * Check if two shortcuts conflict (have the same key combination)
- */
-export function shortcutsConflict(shortcut1, shortcut2) {
-  return shortcut1.key === shortcut2.key &&
-         JSON.stringify(shortcut1.modifiers.sort()) === JSON.stringify(shortcut2.modifiers.sort());
+export function shortcutsConflict(s1, s2) {
+  return normalizeLegacyKey(s1.key) === normalizeLegacyKey(s2.key) &&
+    JSON.stringify([...s1.modifiers].sort()) === JSON.stringify([...s2.modifiers].sort());
 }
 
-/**
- * Find which shortcut ID conflicts with a given shortcut definition
- */
 export function findConflict(newShortcut, excludeId = null) {
-  for (const [id, shortcut] of Object.entries(keyboardShortcuts)) {
+  const all = getKeyboardShortcuts();
+  for (const [id, shortcut] of Object.entries(all)) {
     if (id !== excludeId && shortcutsConflict(newShortcut, shortcut)) {
       return id;
     }
@@ -129,44 +149,26 @@ export function findConflict(newShortcut, excludeId = null) {
   return null;
 }
 
-/**
- * Reset keyboard shortcuts to defaults
- */
 export function resetShortcutsToDefaults() {
-  keyboardShortcuts = { ...DEFAULT_SHORTCUTS };
+  overrides = {};
+  refreshActiveKeymap();
 }
 
-/**
- * Load keyboard shortcuts from settings
- */
 export function loadShortcutsFromSettings(settings) {
-  if (settings.shortcuts && typeof settings.shortcuts === 'object') {
-    // Merge user shortcuts with defaults, keeping user-defined ones
-    keyboardShortcuts = { ...DEFAULT_SHORTCUTS };
+  overrides = {};
+  if (settings && typeof settings.shortcuts === 'object' && settings.shortcuts !== null) {
     for (const [id, shortcut] of Object.entries(settings.shortcuts)) {
-      if (DEFAULT_SHORTCUTS[id]) {
-        keyboardShortcuts[id] = shortcut;
+      if (DEFAULTS_BY_ID[id] && shortcut && Array.isArray(shortcut.modifiers)) {
+        overrides[id] = {
+          key: shortcut.key,
+          modifiers: [...shortcut.modifiers],
+        };
       }
     }
-  } else {
-    keyboardShortcuts = { ...DEFAULT_SHORTCUTS };
   }
+  refreshActiveKeymap();
 }
 
-/**
- * Get keyboard shortcuts data for saving to settings
- */
 export function getShortcutsForSave() {
-  return keyboardShortcuts;
-}
-
-/**
- * Execute a shortcut action by calling the appropriate handler
- */
-export function executeShortcutAction(action, handlers) {
-  const handler = handlers[action];
-  if (handler) {
-    return handler();
-  }
-  return null;
+  return getKeyboardShortcuts();
 }
