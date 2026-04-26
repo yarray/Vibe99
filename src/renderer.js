@@ -1801,7 +1801,7 @@ function clearPaneColor(paneId) {
   render();
 }
 
-function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
+async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
     return false;
