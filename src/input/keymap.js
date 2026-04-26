@@ -39,6 +39,7 @@ export const KEYMAP = [
   { id: 'move-left',       mode: 'nav', chord: 'ArrowLeft|h',     action: 'focusPrev',             hint: '← prev' },
   { id: 'move-right',      mode: 'nav', chord: 'ArrowRight|l',    action: 'focusNext',             hint: '→ next' },
   { id: 'focus-terminal',  mode: 'nav', chord: 'Enter',           action: 'commitFocus',           hint: '↵ focus' },
+  { mode: 'nav', chord: 'Escape', action: 'cancelNav', hint: 'esc cancel' },
 ];
 
 // ---------------------------------------------------------------------------

@@ -41,5 +41,6 @@ export function createActions(deps) {
     focusPrev: () => deps.moveFocus(-1),
     focusNext: () => deps.moveFocus(1),
     commitFocus: () => deps.focusPane(deps.getFocusedPaneId()),
+    cancelNav: () => deps.cancelNavigationMode(),
   };
 }
