@@ -1432,17 +1432,18 @@ function renderPanes(refit = false) {
     const node = paneNodeMap.get(pane.id);
     const left = getPaneLeft(index, previewWidth, focusedIndex);
     const isFocused = index === focusedIndex;
+    const accentColor = pane.customColor || pane.accent;
 
     node.root.classList.toggle('is-focused', isFocused);
     node.root.classList.toggle('is-navigation-target', isFocused && isNavigationMode);
-    node.root.style.setProperty('--pane-accent', pane.accent);
+    node.root.style.setProperty('--pane-accent', accentColor);
     node.root.style.left = `${left}px`;
     node.root.style.zIndex = String(index + 1);
     node.root.style.height = `${stageHeight}px`;
 
-    if (node.accent !== pane.accent) {
-      node.terminal.options.theme = createTerminalTheme(pane.accent);
-      node.accent = pane.accent;
+    if (node.accent !== accentColor) {
+      node.terminal.options.theme = createTerminalTheme(accentColor);
+      node.accent = accentColor;
     }
 
     if (refit || node.needsFit) {
