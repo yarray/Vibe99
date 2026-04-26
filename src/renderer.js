@@ -6,7 +6,6 @@ import {
   openCommandPalette,
   closeCommandPalette,
   isCommandPaletteOpen,
-  isCommandPaletteHotkey,
 } from './command-palette.js';
 import { createPaneActivityWatcher } from './pane-activity-watcher.js';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
@@ -14,6 +13,8 @@ import '@xterm/xterm/css/xterm.css';
 
 import * as ShortcutsRegistry from './shortcuts-registry.js';
 import * as ShortcutsUI from './shortcuts-ui.js';
+import { createActions } from './input/actions.js';
+import { createDispatcher } from './input/dispatcher.js';
 
 function getRuntimePlatform() {
   const platform = navigator.platform.toLowerCase();
@@ -2138,96 +2139,36 @@ function updateStatus() {
   statusHintEl.textContent = 'Ctrl+B to enter navigation mode'; // Note: this will be updated by keyboard shortcuts
 }
 
-window.addEventListener(
-  'keydown',
-  (event) => {
-    // Pane cycling: Ctrl+Tab cycles back through MRU; Ctrl+Shift+Tab cycles
-    // forward. Match by KeyboardEvent.code so the binding is layout-agnostic,
-    // and ignore auto-repeats so each press is one step.
-    const cycleRecentHotkey =
-      event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Tab' && !event.repeat;
+// Wire renderer-level callbacks into pure action handlers, then route every
+// global keydown through the declarative keymap dispatcher. The keydown switch
+// that used to live here is now `KEYMAP` in `input/keymap.js` plus a few flag
+// columns (`mode`, `skipInInput`, `stopPropagation`) interpreted by the
+// dispatcher.
+const keyboardActions = createActions({
+  addPane,
+  enterNavigationMode,
+  cycleToRecentPane,
+  navigateLeft,
+  navigateRight,
+  copyTerminalSelection,
+  pasteIntoTerminal,
+  moveFocus,
+  focusPane,
+  getFocusedPaneId: () => focusedPaneId,
+  isCommandPaletteOpen,
+  closeCommandPalette,
+  openTabSwitcher,
+});
 
-    // Command palette hotkey has highest priority
-    if (isCommandPaletteHotkey(event, bridge.platform)) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (isCommandPaletteOpen()) {
-        closeCommandPalette();
-      } else {
-        openTabSwitcher();
-      }
-      return;
-    }
+const dispatchKeydown = createDispatcher({
+  getKeymap: ShortcutsRegistry.getActiveKeymap,
+  actions: keyboardActions,
+  getMode: () => (isNavigationMode ? 'nav' : 'normal'),
+  isInputFocused: () => document.activeElement?.tagName === 'INPUT',
+  isCommandPaletteOpen,
+});
 
-    // While the palette is open, let its own input handle keys so global
-    // hotkeys don't fire underneath.
-    if (isCommandPaletteOpen()) {
-      return;
-    }
-
-    if (cycleRecentHotkey && document.activeElement?.tagName !== 'INPUT') {
-      event.preventDefault();
-      // Stop propagation so xterm doesn't also send the Tab keystroke to the
-      // PTY as a literal `\t`, which would leak into the shell prompt.
-      event.stopPropagation();
-      cycleToRecentPane({ reverse: event.shiftKey });
-      return;
-    }
-
-    // Check keyboard shortcuts from registry
-    const shortcuts = ShortcutsRegistry.getKeyboardShortcuts();
-    for (const [id, shortcut] of Object.entries(shortcuts)) {
-      if (ShortcutsRegistry.matchesShortcut(event, shortcut)) {
-        // Skip navigation mode shortcuts if not in navigation mode
-        if ((id === 'move-left' || id === 'move-right' || id === 'focus-terminal') &&
-            !isNavigationMode) {
-          continue;
-        }
-
-        // Skip shortcuts that require no editable target
-        if (document.activeElement?.tagName === 'INPUT' &&
-            (id === 'navigation-mode' || id === 'copy' || id === 'paste')) {
-          continue;
-        }
-
-        event.preventDefault();
-
-        // Execute the shortcut action
-        switch (shortcut.action) {
-          case 'addPane':
-            addPane();
-            break;
-          case 'enterNavigationMode':
-            enterNavigationMode();
-            break;
-          case 'copyTerminalSelection':
-            copyTerminalSelection();
-            break;
-          case 'pasteIntoTerminal':
-            void pasteIntoTerminal();
-            break;
-          case 'moveFocusLeft':
-            moveFocus(-1);
-            break;
-          case 'moveFocusRight':
-            moveFocus(1);
-            break;
-          case 'navigateLeft':
-            navigateLeft();
-            break;
-          case 'navigateRight':
-            navigateRight();
-            break;
-          case 'focusTerminal':
-            focusPane(focusedPaneId);
-            break;
-        }
-        return;
-      }
-    }
-  },
-  true
-);
+window.addEventListener('keydown', dispatchKeydown, true);
 
 // Commit the pane cycle when the cycling modifier is released. Without this,
 // a user who presses Ctrl+` and then switches to a different pane via mouse

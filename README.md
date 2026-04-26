@@ -47,14 +47,18 @@ npm run tauri:build
 
 | Shortcut | Action |
 |---|---|
-| `Cmd+T` / `Ctrl+T` | Add a new pane |
+| `Cmd+N` / `Ctrl+N` | Add a new pane |
 | `Ctrl+Tab` | Cycle to the most recently visited pane (add `Shift` to reverse) |
+| `Cmd+Shift+O` / `Ctrl+Shift+O` | Open the command palette (jump to any pane) |
 | `Ctrl+Left` / `Ctrl+Right` | Spatial navigation between panes |
 | `Ctrl+B` | Enter navigation mode (`H`/`L` or arrows to move, `Enter` to focus) |
+| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste in the focused terminal |
 | double-click tab | Rename it |
 | drag tab | Reorder panes |
 | top-right `+` | Add a pane |
 | top-right gear | Open display settings |
+
+Shortcuts are configurable from the gear menu → Keyboard Shortcuts.
 
 ## Platform Defaults And Known Issues
 
