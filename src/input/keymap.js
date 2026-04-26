@@ -36,10 +36,10 @@ export const KEYMAP = [
   { id: 'paste',           mode: '*',   chord: 'Ctrl+Shift+V',    action: 'pasteIntoTerminal',     hint: 'paste',            skipInInput: true },
 
   // Navigation mode
-  { id: 'move-left',       mode: 'nav', chord: 'ArrowLeft|h',     action: 'focusPrev',             hint: '← prev' },
-  { id: 'move-right',      mode: 'nav', chord: 'ArrowRight|l',    action: 'focusNext',             hint: '→ next' },
-  { id: 'focus-terminal',  mode: 'nav', chord: 'Enter',           action: 'commitFocus',           hint: '↵ focus' },
-  { mode: 'nav', chord: 'Escape', action: 'cancelNav', hint: 'esc cancel' },
+  { id: 'move-left',       mode: 'nav', chord: 'ArrowLeft|h',     action: 'focusPrev',             hint: '←/h prev',       stopPropagation: true },
+  { id: 'move-right',      mode: 'nav', chord: 'ArrowRight|l',    action: 'focusNext',             hint: '→/l next',       stopPropagation: true },
+  { id: 'focus-terminal',  mode: 'nav', chord: 'Enter',           action: 'commitFocus',           hint: '↵ focus',        stopPropagation: true },
+  { mode: 'nav', chord: 'Escape', action: 'cancelNav', hint: 'esc cancel', stopPropagation: true },
 ];
 
 // ---------------------------------------------------------------------------
