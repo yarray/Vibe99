@@ -37,8 +37,21 @@ export const KEYMAP = [
 
   // Navigation mode
   { id: 'move-left',       mode: 'nav', chord: 'ArrowLeft|h',     action: 'focusPrev',             hint: '← prev' },
-  { id: 'move-right',      mode: 'nav', chord: 'ArrowRight|l',    action: 'focusNext',             hint: '→ next' },
-  { id: 'focus-terminal',  mode: 'nav', chord: 'Enter',           action: 'commitFocus',           hint: '↵ focus' },
+  { id: 'move-right',      mode: 'nav', chord: 'ArrowRight|l',   action: 'focusNext',             hint: '→ next' },
+  { id: 'focus-terminal',  mode: 'nav', chord: 'Enter',          action: 'commitFocus',           hint: '↵ focus' },
+
+  // Navigation mode — movement
+  { id: 'focus-first',     mode: 'nav', chord: 'Home',           action: 'focusFirst',            hint: 'first' },
+  { id: 'focus-last',      mode: 'nav', chord: 'End',            action: 'focusLast',             hint: 'last' },
+  { id: 'jump-to',         mode: 'nav', chord: '1..9',           action: 'jumpTo',                hint: '1-9 jump',         skipInInput: true },
+
+  // Navigation mode — editing
+  { id: 'new-pane',        mode: 'nav', chord: 'n',              action: 'newPane',               hint: 'n new',            skipInInput: true },
+  { id: 'close-pane',      mode: 'nav', chord: 'c',              action: 'closePane',             hint: 'c close',          skipInInput: true },
+  { id: 'rename-pane',     mode: 'nav', chord: 'r',              action: 'renamePane',            hint: 'r rename',         skipInInput: true },
+
+  // Navigation mode — help
+  { id: 'show-keymap-help', mode: 'nav', chord: '?',             action: 'showKeymapHelp',        hint: '? help',           skipInInput: true },
 ];
 
 // ---------------------------------------------------------------------------
@@ -67,6 +80,13 @@ function parseChordAlt(alt) {
   if (tokens.length === 0) {
     throw new Error(`Empty chord alternative: ${alt}`);
   }
+
+  // Digit range pattern: '1..9' — matches any single digit 1–9.
+  if (tokens.length === 1 && /^\d\.\.\d$/.test(tokens[0])) {
+    const [lo, hi] = tokens[0].split('..').map(Number);
+    return { key: '?', ctrl: false, shift: false, alt: false, _digitRange: { lo, hi } };
+  }
+
   const key = tokens[tokens.length - 1];
   const mods = tokens.slice(0, -1).map((t) => t.toLowerCase());
   for (const m of mods) {
@@ -98,6 +118,16 @@ export function matchesChord(event, parsedAlts) {
 }
 
 function matchesChordAlt(event, alt) {
+  // Digit range: '1..9' matches a single digit key without modifiers.
+  if (alt._digitRange) {
+    const { lo, hi } = alt._digitRange;
+    const digit = parseInt(event.key, 10);
+    if (Number.isNaN(digit)) return false;
+    if (digit < lo || digit > hi) return false;
+    if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    return true;
+  }
+
   if (alt.key === 'Tab') {
     if (event.code !== 'Tab') return false;
     if (event.repeat) return false;

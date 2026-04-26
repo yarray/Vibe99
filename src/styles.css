@@ -1167,3 +1167,33 @@ body.is-dragging-tabs {
   color: #ff6b57;
   margin-top: 2px;
 }
+
+/* Nav-mode keyboard cheatsheet (keymap help modal) */
+.keymap-help-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.keymap-help-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.keymap-help-chord {
+  flex: 0 0 80px;
+  font-size: 12px;
+  color: #ffd166;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.keymap-help-hint {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+}
