@@ -640,6 +640,47 @@ body {
   white-space: nowrap;
 }
 
+/* Hint bar styles */
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+.hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1;
+}
+
+.hint-sep {
+  margin: 0 4px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.hint-minimal {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+}
+
+/* Compact hint bar mode */
+.is-minimal-hint .status-hint {
+  display: none;
+}
+
 body.is-dragging-tabs {
   user-select: none;
   cursor: grabbing;
