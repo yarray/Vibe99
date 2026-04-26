@@ -32,7 +32,6 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
       }
     }
   }
-
   // Show at most 6 items; only show entries with hint text
   const visible = entries.filter(entry => entry.hint).slice(0, 6);
 

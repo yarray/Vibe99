@@ -45,6 +45,7 @@ export const KEYMAP = [
   { id: 'nav-left',  mode: 'nav', chord: 'h', action: 'focusPrev',    hint: 'h prev',  stopPropagation: true },
   { id: 'nav-right', mode: 'nav', chord: 'l', action: 'focusNext',    hint: 'l next',  stopPropagation: true },
 ];
+];
 
 // ---------------------------------------------------------------------------
 // Chord parsing
