@@ -20,6 +20,8 @@ export const DEFAULT_SHORTCUTS = {
   'paste': { key: 'v', modifiers: ['ctrl', 'shift'], platform: 'all', action: 'pasteIntoTerminal' },
   'move-left': { key: 'ArrowLeft', modifiers: [], platform: 'all', action: 'moveFocusLeft' },
   'move-right': { key: 'ArrowRight', modifiers: [], platform: 'all', action: 'moveFocusRight' },
+  'navigate-left': { key: 'ArrowLeft', modifiers: ['ctrl'], platform: 'all', action: 'navigateLeft' },
+  'navigate-right': { key: 'ArrowRight', modifiers: ['ctrl'], platform: 'all', action: 'navigateRight' },
   'focus-terminal': { key: 'Enter', modifiers: [], platform: 'all', action: 'focusTerminal' },
 };
 

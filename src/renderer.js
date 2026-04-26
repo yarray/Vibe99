@@ -1564,6 +1564,34 @@ function moveFocus(delta) {
   render();
 }
 
+function navigateLeft() {
+  if (panes.length === 0) {
+    return;
+  }
+
+  const focusedIndex = getFocusedIndex();
+  const nextIndex = focusedIndex - 1;
+
+  if (nextIndex >= 0) {
+    focusedPaneId = panes[nextIndex].id;
+    render();
+  }
+}
+
+function navigateRight() {
+  if (panes.length === 0) {
+    return;
+  }
+
+  const focusedIndex = getFocusedIndex();
+  const nextIndex = focusedIndex + 1;
+
+  if (nextIndex < panes.length) {
+    focusedPaneId = panes[nextIndex].id;
+    render();
+  }
+}
+
 // Cycle to the previously-visited pane (similar to browser Ctrl+Tab).
 // First press steps from current to MRU[1]; subsequent presses while the
 // modifier is held step further back through the snapshot. Reverse cycles
@@ -2180,6 +2208,12 @@ window.addEventListener(
             break;
           case 'moveFocusRight':
             moveFocus(1);
+            break;
+          case 'navigateLeft':
+            navigateLeft();
+            break;
+          case 'navigateRight':
+            navigateRight();
             break;
           case 'focusTerminal':
             focusPane(focusedPaneId);
