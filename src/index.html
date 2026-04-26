@@ -29,22 +29,32 @@
               <span>Font family</span>
             </label>
             <input class="settings-number" id="font-family-input" type="text" placeholder="e.g. JetBrains Mono, Consolas" value="" />
-          </div>
 
-          <div class="settings-divider"></div>
-
-          <div class="settings-section">
-            <div class="settings-row">
+            <label class="settings-row" for="pane-width-range">
               <span>Pane width</span>
-              <button class="settings-btn settings-action-btn" id="pane-width-settings-btn" type="button" aria-label="Configure pane width">›</button>
+              <span id="pane-width-value">720px</span>
+            </label>
+            <div class="settings-dual">
+              <input id="pane-width-range" type="range" min="520" max="2000" step="10" value="720" />
+              <input class="settings-number" id="pane-width-input" type="number" min="520" max="2000" step="10" value="720" />
             </div>
-            <div class="settings-row">
+
+            <label class="settings-row" for="pane-opacity-range">
               <span>Pane opacity</span>
-              <button class="settings-btn settings-action-btn" id="pane-opacity-settings-btn" type="button" aria-label="Configure pane opacity">›</button>
+              <span id="pane-opacity-value">0.80</span>
+            </label>
+            <div class="settings-dual">
+              <input id="pane-opacity-range" type="range" min="0.55" max="1" step="0.01" value="0.8" />
+              <input class="settings-number" id="pane-opacity-input" type="number" min="0.55" max="1" step="0.01" value="0.8" />
             </div>
-            <div class="settings-row">
+
+            <label class="settings-row" for="pane-mask-alpha-range">
               <span>BG mask opacity</span>
-              <button class="settings-btn settings-action-btn" id="pane-mask-opacity-settings-btn" type="button" aria-label="Configure BG mask opacity">›</button>
+              <span id="pane-mask-alpha-value">0.25</span>
+            </label>
+            <div class="settings-dual">
+              <input id="pane-mask-alpha-range" type="range" min="0" max="0.8" step="0.01" value="0.25" />
+              <input class="settings-number" id="pane-mask-alpha-input" type="number" min="0" max="0.8" step="0.01" value="0.25" />
             </div>
           </div>
 
