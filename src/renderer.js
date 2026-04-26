@@ -1219,6 +1219,17 @@ function createPane(pane) {
   terminal.open(terminalHost);
   try { terminal.loadAddon(new WebglAddon()); } catch {}
   terminal.attachCustomKeyEventHandler((event) => {
+    // Ctrl+Tab is reserved for pane MRU cycling — never let xterm forward
+    // the literal Tab keystroke to the PTY.
+    if (
+      event.type === 'keydown' &&
+      event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      event.code === 'Tab'
+    ) {
+      return false;
+    }
     if (!isWindowsCtrlVPasteHotkey(event)) {
       return true;
     }
@@ -2259,6 +2270,9 @@ window.addEventListener(
 
     if (cycleRecentHotkey && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();
+      // Stop propagation so xterm doesn't also send the Tab keystroke to the
+      // PTY as a literal `\t`, which would leak into the shell prompt.
+      event.stopPropagation();
       cycleToRecentPane({ reverse: event.shiftKey });
       return;
     }
