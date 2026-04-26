@@ -2,7 +2,16 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
+import {
+  openCommandPalette,
+  closeCommandPalette,
+  isCommandPaletteOpen,
+  isCommandPaletteHotkey,
+} from './command-palette.js';
 import '@xterm/xterm/css/xterm.css';
+
+import * as ShortcutsRegistry from './shortcuts-registry.js';
+import * as ShortcutsUI from './shortcuts-ui.js';
 
 function getRuntimePlatform() {
   const platform = navigator.platform.toLowerCase();
@@ -48,6 +57,20 @@ function splitArgs(str) {
   }
   if (cur) { args.push(cur); }
   return args;
+}
+
+// Converts a string array back to a shell-quoted command-line string.
+// This is the inverse of splitArgs(): formatArgs(splitArgs(s)) === s for any s.
+function formatArgs(args) {
+  return args.map((arg) => {
+    // Arguments needing quoting: contain spaces, double quotes, backslashes, or are empty.
+    if (arg === '' || /[\s"]/.test(arg) || /\\/.test(arg)) {
+      // Escape backslashes and double quotes before wrapping in double quotes.
+      const escaped = arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      return `"${escaped}"`;
+    }
+    return arg;
+  }).join(' ');
 }
 
 
@@ -253,12 +276,7 @@ const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
 const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
 const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
 const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
-
-// Show the platform-correct add-pane shortcut in the settings panel.
-const addPaneShortcutEl = document.querySelector('#shortcut-add-pane .settings-shortcut');
-if (addPaneShortcutEl) {
-  addPaneShortcutEl.textContent = bridge.platform === 'darwin' ? '⌘T' : 'Ctrl+T';
-}
+const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
 
 const settings = {
   fontSize: 13,
@@ -420,6 +438,13 @@ function applyPersistedSettings(nextSettings) {
   if (Number.isFinite(uiSettings.paneWidth)) {
     settings.paneWidth = uiSettings.paneWidth;
   }
+
+  // Load keyboard shortcuts
+  if (typeof uiSettings.shortcuts === 'object' && uiSettings.shortcuts !== null) {
+    ShortcutsRegistry.loadShortcutsFromSettings(uiSettings);
+  } else {
+    ShortcutsRegistry.loadShortcutsFromSettings({});
+  }
 }
 
 function buildSessionData() {
@@ -481,7 +506,15 @@ function scheduleSettingsSave() {
 
   pendingSettingsSave = window.setTimeout(() => {
     pendingSettingsSave = null;
-    bridge.saveSettings({ version: 3, ui: settings, session: buildSessionData() }).catch(reportError);
+    const settingsToSave = {
+      version: 3,
+      ui: {
+        ...settings,
+        shortcuts: ShortcutsRegistry.getShortcutsForSave()
+      },
+      session: buildSessionData()
+    };
+    bridge.saveSettings(settingsToSave).catch(reportError);
   }, 150);
 }
 
@@ -489,7 +522,15 @@ function flushSettingsSave() {
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
     pendingSettingsSave = null;
-    void bridge.saveSettings({ version: 3, ui: settings, session: buildSessionData() }).catch(reportError);
+    const settingsToSave = {
+      version: 3,
+      ui: {
+        ...settings,
+        shortcuts: ShortcutsRegistry.getShortcutsForSave()
+      },
+      session: buildSessionData()
+    };
+    void bridge.saveSettings(settingsToSave).catch(reportError);
   }
 }
 
@@ -546,7 +587,7 @@ function renderShellProfiles() {
 
     const cmd = document.createElement('div');
     cmd.className = 'shell-profile-cmd';
-    cmd.textContent = profile.command + (profile.args?.length ? ` ${profile.args.join(' ')}` : '');
+    cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
 
     info.append(name, cmd);
 
@@ -583,7 +624,7 @@ function renderShellProfiles() {
         id: profile.id,
         name: profile.name || '',
         command: profile.command,
-        args: (profile.args ?? []).join(' '),
+        args: formatArgs(profile.args ?? []),
       };
       renderShellProfiles();
     }));
@@ -824,7 +865,7 @@ function renderModalShellProfiles() {
 
     const cmd = document.createElement('div');
     cmd.className = 'shell-profile-cmd';
-    cmd.textContent = profile.command + (profile.args?.length ? ` ${profile.args.join(' ')}` : '');
+    cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
 
     info.append(name, cmd);
 
@@ -854,7 +895,7 @@ function renderModalShellProfiles() {
         id: profile.id,
         name: profile.name || '',
         command: profile.command,
-        args: (profile.args ?? []).join(' '),
+        args: formatArgs(profile.args ?? []),
       };
       renderModalShellProfiles();
     }));
@@ -2055,6 +2096,29 @@ function clearPaneColor(paneId) {
   render();
 }
 
+// VIB-16: open the command palette over the current panes. Build a
+// feature-agnostic item list and let the palette module do the rest.
+function openTabSwitcher() {
+  hideContextMenu();
+  if (renamingPaneId !== null) {
+    cancelRenamePane();
+  }
+  if (!settingsPanelEl.classList.contains('is-hidden')) {
+    settingsPanelEl.classList.add('is-hidden');
+  }
+
+  const items = panes.map((pane) => ({
+    id: pane.id,
+    label: getPaneLabel(pane) || pane.id,
+    accent: pane.customColor || pane.accent,
+  }));
+
+  openCommandPalette(items, focusPane, {
+    placeholder: 'Switch tab by title…',
+    emptyText: 'No matching tabs',
+  });
+}
+
 async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
@@ -2163,35 +2227,33 @@ function updateStatus() {
 
   statusLabelEl.classList.remove('is-navigation-mode');
   statusLabelEl.textContent = `Focused: ${getPaneLabel(focusedPane) || focusedPane.id}`;
-  statusHintEl.textContent = 'Ctrl+B to enter navigation mode';
+  statusHintEl.textContent = 'Ctrl+B to enter navigation mode'; // Note: this will be updated by keyboard shortcuts
 }
 
 window.addEventListener(
   'keydown',
   (event) => {
-    const key = event.key.toLowerCase();
-    const isMac = bridge.platform === 'darwin';
-    const openTabHotkey = isMac
-      ? event.metaKey && !event.ctrlKey && !event.altKey && key === 't'
-      : event.ctrlKey && !event.metaKey && !event.altKey && key === 't';
-    const enterNavigationHotkey =
-      event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && key === 'b';
-    const copyHotkey = isMac
-      ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'c'
-      : event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && key === 'c';
-    const pasteHotkey = isMac
-      ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'v'
-      : event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && key === 'v';
-    const windowsCtrlVPasteHotkey = isWindowsCtrlVPasteHotkey(event);
     // Pane cycling: Ctrl+` cycles back through MRU; Shift+Ctrl+` cycles
     // forward. Match by KeyboardEvent.code so layouts that produce `~` on
     // shift still work, and ignore auto-repeats so each press is one step.
     const cycleRecentHotkey =
       event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Backquote' && !event.repeat;
 
-    if (openTabHotkey) {
+    // Command palette hotkey has highest priority
+    if (isCommandPaletteHotkey(event, bridge.platform)) {
       event.preventDefault();
-      addPane();
+      event.stopPropagation();
+      if (isCommandPaletteOpen()) {
+        closeCommandPalette();
+      } else {
+        openTabSwitcher();
+      }
+      return;
+    }
+
+    // While the palette is open, let its own input handle keys so global
+    // hotkeys don't fire underneath.
+    if (isCommandPaletteOpen()) {
       return;
     }
 
@@ -2201,43 +2263,50 @@ window.addEventListener(
       return;
     }
 
-    if (enterNavigationHotkey && document.activeElement?.tagName !== 'INPUT') {
-      event.preventDefault();
-      enterNavigationMode();
-      return;
-    }
+    // Check keyboard shortcuts from registry
+    const shortcuts = ShortcutsRegistry.getKeyboardShortcuts();
+    for (const [id, shortcut] of Object.entries(shortcuts)) {
+      if (ShortcutsRegistry.matchesShortcut(event, shortcut)) {
+        // Skip navigation mode shortcuts if not in navigation mode
+        if ((id === 'move-left' || id === 'move-right' || id === 'focus-terminal') &&
+            !isNavigationMode) {
+          continue;
+        }
 
-    if (copyHotkey && document.activeElement?.tagName !== 'INPUT') {
-      event.preventDefault();
-      copyTerminalSelection();
-      return;
-    }
+        // Skip shortcuts that require no editable target
+        if (document.activeElement?.tagName === 'INPUT' &&
+            (id === 'navigation-mode' || id === 'copy' || id === 'paste')) {
+          continue;
+        }
 
-    if ((pasteHotkey || windowsCtrlVPasteHotkey) && document.activeElement?.tagName !== 'INPUT') {
-      event.preventDefault();
-      void pasteIntoTerminal();
-      return;
-    }
+        event.preventDefault();
 
-    if (isEditableTarget() || !isNavigationMode) {
-      return;
-    }
-
-    if (event.key === 'ArrowLeft' || key === 'h') {
-      event.preventDefault();
-      moveFocus(-1);
-      return;
-    }
-
-    if (event.key === 'ArrowRight' || key === 'l') {
-      event.preventDefault();
-      moveFocus(1);
-      return;
-    }
-
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      focusPane(focusedPaneId);
+        // Execute the shortcut action
+        switch (shortcut.action) {
+          case 'addPane':
+            addPane();
+            break;
+          case 'enterNavigationMode':
+            enterNavigationMode();
+            break;
+          case 'copyTerminalSelection':
+            copyTerminalSelection();
+            break;
+          case 'pasteIntoTerminal':
+            void pasteIntoTerminal();
+            break;
+          case 'moveFocusLeft':
+            moveFocus(-1);
+            break;
+          case 'moveFocusRight':
+            moveFocus(1);
+            break;
+          case 'focusTerminal':
+            focusPane(focusedPaneId);
+            break;
+        }
+        return;
+      }
     }
   },
   true
@@ -2287,6 +2356,22 @@ shellProfilesSettingsBtn.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
     openShellProfilesModal();
+  }
+});
+
+// ----------------------------------------------------------------
+// Keyboard shortcuts modal
+// ----------------------------------------------------------------
+
+// Keyboard shortcuts modal button (clickable row)
+keyboardShortcutsSettingsBtn.addEventListener('click', () => {
+  ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+});
+
+keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
   }
 });
 
