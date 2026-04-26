@@ -591,6 +591,16 @@ body {
   transition: none;
 }
 
+/* In navigation mode border expands from 2px→4px.
+   ::after inset: 0 equals the border-box (unchanged), so at 4px border
+   the pseudo-element only covers the inner 2px of the 4px border —
+   the outer 2px shows through as the accent color, making the top (and
+   other) border edges appear wider than intended.
+   Expanding inset by the extra 2px restores full border coverage. */
+.pane.is-navigation-target::after {
+  inset: -2px;
+}
+
 .pane.is-navigation-target {
   opacity: 1;
   border-width: 4px;
