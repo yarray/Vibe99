@@ -18,9 +18,7 @@
 }
 
 .pane.has-pending-activity::after {
-  opacity: 0;
-  transition: opacity 200ms ease;
-  animation: pane-breathing-pulse 2.4s ease-in-out 200ms infinite;
+  animation: pane-breathing-pulse 2.4s ease-in-out infinite;
 }
 
 .pane.is-focused::after,

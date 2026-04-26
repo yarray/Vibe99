@@ -41,5 +41,20 @@ export function createActions(deps) {
     focusPrev: () => deps.moveFocus(-1),
     focusNext: () => deps.moveFocus(1),
     commitFocus: () => deps.focusPane(deps.getFocusedPaneId()),
+
+    // Navigation mode — movement
+    focusFirst:    () => deps.focusPaneAt(0),
+    focusLast:     () => deps.focusPaneAt(deps.getPaneCount() - 1),
+    jumpTo: (e) => {
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= deps.getPaneCount()) deps.focusPaneAt(n - 1);
+    },
+
+    // Navigation mode — editing
+    closePane:   () => deps.requestClosePane(deps.getFocusedPaneId()),
+    renamePane:  () => deps.startInlineRename(deps.getFocusedPaneId()),
+
+    // Navigation mode — help
+    showKeymapHelp: () => deps.openKeymapHelpModal(),
   };
 }

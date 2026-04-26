@@ -256,6 +256,8 @@ let paneMruOrder = panes.map((pane) => pane.id);
 // presses step through a stable list. `index` points into that snapshot.
 // `null` means no cycle is in progress.
 let paneCycleState = null;
+let pendingClosePaneId = null;   // pane awaiting second 'c' to confirm close
+let closeConfirmTimer = null;    // setTimeout id for 3s auto-cancel
 
 const paneNodeMap = new Map();
 
@@ -644,6 +646,7 @@ function openShellProfilesModal() {
       </div>
       <div class="settings-modal-footer">
         <button type="button" class="settings-modal-btn" id="modal-shell-profile-add">Add Profile</button>
+        <button type="button" class="settings-modal-btn primary close-btn">Done</button>
       </div>
     </div>
   `;
@@ -658,6 +661,7 @@ function openShellProfilesModal() {
   });
 
   overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+  overlay.querySelector('.close-btn').addEventListener('click', closeModal);
 
   // Add profile button
   overlay.querySelector('#modal-shell-profile-add').addEventListener('click', () => {
@@ -849,6 +853,58 @@ function createModalShellProfileEditor() {
   });
 
   return editor;
+}
+
+// Cheatsheet modal — shows all nav-mode keymap entries.
+function openKeymapHelpModal() {
+  import('./input/keymap.js').then(({ KEYMAP }) => {
+    const navEntries = KEYMAP.filter((e) => e.mode === 'nav' && e.hint);
+    const overlay = document.createElement('div');
+    overlay.className = 'settings-modal-overlay';
+
+    const rows = navEntries.map((e) => `
+      <div class="keymap-help-row">
+        <span class="keymap-help-chord">${e.chord}</span>
+        <span class="keymap-help-hint">${e.hint}</span>
+      </div>
+    `).join('');
+
+    overlay.innerHTML = `
+      <div class="settings-modal" style="min-width: 280px;">
+        <div class="settings-modal-header">
+          <span>Nav Mode — Keyboard Cheatsheet</span>
+          <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="settings-modal-body">
+          <div class="keymap-help-list">${rows}</div>
+        </div>
+        <div class="settings-modal-footer">
+          <button type="button" class="settings-modal-btn primary close-btn">Done</button>
+        </div>
+      </div>
+    `;
+
+    const closeModal = () => {
+      document.removeEventListener('keydown', onKeydown);
+      overlay.remove();
+    };
+
+    function onKeydown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeModal();
+      }
+    }
+    document.addEventListener('keydown', onKeydown);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+    overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+    overlay.querySelector('.close-btn').addEventListener('click', closeModal);
+
+    document.body.appendChild(overlay);
+  });
 }
 
 function createTerminalTheme(accent) {
@@ -1273,6 +1329,14 @@ function focusPane(paneId, options = {}) {
   }
 }
 
+// Like focusPane but does NOT exit nav mode — used by nav-mode keyboard shortcuts.
+function focusPaneAt(index) {
+  if (panes.length === 0 || index < 0 || index >= panes.length) return;
+  paneCycleState = null;
+  focusedPaneId = panes[index].id;
+  render();  // stays in nav mode
+}
+
 function addPane() {
   const newPane = createPaneData();
   paneCycleState = null;
@@ -1306,6 +1370,10 @@ function closePane(index, options = {}) {
     clearPendingTabFocus();
   }
 
+  if (closingPane.id === pendingClosePaneId) {
+    clearCloseConfirm();
+  }
+
   if (destroyTerminal) {
     bridge.destroyTerminal({ paneId: closingPane.id });
   }
@@ -1321,6 +1389,36 @@ function closePane(index, options = {}) {
   recordPaneVisit(focusedPaneId);
 
   render(true);
+}
+
+// Two-step close: first 'c' arms the confirm; second 'c' within 3s closes.
+function requestClosePane(paneId) {
+  if (panes.length <= 1) return; // can't close the last pane
+
+  // Already pending confirmation for the same pane — confirm and close.
+  if (pendingClosePaneId === paneId) {
+    clearCloseConfirm();
+    const index = getPaneIndex(paneId);
+    if (index !== -1) closePane(index);
+    return;
+  }
+
+  // New pane — arm confirmation.
+  clearCloseConfirm();
+  pendingClosePaneId = paneId;
+  closeConfirmTimer = window.setTimeout(clearCloseConfirm, 3000);
+  render();
+}
+
+function clearCloseConfirm() {
+  if (closeConfirmTimer !== null) {
+    window.clearTimeout(closeConfirmTimer);
+    closeConfirmTimer = null;
+  }
+  if (pendingClosePaneId !== null) {
+    pendingClosePaneId = null;
+    render();
+  }
 }
 
 function beginRenamePane(index) {
@@ -2128,7 +2226,11 @@ function updateStatus() {
   if (isNavigationMode) {
     statusLabelEl.classList.add('is-navigation-mode');
     statusLabelEl.textContent = 'Navigation Mode';
-    statusHintEl.textContent = 'Left/Right or H/L to flip; Enter to Focus';
+    if (pendingClosePaneId !== null) {
+      statusHintEl.textContent = 'Press c again to confirm close — Esc to cancel';
+    } else {
+      statusHintEl.textContent = '← → 1-9 ↵ n c r ?';
+    }
     return;
   }
 
@@ -2152,7 +2254,12 @@ const keyboardActions = createActions({
   pasteIntoTerminal,
   moveFocus,
   focusPane,
+  focusPaneAt,
   getFocusedPaneId: () => focusedPaneId,
+  getPaneCount: () => panes.length,
+  requestClosePane,
+  startInlineRename: beginRenamePane,
+  openKeymapHelpModal,
   isCommandPaletteOpen,
   closeCommandPalette,
   openTabSwitcher,
@@ -2393,6 +2500,10 @@ window.addEventListener('pointerdown', (event) => {
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !settingsPanelEl.classList.contains('is-hidden')) {
     settingsPanelEl.classList.add('is-hidden');
+  }
+  // Cancel pending close-confirm when Esc is pressed in nav mode.
+  if (event.key === 'Escape' && pendingClosePaneId !== null) {
+    clearCloseConfirm();
   }
 });
 
