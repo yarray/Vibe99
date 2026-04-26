@@ -220,6 +220,15 @@ let isNavigationMode = false;
 let pendingTabFocus = null;
 let sessionRestoreComplete = false;
 
+// Ctrl+Tab cycling state
+let paneHistory = []; // MRU list of pane IDs (most recently used first)
+let ctrlTabPressCount = 0; // Number of Tab presses while Ctrl is held
+let ctrlTabState = {
+  ctrlPressed: false,
+  timerId: null,
+  basePaneId: null, // The pane we started from before any Ctrl+Tab
+};
+
 const paneNodeMap = new Map();
 
 const stageEl = document.getElementById('stage');
@@ -764,6 +773,90 @@ function getFocusedIndex() {
   return panes.length > 0 ? 0 : -1;
 }
 
+// Pane history management for Ctrl+Tab cycling
+function initializePaneHistory() {
+  // Initialize history with current panes in order, most recent first
+  paneHistory = panes.map((p) => p.id);
+}
+
+function updatePaneHistory(paneId) {
+  // Move pane to front of history (most recently used)
+  // Remove if already present, then add to front
+  paneHistory = paneHistory.filter((id) => id !== paneId);
+  paneHistory.unshift(paneId);
+
+  // Clean up history: remove any panes that no longer exist
+  const currentPaneIds = new Set(panes.map((p) => p.id));
+  paneHistory = paneHistory.filter((id) => currentPaneIds.has(id));
+
+  // Ensure all current panes are in history (add any missing ones to end)
+  for (const pane of panes) {
+    if (!paneHistory.includes(pane.id)) {
+      paneHistory.push(pane.id);
+    }
+  }
+}
+
+function handleCtrlTabStart() {
+  if (panes.length <= 1) {
+    return;
+  }
+
+  ctrlTabState.ctrlPressed = true;
+  ctrlTabState.basePaneId = focusedPaneId;
+  ctrlTabPressCount = 0;
+
+  // Clear any existing timer
+  if (ctrlTabState.timerId !== null) {
+    clearTimeout(ctrlTabState.timerId);
+    ctrlTabState.timerId = null;
+  }
+}
+
+function handleCtrlTabPress() {
+  if (!ctrlTabState.ctrlPressed || panes.length <= 1) {
+    return;
+  }
+
+  ctrlTabPressCount++;
+
+  // Reset timer on each Tab press
+  if (ctrlTabState.timerId !== null) {
+    clearTimeout(ctrlTabState.timerId);
+  }
+
+  // The pane to switch to is at index (pressCount) in history
+  // pressCount 0 → index 1 (second most recent, i.e., "previous")
+  // pressCount 1 → index 2 (third most recent)
+  const targetIndex = ctrlTabPressCount % paneHistory.length;
+  const targetPaneId = paneHistory[targetIndex];
+
+  if (targetPaneId && targetPaneId !== focusedPaneId) {
+    focusPane(targetPaneId);
+  }
+}
+
+function handleCtrlTabEnd() {
+  if (!ctrlTabState.ctrlPressed) {
+    return;
+  }
+
+  ctrlTabState.ctrlPressed = false;
+
+  // Start timer to detect when user has "paused"
+  // During this time, if user presses Ctrl+Tab again, we continue from where we left off
+  ctrlTabState.timerId = setTimeout(() => {
+    // Timer expired - user has paused
+    // Update history with the final pane we settled on
+    if (focusedPaneId !== ctrlTabState.basePaneId) {
+      updatePaneHistory(focusedPaneId);
+    }
+    ctrlTabState.basePaneId = null;
+    ctrlTabPressCount = 0;
+    ctrlTabState.timerId = null;
+  }, 800); // 800ms delay to detect "pause"
+}
+
 function getPaneLeft(index, previewWidth, focusedIndex) {
   if (previewWidth >= settings.paneWidth) {
     return index * settings.paneWidth;
@@ -1088,9 +1181,14 @@ function createPaneData() {
 }
 
 function focusPane(paneId, options = {}) {
-  const { focusTerminal = true } = options;
+  const { focusTerminal = true, updateHistory = true } = options;
   focusedPaneId = paneId;
   isNavigationMode = false;
+
+  if (updateHistory) {
+    updatePaneHistory(paneId);
+  }
+
   render();
   const node = paneNodeMap.get(paneId);
   if (node && focusTerminal) {
@@ -1104,6 +1202,7 @@ function addPane() {
   const newPane = createPaneData();
   panes = [...panes, newPane];
   focusedPaneId = newPane.id;
+  paneHistory.push(newPane.id); // Add new pane to history
   render(true);
 }
 
@@ -1134,6 +1233,9 @@ function closePane(index, options = {}) {
   if (destroyTerminal) {
     bridge.destroyTerminal({ paneId: closingPane.id });
   }
+
+  // Remove from history
+  paneHistory = paneHistory.filter((id) => id !== closingPane.id);
 
   const remainingPanes = panes.filter((_, paneIndex) => paneIndex !== index);
   if (closingPane.id === focusedPaneId) {
@@ -1826,7 +1928,7 @@ function updateStatus() {
 
   statusLabelEl.classList.remove('is-navigation-mode');
   statusLabelEl.textContent = `Focused: ${getPaneLabel(focusedPane) || focusedPane.id}`;
-  statusHintEl.textContent = 'Ctrl+B to enter navigation mode';
+  statusHintEl.textContent = 'Ctrl+B navigation · Ctrl+Tab cycle';
 }
 
 window.addEventListener(
@@ -1846,10 +1948,20 @@ window.addEventListener(
       ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'v'
       : event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && key === 'v';
     const windowsCtrlVPasteHotkey = isWindowsCtrlVPasteHotkey(event);
+    const ctrlTabHotkey = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && key === 'tab';
 
     if (openTabHotkey) {
       event.preventDefault();
       addPane();
+      return;
+    }
+
+    if (ctrlTabHotkey && document.activeElement?.tagName !== 'INPUT') {
+      event.preventDefault();
+      if (!ctrlTabState.ctrlPressed) {
+        handleCtrlTabStart();
+      }
+      handleCtrlTabPress();
       return;
     }
 
@@ -1894,6 +2006,13 @@ window.addEventListener(
   },
   true
 );
+
+// Keyup listener for Ctrl+Tab completion
+window.addEventListener('keyup', (event) => {
+  if (event.key === 'Control' && ctrlTabState.ctrlPressed) {
+    handleCtrlTabEnd();
+  }
+}, true);
 
 addPaneButtonEl.addEventListener('click', () => {
   try {
@@ -2104,6 +2223,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       );
     }
 
+    initializePaneHistory();
     render(true);
     sessionRestoreComplete = true;
   } catch (error) {
