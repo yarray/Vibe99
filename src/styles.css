@@ -731,17 +731,6 @@ body.is-dragging-tabs {
   display: block;
 }
 
-/* VIB-10: Custom Pane Color Bar */
-.pane-color-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  z-index: 2;
-  /* Color bar is above the background mask (VIB-6) and pane content */
-}
-
 /* VIB-10: Color Picker Overlay */
 .color-picker-overlay {
   position: fixed;

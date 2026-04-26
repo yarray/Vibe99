@@ -1175,14 +1175,6 @@ function createPane(pane) {
     focusPane(pane.id);
   });
 
-  // VIB-10: Add custom color bar at top of pane (above background mask)
-  if (pane.customColor) {
-    const colorBar = document.createElement('div');
-    colorBar.className = 'pane-color-bar';
-    colorBar.style.backgroundColor = pane.customColor;
-    paneEl.appendChild(colorBar);
-  }
-
   const shell = document.createElement('div');
   shell.className = 'pane-shell';
 
