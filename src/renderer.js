@@ -1170,6 +1170,13 @@ function fitTerminal(node, force = false) {
 }
 
 async function initializePaneTerminal(node) {
+  // Reset terminal state before creating a new PTY session.
+  // This is critical when restarting after TUI programs (Vim, Codex, etc.)
+  // exit, as their escape sequences may leave xterm.js in an inconsistent
+  // state (wrong cursor position, scrolling region, etc.) that causes
+  // display misalignment for the new session.
+  node.terminal.reset();
+
   // Fit twice to ensure accurate dimensions: once before PTY creation
   // to calculate initial size, and once after to sync with backend.
   fitTerminal(node, true);
