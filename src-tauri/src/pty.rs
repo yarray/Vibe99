@@ -101,7 +101,7 @@ struct PtySession {
     /// Join handle for the background reader thread.
     _reader_thread: std::thread::JoinHandle<()>,
     /// Join handle for the exit-watcher thread.
-    _exit_thread: std::thread::JoinHandle<()>,
+    exit_thread: std::thread::JoinHandle<()>,
 }
 
 /// Manages a collection of PTY sessions keyed by pane ID.
@@ -255,7 +255,7 @@ impl PtyManager {
         // Watch for child exit on a blocking thread. Emit the exit event
         // and remove the session from the map, matching Electron behaviour.
         let manager = Arc::clone(self);
-        let _exit_thread = std::thread::spawn(move || {
+        let exit_thread = std::thread::spawn(move || {
             let exit_code = child.wait().map(|s| s.exit_code()).unwrap_or(1);
 
             // Emit the exit event before removing the session so the
@@ -280,7 +280,7 @@ impl PtyManager {
             writer,
             killer,
             _reader_thread,
-            _exit_thread,
+            exit_thread,
         };
 
         self.sessions
@@ -340,13 +340,22 @@ impl PtyManager {
         Ok(())
     }
 
-    /// Kill the child process and remove the session for `pane_id`.
+    /// Kill the child process, remove the session for `pane_id`, and join the
+    /// exit-watcher thread so no stale events are emitted after this returns.
     pub fn destroy(&self, pane_id: &str) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            if let Some(mut session) = sessions.remove(pane_id) {
-                let _ = session.killer.kill();
-            }
-        }
+        let exit_handle = {
+            let mut sessions = match self.sessions.lock() {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let Some(session) = sessions.remove(pane_id) else {
+                return;
+            };
+            let PtySession { mut killer, exit_thread, .. } = session;
+            let _ = killer.kill();
+            exit_thread
+        };
+        let _ = exit_handle.join();
     }
 
     /// Destroy all active sessions.

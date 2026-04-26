@@ -91,7 +91,7 @@ function createTauriBridge(tauri) {
   const { getCurrentWindow } = tauri.window;
   const { readText: clipboardReadText, writeText: clipboardWriteText } =
     tauri.clipboardManager;
-  const { open: shellOpen } = tauri.shell;
+  const { openUrl } = tauri.opener;
 
   function base64Encode(str) {
     const bytes = new TextEncoder().encode(str);
@@ -143,10 +143,14 @@ function createTauriBridge(tauri) {
     readClipboardText: () => clipboardReadText(),
     writeClipboardText: (text) => clipboardWriteText(text),
     getClipboardSnapshot: async () => {
-      const text = await clipboardReadText();
-      return { text: text ?? '', hasImage: false };
+      try {
+        const text = await clipboardReadText();
+        return { text: text ?? '', hasImage: false };
+      } catch {
+        return { text: '', hasImage: false };
+      }
     },
-    openExternalUrl: (url) => shellOpen(url),
+    openExternalUrl: (url) => openUrl(url),
     showContextMenu: () => {},
     loadSettings: () => invoke('settings_load'),
     saveSettings: (payload) => invoke('settings_save', { settings: payload }),
@@ -210,6 +214,7 @@ let panes = initialPanes.map((pane) => ({ ...pane }));
 let focusedPaneId = panes[0].id;
 let nextPaneNumber = panes.length + 1;
 let renamingPaneId = null;
+let isRenderingTabs = false; // Guard against re-entrant renderTabs calls
 let dragState = null;
 let isNavigationMode = false;
 let pendingTabFocus = null;
@@ -232,11 +237,15 @@ const paneWidthValueEl = document.getElementById('pane-width-value');
 const paneOpacityRangeEl = document.getElementById('pane-opacity-range');
 const paneOpacityInputEl = document.getElementById('pane-opacity-input');
 const paneOpacityValueEl = document.getElementById('pane-opacity-value');
+const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
+const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
+const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
 
 const settings = {
   fontSize: 13,
   fontFamily: getDefaultFontFamily(bridge.platform),
   paneOpacity: 0.8,
+  paneMaskOpacity: 0.25,
   paneWidth: 720,
 };
 let pendingSettingsSave = null;
@@ -344,6 +353,7 @@ function getPaneLabel(pane) {
 function applySettings() {
   document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
   document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
+  document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
   document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
   fontSizeInputEl.value = String(settings.fontSize);
   fontFamilyInputEl.value = settings.fontFamily;
@@ -353,6 +363,9 @@ function applySettings() {
   paneOpacityRangeEl.value = settings.paneOpacity.toFixed(2);
   paneOpacityInputEl.value = settings.paneOpacity.toFixed(2);
   paneOpacityValueEl.textContent = settings.paneOpacity.toFixed(2);
+  paneMaskOpacityRangeEl.value = settings.paneMaskOpacity.toFixed(2);
+  paneMaskOpacityInputEl.value = settings.paneMaskOpacity.toFixed(2);
+  paneMaskOpacityValueEl.textContent = settings.paneMaskOpacity.toFixed(2);
 }
 
 function applyPersistedSettings(nextSettings) {
@@ -374,7 +387,16 @@ function applyPersistedSettings(nextSettings) {
   }
 
   if (Number.isFinite(uiSettings.paneOpacity)) {
-    settings.paneOpacity = uiSettings.paneOpacity;
+    settings.paneOpacity = Math.max(0.55, Math.min(1, uiSettings.paneOpacity));
+  }
+
+  if (Number.isFinite(uiSettings.paneMaskOpacity)) {
+    settings.paneMaskOpacity = Math.max(0, Math.min(0.8, uiSettings.paneMaskOpacity));
+  }
+
+  // Migrate legacy paneMaskAlpha → paneMaskOpacity
+  if (Number.isFinite(uiSettings.paneMaskAlpha) && !Number.isFinite(uiSettings.paneMaskOpacity)) {
+    settings.paneMaskOpacity = Math.max(0, Math.min(0.8, uiSettings.paneMaskAlpha));
   }
 
   if (Number.isFinite(uiSettings.paneWidth)) {
@@ -436,7 +458,7 @@ function scheduleSettingsSave() {
 
   pendingSettingsSave = window.setTimeout(() => {
     pendingSettingsSave = null;
-    void bridge.saveSettings({ version: 3, ui: settings, session: buildSessionData() }).catch(reportError);
+    bridge.saveSettings({ version: 3, ui: settings, session: buildSessionData() }).catch(reportError);
   }, 150);
 }
 
@@ -759,6 +781,14 @@ function getPaneLeft(index, previewWidth, focusedIndex) {
   return focusedLeft + settings.paneWidth + (index - focusedIndex - 1) * previewWidth;
 }
 
+function getTextColorForBackground(hexColor) {
+  const r = parseInt(hexColor.slice(1, 3), 16);
+  const g = parseInt(hexColor.slice(3, 5), 16);
+  const b = parseInt(hexColor.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? '#000' : '#fff';
+}
+
 function createTab(pane, index, focusedIndex, dragMeta) {
   const tab = document.createElement('div');
   tab.className = `tab${index === focusedIndex ? ' is-focused' : ''}`;
@@ -770,6 +800,7 @@ function createTab(pane, index, focusedIndex, dragMeta) {
     tab.classList.add('insert-before');
   }
   tab.style.setProperty('--pane-accent', pane.accent);
+  tab.style.setProperty('--tab-text-color', getTextColorForBackground(pane.accent));
   tab.dataset.paneId = pane.id;
   tab.addEventListener('contextmenu', (event) => {
     event.preventDefault();
@@ -878,6 +909,7 @@ function createPane(pane) {
   const terminal = new Terminal({
     allowTransparency: true,
     convertEol: false,
+    customGlyphs: true,
     cursorBlink: true,
     disableStdin: false,
     drawBoldTextInBrightColors: false,
@@ -897,9 +929,7 @@ function createPane(pane) {
     if (!isWindowsCtrlVPasteHotkey(event)) {
       return true;
     }
-
-    const clipboardSnapshot = getClipboardSnapshot();
-    return shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot);
+    return false;
   });
 
   const node = {
@@ -938,6 +968,32 @@ function createPane(pane) {
     if (entryNeedsTabRefresh(pane.id)) {
       renderTabs();
     }
+  });
+
+  terminal.onSelectionChange(() => {
+    const selection = terminal.getSelection();
+    if (selection) {
+      bridge.writeClipboardText(selection);
+    }
+  });
+
+  terminal.parser.registerOscHandler(52, (data) => {
+    const semicolon = data.indexOf(';');
+    if (semicolon === -1) {
+      return true;
+    }
+    const base64Text = data.slice(semicolon + 1);
+    if (!base64Text || base64Text === '?') {
+      return true;
+    }
+    try {
+      const bytes = atob(base64Text);
+      const text = new TextDecoder().decode(
+        Uint8Array.from(bytes, (c) => c.charCodeAt(0))
+      );
+      bridge.writeClipboardText(text);
+    } catch {}
+    return true;
   });
 
   return node;
@@ -1095,12 +1151,21 @@ function beginRenamePane(index) {
 
   clearPendingTabFocus();
   renamingPaneId = pane.id;
-  render();
+  try {
+    render();
+  } catch (error) {
+    renamingPaneId = null;
+    reportError(error);
+  }
 }
 
 function cancelRenamePane() {
   renamingPaneId = null;
-  render();
+  try {
+    render();
+  } catch (error) {
+    reportError(error);
+  }
 }
 
 function commitRenamePane(paneId, nextTitle) {
@@ -1111,7 +1176,11 @@ function commitRenamePane(paneId, nextTitle) {
     entry.id === paneId ? { ...entry, title: trimmedTitle || null } : entry
   );
 
-  render();
+  try {
+    render();
+  } catch (error) {
+    reportError(error);
+  }
 }
 
 function clearPendingTabFocus() {
@@ -1238,6 +1307,10 @@ function getTabDropIndex(clientX) {
 }
 
 function renderTabs() {
+  if (isRenderingTabs) {
+    return;
+  }
+  isRenderingTabs = true;
   const focusedIndex = getFocusedIndex();
   const draggedPaneId = dragState?.paneId ?? null;
   let slot = 0;
@@ -1257,6 +1330,7 @@ function renderTabs() {
       return createTab(pane, index, focusedIndex, dragMeta);
     })
   );
+  isRenderingTabs = false;
 }
 
 function renderPanes(refit = false) {
@@ -1325,8 +1399,12 @@ function getPaneNode(paneId) {
   return paneNodeMap.get(paneId) ?? null;
 }
 
-function getClipboardSnapshot() {
-  return bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+async function getClipboardSnapshot() {
+  try {
+    return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+  } catch {
+    return { text: '', hasImage: false };
+  }
 }
 
 function isWindowsCtrlVPasteHotkey(event) {
@@ -1338,10 +1416,6 @@ function isWindowsCtrlVPasteHotkey(event) {
     !event.shiftKey &&
     event.key.toLowerCase() === 'v'
   );
-}
-
-function shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot) {
-  return Boolean(clipboardSnapshot.hasImage && !clipboardSnapshot.text);
 }
 
 function copyTerminalSelection(paneId = focusedPaneId) {
@@ -1503,8 +1577,8 @@ function dismissContextMenuOnOutside(event) {
   }
 }
 
-function showTerminalContextMenu(node, event) {
-  const clipboardSnapshot = getClipboardSnapshot();
+async function showTerminalContextMenu(node, event) {
+  const clipboardSnapshot = await getClipboardSnapshot();
 
   const shellChildren = shellProfiles.map((p) => ({
     label: p.name || p.id,
@@ -1551,6 +1625,7 @@ function showTabContextMenu(paneId, event) {
   showContextMenu(items, event.clientX, event.clientY, paneId);
 }
 
+<<<<<<< HEAD
 // Preset colors for pane customization (VIB-10)
 const presetPaneColors = [
   '#ff6b57', '#ff9f1c', '#ffd166', '#06d6a0',
@@ -1640,13 +1715,13 @@ function clearPaneColor(paneId) {
   render();
 }
 
-function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
+async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
     return false;
   }
 
-  const clipboardSnapshot = options.clipboardSnapshot ?? getClipboardSnapshot();
+  const clipboardSnapshot = options.clipboardSnapshot ?? (await getClipboardSnapshot());
   if (!clipboardSnapshot.hasImage) {
     return false;
   }
@@ -1777,23 +1852,14 @@ window.addEventListener(
     }
 
     if (copyHotkey && document.activeElement?.tagName !== 'INPUT') {
-      if (copyTerminalSelection()) {
-        event.preventDefault();
-      }
+      event.preventDefault();
+      copyTerminalSelection();
       return;
     }
 
     if ((pasteHotkey || windowsCtrlVPasteHotkey) && document.activeElement?.tagName !== 'INPUT') {
-      const clipboardSnapshot = getClipboardSnapshot();
-      if (
-        windowsCtrlVPasteHotkey &&
-        shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot)
-      ) {
-        return;
-      }
-
       event.preventDefault();
-      void pasteIntoTerminal(undefined, { clipboardSnapshot });
+      void pasteIntoTerminal();
       return;
     }
 
@@ -1892,6 +1958,18 @@ function updatePaneOpacity(nextValue) {
   scheduleSettingsSave();
 }
 
+function updatePaneMaskOpacity(nextValue) {
+  const parsedValue = Number(nextValue);
+  if (!Number.isFinite(parsedValue)) {
+    applySettings();
+    return;
+  }
+
+  settings.paneMaskOpacity = Math.max(0, Math.min(0.8, Number(parsedValue.toFixed(2))));
+  applySettings();
+  scheduleSettingsSave();
+}
+
 paneWidthRangeEl.addEventListener('input', () => {
   updatePaneWidth(paneWidthRangeEl.value);
 });
@@ -1906,6 +1984,14 @@ paneOpacityRangeEl.addEventListener('input', () => {
 
 paneOpacityInputEl.addEventListener('change', () => {
   updatePaneOpacity(paneOpacityInputEl.value);
+});
+
+paneMaskOpacityRangeEl.addEventListener('input', () => {
+  updatePaneMaskOpacity(paneMaskOpacityRangeEl.value);
+});
+
+paneMaskOpacityInputEl.addEventListener('change', () => {
+  updatePaneMaskOpacity(paneMaskOpacityInputEl.value);
 });
 
 window.addEventListener('pointerdown', (event) => {

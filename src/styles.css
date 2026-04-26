@@ -7,6 +7,7 @@
   --text: #f4f1e8;
   --app-font-size: 13px;
   --pane-opacity: 0.8;
+  --pane-bg-mask-opacity: 0.25;
   --pane-width: 720px;
   --tabs-height: 34px;
   --status-height: 20px;
@@ -49,7 +50,8 @@ body {
   align-items: center;
   gap: 0;
   padding: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: none;
+  /*border-bottom: 1px solid rgba(255, 255, 255, 0.06);*/
 }
 
 .tabs-list {
@@ -78,9 +80,11 @@ body {
 }
 
 .tab.is-focused {
-  color: var(--text);
-  background: color-mix(in srgb, var(--pane-accent) 10%, #1b1b1b);
-  box-shadow: inset 0 1px 0 0 var(--pane-accent);
+  color: var(--tab-text-color, #fff);
+  background: var(--pane-accent);
+  box-shadow: none;
+  border-bottom: 1px solid var(--pane-accent);
+  z-index: 1;
 }
 
 .tab.is-dragging {
@@ -144,6 +148,15 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.tab.is-focused .tab-close {
+  color: color-mix(in srgb, var(--tab-text-color) 50%, transparent);
+}
+
+.tab.is-focused .tab-close:hover {
+  color: color-mix(in srgb, var(--tab-text-color) 88%, transparent);
+  background: color-mix(in srgb, var(--tab-text-color) 5%, transparent);
+}
+
 .tab-close:disabled {
   opacity: 0.35;
   cursor: default;
@@ -159,6 +172,10 @@ body {
   transform: translateY(-50%);
   background: var(--pane-accent);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.tab.is-focused .tab-swatch {
+  display: none;
 }
 
 .tab-label {
@@ -257,6 +274,23 @@ body {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font: inherit;
+}
+
+.settings-color {
+  width: 56px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.settings-color::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.settings-color::-webkit-color-swatch {
+  border: none;
 }
 
 .settings-section {
@@ -459,6 +493,20 @@ body {
   will-change: left;
 }
 
+/* Overlay mask: solid pane-accent board on top.
+   opacity=0  → fully opaque (nothing underneath visible)
+   opacity→1 → increasingly transparent */
+.pane::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--pane-accent);
+  opacity: calc(1 - var(--pane-bg-mask-opacity));
+  transition: opacity 80ms ease;
+  z-index: 10;
+}
+
 .pane-shell {
   height: 100%;
 }
@@ -482,6 +530,12 @@ body {
     0 24px 54px rgba(0, 0, 0, 0.42),
     0 0 0 1px color-mix(in srgb, var(--pane-accent) 22%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pane.is-focused::after,
+.pane.is-navigation-target::after {
+  opacity: 0;
+  transition: none;
 }
 
 .pane.is-navigation-target {
