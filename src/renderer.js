@@ -571,7 +571,7 @@ function renderShellProfiles() {
 
     const cmd = document.createElement('div');
     cmd.className = 'shell-profile-cmd';
-    cmd.textContent = profile.command + (profile.args?.length ? ` ${profile.args.join(' ')}` : '');
+    cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
 
     info.append(name, cmd);
 
@@ -849,7 +849,7 @@ function renderModalShellProfiles() {
 
     const cmd = document.createElement('div');
     cmd.className = 'shell-profile-cmd';
-    cmd.textContent = profile.command + (profile.args?.length ? ` ${profile.args.join(' ')}` : '');
+    cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
 
     info.append(name, cmd);
 
@@ -879,7 +879,7 @@ function renderModalShellProfiles() {
         id: profile.id,
         name: profile.name || '',
         command: profile.command,
-        args: (profile.args ?? []).join(' '),
+        args: formatArgs(profile.args ?? []),
       };
       renderModalShellProfiles();
     }));
