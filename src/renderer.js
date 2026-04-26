@@ -257,6 +257,15 @@ const settings = {
   paneMaskOpacity: 0.25,
   paneWidth: 720,
 };
+
+function sanitizePaneOpacity(value) {
+  return Math.max(0.55, Math.min(1, Number(Number(value).toFixed(2))));
+}
+
+function sanitizePaneMaskOpacity(value) {
+  return Math.max(0, Math.min(1, Number(Number(value).toFixed(2))));
+}
+
 let pendingSettingsSave = null;
 
 let shellProfiles = [];
@@ -396,16 +405,16 @@ function applyPersistedSettings(nextSettings) {
   }
 
   if (Number.isFinite(uiSettings.paneOpacity)) {
-    settings.paneOpacity = Math.max(0.55, Math.min(1, uiSettings.paneOpacity));
+    settings.paneOpacity = sanitizePaneOpacity(uiSettings.paneOpacity);
   }
 
   if (Number.isFinite(uiSettings.paneMaskOpacity)) {
-    settings.paneMaskOpacity = Math.max(0, Math.min(0.8, uiSettings.paneMaskOpacity));
+    settings.paneMaskOpacity = sanitizePaneMaskOpacity(uiSettings.paneMaskOpacity);
   }
 
   // Migrate legacy paneMaskAlpha → paneMaskOpacity
   if (Number.isFinite(uiSettings.paneMaskAlpha) && !Number.isFinite(uiSettings.paneMaskOpacity)) {
-    settings.paneMaskOpacity = Math.max(0, Math.min(0.8, uiSettings.paneMaskAlpha));
+    settings.paneMaskOpacity = sanitizePaneMaskOpacity(uiSettings.paneMaskAlpha);
   }
 
   if (Number.isFinite(uiSettings.paneWidth)) {
@@ -1950,7 +1959,7 @@ function updatePaneOpacity(nextValue) {
     return;
   }
 
-  settings.paneOpacity = Math.max(0.55, Math.min(1, Number(parsedValue.toFixed(2))));
+  settings.paneOpacity = sanitizePaneOpacity(parsedValue);
   applySettings();
   scheduleSettingsSave();
 }
@@ -1962,7 +1971,7 @@ function updatePaneMaskOpacity(nextValue) {
     return;
   }
 
-  settings.paneMaskOpacity = Math.max(0, Math.min(0.8, Number(parsedValue.toFixed(2))));
+  settings.paneMaskOpacity = sanitizePaneMaskOpacity(parsedValue);
   applySettings();
   scheduleSettingsSave();
 }
