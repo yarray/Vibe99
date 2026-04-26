@@ -41,7 +41,7 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
   // Determine mode label
   let modeLabel;
   if (currentMode === 'nav') {
-    modeLabel = 'NAV';
+    modeLabel = 'Navigation Mode';
   } else {
     modeLabel = focusedPaneLabel || 'Terminal';
   }

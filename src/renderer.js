@@ -252,6 +252,7 @@ let sessionRestoreComplete = false;
 function setMode(next) {
   if (currentMode === next) return;
   currentMode = next;
+  document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
   render();
 }
 
