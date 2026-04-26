@@ -220,6 +220,13 @@ let isNavigationMode = false;
 let pendingTabFocus = null;
 let sessionRestoreComplete = false;
 
+// Ctrl+Tab state
+let paneHistory = []; // MRU list of pane IDs (index 0 is current)
+let ctrlTabState = {
+  isCycling: false,
+  pressCount: 0,
+};
+
 const paneNodeMap = new Map();
 
 const stageEl = document.getElementById('stage');
@@ -761,6 +768,54 @@ function getFocusedIndex() {
   return panes.length > 0 ? 0 : -1;
 }
 
+// Pane history management for Ctrl+Tab cycling
+function initializePaneHistory() {
+  // Initialize history with all panes, current pane first
+  paneHistory = [...panes.map((p) => p.id)];
+}
+
+function updatePaneHistory(paneId) {
+  // Move pane to front of history (most recently used)
+  paneHistory = paneHistory.filter((id) => id !== paneId);
+  paneHistory.unshift(paneId);
+}
+
+function handleCtrlTabStart() {
+  if (panes.length <= 1) {
+    return;
+  }
+
+  // Start cycling on first Tab press with Ctrl
+  if (!ctrlTabState.isCycling) {
+    ctrlTabState.isCycling = true;
+    ctrlTabState.pressCount = 0;
+  }
+}
+
+function handleCtrlTabPress() {
+  if (!ctrlTabState.isCycling || panes.length <= 1) {
+    return;
+  }
+
+  ctrlTabState.pressCount++;
+
+  // Calculate target index, skip current pane (index 0)
+  const targetIndex = ctrlTabState.pressCount % paneHistory.length;
+  const targetPaneId = paneHistory[targetIndex];
+
+  if (targetPaneId && targetPaneId !== focusedPaneId) {
+    // Move current pane to front of history before switching
+    updatePaneHistory(focusedPaneId);
+    focusPane(targetPaneId);
+  }
+}
+
+function handleCtrlTabEnd() {
+  // Ctrl released - reset cycling state
+  ctrlTabState.isCycling = false;
+  ctrlTabState.pressCount = 0;
+}
+
 function getPaneLeft(index, previewWidth, focusedIndex) {
   if (previewWidth >= settings.paneWidth) {
     return index * settings.paneWidth;
@@ -1091,6 +1146,12 @@ function addPane() {
   const newPane = createPaneData();
   panes = [...panes, newPane];
   focusedPaneId = newPane.id;
+
+  // Add to history
+  if (!paneHistory.includes(newPane.id)) {
+    paneHistory.push(newPane.id);
+  }
+
   render(true);
 }
 
@@ -1121,6 +1182,9 @@ function closePane(index, options = {}) {
   if (destroyTerminal) {
     bridge.destroyTerminal({ paneId: closingPane.id });
   }
+
+  // Remove from history
+  paneHistory = paneHistory.filter((id) => id !== closingPane.id);
 
   const remainingPanes = panes.filter((_, paneIndex) => paneIndex !== index);
   if (closingPane.id === focusedPaneId) {
@@ -1696,7 +1760,7 @@ function updateStatus() {
 
   statusLabelEl.classList.remove('is-navigation-mode');
   statusLabelEl.textContent = `Focused: ${getPaneLabel(focusedPane) || focusedPane.id}`;
-  statusHintEl.textContent = 'Ctrl+B to enter navigation mode';
+  statusHintEl.textContent = 'Ctrl+B navigation · Ctrl+Tab cycle';
 }
 
 window.addEventListener(
@@ -1716,6 +1780,7 @@ window.addEventListener(
       ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'v'
       : event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && key === 'v';
     const windowsCtrlVPasteHotkey = isWindowsCtrlVPasteHotkey(event);
+    const ctrlTabHotkey = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && key === 'tab';
 
     if (openTabHotkey) {
       event.preventDefault();
@@ -1738,6 +1803,14 @@ window.addEventListener(
     if ((pasteHotkey || windowsCtrlVPasteHotkey) && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();
       void pasteIntoTerminal();
+      return;
+    }
+
+    if (ctrlTabHotkey && document.activeElement?.tagName !== 'INPUT') {
+      event.preventDefault();
+      event.stopPropagation();
+      handleCtrlTabStart();
+      handleCtrlTabPress();
       return;
     }
 
@@ -1764,6 +1837,13 @@ window.addEventListener(
   },
   true
 );
+
+// Keyup listener for detecting Ctrl release
+window.addEventListener('keyup', (event) => {
+  if (event.key === 'Control' && ctrlTabState.isCycling) {
+    handleCtrlTabEnd();
+  }
+}, true);
 
 addPaneButtonEl.addEventListener('click', () => {
   try {
@@ -1915,6 +1995,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       );
     }
 
+    initializePaneHistory();
     render(true);
     sessionRestoreComplete = true;
   } catch (error) {
