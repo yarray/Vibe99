@@ -225,7 +225,6 @@ let paneHistory = []; // MRU list of pane IDs (most recently used first)
 let ctrlTabState = {
   isCycling: false,
   pressCount: 0,
-  timerId: null,
 };
 
 const paneNodeMap = new Map();
@@ -798,16 +797,18 @@ function handleCtrlTabStart() {
     return;
   }
 
-  // Clear any existing timer
-  if (ctrlTabState.timerId !== null) {
-    clearTimeout(ctrlTabState.timerId);
-    ctrlTabState.timerId = null;
-  }
-
-  // If not already cycling, start cycling
+  // Start cycling on first Tab press with Ctrl
   if (!ctrlTabState.isCycling) {
     ctrlTabState.isCycling = true;
-    ctrlTabState.pressCount = 0;
+    ctrlTabState.pressCount = 1; // First press
+
+    // First Tab: switch to previous pane (index 1)
+    const targetIndex = 1;
+    const targetPaneId = paneHistory[targetIndex];
+
+    if (targetPaneId) {
+      focusPane(targetPaneId);
+    }
   }
 }
 
@@ -816,45 +817,23 @@ function handleCtrlTabPress() {
     return;
   }
 
-  // Increment press count and calculate target
+  // Subsequent Tab presses while holding Ctrl
   ctrlTabState.pressCount++;
+
+  // Calculate target based on current pressCount
+  // Note: paneHistory may change between presses due to focusPane() updating it
   const targetIndex = ctrlTabState.pressCount % paneHistory.length;
   const targetPaneId = paneHistory[targetIndex];
 
-  if (targetPaneId && targetPaneId !== focusedPaneId) {
-    // Update focused pane directly without updating history
-    focusedPaneId = targetPaneId;
-    isNavigationMode = false;
-    render();
-
-    const node = paneNodeMap.get(targetPaneId);
-    if (node) {
-      requestAnimationFrame(() => {
-        node.terminal.focus();
-      });
-    }
+  if (targetPaneId) {
+    focusPane(targetPaneId);
   }
-
-  // Reset timer - user is still cycling
-  if (ctrlTabState.timerId !== null) {
-    clearTimeout(ctrlTabState.timerId);
-  }
-
-  // Set timer to detect when user stops cycling
-  ctrlTabState.timerId = setTimeout(() => {
-    // User has stopped cycling - update history now
-    if (focusedPaneId) {
-      updatePaneHistory(focusedPaneId);
-    }
-    ctrlTabState.isCycling = false;
-    ctrlTabState.pressCount = 0;
-    ctrlTabState.timerId = null;
-  }, 800);
 }
 
 function handleCtrlTabEnd() {
-  // Ctrl released - let the timer handle state reset
-  // The timer will reset cycling state after 800ms of no Tab presses
+  // Ctrl released - end cycling, reset pressCount for next cycle
+  ctrlTabState.isCycling = false;
+  ctrlTabState.pressCount = 0;
 }
 
 function getPaneLeft(index, previewWidth, focusedIndex) {
