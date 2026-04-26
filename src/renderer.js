@@ -248,8 +248,6 @@ const paneOpacityValueEl = document.getElementById('pane-opacity-value');
 const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
 const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
 const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
-const paneColorPresetsEl = document.getElementById('pane-color-presets');
-const paneColorClearBtn = document.getElementById('pane-color-clear');
 
 const settings = {
   fontSize: 13,
@@ -1459,9 +1457,6 @@ function render(refit = false) {
   if (sessionRestoreComplete) {
     scheduleSettingsSave();
   }
-  if (!settingsPanelEl.classList.contains('is-hidden')) {
-    renderPaneColorPresets();
-  }
 }
 
 function moveFocus(delta) {
@@ -1724,35 +1719,6 @@ const presetPaneColors = [
   '#5cc8ff', '#f4a261', '#e76f51', '#2a9d8f',
   '#e9c46a', '#f4a261', '#264653', '#8d99ae',
 ];
-
-function renderPaneColorPresets() {
-  if (!paneColorPresetsEl) return;
-
-  const focusedPane = panes[getFocusedIndex()];
-  if (!focusedPane) return;
-
-  const currentColor = focusedPane.customColor || focusedPane.accent;
-
-  paneColorPresetsEl.replaceChildren(
-    ...presetPaneColors.map(color => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'pane-color-preset-btn';
-      if (color === currentColor) {
-        btn.classList.add('is-selected');
-      }
-      btn.style.setProperty('--color', color);
-      btn.setAttribute('aria-label', `Set pane color to ${color}`);
-      btn.addEventListener('click', () => {
-        setPaneColor(focusedPane.id, color);
-        renderPaneColorPresets();
-      });
-      return btn;
-    })
-  );
-
-  paneColorClearBtn.disabled = !focusedPane.customColor;
-}
 
 function showColorPicker(paneId) {
   hideContextMenu();
@@ -2042,7 +2008,6 @@ settingsButtonEl.addEventListener('click', (event) => {
   if (wasHidden) {
     editingShellProfile = null;
     loadShellProfiles();
-    renderPaneColorPresets();
   }
 });
 
@@ -2112,14 +2077,6 @@ settingsPanelEl.addEventListener('click', (event) => {
 shellProfileAddBtn.addEventListener('click', () => {
   editingShellProfile = { id: '', name: '', command: '', args: '' };
   renderShellProfiles();
-});
-
-paneColorClearBtn.addEventListener('click', () => {
-  const focusedPane = panes[getFocusedIndex()];
-  if (focusedPane) {
-    clearPaneColor(focusedPane.id);
-    renderPaneColorPresets();
-  }
 });
 
 fontSizeInputEl.addEventListener('change', () => {
