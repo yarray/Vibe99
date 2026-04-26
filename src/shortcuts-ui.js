@@ -18,6 +18,8 @@ function getShortcutActionName(actionId) {
     'paste': 'Paste',
     'move-left': 'Move Left',
     'move-right': 'Move Right',
+    'navigate-left': 'Navigate Left',
+    'navigate-right': 'Navigate Right',
     'focus-terminal': 'Focus Terminal',
   };
   return names[actionId] || actionId;
@@ -34,6 +36,8 @@ function getShortcutActionDescription(actionId) {
     'paste': 'Paste clipboard content to terminal',
     'move-left': 'Focus previous pane in navigation mode',
     'move-right': 'Focus next pane in navigation mode',
+    'navigate-left': 'Switch to the pane on the left',
+    'navigate-right': 'Switch to the pane on the right',
     'focus-terminal': 'Focus the selected terminal',
   };
   return descriptions[actionId] || '';
