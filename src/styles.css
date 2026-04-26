@@ -106,7 +106,8 @@ body {
 .tab-main,
 .tab-close,
 .tabs-add,
-.tabs-settings {
+.tabs-settings,
+.tabs-fullscreen {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -230,15 +231,13 @@ body {
 }
 
 .tabs-fullscreen {
-  appearance: none;
-  border: none;
   width: 34px;
   height: 33px;
   flex: 0 0 auto;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
   color: rgba(255, 255, 255, 0.82);
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   transition:
     background 120ms ease,
