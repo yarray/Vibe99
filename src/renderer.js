@@ -831,10 +831,12 @@ function handleCtrlTabPress() {
     clearTimeout(ctrlTabState.timerId);
   }
 
-  // Calculate target index with proper wrapping
-  // Start from index 1 (skip current pane at index 0)
-  // When we reach the end, wrap back to index 1
-  const targetIndex = (ctrlTabPressCount % (paneHistory.length - 1)) + 1;
+  // Calculate target index with proper wrapping through ALL panes including original
+  // pressCount 0 → index 1 (second in MRU, i.e., "previous")
+  // pressCount 1 → index 2 (third in MRU)
+  // ...
+  // pressCount N-1 → index 0 (back to original/start, wrap around)
+  const targetIndex = (ctrlTabPressCount + 1) % paneHistory.length;
   const targetPaneId = paneHistory[targetIndex];
 
   if (targetPaneId) {
