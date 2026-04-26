@@ -295,8 +295,6 @@ let shellProfiles = [];
 let defaultShellProfileId = '';
 let editingShellProfile = null; // null or { id?, name, command, args }
 
-const shellProfileListEl = document.getElementById('shell-profile-list');
-
 // Batch terminal writes within a single animation frame so that rapid TUI
 // updates (cursor move → clear → rewrite) are parsed as one coherent chunk
 // instead of many tiny fragments that can leave stale cells in the renderer.
@@ -583,96 +581,6 @@ function loadShellProfiles() {
   }).catch(reportError);
 }
 
-function renderShellProfiles() {
-  shellProfileListEl.replaceChildren();
-
-  if (editingShellProfile) {
-    shellProfileListEl.appendChild(createShellProfileEditor());
-    return;
-  }
-
-  if (shellProfiles.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'shell-profile-empty';
-    empty.textContent = 'No profiles configured';
-    shellProfileListEl.appendChild(empty);
-    return;
-  }
-
-  const detectedIds = new Set(detectedShellProfiles.map((p) => p.id));
-
-  for (const profile of shellProfiles) {
-    const isDetected = detectedIds.has(profile.id);
-    const item = document.createElement('div');
-    item.className = `shell-profile-item${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
-
-    const info = document.createElement('div');
-    info.className = 'shell-profile-info';
-
-    const name = document.createElement('div');
-    name.className = 'shell-profile-name';
-    name.textContent = profile.name || profile.id;
-
-    const cmd = document.createElement('div');
-    cmd.className = 'shell-profile-cmd';
-    cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
-
-    info.append(name, cmd);
-
-    // Click the profile info area to apply this shell to the focused pane.
-    info.addEventListener('click', () => {
-      if (focusedPaneId) {
-        changePaneShell(focusedPaneId, profile.id);
-      }
-    });
-
-    const actions = document.createElement('div');
-    actions.className = 'shell-profile-actions';
-
-    if (profile.id !== defaultShellProfileId) {
-      actions.appendChild(createProfileActionButton('★', 'Set as default', () => {
-        const apply = (config) => {
-          const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-          shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-          defaultShellProfileId = config.defaultProfile ?? '';
-          renderShellProfiles();
-        };
-        if (isDetected) {
-          bridge.addShellProfile(profile).then(() => {
-            bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-          }).catch(reportError);
-        } else {
-          bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-        }
-      }));
-    }
-
-    actions.appendChild(createProfileActionButton('✎', 'Edit', () => {
-      editingShellProfile = {
-        id: profile.id,
-        name: profile.name || '',
-        command: profile.command,
-        args: formatArgs(profile.args ?? []),
-      };
-      renderShellProfiles();
-    }));
-
-    if (!isDetected) {
-      actions.appendChild(createProfileActionButton('✕', 'Delete', () => {
-        bridge.removeShellProfile(profile.id).then((config) => {
-          const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-          shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-          defaultShellProfileId = config.defaultProfile ?? '';
-          renderShellProfiles();
-        }).catch(reportError);
-      }));
-    }
-
-    item.append(info, actions);
-    shellProfileListEl.appendChild(item);
-  }
-}
-
 function createProfileActionButton(label, title, onClick) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -684,96 +592,6 @@ function createProfileActionButton(label, title, onClick) {
     onClick();
   });
   return btn;
-}
-
-function createShellProfileEditor() {
-  const editor = document.createElement('div');
-  editor.className = 'shell-profile-editor';
-
-  const fields = [
-    { key: 'name', label: 'Name (optional)', placeholder: 'e.g. Zsh' },
-    { key: 'id', label: 'ID', placeholder: 'e.g. zsh' },
-    { key: 'command', label: 'Command', placeholder: '/bin/zsh' },
-    { key: 'args', label: 'Arguments', placeholder: '-il' },
-  ];
-
-  const inputs = {};
-  for (const field of fields) {
-    const label = document.createElement('label');
-    label.textContent = field.label;
-    label.setAttribute('for', `shell-edit-${field.key}`);
-
-    const input = document.createElement('input');
-    input.id = `shell-edit-${field.key}`;
-    input.type = 'text';
-    input.value = editingShellProfile[field.key] ?? '';
-    input.placeholder = field.placeholder;
-    input.dataset.field = field.key;
-    inputs[field.key] = input;
-
-    // Auto-fill id from name when creating new profile
-    if (field.key === 'name' && !editingShellProfile.id) {
-      input.addEventListener('input', () => {
-        const idInput = inputs.id;
-        if (!idInput.value && input.value.trim()) {
-          idInput.value = input.value.trim().toLowerCase().replace(/\s+/g, '-');
-        }
-      });
-    }
-
-    editor.append(label, input);
-  }
-
-  const actions = document.createElement('div');
-  actions.className = 'shell-profile-editor-actions';
-
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'settings-btn';
-  cancel.textContent = 'Cancel';
-  cancel.addEventListener('click', () => {
-    editingShellProfile = null;
-    renderShellProfiles();
-  });
-
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'settings-btn is-primary';
-  save.textContent = 'Save';
-  save.addEventListener('click', () => {
-    const profile = {
-      id: inputs.id.value.trim(),
-      name: inputs.name.value.trim(),
-      command: inputs.command.value.trim(),
-      args: splitArgs(inputs.args.value.trim()),
-    };
-
-    if (!profile.id || !profile.command) {
-      reportError(new Error('ID and Command are required'));
-      return;
-    }
-
-    bridge.addShellProfile(profile).then((config) => {
-      const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-      shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-      defaultShellProfileId = config.defaultProfile ?? '';
-      editingShellProfile = null;
-      renderShellProfiles();
-    }).catch(reportError);
-  });
-
-  actions.append(cancel, save);
-  editor.appendChild(actions);
-
-  queueMicrotask(() => {
-    const firstInput = editor.querySelector('input');
-    if (firstInput) {
-      firstInput.focus();
-      firstInput.select();
-    }
-  });
-
-  return editor;
 }
 
 function changePaneShell(paneId, profileId) {
