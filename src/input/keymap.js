@@ -28,7 +28,7 @@ export const KEYMAP = [
   { mode: '*',   chord: 'Ctrl+Shift+O',    action: 'toggleCommandPalette',  hint: 'palette',          stopPropagation: true },
   { mode: '*',   chord: 'Ctrl+Tab',        action: 'cycleRecent',           hint: 'recent',           skipInInput: true, stopPropagation: true },
   { mode: '*',   chord: 'Ctrl+Shift+Tab',  action: 'cycleRecentReverse',    hint: 'recent (rev)',     skipInInput: true, stopPropagation: true },
-  { id: 'navigation-mode', mode: '*',   chord: 'Ctrl+B',          action: 'enterNav',              hint: 'navigate',         skipInInput: true },
+  { id: 'navigation-mode', mode: '*',   chord: 'Ctrl+B',          action: 'enterNav',              hint: 'navigate',         skipInInput: true, stopPropagation: true },
   { id: 'new-tab',         mode: '*',   chord: 'Ctrl+N',          action: 'newPane',               hint: 'new pane' },
   { id: 'navigate-left',   mode: '*',   chord: 'Ctrl+ArrowLeft',  action: 'navigateLeft',          hint: '← pane' },
   { id: 'navigate-right',  mode: '*',   chord: 'Ctrl+ArrowRight', action: 'navigateRight',         hint: '→ pane' },

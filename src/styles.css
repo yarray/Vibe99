@@ -619,7 +619,7 @@ body {
   padding: 0 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.65);
-  font-size: var(--app-font-size);
+  font-size: 14px;
 }
 
 #status-label {
@@ -645,8 +645,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 15px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
 }
 
 .hint kbd {
@@ -656,39 +656,40 @@ body {
   min-width: 22px;
   height: 20px;
   padding: 0 6px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  font-size: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
   font-family: inherit;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
   line-height: 1;
 }
 
 .hint-sep {
   margin: 0 6px;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.2);
 }
 
 .hint-minimal {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 15px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
 }
 
-/* Navigation mode hints highlighting */
+/* Navigation mode hints highlighting - solid yellow background with white text */
 body.is-navigation-mode .hint {
-  color: rgba(255, 209, 102, 0.9);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 body.is-navigation-mode .hint kbd {
-  border-color: rgba(255, 209, 102, 0.4);
-  background: rgba(255, 209, 102, 0.15);
-  color: rgba(255, 209, 102, 1);
+  background: #ffd166;
+  border-color: #ffd166;
+  color: #1a1a1a;
+  font-weight: 600;
 }
 
 body.is-navigation-mode .hint-sep {
-  color: rgba(255, 209, 102, 0.5);
+  color: rgba(255, 209, 102, 0.7);
 }
 
 /* Compact hint bar mode */
