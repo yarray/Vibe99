@@ -266,15 +266,9 @@ const fullscreenButtonEl = document.getElementById('tabs-fullscreen');
 const settingsPanelEl = document.getElementById('settings-panel');
 const fontSizeInputEl = document.getElementById('font-size-input');
 const fontFamilyInputEl = document.getElementById('font-family-input');
-const paneWidthRangeEl = document.getElementById('pane-width-range');
-const paneWidthInputEl = document.getElementById('pane-width-input');
-const paneWidthValueEl = document.getElementById('pane-width-value');
-const paneOpacityRangeEl = document.getElementById('pane-opacity-range');
-const paneOpacityInputEl = document.getElementById('pane-opacity-input');
-const paneOpacityValueEl = document.getElementById('pane-opacity-value');
-const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
-const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
-const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
+const paneWidthSettingsBtn = document.getElementById('pane-width-settings-btn');
+const paneOpacitySettingsBtn = document.getElementById('pane-opacity-settings-btn');
+const paneMaskOpacitySettingsBtn = document.getElementById('pane-mask-opacity-settings-btn');
 const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
 
@@ -290,8 +284,6 @@ let pendingSettingsSave = null;
 let shellProfiles = [];
 let defaultShellProfileId = '';
 let editingShellProfile = null; // null or { id?, name, command, args }
-
-const shellProfileListEl = document.getElementById('shell-profile-list');
 
 // Batch terminal writes within a single animation frame so that rapid TUI
 // updates (cursor move → clear → rewrite) are parsed as one coherent chunk
@@ -393,15 +385,6 @@ function applySettings() {
   document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
   fontSizeInputEl.value = String(settings.fontSize);
   fontFamilyInputEl.value = settings.fontFamily;
-  paneWidthRangeEl.value = String(settings.paneWidth);
-  paneWidthInputEl.value = String(settings.paneWidth);
-  paneWidthValueEl.textContent = `${settings.paneWidth}px`;
-  paneOpacityRangeEl.value = settings.paneOpacity.toFixed(2);
-  paneOpacityInputEl.value = settings.paneOpacity.toFixed(2);
-  paneOpacityValueEl.textContent = settings.paneOpacity.toFixed(2);
-  paneMaskOpacityRangeEl.value = settings.paneMaskOpacity.toFixed(2);
-  paneMaskOpacityInputEl.value = settings.paneMaskOpacity.toFixed(2);
-  paneMaskOpacityValueEl.textContent = settings.paneMaskOpacity.toFixed(2);
 }
 
 function applyPersistedSettings(nextSettings) {
@@ -554,96 +537,6 @@ function loadShellProfiles() {
   }).catch(reportError);
 }
 
-function renderShellProfiles() {
-  shellProfileListEl.replaceChildren();
-
-  if (editingShellProfile) {
-    shellProfileListEl.appendChild(createShellProfileEditor());
-    return;
-  }
-
-  if (shellProfiles.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'shell-profile-empty';
-    empty.textContent = 'No profiles configured';
-    shellProfileListEl.appendChild(empty);
-    return;
-  }
-
-  const detectedIds = new Set(detectedShellProfiles.map((p) => p.id));
-
-  for (const profile of shellProfiles) {
-    const isDetected = detectedIds.has(profile.id);
-    const item = document.createElement('div');
-    item.className = `shell-profile-item${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
-
-    const info = document.createElement('div');
-    info.className = 'shell-profile-info';
-
-    const name = document.createElement('div');
-    name.className = 'shell-profile-name';
-    name.textContent = profile.name || profile.id;
-
-    const cmd = document.createElement('div');
-    cmd.className = 'shell-profile-cmd';
-    cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
-
-    info.append(name, cmd);
-
-    // Click the profile info area to apply this shell to the focused pane.
-    info.addEventListener('click', () => {
-      if (focusedPaneId) {
-        changePaneShell(focusedPaneId, profile.id);
-      }
-    });
-
-    const actions = document.createElement('div');
-    actions.className = 'shell-profile-actions';
-
-    if (profile.id !== defaultShellProfileId) {
-      actions.appendChild(createProfileActionButton('★', 'Set as default', () => {
-        const apply = (config) => {
-          const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-          shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-          defaultShellProfileId = config.defaultProfile ?? '';
-          renderShellProfiles();
-        };
-        if (isDetected) {
-          bridge.addShellProfile(profile).then(() => {
-            bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-          }).catch(reportError);
-        } else {
-          bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-        }
-      }));
-    }
-
-    actions.appendChild(createProfileActionButton('✎', 'Edit', () => {
-      editingShellProfile = {
-        id: profile.id,
-        name: profile.name || '',
-        command: profile.command,
-        args: formatArgs(profile.args ?? []),
-      };
-      renderShellProfiles();
-    }));
-
-    if (!isDetected) {
-      actions.appendChild(createProfileActionButton('✕', 'Delete', () => {
-        bridge.removeShellProfile(profile.id).then((config) => {
-          const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-          shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-          defaultShellProfileId = config.defaultProfile ?? '';
-          renderShellProfiles();
-        }).catch(reportError);
-      }));
-    }
-
-    item.append(info, actions);
-    shellProfileListEl.appendChild(item);
-  }
-}
-
 function createProfileActionButton(label, title, onClick) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -655,96 +548,6 @@ function createProfileActionButton(label, title, onClick) {
     onClick();
   });
   return btn;
-}
-
-function createShellProfileEditor() {
-  const editor = document.createElement('div');
-  editor.className = 'shell-profile-editor';
-
-  const fields = [
-    { key: 'name', label: 'Name (optional)', placeholder: 'e.g. Zsh' },
-    { key: 'id', label: 'ID', placeholder: 'e.g. zsh' },
-    { key: 'command', label: 'Command', placeholder: '/bin/zsh' },
-    { key: 'args', label: 'Arguments', placeholder: '-il' },
-  ];
-
-  const inputs = {};
-  for (const field of fields) {
-    const label = document.createElement('label');
-    label.textContent = field.label;
-    label.setAttribute('for', `shell-edit-${field.key}`);
-
-    const input = document.createElement('input');
-    input.id = `shell-edit-${field.key}`;
-    input.type = 'text';
-    input.value = editingShellProfile[field.key] ?? '';
-    input.placeholder = field.placeholder;
-    input.dataset.field = field.key;
-    inputs[field.key] = input;
-
-    // Auto-fill id from name when creating new profile
-    if (field.key === 'name' && !editingShellProfile.id) {
-      input.addEventListener('input', () => {
-        const idInput = inputs.id;
-        if (!idInput.value && input.value.trim()) {
-          idInput.value = input.value.trim().toLowerCase().replace(/\s+/g, '-');
-        }
-      });
-    }
-
-    editor.append(label, input);
-  }
-
-  const actions = document.createElement('div');
-  actions.className = 'shell-profile-editor-actions';
-
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'settings-btn';
-  cancel.textContent = 'Cancel';
-  cancel.addEventListener('click', () => {
-    editingShellProfile = null;
-    renderShellProfiles();
-  });
-
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'settings-btn is-primary';
-  save.textContent = 'Save';
-  save.addEventListener('click', () => {
-    const profile = {
-      id: inputs.id.value.trim(),
-      name: inputs.name.value.trim(),
-      command: inputs.command.value.trim(),
-      args: splitArgs(inputs.args.value.trim()),
-    };
-
-    if (!profile.id || !profile.command) {
-      reportError(new Error('ID and Command are required'));
-      return;
-    }
-
-    bridge.addShellProfile(profile).then((config) => {
-      const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-      shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-      defaultShellProfileId = config.defaultProfile ?? '';
-      editingShellProfile = null;
-      renderShellProfiles();
-    }).catch(reportError);
-  });
-
-  actions.append(cancel, save);
-  editor.appendChild(actions);
-
-  queueMicrotask(() => {
-    const firstInput = editor.querySelector('input');
-    if (firstInput) {
-      firstInput.focus();
-      firstInput.select();
-    }
-  });
-
-  return editor;
 }
 
 function changePaneShell(paneId, profileId) {
@@ -779,6 +582,173 @@ function changePaneShell(paneId, profileId) {
 // ----------------------------------------------------------------
 // Settings modals for complex settings
 // ----------------------------------------------------------------
+
+function createSettingsModal(title, bodyContent, onSave) {
+  const overlay = document.createElement('div');
+  overlay.className = 'settings-modal-overlay';
+
+  overlay.innerHTML = `
+    <div class="settings-modal">
+      <div class="settings-modal-header">
+        <span>${title}</span>
+        <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+      </div>
+      <div class="settings-modal-body">
+        ${bodyContent}
+      </div>
+      <div class="settings-modal-footer">
+        <button type="button" class="settings-modal-btn cancel-btn">Cancel</button>
+        <button type="button" class="settings-modal-btn primary save-btn">Save</button>
+      </div>
+    </div>
+  `;
+
+  const closeModal = () => overlay.remove();
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+  overlay.querySelector('.cancel-btn').addEventListener('click', closeModal);
+  overlay.querySelector('.save-btn').addEventListener('click', () => {
+    onSave();
+    closeModal();
+  });
+
+  document.body.appendChild(overlay);
+
+  // Focus first input if exists
+  const firstInput = overlay.querySelector('input');
+  if (firstInput) firstInput.focus();
+
+  return overlay;
+}
+
+function openPaneWidthModal() {
+  const currentValue = settings.paneWidth;
+
+  const bodyContent = `
+    <label class="settings-modal-label">
+      <span>Pane width</span>
+      <span class="settings-modal-value">${currentValue}px</span>
+    </label>
+    <div class="settings-dual">
+      <input type="range" id="modal-pane-width-range" min="520" max="2000" step="10" value="${currentValue}" />
+      <input type="number" class="settings-number" id="modal-pane-width-input" min="520" max="2000" step="10" value="${currentValue}" />
+    </div>
+  `;
+
+  const modal = createSettingsModal('Pane Width', bodyContent, () => {
+    const rangeInput = modal.querySelector('#modal-pane-width-range');
+    const numberInput = modal.querySelector('#modal-pane-width-input');
+    const newValue = Number(rangeInput.value);
+    if (Number.isFinite(newValue)) {
+      settings.paneWidth = Math.max(520, Math.min(2000, Math.round(newValue / 10) * 10));
+      applySettings();
+      render(true);
+      scheduleSettingsSave();
+    }
+  });
+
+  const rangeInput = modal.querySelector('#modal-pane-width-range');
+  const numberInput = modal.querySelector('#modal-pane-width-input');
+  const valueDisplay = modal.querySelector('.settings-modal-value');
+
+  const updateValue = (val) => {
+    const parsed = Number(val);
+    if (!Number.isFinite(parsed)) return;
+    rangeInput.value = parsed;
+    numberInput.value = parsed;
+    valueDisplay.textContent = `${parsed}px`;
+  };
+
+  rangeInput.addEventListener('input', () => updateValue(rangeInput.value));
+  numberInput.addEventListener('change', () => updateValue(numberInput.value));
+}
+
+function openPaneOpacityModal() {
+  const currentValue = settings.paneOpacity;
+
+  const bodyContent = `
+    <label class="settings-modal-label">
+      <span>Pane opacity</span>
+      <span class="settings-modal-value">${currentValue.toFixed(2)}</span>
+    </label>
+    <div class="settings-dual">
+      <input type="range" id="modal-pane-opacity-range" min="0.55" max="1" step="0.01" value="${currentValue}" />
+      <input type="number" class="settings-number" id="modal-pane-opacity-input" min="0.55" max="1" step="0.01" value="${currentValue}" />
+    </div>
+  `;
+
+  const modal = createSettingsModal('Pane Opacity', bodyContent, () => {
+    const rangeInput = modal.querySelector('#modal-pane-opacity-range');
+    const numberInput = modal.querySelector('#modal-pane-opacity-input');
+    const newValue = Number(rangeInput.value);
+    if (Number.isFinite(newValue)) {
+      settings.paneOpacity = Math.max(0.55, Math.min(1, Number(newValue.toFixed(2))));
+      applySettings();
+      scheduleSettingsSave();
+    }
+  });
+
+  const rangeInput = modal.querySelector('#modal-pane-opacity-range');
+  const numberInput = modal.querySelector('#modal-pane-opacity-input');
+  const valueDisplay = modal.querySelector('.settings-modal-value');
+
+  const updateValue = (val) => {
+    const parsed = Number(val);
+    if (!Number.isFinite(parsed)) return;
+    rangeInput.value = parsed;
+    numberInput.value = parsed;
+    valueDisplay.textContent = parsed.toFixed(2);
+  };
+
+  rangeInput.addEventListener('input', () => updateValue(rangeInput.value));
+  numberInput.addEventListener('change', () => updateValue(numberInput.value));
+}
+
+function openPaneMaskOpacityModal() {
+  const currentValue = settings.paneMaskOpacity;
+
+  const bodyContent = `
+    <label class="settings-modal-label">
+      <span>BG mask opacity</span>
+      <span class="settings-modal-value">${currentValue.toFixed(2)}</span>
+    </label>
+    <div class="settings-dual">
+      <input type="range" id="modal-pane-mask-opacity-range" min="0" max="0.8" step="0.01" value="${currentValue}" />
+      <input type="number" class="settings-number" id="modal-pane-mask-opacity-input" min="0" max="0.8" step="0.01" value="${currentValue}" />
+    </div>
+  `;
+
+  const modal = createSettingsModal('BG Mask Opacity', bodyContent, () => {
+    const rangeInput = modal.querySelector('#modal-pane-mask-opacity-range');
+    const numberInput = modal.querySelector('#modal-pane-mask-opacity-input');
+    const newValue = Number(rangeInput.value);
+    if (Number.isFinite(newValue)) {
+      settings.paneMaskOpacity = Math.max(0, Math.min(0.8, Number(newValue.toFixed(2))));
+      applySettings();
+      scheduleSettingsSave();
+    }
+  });
+
+  const rangeInput = modal.querySelector('#modal-pane-mask-opacity-range');
+  const numberInput = modal.querySelector('#modal-pane-mask-opacity-input');
+  const valueDisplay = modal.querySelector('.settings-modal-value');
+
+  const updateValue = (val) => {
+    const parsed = Number(val);
+    if (!Number.isFinite(parsed)) return;
+    rangeInput.value = parsed;
+    numberInput.value = parsed;
+    valueDisplay.textContent = parsed.toFixed(2);
+  };
+
+  rangeInput.addEventListener('input', () => updateValue(rangeInput.value));
+  numberInput.addEventListener('change', () => updateValue(numberInput.value));
+}
+
 
 function openShellProfilesModal() {
   loadShellProfiles();
@@ -2352,6 +2322,40 @@ settingsButtonEl.addEventListener('click', (event) => {
   }
 });
 
+// Complex settings modal buttons
+paneWidthSettingsBtn.addEventListener('click', () => {
+  openPaneWidthModal();
+});
+
+paneWidthSettingsBtn.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openPaneWidthModal();
+  }
+});
+
+paneOpacitySettingsBtn.addEventListener('click', () => {
+  openPaneOpacityModal();
+});
+
+paneOpacitySettingsBtn.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openPaneOpacityModal();
+  }
+});
+
+paneMaskOpacitySettingsBtn.addEventListener('click', () => {
+  openPaneMaskOpacityModal();
+});
+
+paneMaskOpacitySettingsBtn.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openPaneMaskOpacityModal();
+  }
+});
+
 // Shell profiles modal button (clickable row)
 shellProfilesSettingsBtn.addEventListener('click', () => {
   openShellProfilesModal();
@@ -2461,67 +2465,6 @@ fontFamilyInputEl.addEventListener('change', () => {
   applySettings();
   render(true);
   scheduleSettingsSave();
-});
-
-function updatePaneWidth(nextValue) {
-  const parsedValue = Number(nextValue);
-  if (!Number.isFinite(parsedValue)) {
-    applySettings();
-    return;
-  }
-
-  settings.paneWidth = Math.max(520, Math.min(2000, Math.round(parsedValue / 10) * 10));
-  applySettings();
-  render(true);
-  scheduleSettingsSave();
-}
-
-function updatePaneOpacity(nextValue) {
-  const parsedValue = Number(nextValue);
-  if (!Number.isFinite(parsedValue)) {
-    applySettings();
-    return;
-  }
-
-  settings.paneOpacity = Math.max(0.55, Math.min(1, Number(parsedValue.toFixed(2))));
-  applySettings();
-  scheduleSettingsSave();
-}
-
-function updatePaneMaskOpacity(nextValue) {
-  const parsedValue = Number(nextValue);
-  if (!Number.isFinite(parsedValue)) {
-    applySettings();
-    return;
-  }
-
-  settings.paneMaskOpacity = Math.max(0, Math.min(0.8, Number(parsedValue.toFixed(2))));
-  applySettings();
-  scheduleSettingsSave();
-}
-
-paneWidthRangeEl.addEventListener('input', () => {
-  updatePaneWidth(paneWidthRangeEl.value);
-});
-
-paneWidthInputEl.addEventListener('change', () => {
-  updatePaneWidth(paneWidthInputEl.value);
-});
-
-paneOpacityRangeEl.addEventListener('input', () => {
-  updatePaneOpacity(paneOpacityRangeEl.value);
-});
-
-paneOpacityInputEl.addEventListener('change', () => {
-  updatePaneOpacity(paneOpacityInputEl.value);
-});
-
-paneMaskOpacityRangeEl.addEventListener('input', () => {
-  updatePaneMaskOpacity(paneMaskOpacityRangeEl.value);
-});
-
-paneMaskOpacityInputEl.addEventListener('change', () => {
-  updatePaneMaskOpacity(paneMaskOpacityInputEl.value);
 });
 
 window.addEventListener('pointerdown', (event) => {

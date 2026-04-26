@@ -30,31 +30,17 @@
             </label>
             <input class="settings-number" id="font-family-input" type="text" placeholder="e.g. JetBrains Mono, Consolas" value="" />
 
-            <label class="settings-row" for="pane-width-range">
+            <div class="settings-row settings-clickable-row" id="pane-width-settings-btn" role="button" tabindex="0" aria-label="Configure pane width">
               <span>Pane width</span>
-              <span id="pane-width-value">720px</span>
-            </label>
-            <div class="settings-dual">
-              <input id="pane-width-range" type="range" min="520" max="2000" step="10" value="720" />
-              <input class="settings-number" id="pane-width-input" type="number" min="520" max="2000" step="10" value="720" />
+              <span class="settings-row-hint">›</span>
             </div>
-
-            <label class="settings-row" for="pane-opacity-range">
+            <div class="settings-row settings-clickable-row" id="pane-opacity-settings-btn" role="button" tabindex="0" aria-label="Configure pane opacity">
               <span>Pane opacity</span>
-              <span id="pane-opacity-value">0.80</span>
-            </label>
-            <div class="settings-dual">
-              <input id="pane-opacity-range" type="range" min="0.55" max="1" step="0.01" value="0.8" />
-              <input class="settings-number" id="pane-opacity-input" type="number" min="0.55" max="1" step="0.01" value="0.8" />
+              <span class="settings-row-hint">›</span>
             </div>
-
-            <label class="settings-row" for="pane-mask-alpha-range">
+            <div class="settings-row settings-clickable-row" id="pane-mask-opacity-settings-btn" role="button" tabindex="0" aria-label="Configure BG mask opacity">
               <span>BG mask opacity</span>
-              <span id="pane-mask-alpha-value">0.25</span>
-            </label>
-            <div class="settings-dual">
-              <input id="pane-mask-alpha-range" type="range" min="0" max="0.8" step="0.01" value="0.25" />
-              <input class="settings-number" id="pane-mask-alpha-input" type="number" min="0" max="0.8" step="0.01" value="0.25" />
+              <span class="settings-row-hint">›</span>
             </div>
           </div>
 
