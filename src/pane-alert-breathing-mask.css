@@ -1,9 +1,10 @@
 /* Breathing-mask alert: layered ABOVE `.pane::after` (the color overlay,
-   z-index 10) so the pulse reads at any "BG mask opacity" value — including
-   the fully-opaque end where the overlay would otherwise hide a sibling
-   layer. Color follows --pane-accent which the renderer sets per pane.
-   `mix-blend-mode: screen` keeps the pulse a brightening effect regardless
-   of what's underneath (bare terminal, accent-tinted overlay, etc.). */
+   z-index 10) so the pulse reads at any "BG mask opacity" value. The
+   keyframes deliberately start from fully transparent and fade up to a
+   strong accent glow, so the contrast between the trough and the peak is
+   maximized regardless of how opaque the overlay underneath happens to
+   be. `mix-blend-mode: screen` keeps the peak a brightening effect on top
+   of whatever is underneath (bare terminal, accent-tinted overlay, …). */
 .pane-activity-mask {
   position: absolute;
   inset: 0;
@@ -12,19 +13,17 @@
   pointer-events: none;
   z-index: 11;
   mix-blend-mode: screen;
-  box-shadow: inset 0 0 0 0 transparent;
+  box-shadow: none;
 }
 
 @keyframes pane-breathing-pulse {
   0%,
   100% {
-    opacity: 0.18;
-    box-shadow:
-      inset 0 0 0 2px color-mix(in srgb, var(--pane-accent) 70%, white),
-      inset 0 0 12px 2px color-mix(in srgb, var(--pane-accent) 60%, transparent);
+    opacity: 0;
+    box-shadow: none;
   }
   50% {
-    opacity: 0.65;
+    opacity: 0.7;
     box-shadow:
       inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white),
       inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent);
