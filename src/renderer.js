@@ -1159,14 +1159,6 @@ function createPane(pane) {
     focusPane(pane.id);
   });
 
-  // VIB-10: Add custom color bar at top of pane (above background mask)
-  if (pane.customColor) {
-    const colorBar = document.createElement('div');
-    colorBar.className = 'pane-color-bar';
-    colorBar.style.backgroundColor = pane.customColor;
-    paneEl.appendChild(colorBar);
-  }
-
   const shell = document.createElement('div');
   shell.className = 'pane-shell';
 
@@ -1634,20 +1626,6 @@ function renderPanes(refit = false) {
     if (node.accent !== accentColor) {
       node.terminal.options.theme = createTerminalTheme(accentColor);
       node.accent = accentColor;
-    }
-
-    // VIB-21: Update color bar when customColor changes
-    let colorBar = node.root.querySelector('.pane-color-bar');
-    if (pane.customColor) {
-      if (!colorBar) {
-        colorBar = document.createElement('div');
-        colorBar.className = 'pane-color-bar';
-        const shell = node.root.querySelector('.pane-shell');
-        node.root.insertBefore(colorBar, shell);
-      }
-      colorBar.style.backgroundColor = pane.customColor;
-    } else if (colorBar) {
-      colorBar.remove();
     }
 
     if (refit || node.needsFit) {
