@@ -1170,7 +1170,18 @@ function fitTerminal(node, force = false) {
 }
 
 async function initializePaneTerminal(node) {
+  // Fit twice to ensure accurate dimensions: once before PTY creation
+  // to calculate initial size, and once after to sync with backend.
   fitTerminal(node, true);
+
+  // Wait for layout to stabilize before creating PTY with accurate dimensions.
+  // This is critical for SSH+zellij scenarios where incorrect initial PTY size
+  // causes permanent misalignment.
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  // Refit after layout has stabilized to get accurate terminal dimensions.
+  fitTerminal(node, true);
+
   const pane = panes.find((p) => p.id === node.paneId);
   const profileId = pane?.shellProfileId ?? null;
   try {
@@ -1182,6 +1193,7 @@ async function initializePaneTerminal(node) {
       shellProfileId: profileId,
     });
     node.sessionReady = true;
+    // Final sync after PTY is ready to ensure backend has correct dimensions.
     fitTerminal(node, true);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
