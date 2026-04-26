@@ -229,6 +229,32 @@ body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.tabs-fullscreen {
+  width: 34px;
+  height: 33px;
+  flex: 0 0 auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 16px;
+  line-height: 1;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.tabs-fullscreen:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tabs-fullscreen.is-hidden {
+  display: none;
+}
+
+.tabs-fullscreen.is-fullscreen {
+  color: #ffd166;
+}
+
 .settings-panel {
   position: absolute;
   top: calc(100% + 1px);
