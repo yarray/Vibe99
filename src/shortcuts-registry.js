@@ -80,12 +80,24 @@ function legacyShortcut(row) {
 let activeKeymap = computeActiveKeymap();
 
 function computeActiveKeymap() {
-  return KEYMAP.map((row) => {
+  const result = KEYMAP.map((row) => {
     if (!row.id) return row;
     const override = overrides[row.id];
-    if (!override) return row;
-    return { ...row, chord: legacyToChord(override) };
+    if (!override) {
+      // Debug: log entries without overrides
+      if (row.action === 'focusPrev' || row.action === 'focusNext') {
+        console.log('[ShortcutsRegistry] No override for', row.id, 'keeping original chord:', row.chord);
+      }
+      return row;
+    }
+    const newChord = legacyToChord(override);
+    if (row.action === 'focusPrev' || row.action === 'focusNext') {
+      console.log('[ShortcutsRegistry] Override for', row.id, 'original chord:', row.chord, 'new chord:', newChord, 'override:', override);
+    }
+    return { ...row, chord: newChord };
   });
+  console.log('[ShortcutsRegistry] Computed active keymap, entries:', result.length);
+  return result;
 }
 
 function refreshActiveKeymap() {
