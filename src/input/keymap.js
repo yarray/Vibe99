@@ -186,6 +186,5 @@ export function formatChord(chord, platform = 'linux') {
 
 function formatKeyForDisplay(key) {
   if (key === ' ') return 'Space';
-  if (key.length === 1) return key.toUpperCase();
   return key;
 }

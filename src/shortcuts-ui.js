@@ -16,11 +16,16 @@ function getShortcutActionName(actionId) {
     'navigation-mode': 'Navigation Mode',
     'copy': 'Copy',
     'paste': 'Paste',
-    'move-left': 'Move Left',
-    'move-right': 'Move Right',
     'navigate-left': 'Navigate Left',
     'navigate-right': 'Navigate Right',
-    'focus-terminal': 'Focus Terminal',
+    'nav-left': 'Focus Previous',
+    'nav-right': 'Focus Next',
+    'focus-first': 'Focus First',
+    'focus-last': 'Focus Last',
+    'jump-to': 'Jump to Pane',
+    'new-pane': 'New Pane',
+    'close-pane': 'Close Pane',
+    'rename-pane': 'Rename Pane',
   };
   return names[actionId] || actionId;
 }
@@ -34,11 +39,16 @@ function getShortcutActionDescription(actionId) {
     'navigation-mode': 'Enter keyboard navigation mode',
     'copy': 'Copy selected text to clipboard',
     'paste': 'Paste clipboard content to terminal',
-    'move-left': 'Focus previous pane in navigation mode',
-    'move-right': 'Focus next pane in navigation mode',
     'navigate-left': 'Switch to the pane on the left',
     'navigate-right': 'Switch to the pane on the right',
-    'focus-terminal': 'Focus the selected terminal',
+    'nav-left': 'Focus previous pane (navigation mode)',
+    'nav-right': 'Focus next pane (navigation mode)',
+    'focus-first': 'Jump to first pane (navigation mode)',
+    'focus-last': 'Jump to last pane (navigation mode)',
+    'jump-to': 'Jump to pane 1–9 (navigation mode)',
+    'new-pane': 'Create a new terminal pane (navigation mode)',
+    'close-pane': 'Close current pane (navigation mode)',
+    'rename-pane': 'Rename current pane (navigation mode)',
   };
   return descriptions[actionId] || '';
 }
@@ -118,6 +128,12 @@ function renderModalShortcuts() {
     const name = document.createElement('div');
     name.className = 'shortcut-name';
     name.textContent = getShortcutActionName(id);
+    if (shortcut.mode === 'nav') {
+      const badge = document.createElement('span');
+      badge.className = 'shortcut-mode-badge';
+      badge.textContent = 'Nav';
+      name.appendChild(badge);
+    }
 
     const description = document.createElement('div');
     description.className = 'shortcut-description';

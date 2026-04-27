@@ -1299,6 +1299,18 @@ body.is-dragging-tabs {
   color: rgba(255, 255, 255, 0.5);
 }
 
+.shortcut-mode-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 196, 93, 0.15);
+  color: #ffc45d;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 .shortcut-binding {
   display: flex;
   align-items: center;

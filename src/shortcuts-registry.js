@@ -70,6 +70,7 @@ function legacyShortcut(row) {
     modifiers: override?.modifiers ?? base.modifiers,
     action: row.action,
     platform: 'all',
+    mode: row.mode,
   };
 }
 
