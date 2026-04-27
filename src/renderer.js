@@ -702,18 +702,9 @@ function renderModalShellProfiles() {
       item.dataset.profileId = profile.id;
       item.draggable = !isDetected;
 
-      const info = document.createElement('div');
-      info.className = 'shell-profile-info';
-
       const name = document.createElement('div');
       name.className = 'shell-profile-name';
       name.textContent = profile.name || profile.id;
-
-      const cmd = document.createElement('div');
-      cmd.className = 'shell-profile-cmd';
-      cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
-
-      info.append(name, cmd);
 
       const actions = document.createElement('div');
       actions.className = 'shell-profile-actions';
@@ -737,7 +728,7 @@ function renderModalShellProfiles() {
         }));
       }
 
-      actions.appendChild(createProfileActionButton('⊙', 'Clone profile', () => {
+      actions.appendChild(createProfileActionButton('⧉', 'Clone profile', () => {
         cloneProfile(profile);
       }));
 
@@ -756,11 +747,15 @@ function renderModalShellProfiles() {
         }));
       }
 
-      item.append(info, actions);
+      item.append(name, actions);
 
-      // Click to select
+      // Click to select (but not when dragging)
+      let isDragging = false;
+      let dragStartTime = 0;
+
       item.addEventListener('click', (e) => {
         if (e.target.closest('.shell-profile-actions')) return;
+        if (isDragging) return;
         selectedShellProfileId = profile.id;
         editingShellProfile = {
           id: profile.id,
@@ -775,12 +770,26 @@ function renderModalShellProfiles() {
       // Drag events for reordering
       if (!isDetected) {
         item.addEventListener('dragstart', (e) => {
+          dragStartTime = Date.now();
+          isDragging = true;
           item.classList.add('is-dragging');
           e.dataTransfer.setData('text/plain', profile.id);
           e.dataTransfer.effectAllowed = 'move';
+          // Set a drag image if possible
+          if (e.dataTransfer.setDragImage) {
+            e.dataTransfer.setDragImage(item, 0, 0);
+          }
         });
 
-        item.addEventListener('dragend', () => {
+        item.addEventListener('dragend', (e) => {
+          const dragDuration = Date.now() - dragStartTime;
+          // If drag was very short, treat it as a click
+          if (dragDuration < 200) {
+            isDragging = false;
+          }
+          setTimeout(() => {
+            isDragging = false;
+          }, 100);
           item.classList.remove('is-dragging');
           document.querySelectorAll('.shell-profile-item').forEach(el => {
             el.classList.remove('drag-over');
@@ -789,6 +798,7 @@ function renderModalShellProfiles() {
 
         item.addEventListener('dragover', (e) => {
           e.preventDefault();
+          e.stopPropagation();
           e.dataTransfer.dropEffect = 'move';
           const dragging = document.querySelector('.shell-profile-item.is-dragging');
           if (dragging && dragging !== item) {
@@ -796,12 +806,16 @@ function renderModalShellProfiles() {
           }
         });
 
-        item.addEventListener('dragleave', () => {
-          item.classList.remove('drag-over');
+        item.addEventListener('dragleave', (e) => {
+          // Only remove drag-over if we're actually leaving the item
+          if (!item.contains(e.relatedTarget)) {
+            item.classList.remove('drag-over');
+          }
         });
 
         item.addEventListener('drop', (e) => {
           e.preventDefault();
+          e.stopPropagation();
           item.classList.remove('drag-over');
           const draggedId = e.dataTransfer.getData('text/plain');
           const targetId = profile.id;

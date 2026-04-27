@@ -381,6 +381,7 @@ body {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  padding-right: 4px;
 }
 
 .shell-profile-item {
@@ -388,12 +389,13 @@ body {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 4px;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
   transition: all 120ms ease;
   border: 1px solid transparent;
+  user-select: none;
 }
 
 .shell-profile-item:hover {
@@ -404,6 +406,7 @@ body {
 .shell-profile-item.is-selected {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.15);
+  cursor: default;
 }
 
 .shell-profile-item.is-default {
@@ -411,13 +414,22 @@ body {
 }
 
 .shell-profile-item.is-dragging {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: grabbing;
 }
 
 .shell-profile-item.drag-over {
   border-color: rgba(255, 255, 255, 0.3);
   background: rgba(255, 255, 255, 0.08);
+  transform: scale(1.02);
+}
+
+.shell-profile-item .shell-profile-name {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .shell-profile-item.is-detected .shell-profile-name::after {
@@ -426,33 +438,17 @@ body {
   font-size: 11px;
 }
 
-.shell-profile-info {
-  display: grid;
-  gap: 0;
-  min-width: 0;
-  cursor: pointer;
-}
-
-.shell-profile-name {
-  color: var(--text);
-  font-size: var(--app-font-size);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.shell-profile-cmd {
-  color: var(--panel-muted);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.shell-profile-actions {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .shell-profile-actions {
   display: inline-flex;
   gap: 2px;
   flex-shrink: 0;
+  pointer-events: none;
 }
 
 .shell-profile-actions .settings-btn {
@@ -462,11 +458,13 @@ body {
   border-color: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   transition: all 0.15s ease;
+  pointer-events: auto;
 }
 
 .shell-profile-actions .settings-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
 }
 
 .shell-profile-empty {
@@ -967,10 +965,10 @@ body.is-dragging-tabs {
 
 /* Shell Profiles Modal - Two Column Layout */
 .shell-profiles-modal {
-  min-width: 600px;
-  max-width: 800px;
+  min-width: 700px;
+  max-width: 900px;
   width: 90vw;
-  height: 70vh;
+  height: 600px;
   display: flex;
   flex-direction: column;
 }
@@ -984,12 +982,13 @@ body.is-dragging-tabs {
 }
 
 .shell-profiles-sidebar {
-  flex: 0 0 280px;
+  flex: 0 0 240px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   padding-right: 16px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .shell-profiles-sidebar-header {
@@ -999,6 +998,7 @@ body.is-dragging-tabs {
   padding: 8px 0;
   margin-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
 }
 
 .shell-profiles-add-btn {
