@@ -295,6 +295,7 @@ let pendingSettingsSave = null;
 let shellProfiles = [];
 let defaultShellProfileId = '';
 let editingShellProfile = null; // null or { id?, name, command, args }
+let selectedShellProfileId = null; // ID of currently selected profile for editing
 
 // Surface "settled output on a backgrounded pane" via a pulsing mask. The
 // watcher just decides *when* a pane should alert; the alert renderer
@@ -613,27 +614,36 @@ function changePaneShell(paneId, profileId) {
 
 function openShellProfilesModal() {
   loadShellProfiles();
+  selectedShellProfileId = null;
+  editingShellProfile = null;
+
   const overlay = document.createElement('div');
   overlay.className = 'settings-modal-overlay';
 
   overlay.innerHTML = `
-    <div class="settings-modal" style="min-width: 360px;">
+    <div class="settings-modal shell-profiles-modal">
       <div class="settings-modal-header">
         <span>Shell Profiles</span>
         <button type="button" class="settings-modal-close" aria-label="Close">×</button>
       </div>
-      <div class="settings-modal-body" style="max-height: 400px; overflow-y: auto;">
-        <div class="shell-profile-list" id="modal-shell-profile-list"></div>
-      </div>
-      <div class="settings-modal-footer">
-        <button type="button" class="settings-modal-btn" id="modal-shell-profile-add">Add Profile</button>
+      <div class="settings-modal-body shell-profiles-modal-body">
+        <div class="shell-profiles-sidebar">
+          <div class="shell-profiles-sidebar-header">
+            <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">+</button>
+          </div>
+          <div class="shell-profile-list" id="modal-shell-profile-list"></div>
+        </div>
+        <div class="shell-profiles-editor-panel" id="modal-shell-profile-editor">
+          <div class="shell-profiles-editor-placeholder">Select a profile or create a new one</div>
+        </div>
       </div>
     </div>
   `;
 
   const closeModal = () => {
     overlay.remove();
-    editingShellProfile = null; // Reset editing state when closing modal
+    editingShellProfile = null;
+    selectedShellProfileId = null;
   };
 
   overlay.addEventListener('click', (e) => {
@@ -644,14 +654,22 @@ function openShellProfilesModal() {
 
   // Add profile button
   overlay.querySelector('#modal-shell-profile-add').addEventListener('click', () => {
-    editingShellProfile = { id: '', name: '', command: '', args: '' };
+    editingShellProfile = {
+      id: '',
+      name: '',
+      command: '',
+      args: '',
+      isNew: true
+    };
+    selectedShellProfileId = null;
     renderModalShellProfiles();
   });
 
   document.body.appendChild(overlay);
 
-  // Store reference to modal list for rendering
+  // Store reference to modal elements for rendering
   overlay._modalShellProfileList = overlay.querySelector('#modal-shell-profile-list');
+  overlay._modalShellProfileEditor = overlay.querySelector('#modal-shell-profile-editor');
 
   renderModalShellProfiles();
 }
@@ -661,93 +679,224 @@ function renderModalShellProfiles() {
   if (!overlay || !overlay._modalShellProfileList) return;
 
   const listEl = overlay._modalShellProfileList;
-  if (!listEl) return;
+  const editorEl = overlay._modalShellProfileEditor;
+
+  if (!listEl || !editorEl) return;
 
   listEl.replaceChildren();
+  editorEl.replaceChildren();
 
-  if (editingShellProfile) {
-    listEl.appendChild(createModalShellProfileEditor());
-    return;
-  }
-
+  // Render sidebar list
   if (shellProfiles.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'shell-profile-empty';
     empty.textContent = 'No profiles configured';
     listEl.appendChild(empty);
-    return;
-  }
+  } else {
+    const detectedIds = new Set(detectedShellProfiles.map((p) => p.id));
 
-  const detectedIds = new Set(detectedShellProfiles.map((p) => p.id));
+    for (const profile of shellProfiles) {
+      const isDetected = detectedIds.has(profile.id);
+      const item = document.createElement('div');
+      item.className = `shell-profile-item${profile.id === selectedShellProfileId ? ' is-selected' : ''}${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
+      item.dataset.profileId = profile.id;
+      item.draggable = !isDetected;
 
-  for (const profile of shellProfiles) {
-    const isDetected = detectedIds.has(profile.id);
-    const item = document.createElement('div');
-    item.className = `shell-profile-item${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
+      const info = document.createElement('div');
+      info.className = 'shell-profile-info';
 
-    const info = document.createElement('div');
-    info.className = 'shell-profile-info';
+      const name = document.createElement('div');
+      name.className = 'shell-profile-name';
+      name.textContent = profile.name || profile.id;
 
-    const name = document.createElement('div');
-    name.className = 'shell-profile-name';
-    name.textContent = profile.name || profile.id;
+      const cmd = document.createElement('div');
+      cmd.className = 'shell-profile-cmd';
+      cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
 
-    const cmd = document.createElement('div');
-    cmd.className = 'shell-profile-cmd';
-    cmd.textContent = profile.command + (profile.args?.length ? ` ${formatArgs(profile.args)}` : '');
+      info.append(name, cmd);
 
-    info.append(name, cmd);
+      const actions = document.createElement('div');
+      actions.className = 'shell-profile-actions';
 
-    const actions = document.createElement('div');
-    actions.className = 'shell-profile-actions';
-
-    if (profile.id !== defaultShellProfileId) {
-      actions.appendChild(createProfileActionButton('★', 'Set as default', () => {
-        const apply = (config) => {
-          const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-          shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-          defaultShellProfileId = config.defaultProfile ?? '';
-          renderModalShellProfiles();
-        };
-        if (isDetected) {
-          bridge.addShellProfile(profile).then(() => {
+      // Quick actions: set default, clone, delete
+      if (profile.id !== defaultShellProfileId) {
+        actions.appendChild(createProfileActionButton('★', 'Set as default', () => {
+          const apply = (config) => {
+            const userIds = new Set((config.profiles ?? []).map((p) => p.id));
+            shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
+            defaultShellProfileId = config.defaultProfile ?? '';
+            renderModalShellProfiles();
+          };
+          if (isDetected) {
+            bridge.addShellProfile(profile).then(() => {
+              bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
+            }).catch(reportError);
+          } else {
             bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
+          }
+        }));
+      }
+
+      actions.appendChild(createProfileActionButton('⊙', 'Clone profile', () => {
+        cloneProfile(profile);
+      }));
+
+      if (!isDetected) {
+        actions.appendChild(createProfileActionButton('✕', 'Delete', () => {
+          if (selectedShellProfileId === profile.id) {
+            selectedShellProfileId = null;
+            editingShellProfile = null;
+          }
+          bridge.removeShellProfile(profile.id).then((config) => {
+            const userIds = new Set((config.profiles ?? []).map((p) => p.id));
+            shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
+            defaultShellProfileId = config.defaultProfile ?? '';
+            renderModalShellProfiles();
           }).catch(reportError);
-        } else {
-          bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-        }
-      }));
+        }));
+      }
+
+      item.append(info, actions);
+
+      // Click to select
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.shell-profile-actions')) return;
+        selectedShellProfileId = profile.id;
+        editingShellProfile = {
+          id: profile.id,
+          name: profile.name || '',
+          command: profile.command,
+          args: formatArgs(profile.args ?? []),
+          isNew: false
+        };
+        renderModalShellProfiles();
+      });
+
+      // Drag events for reordering
+      if (!isDetected) {
+        item.addEventListener('dragstart', (e) => {
+          item.classList.add('is-dragging');
+          e.dataTransfer.setData('text/plain', profile.id);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+
+        item.addEventListener('dragend', () => {
+          item.classList.remove('is-dragging');
+          document.querySelectorAll('.shell-profile-item').forEach(el => {
+            el.classList.remove('drag-over');
+          });
+        });
+
+        item.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          const dragging = document.querySelector('.shell-profile-item.is-dragging');
+          if (dragging && dragging !== item) {
+            item.classList.add('drag-over');
+          }
+        });
+
+        item.addEventListener('dragleave', () => {
+          item.classList.remove('drag-over');
+        });
+
+        item.addEventListener('drop', (e) => {
+          e.preventDefault();
+          item.classList.remove('drag-over');
+          const draggedId = e.dataTransfer.getData('text/plain');
+          const targetId = profile.id;
+
+          if (draggedId !== targetId) {
+            reorderProfiles(draggedId, targetId);
+          }
+        });
+      }
+
+      listEl.appendChild(item);
     }
-
-    actions.appendChild(createProfileActionButton('✎', 'Edit', () => {
-      editingShellProfile = {
-        id: profile.id,
-        name: profile.name || '',
-        command: profile.command,
-        args: formatArgs(profile.args ?? []),
-      };
-      renderModalShellProfiles();
-    }));
-
-    if (!isDetected) {
-      actions.appendChild(createProfileActionButton('✕', 'Delete', () => {
-        bridge.removeShellProfile(profile.id).then((config) => {
-          const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-          shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-          defaultShellProfileId = config.defaultProfile ?? '';
-          renderModalShellProfiles();
-        }).catch(reportError);
-      }));
-    }
-
-    item.append(info, actions);
-    listEl.appendChild(item);
   }
+
+  // Render editor panel
+  if (editingShellProfile) {
+    editorEl.appendChild(createModalShellProfileEditor());
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'shell-profiles-editor-placeholder';
+    placeholder.textContent = 'Select a profile or create a new one';
+    editorEl.appendChild(placeholder);
+  }
+}
+
+function cloneProfile(profile) {
+  const clonedProfile = {
+    id: `${profile.id}-copy-${Date.now()}`,
+    name: `${profile.name || profile.id} (副本)`,
+    command: profile.command,
+    args: profile.args ? [...profile.args] : [],
+  };
+
+  bridge.addShellProfile(clonedProfile).then((config) => {
+    const userIds = new Set((config.profiles ?? []).map((p) => p.id));
+    shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
+    defaultShellProfileId = config.defaultProfile ?? '';
+
+    // Select the cloned profile
+    selectedShellProfileId = clonedProfile.id;
+    editingShellProfile = {
+      id: clonedProfile.id,
+      name: clonedProfile.name,
+      command: clonedProfile.command,
+      args: formatArgs(clonedProfile.args ?? []),
+      isNew: false
+    };
+    renderModalShellProfiles();
+  }).catch(reportError);
+}
+
+function reorderProfiles(draggedId, targetId) {
+  const draggedIndex = shellProfiles.findIndex(p => p.id === draggedId);
+  const targetIndex = shellProfiles.findIndex(p => p.id === targetId);
+
+  if (draggedIndex === -1 || targetIndex === -1) return;
+
+  // Remove dragged profile and insert at target position
+  const [draggedProfile] = shellProfiles.splice(draggedIndex, 1);
+  shellProfiles.splice(targetIndex, 0, draggedProfile);
+
+  // Save the new order (add all profiles to persist order)
+  const userProfiles = shellProfiles.filter(p => !detectedShellProfiles.some(dp => dp.id === p.id));
+  const savePromises = userProfiles.map(p => bridge.addShellProfile(p));
+
+  Promise.all(savePromises).then(() => {
+    renderModalShellProfiles();
+  }).catch(reportError);
 }
 
 function createModalShellProfileEditor() {
   const editor = document.createElement('div');
   editor.className = 'shell-profile-editor';
+
+  // Header with title and close button
+  const header = document.createElement('div');
+  header.className = 'shell-profile-editor-header';
+
+  const title = document.createElement('span');
+  title.className = 'shell-profile-editor-title';
+  title.textContent = editingShellProfile.isNew ? 'New Profile' : 'Edit Profile';
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'shell-profile-editor-close';
+  close.textContent = '×';
+  close.title = 'Close editor';
+  close.addEventListener('click', () => {
+    editingShellProfile = null;
+    selectedShellProfileId = null;
+    renderModalShellProfiles();
+  });
+
+  header.append(title, close);
+  editor.appendChild(header);
 
   const fields = [
     { key: 'name', label: 'Name (optional)', placeholder: 'e.g. Zsh' },
@@ -770,7 +919,7 @@ function createModalShellProfileEditor() {
     input.dataset.field = field.key;
     inputs[field.key] = input;
 
-    if (field.key === 'name' && !editingShellProfile.id) {
+    if (field.key === 'name' && editingShellProfile.isNew) {
       input.addEventListener('input', () => {
         const idInput = inputs.id;
         if (!idInput.value && input.value.trim()) {
@@ -787,16 +936,17 @@ function createModalShellProfileEditor() {
 
   const cancel = document.createElement('button');
   cancel.type = 'button';
-  cancel.className = 'settings-btn';
+  cancel.className = 'settings-btn shell-profile-editor-btn';
   cancel.textContent = 'Cancel';
   cancel.addEventListener('click', () => {
     editingShellProfile = null;
+    selectedShellProfileId = null;
     renderModalShellProfiles();
   });
 
   const save = document.createElement('button');
   save.type = 'button';
-  save.className = 'settings-btn is-primary';
+  save.className = 'settings-btn shell-profile-editor-btn is-primary';
   save.textContent = 'Save';
   save.addEventListener('click', () => {
     const profile = {
@@ -815,7 +965,16 @@ function createModalShellProfileEditor() {
       const userIds = new Set((config.profiles ?? []).map((p) => p.id));
       shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
       defaultShellProfileId = config.defaultProfile ?? '';
-      editingShellProfile = null;
+
+      // Select the newly created/saved profile
+      selectedShellProfileId = profile.id;
+      editingShellProfile = {
+        id: profile.id,
+        name: profile.name,
+        command: profile.command,
+        args: formatArgs(profile.args),
+        isNew: false
+      };
       renderModalShellProfiles();
     }).catch(reportError);
   });
