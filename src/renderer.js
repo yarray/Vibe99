@@ -111,6 +111,7 @@ function createUnavailableBridge() {
     onTerminalData: () => () => {},
     onTerminalExit: () => () => {},
     onMenuAction: () => () => {},
+    onPaneCwd: () => () => {},
     cwdReady: Promise.resolve(),
   };
 }
@@ -191,6 +192,7 @@ function createTauriBridge(tauri) {
     onTerminalData: (handler) => onTauriEvent('vibe99:terminal-data', handler),
     onTerminalExit: (handler) => onTauriEvent('vibe99:terminal-exit', handler),
     onMenuAction: (handler) => onTauriEvent('vibe99:menu-action', handler),
+    onPaneCwd: (handler) => onTauriEvent('vibe99:pane-cwd', handler),
     cwdReady: _cwdReady,
   };
 }
@@ -258,6 +260,9 @@ let paneMruOrder = panes.map((pane) => pane.id);
 let paneCycleState = null;
 
 const paneNodeMap = new Map();
+
+// Tracks pending debounce timers for pane CWD saves, keyed by paneId.
+const pendingPaneCwdTimers = {};
 
 const stageEl = document.getElementById('stage');
 const tabsListEl = document.getElementById('tabs-list');
@@ -527,6 +532,25 @@ function restoreSession(session) {
   // Initial MRU order: focused pane first, then remaining panes in tab order.
   paneMruOrder = [focusedPaneId, ...panes.map((p) => p.id).filter((id) => id !== focusedPaneId)];
   paneCycleState = null;
+}
+
+function onPaneCwdChanged(paneId, cwd) {
+  const paneIndex = panes.findIndex((p) => p.id === paneId);
+  if (paneIndex === -1) return;
+
+  // Update the pane's cwd
+  panes[paneIndex] = { ...panes[paneIndex], cwd };
+
+  // Cancel any pending save timer for this pane to avoid duplicate saves
+  if (pendingPaneCwdTimers[paneId] !== undefined) {
+    window.clearTimeout(pendingPaneCwdTimers[paneId]);
+  }
+
+  // Set a 5000ms debounce timer; timer expiry triggers a settings save
+  pendingPaneCwdTimers[paneId] = window.setTimeout(() => {
+    delete pendingPaneCwdTimers[paneId];
+    scheduleSettingsSave();
+  }, 5000);
 }
 
 function scheduleSettingsSave() {
@@ -2705,6 +2729,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     render(true);
     sessionRestoreComplete = true;
+
+    bridge.onPaneCwd(({ paneId, cwd }) => {
+      onPaneCwdChanged(paneId, cwd);
+    });
   } catch (error) {
     reportError(error);
   }
@@ -2715,6 +2743,7 @@ window.addEventListener('beforeunload', () => {
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();
+  Object.values(pendingPaneCwdTimers).forEach(window.clearTimeout);
 });
 
 window.addEventListener('error', (event) => {
