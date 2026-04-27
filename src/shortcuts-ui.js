@@ -148,7 +148,7 @@ function renderModalShortcuts() {
     keys.className = 'shortcut-keys';
     keys.textContent = ShortcutsRegistry.formatShortcut(shortcut);
     keys.addEventListener('click', () => {
-      startShortcutRecording(id, () => renderModalShortcuts());
+      startShortcutRecording(id, () => renderModalShortcuts(), scheduleSettingsSave);
     });
 
     const editBtn = document.createElement('button');
@@ -157,7 +157,7 @@ function renderModalShortcuts() {
     editBtn.textContent = '✎';
     editBtn.title = 'Change shortcut';
     editBtn.addEventListener('click', () => {
-      startShortcutRecording(id, () => renderModalShortcuts());
+      startShortcutRecording(id, () => renderModalShortcuts(), scheduleSettingsSave);
     });
 
     binding.append(keys, editBtn);
@@ -169,7 +169,7 @@ function renderModalShortcuts() {
 /**
  * Start recording a new keyboard shortcut
  */
-function startShortcutRecording(shortcutId, onRecordComplete) {
+function startShortcutRecording(shortcutId, onRecordComplete, scheduleSettingsSave) {
   const shortcuts = ShortcutsRegistry.getKeyboardShortcuts();
   const shortcut = shortcuts[shortcutId];
   if (!shortcut) return;
@@ -266,8 +266,12 @@ function startShortcutRecording(shortcutId, onRecordComplete) {
         modifiers: recordedShortcut.modifiers,
       });
 
-      // Save and update UI
-      // Note: scheduleSettingsSave should be passed from the caller
+      // Persist to settings
+      if (scheduleSettingsSave) {
+        scheduleSettingsSave();
+      }
+
+      // Update UI
       if (onRecordComplete) {
         onRecordComplete();
       }

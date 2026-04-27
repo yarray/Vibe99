@@ -177,6 +177,16 @@ export function loadShortcutsFromSettings(settings) {
   if (settings && typeof settings.shortcuts === 'object' && settings.shortcuts !== null) {
     for (const [id, shortcut] of Object.entries(settings.shortcuts)) {
       if (DEFAULTS_BY_ID[id] && shortcut && Array.isArray(shortcut.modifiers)) {
+        // Skip entries that match the current default — old saved defaults
+        // should not block keymap updates.
+        const defaultLegacy = DEFAULTS_BY_ID[id];
+        if (
+          normalizeLegacyKey(shortcut.key) === normalizeLegacyKey(defaultLegacy.key) &&
+          JSON.stringify([...shortcut.modifiers].sort()) ===
+            JSON.stringify([...defaultLegacy.modifiers].sort())
+        ) {
+          continue;
+        }
         overrides[id] = {
           key: shortcut.key,
           modifiers: [...shortcut.modifiers],
@@ -188,5 +198,12 @@ export function loadShortcutsFromSettings(settings) {
 }
 
 export function getShortcutsForSave() {
-  return getKeyboardShortcuts();
+  const out = {};
+  for (const [id, override] of Object.entries(overrides)) {
+    out[id] = {
+      key: override.key,
+      modifiers: [...override.modifiers],
+    };
+  }
+  return out;
 }
