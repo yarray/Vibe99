@@ -9,6 +9,8 @@
 - Navigation mode pane numbers now properly centered within the accent color bar (VIB-33).
 - Navigation mode now exits correctly after closing a pane with `x` (VIB-33).
 - Focus returns to the terminal after completing a tab rename with Enter (VIB-33).
+- Focus returns to the terminal after closing a pane with `x` (VIB-33).
+- Pane numbers no longer jump 1px when focus changes (VIB-33).
 
 ## 0.7.1 - 2026-04-26
 
