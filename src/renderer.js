@@ -2271,7 +2271,7 @@ function updateStatus() {
     if (pendingClosePaneId !== null) {
       statusHintEl.textContent = 'Press x again to confirm close — Esc to cancel';
     } else {
-      statusHintEl.textContent = '← → 1-9 $ ↵ n x r ?';
+      statusHintEl.textContent = '←/→ or 1-9 to move; Enter to focus; n: new, x: close, r: rename, ?: help';
     }
     return;
   }
