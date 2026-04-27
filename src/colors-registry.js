@@ -30,8 +30,8 @@ export const ACCENT_PALETTE = [
  * @type {string[]}
  */
 export const PRESET_PANE_COLORS = [
-  '#00a8e8', '#e84393', '#fdab0f', '#00cec9',
+  '#5e35b1', '#e84393', '#fdab0f', '#00cec9',
   '#e17055', '#a29bfe', '#55efc4', '#27ae60',
-  '#fdcb6e', '#636e72', '#5e35b1', '#ff7675',
-  '#bf6000', '#74b9ff', '#0050a0', '#1b5e20',
+  '#fdcb6e', '#636e72', '#7b1fa2', '#ff7675',
+  '#e65100', '#0050a0', '#1b5e20', '#2e7d32',
 ];
