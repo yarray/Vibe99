@@ -8,10 +8,11 @@
  */
 
 /**
- * Default accent palette for newly created panes.
+ * Unified palette for pane accents — used both for auto-assignment (cycles
+ * through this array) and as the preset list in the color picker.
  * @type {string[]}
  */
-export const ACCENT_PALETTE = [
+export const PALETTE = [
   '#00a8e8', // vivid sky blue
   '#e84393', // hot pink
   '#fdab0f', // bright gold
@@ -22,16 +23,16 @@ export const ACCENT_PALETTE = [
   '#d63031', // vivid red
   '#fdcb6e', // lemon yellow
   '#636e72', // cool gray
+  '#5e35b1', // deep purple
+  '#27ae60', // medium green
+  '#7b1fa2', // medium purple
+  '#e65100', // deep orange
+  '#0050a0', // dark blue
+  '#2e7d32', // forest green
 ];
 
-/**
- * Preset colors for the pane color picker (VIB-10).
- * Uses the same high-contrast palette as ACCENT_PALETTE.
- * @type {string[]}
- */
-export const PRESET_PANE_COLORS = [
-  '#5e35b1', '#e84393', '#fdab0f', '#00cec9',
-  '#e17055', '#a29bfe', '#55efc4', '#27ae60',
-  '#fdcb6e', '#636e72', '#7b1fa2', '#ff7675',
-  '#e65100', '#0050a0', '#1b5e20', '#2e7d32',
-];
+/** @type {string[]} Alias for auto-assignment (cycles through PALETTE). */
+export const ACCENT_PALETTE = PALETTE;
+
+/** @type {string[]} Alias for the color picker preset list. */
+export const PRESET_PANE_COLORS = PALETTE;
