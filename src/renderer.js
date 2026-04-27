@@ -1416,6 +1416,9 @@ function requestClosePane(paneId) {
     clearCloseConfirm();
     const index = getPaneIndex(paneId);
     if (index !== -1) closePane(index);
+    // Exiting nav mode after close: if the last remaining pane is still visible,
+    // the user should be in normal mode rather than stuck in nav mode.
+    isNavigationMode = false;
     return;
   }
 
@@ -1442,6 +1445,10 @@ function beginRenamePane(index) {
   if (!pane) {
     return;
   }
+
+  // Exiting nav mode before focusing the rename input — otherwise arrow keys
+  // are consumed by nav mode and the user cannot navigate in the text field.
+  isNavigationMode = false;
 
   clearPendingTabFocus();
   renamingPaneId = pane.id;
