@@ -48,6 +48,14 @@ struct TerminalDataPayload {
     data: String,
 }
 
+/// Payload emitted on `vibe99:pane-cwd`.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PaneCwdPayload {
+    pane_id: String,
+    cwd: String,
+}
+
 /// Returns the index of the last complete UTF-8 character boundary in
 /// `buf`. Bytes after this point form an incomplete multi-byte sequence
 /// and should be carried over to the next read. Returns `buf.len()` when
@@ -216,6 +224,8 @@ impl PtyManager {
             // Holds incomplete UTF-8 tail bytes from a previous read so
             // that multi-byte characters are not split across payloads.
             let mut pending: Vec<u8> = Vec::with_capacity(4);
+            // OSC 7 state machine — detects cwd changes per pane.
+            let mut osc7 = Osc7Parser::new();
 
             loop {
                 match reader.read(&mut buf) {
@@ -234,7 +244,22 @@ impl PtyManager {
                         break;
                     }
                     Ok(n) => {
-                        pending.extend_from_slice(&buf[..n]);
+                        let (safe, cwd_opt) = osc7.feed(&buf[..n]);
+
+                        // Emit any parsed cwd change.
+                        if let Some(cwd) = cwd_opt {
+                            let _ = app_reader.emit(
+                                "vibe99:pane-cwd",
+                                PaneCwdPayload {
+                                    pane_id: pane_id_reader.clone(),
+                                    cwd: cwd.to_string_lossy().into_owned(),
+                                },
+                            );
+                        }
+
+                        // Append safe bytes to the pending buffer for UTF-8 chunking.
+                        pending.extend_from_slice(&safe);
+
                         let cut = utf8_safe_cut(&pending);
                         if cut > 0 {
                             let text = String::from_utf8_lossy(&pending[..cut]);
@@ -351,7 +376,11 @@ impl PtyManager {
             let Some(session) = sessions.remove(pane_id) else {
                 return;
             };
-            let PtySession { mut killer, exit_thread, .. } = session;
+            let PtySession {
+                mut killer,
+                exit_thread,
+                ..
+            } = session;
             let _ = killer.kill();
             exit_thread
         };
@@ -678,7 +707,7 @@ fn build_command(candidate: &ShellCandidate, cwd: &Path) -> Result<CommandBuilde
     };
 
     if !is_executable(&shell_path) {
-        return Err(format!("shell not executable: {:?}", shell_path));
+        return Err(format!("shell not executable: {:?}", candidate.shell));
     }
 
     let mut cmd = CommandBuilder::new(&shell_path);
@@ -779,4 +808,203 @@ fn is_executable(path: &Path) -> bool {
 #[cfg(not(unix))]
 fn is_executable(path: &Path) -> bool {
     path.is_file()
+}
+
+// ----------------------------------------------------------------
+// OSC 7 (cwd) support
+// ----------------------------------------------------------------
+
+/// State machine for parsing OSC 7 (Operating System Command 7) sequences
+/// that encode the shell's current working directory.
+///
+/// OSC 7 format: `ESC ] 7 ; <cwd> ESC \`  or  `ESC ] 7 ; <cwd> BEL`
+///
+/// The sequence may arrive split across multiple `read()` calls. This
+/// parser accumulates state across calls and only emits a cwd when the
+/// sequence terminates. Invalid or incomplete sequences are discarded.
+struct Osc7Parser {
+    /// Accumulated payload bytes between `ESC ] 7 ;` and the terminator.
+    buf: Vec<u8>,
+    /// Current parse phase.
+    phase: Osc7Phase,
+}
+
+/// Phases of the OSC 7 state machine.
+enum Osc7Phase {
+    /// Normal terminal data — no OSC 7 sequence in progress.
+    Normal,
+    /// Saw `ESC` (`0x1B`). Next byte determines the sequence type.
+    GotEscape,
+    /// Saw `ESC ]`. Next byte must be `7` (otherwise not OSC 7).
+    GotCsi,
+    /// Saw `ESC ] 7 ;`. Accumulating the cwd payload.
+    Collecting,
+    /// Inside an OSC 7 sequence, saw `ESC` — checking if it's `ESC \` terminator.
+    GotEscInOsc7,
+}
+
+impl Osc7Parser {
+    fn new() -> Self {
+        Self {
+            buf: Vec::with_capacity(64),
+            phase: Osc7Phase::Normal,
+        }
+    }
+
+    /// Feed a byte slice from the PTY reader.
+    ///
+    /// Returns `(safe_bytes, parsed_cwd)`:
+    /// - `safe_bytes` — bytes that did not belong to an OSC 7 sequence.
+    ///   These are forwarded to the frontend unchanged.
+    /// - `parsed_cwd` — `Some(PathBuf)` when a complete OSC 7 cwd was
+    ///   successfully parsed. `None` otherwise.
+    ///
+    /// Incomplete sequences (spanning buffer boundaries) are held in state
+    /// and do not emit safe bytes until the sequence resolves.
+    fn feed(&mut self, incoming: &[u8]) -> (Vec<u8>, Option<PathBuf>) {
+        let mut safe = Vec::new();
+        let mut cwd = None;
+
+        for &byte in incoming {
+            match self.phase {
+                Osc7Phase::Normal => {
+                    if byte == 0x1B {
+                        self.phase = Osc7Phase::GotEscape;
+                    } else {
+                        safe.push(byte);
+                    }
+                }
+                Osc7Phase::GotEscape => match byte {
+                    b']' => {
+                        self.phase = Osc7Phase::GotCsi;
+                    }
+                    _ => {
+                        safe.push(0x1B);
+                        self.phase = Osc7Phase::Normal;
+                        if byte == 0x1B {
+                            self.phase = Osc7Phase::GotEscape;
+                        } else {
+                            safe.push(byte);
+                        }
+                    }
+                },
+                Osc7Phase::GotCsi => {
+                    if byte == b'7' {
+                        self.phase = Osc7Phase::Collecting;
+                    } else {
+                        self.phase = Osc7Phase::Normal;
+                    }
+                }
+                Osc7Phase::Collecting => {
+                    match byte {
+                        0x07 => {
+                            // `BEL` — OSC 7 terminated.
+                            cwd = self.parse_and_reset();
+                        }
+                        0x1B => {
+                            self.phase = Osc7Phase::GotEscInOsc7;
+                        }
+                        _ => {
+                            self.buf.push(byte);
+                            if self.buf.len() > 4096 {
+                                self.reset();
+                            }
+                        }
+                    }
+                }
+                Osc7Phase::GotEscInOsc7 => {
+                    match byte {
+                        b'\\' => {
+                            // `ESC \` — strict OSC terminator. OSC 7 complete.
+                            cwd = self.parse_and_reset();
+                        }
+                        _ => {
+                            // Not a terminator. The `ESC` was a literal byte; reprocess current byte.
+                            self.buf.push(0x1B);
+                            self.phase = Osc7Phase::Collecting;
+                            if byte == 0x1B {
+                                self.phase = Osc7Phase::GotEscInOsc7;
+                            } else if byte == 0x07 {
+                                cwd = self.parse_and_reset();
+                            } else {
+                                self.buf.push(byte);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        (safe, cwd)
+    }
+
+    /// Parse the accumulated payload as an OSC 7 cwd and reset state.
+    fn parse_and_reset(&mut self) -> Option<PathBuf> {
+        let raw = std::mem::take(&mut self.buf);
+        let path_str = String::from_utf8_lossy(&raw);
+        let path_str = path_str.trim();
+
+        // OSC 7 format: `file://host/full/path` — extract the path component.
+        let decoded = urlencoding_decode(path_str).unwrap_or_else(|_| path_str.to_string());
+        let decoded = decoded.trim();
+
+        // Accept only absolute paths (starting with `/` or a drive letter on Windows).
+        let is_absolute =
+            decoded.starts_with('/') || (decoded.len() >= 2 && decoded.chars().nth(1) == Some(':'));
+
+        if decoded.is_empty() || !is_absolute {
+            self.phase = Osc7Phase::Normal;
+            return None;
+        }
+
+        self.phase = Osc7Phase::Normal;
+        Some(PathBuf::from(decoded))
+    }
+
+    /// Discard accumulated state and return to Normal.
+    fn reset(&mut self) {
+        self.buf.clear();
+        self.phase = Osc7Phase::Normal;
+    }
+}
+
+/// Decode a percent-encoded string (URL encoding).
+///
+/// Returns the decoded `String` or `Err(())` if the sequence is malformed
+/// (e.g. a truncated `%XX` at the end of input).
+fn urlencoding_decode(input: &str) -> Result<String, ()> {
+    let mut out = Vec::with_capacity(input.len());
+    let mut chars = input.as_bytes().iter().copied().peekable();
+
+    while let Some(b) = chars.next() {
+        if b != b'%' {
+            // Bare character — unescape `+` as a space (common in shell paths).
+            out.push(if b == b'+' { b' ' } else { b });
+            continue;
+        }
+
+        let hex1 = chars.next().ok_or(())?;
+        let hex2 = chars.next().ok_or(())?;
+        let d1 = hex1.char_to_hex().ok_or(())?;
+        let d2 = hex2.char_to_hex().ok_or(())?;
+        out.push((d1 << 4) | d2);
+    }
+
+    String::from_utf8(out).map_err(|_| ())
+}
+
+/// Extension trait for `u8` to decode a hex digit.
+trait CharToHex {
+    fn char_to_hex(self) -> Option<u8>;
+}
+
+impl CharToHex for u8 {
+    fn char_to_hex(self) -> Option<u8> {
+        match self {
+            b'0'..=b'9' => Some(self - b'0'),
+            b'a'..=b'f' => Some(self - b'a' + 10),
+            b'A'..=b'F' => Some(self - b'A' + 10),
+            _ => None,
+        }
+    }
 }
