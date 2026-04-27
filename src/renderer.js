@@ -614,8 +614,6 @@ function changePaneShell(paneId, profileId) {
 
 function openShellProfilesModal() {
   loadShellProfiles();
-  selectedShellProfileId = null;
-  editingShellProfile = null;
 
   const overlay = document.createElement('div');
   overlay.className = 'settings-modal-overlay';
@@ -670,6 +668,22 @@ function openShellProfilesModal() {
   // Store reference to modal elements for rendering
   overlay._modalShellProfileList = overlay.querySelector('#modal-shell-profile-list');
   overlay._modalShellProfileEditor = overlay.querySelector('#modal-shell-profile-editor');
+
+  // Select first profile by default if available
+  if (shellProfiles.length > 0) {
+    const firstProfile = shellProfiles[0];
+    selectedShellProfileId = firstProfile.id;
+    editingShellProfile = {
+      id: firstProfile.id,
+      name: firstProfile.name || '',
+      command: firstProfile.command,
+      args: formatArgs(firstProfile.args ?? []),
+      isNew: false
+    };
+  } else {
+    selectedShellProfileId = null;
+    editingShellProfile = null;
+  }
 
   renderModalShellProfiles();
 }
