@@ -58,7 +58,7 @@ export function createDispatcher({
 
       event.preventDefault();
       if (entry.stopPropagation) event.stopPropagation();
-      handler();
+      handler(event);
       return;
     }
   };

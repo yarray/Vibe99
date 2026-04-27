@@ -2244,7 +2244,7 @@ function updateStatus() {
     if (pendingClosePaneId !== null) {
       statusHintEl.textContent = 'Press x again to confirm close — Esc to cancel';
     } else {
-      statusHintEl.textContent = '← → 0 $ 1-9 ↵ n x r ?';
+      statusHintEl.textContent = '← → 0 ^ $ 0-9 ↵ n x r ?';
     }
     return;
   }
