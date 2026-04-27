@@ -1022,6 +1022,7 @@ function createPane(pane) {
   paneEl.append(shell);
 
   const terminal = new Terminal({
+    allowProposedApi: true,
     allowTransparency: true,
     convertEol: false,
     customGlyphs: true,
