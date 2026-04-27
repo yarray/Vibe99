@@ -52,7 +52,7 @@ export const KEYMAP = [
 
   // Navigation mode — editing (VIB-33)
   { id: 'new-pane',        mode: 'nav', chord: 'n',              action: 'newPane',               hint: 'n new',            skipInInput: true },
-  { id: 'close-pane',      mode: 'nav', chord: 'x',              action: 'closePane',             hint: 'x close',          skipInInput: true },
+  { id: 'close-pane',      mode: 'nav', chord: 'c',              action: 'closePane',             hint: 'c close',          skipInInput: true },
   { id: 'rename-pane',     mode: 'nav', chord: 'r',              action: 'renamePane',            hint: 'r rename',         skipInInput: true },
 
   // Navigation mode — help (VIB-33)
@@ -77,7 +77,8 @@ const MOD_TOKENS = new Set(['ctrl', 'cmd', 'meta', 'shift', 'alt', 'option']);
  * @returns {Array<{key: string, ctrl: boolean, shift: boolean, alt: boolean}>}
  */
 export function parseChord(chord) {
-  return chord.split('|').map(parseChordAlt);
+  const alternatives = chord.split('|').flatMap(parseChordAlt);
+  return alternatives;
 }
 
 function parseChordAlt(alt) {
@@ -92,6 +93,27 @@ function parseChordAlt(alt) {
       throw new Error(`Unknown modifier "${m}" in chord ${alt}`);
     }
   }
+
+  // Handle special key patterns: '1..9' expands to ['1', '2', ..., '9']
+  if (key.includes('..')) {
+    const [start, end] = key.split('..');
+    const startNum = parseInt(start, 10);
+    const endNum = parseInt(end, 10);
+    if (!isNaN(startNum) && !isNaN(endNum) && startNum < endNum) {
+      // Generate array of chord entries, one for each number in range
+      const results = [];
+      for (let i = startNum; i <= endNum; i++) {
+        results.push({
+          key: String(i),
+          ctrl: mods.includes('ctrl') || mods.includes('cmd') || mods.includes('meta'),
+          shift: mods.includes('shift'),
+          alt: mods.includes('alt') || mods.includes('option'),
+        });
+      }
+      return results;
+    }
+  }
+
   return {
     key,
     ctrl: mods.includes('ctrl') || mods.includes('cmd') || mods.includes('meta'),

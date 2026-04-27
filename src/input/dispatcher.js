@@ -61,7 +61,7 @@ export function createDispatcher({
         event.stopPropagation();
         event.stopImmediatePropagation();
       }
-      handler();
+      handler(event);
       return;
     }
   };

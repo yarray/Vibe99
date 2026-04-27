@@ -72,6 +72,11 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
  * Prefers single characters over arrow key names.
  */
 function formatChordForHint(chord, platform) {
+  // Handle special chord patterns: '1..9' displays as '1-9'
+  if (chord === '1..9') {
+    return '1-9';
+  }
+
   const alternatives = chord.split('|');
 
   // Prefer single character alternatives (like 'h', 'l') over arrow keys (like 'ArrowLeft')
@@ -105,6 +110,12 @@ function formatChordForHint(chord, platform) {
   let displayKey = key;
   if (key === ' ') {
     displayKey = 'Space';
+  } else if (key === 'Home') {
+    displayKey = 'Home';
+  } else if (key === 'End') {
+    displayKey = 'End';
+  } else if (key === '?') {
+    displayKey = '?';
   } else if (key.length === 1) {
     displayKey = key.toUpperCase();
   }
