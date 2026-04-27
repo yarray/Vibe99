@@ -93,9 +93,7 @@ function parseChordAlt(alt) {
  */
 export function matchesChord(event, parsedAlts) {
   for (const alt of parsedAlts) {
-    if (matchesChordAlt(event, alt)) {
-      return true;
-    }
+    if (matchesChordAlt(event, alt)) return true;
   }
   return false;
 }
@@ -105,31 +103,12 @@ function matchesChordAlt(event, alt) {
     if (event.code !== 'Tab') return false;
     if (event.repeat) return false;
   } else {
-    const eventKey = normalizeKey(event.key);
-    const altKey = normalizeKey(alt.key);
-    if (eventKey !== altKey) {
-      // Debug logging for single character mismatches
-      if (alt.key.length === 1 && event.key.length === 1) {
-        console.log('[matchesChordAlt] Key mismatch:', {
-          eventKey,
-          altKey,
-          event,
-          alt,
-        });
-      }
-      return false;
-    }
+    if (normalizeKey(event.key) !== normalizeKey(alt.key)) return false;
   }
   const ctrlHeld = Boolean(event.ctrlKey || event.metaKey);
   if (alt.ctrl !== ctrlHeld) return false;
   if (alt.shift !== Boolean(event.shiftKey)) return false;
   if (alt.alt !== Boolean(event.altKey)) return false;
-
-  // Debug logging for successful matches of single characters
-  if (alt.key.length === 1 && event.key.length === 1) {
-    console.log('[matchesChordAlt] Matched!', { altKey: alt.key, eventKey: event.key });
-  }
-
   return true;
 }
 

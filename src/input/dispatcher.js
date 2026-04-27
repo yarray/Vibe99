@@ -33,18 +33,11 @@ export function createDispatcher({
   function getParsed() {
     const km = getKeymap();
     if (km !== cachedKeymap) {
-      console.log('[Dispatcher] Cache invalidated, rebuilding parsed keymap');
-      console.log('[Dispatcher] Keymap entries:', km.map(e => ({ action: e.action, chord: e.chord, mode: e.mode })));
       parsedKeymap = km.map((entry) => ({
         ...entry,
         parsedChord: parseChord(entry.chord),
       }));
       cachedKeymap = km;
-      console.log('[Dispatcher] Parsed keymap:', parsedKeymap.map(e => ({
-        action: e.action,
-        chord: e.chord,
-        parsedChord: e.parsedChord
-      })));
     }
     return parsedKeymap;
   }
@@ -54,40 +47,14 @@ export function createDispatcher({
     const inputFocused = isInputFocused();
     const paletteOpen = isCommandPaletteOpen();
 
-    // Debug logging for single character keys in nav mode
-    if (mode === 'nav' && event.key.length === 1) {
-      console.log('[Dispatch] Nav mode key:', event.key, 'event:', {
-        key: event.key,
-        code: event.code,
-        ctrlKey: event.ctrlKey,
-        shiftKey: event.shiftKey,
-        altKey: event.altKey,
-        metaKey: event.metaKey,
-      });
-    }
-
     for (const entry of getParsed()) {
       if (entry.mode !== '*' && entry.mode !== mode) continue;
       if (paletteOpen && entry.action !== 'toggleCommandPalette') continue;
-
-      // Debug: show which nav mode entries are being checked
-      if (mode === 'nav' && event.key.length === 1 && /^[hl]$/.test(event.key)) {
-        console.log('[Dispatch] Checking entry:', {
-          action: entry.action,
-          chord: entry.chord,
-          parsedChord: entry.parsedChord,
-        });
-      }
-
       if (!matchesChord(event, entry.parsedChord)) continue;
       if (inputFocused && entry.skipInInput) continue;
 
       const handler = actions[entry.action];
       if (!handler) continue;
-
-      if (mode === 'nav' && event.key.length === 1) {
-        console.log('[Dispatch] Matched entry:', entry.action, entry.chord);
-      }
 
       event.preventDefault();
       if (entry.stopPropagation) {
@@ -96,10 +63,6 @@ export function createDispatcher({
       }
       handler();
       return;
-    }
-
-    if (mode === 'nav' && event.key.length === 1) {
-      console.log('[Dispatch] No match found for key:', event.key);
     }
   };
 }
