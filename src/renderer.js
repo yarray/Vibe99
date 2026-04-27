@@ -904,28 +904,6 @@ function createModalShellProfileEditor() {
   const editor = document.createElement('div');
   editor.className = 'shell-profile-editor';
 
-  // Header with title and close button
-  const header = document.createElement('div');
-  header.className = 'shell-profile-editor-header';
-
-  const title = document.createElement('span');
-  title.className = 'shell-profile-editor-title';
-  title.textContent = editingShellProfile.isNew ? 'New Profile' : 'Edit Profile';
-
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'shell-profile-editor-close';
-  close.textContent = '×';
-  close.title = 'Close editor';
-  close.addEventListener('click', () => {
-    editingShellProfile = null;
-    selectedShellProfileId = null;
-    renderModalShellProfiles();
-  });
-
-  header.append(title, close);
-  editor.appendChild(header);
-
   const fields = [
     { key: 'name', label: 'Name (optional)', placeholder: 'e.g. Zsh' },
     { key: 'id', label: 'ID', placeholder: 'e.g. zsh' },

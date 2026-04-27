@@ -383,7 +383,6 @@ body {
   overflow-x: hidden;
   min-height: 0;
   padding-right: 4px;
-  scrollbar-gutter: stable;
 }
 
 .shell-profile-item {
@@ -428,6 +427,7 @@ body {
 .shell-profile-item .shell-profile-name {
   flex: 1;
   min-width: 0;
+  max-width: calc(100% - 80px);
   font-size: 13px;
   color: var(--text);
   white-space: nowrap;
