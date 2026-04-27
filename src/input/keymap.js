@@ -44,6 +44,19 @@ export const KEYMAP = [
   // Navigation mode - customizable vim-style keys (optional)
   { id: 'nav-left',  mode: 'nav', chord: 'h', action: 'focusPrev',    hint: 'h prev',  stopPropagation: true },
   { id: 'nav-right', mode: 'nav', chord: 'l', action: 'focusNext',    hint: 'l next',  stopPropagation: true },
+
+  // Navigation mode — movement (VIB-33)
+  { id: 'focus-first',     mode: 'nav', chord: 'Home',           action: 'focusFirst',            hint: 'first' },
+  { id: 'focus-last',      mode: 'nav', chord: 'End',            action: 'focusLast',             hint: 'last' },
+  { id: 'jump-to',         mode: 'nav', chord: '1..9',           action: 'jumpTo',                hint: '1-9 jump',         skipInInput: true },
+
+  // Navigation mode — editing (VIB-33)
+  { id: 'new-pane',        mode: 'nav', chord: 'n',              action: 'newPane',               hint: 'n new',            skipInInput: true },
+  { id: 'close-pane',      mode: 'nav', chord: 'x',              action: 'closePane',             hint: 'x close',          skipInInput: true },
+  { id: 'rename-pane',     mode: 'nav', chord: 'r',              action: 'renamePane',            hint: 'r rename',         skipInInput: true },
+
+  // Navigation mode — help (VIB-33)
+  { id: 'show-keymap-help', mode: 'nav', chord: '?',             action: 'showKeymapHelp',        hint: '? help',           skipInInput: true },
 ];
 
 // ---------------------------------------------------------------------------

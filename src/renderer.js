@@ -981,6 +981,11 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   const swatch = document.createElement('span');
   swatch.className = 'tab-swatch';
 
+  // Show number badge in navigation mode
+  if (currentMode === 'nav') {
+    swatch.textContent = String(index + 1);
+  }
+
   let label;
   if (renamingPaneId === pane.id) {
     label = document.createElement('input');
@@ -1022,6 +1027,13 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   close.textContent = 'x';
   close.setAttribute('aria-label', `Close tab ${pane.id}`);
   close.disabled = panes.length === 1;
+
+  // Show pending close state
+  if (pendingClosePaneId === pane.id) {
+    close.classList.add('pending-close');
+    close.textContent = '?';
+  }
+
   close.addEventListener('click', (event) => {
     event.stopPropagation();
     closePane(index);
@@ -1376,10 +1388,15 @@ function commitRenamePane(paneId, nextTitle) {
     entry.id === paneId ? { ...entry, title: trimmedTitle || null } : entry
   );
 
-  try {
-    render();
-  } catch (error) {
-    reportError(error);
+  // Exit nav mode and return focus to the renamed pane
+  if (currentMode === 'nav') {
+    focusPane(paneId, { focusTerminal: true });
+  } else {
+    try {
+      render();
+    } catch (error) {
+      reportError(error);
+    }
   }
 }
 
@@ -2174,6 +2191,60 @@ function updateStatus() {
   statusHintEl.innerHTML = hintsHtml;
 }
 
+// ---------------------------------------------------------------------------
+// VIB-33: Navigation mode enhancement functions
+// ---------------------------------------------------------------------------
+
+function focusPaneAt(index) {
+  if (panes.length === 0 || index < 0 || index >= panes.length) return;
+  paneCycleState = null;
+  focusedPaneId = panes[index].id;
+  // Stay in nav mode, just update which pane is focused
+  render();
+}
+
+function getPaneCount() {
+  return panes.length;
+}
+
+// Two-step close confirmation state
+let pendingClosePaneId = null;
+
+function requestClosePane(paneId) {
+  if (pendingClosePaneId === paneId) {
+    // Second press - confirmed
+    const index = panes.findIndex((pane) => pane.id === paneId);
+    if (index !== -1) {
+      pendingClosePaneId = null;
+      closePane(index);
+
+      // Exit nav mode and return focus to the now-focused pane after close
+      if (currentMode === 'nav' && panes.length > 0) {
+        focusPane(focusedPaneId, { focusTerminal: true });
+      }
+    }
+  } else {
+    // First press - show pending state
+    pendingClosePaneId = paneId;
+    render();
+  }
+}
+
+function startInlineRename(paneId) {
+  const index = panes.findIndex((pane) => pane.id === paneId);
+  if (index !== -1) {
+    beginRenamePane(index);
+  }
+}
+
+function openKeymapHelpModal() {
+  ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+}
+
+// ---------------------------------------------------------------------------
+// Wire renderer-level callbacks into pure action handlers
+// ---------------------------------------------------------------------------
+
 // Wire renderer-level callbacks into pure action handlers, then route every
 // global keydown through the declarative keymap dispatcher. The keydown switch
 // that used to live here is now `KEYMAP` in `input/keymap.js` plus a few flag
@@ -2194,6 +2265,11 @@ const keyboardActions = createActions({
   isCommandPaletteOpen,
   closeCommandPalette,
   openTabSwitcher,
+  focusPaneAt,
+  getPaneCount,
+  requestClosePane,
+  startInlineRename,
+  openKeymapHelpModal,
 });
 
 const dispatchKeydown = createDispatcher({

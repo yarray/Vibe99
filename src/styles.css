@@ -695,6 +695,33 @@ body.is-navigation-mode .hint-sep {
   display: none;
 }
 
+/* Navigation mode - number badges in tabs */
+body.is-navigation-mode .tab-swatch {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 11px;
+	font-weight: 600;
+	color: rgba(0, 0, 0, 0.75);
+}
+
+/* Pending close confirmation */
+.tab-close.pending-close {
+	color: #ff6b57;
+	font-weight: 700;
+	animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.6; }
+}
+
+/* Navigation mode - highlight focused tab */
+body.is-navigation-mode .tab.is-focused .tab-swatch {
+	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
 body.is-dragging-tabs {
   user-select: none;
   cursor: grabbing;
