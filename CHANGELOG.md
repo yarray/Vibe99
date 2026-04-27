@@ -6,6 +6,11 @@
 
 ### Added
 
+- SessionState V2 versioning with restore compatibility (VIB-28-C):
+  - buildSessionData() outputs version: 2
+  - restoreSession() checks session version; V2 uses full new path, older sessions fall back with bridge.defaultCwd
+  - Fixes missing pendingSessionSave declaration used by flushSettingsSave
+
 - Navigation mode enhancements (VIB-33):
   - Number shortcuts (1-9) for jumping to specific panes
   - Home/End keys for jumping to first/last pane

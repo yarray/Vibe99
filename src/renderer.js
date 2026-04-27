@@ -296,6 +296,7 @@ const settings = {
   breathingAlertEnabled: true,
 };
 let pendingSettingsSave = null;
+let pendingSessionSave = null;
 
 let shellProfiles = [];
 let defaultShellProfileId = '';
@@ -496,6 +497,10 @@ function buildSessionData() {
 }
 
 function restoreSession(session) {
+  // Version check: V2 uses full new path; older sessions (version === undefined or < 2)
+  // fall back to legacy path where cwd is still read from p.cwd with bridge.defaultCwd fallback.
+  const isV2 = session.version === 2;
+
   const validPanes = (session.panes ?? [])
     .filter((p) => p && typeof p.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.accent))
     .map((p, index) => ({
