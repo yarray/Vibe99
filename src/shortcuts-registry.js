@@ -80,12 +80,29 @@ function legacyShortcut(row) {
 let activeKeymap = computeActiveKeymap();
 
 function computeActiveKeymap() {
-  return KEYMAP.map((row) => {
+  const result = KEYMAP.map((row) => {
     if (!row.id) return row;
     const override = overrides[row.id];
-    if (!override) return row;
+    if (!override) {
+      // No override, keep original chord with all alternatives
+      return row;
+    }
+
+    // Check if the override is identical to the default
+    const defaultLegacy = chordToLegacy(row.chord);
+    const overrideMatchesDefault =
+      override.key === defaultLegacy.key &&
+      JSON.stringify(override.modifiers) === JSON.stringify(defaultLegacy.modifiers);
+
+    // If override matches default, keep original chord to preserve alternatives
+    if (overrideMatchesDefault) {
+      return row;
+    }
+
+    // Override is different from default, apply it
     return { ...row, chord: legacyToChord(override) };
   });
+  return result;
 }
 
 function refreshActiveKeymap() {

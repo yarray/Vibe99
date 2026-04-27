@@ -57,7 +57,10 @@ export function createDispatcher({
       if (!handler) continue;
 
       event.preventDefault();
-      if (entry.stopPropagation) event.stopPropagation();
+      if (entry.stopPropagation) {
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
       handler();
       return;
     }

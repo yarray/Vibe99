@@ -27,18 +27,23 @@ export const KEYMAP = [
   // Global
   { mode: '*',   chord: 'Ctrl+Shift+O',    action: 'toggleCommandPalette',  hint: 'palette',          stopPropagation: true },
   { mode: '*',   chord: 'Ctrl+Tab',        action: 'cycleRecent',           hint: 'recent',           skipInInput: true, stopPropagation: true },
-  { mode: '*',   chord: 'Ctrl+Shift+Tab',  action: 'cycleRecentReverse',    hint: 'recent (rev)',     skipInInput: true, stopPropagation: true },
-  { id: 'navigation-mode', mode: '*',   chord: 'Ctrl+B',          action: 'enterNav',              hint: 'navigate',         skipInInput: true },
+  { mode: '*',   chord: 'Ctrl+Shift+Tab',  action: 'cycleRecentReverse',    hint: 'recent',           skipInInput: true, stopPropagation: true },
+  { id: 'navigation-mode', mode: '*',   chord: 'Ctrl+B',          action: 'enterNav',              hint: 'navigate',         skipInInput: true, stopPropagation: true },
   { id: 'new-tab',         mode: '*',   chord: 'Ctrl+N',          action: 'newPane',               hint: 'new pane' },
   { id: 'navigate-left',   mode: '*',   chord: 'Ctrl+ArrowLeft',  action: 'navigateLeft',          hint: '← pane' },
   { id: 'navigate-right',  mode: '*',   chord: 'Ctrl+ArrowRight', action: 'navigateRight',         hint: '→ pane' },
   { id: 'copy',            mode: '*',   chord: 'Ctrl+Shift+C',    action: 'copyTerminalSelection', hint: 'copy',             skipInInput: true },
   { id: 'paste',           mode: '*',   chord: 'Ctrl+Shift+V',    action: 'pasteIntoTerminal',     hint: 'paste',            skipInInput: true },
 
-  // Navigation mode
-  { id: 'move-left',       mode: 'nav', chord: 'ArrowLeft|h',     action: 'focusPrev',             hint: '← prev' },
-  { id: 'move-right',      mode: 'nav', chord: 'ArrowRight|l',    action: 'focusNext',             hint: '→ next' },
-  { id: 'focus-terminal',  mode: 'nav', chord: 'Enter',           action: 'commitFocus',           hint: '↵ focus' },
+  // Navigation mode - non-customizable arrow keys (always available)
+  { mode: 'nav', chord: 'ArrowLeft',  action: 'focusPrev',    hint: '← prev',  stopPropagation: true },
+  { mode: 'nav', chord: 'ArrowRight', action: 'focusNext',    hint: '→ next',  stopPropagation: true },
+  { mode: 'nav', chord: 'Enter',       action: 'commitFocus', hint: '↵ focus', stopPropagation: true },
+  { mode: 'nav', chord: 'Escape',      action: 'cancelNav',   hint: 'esc cancel', stopPropagation: true },
+
+  // Navigation mode - customizable vim-style keys (optional)
+  { id: 'nav-left',  mode: 'nav', chord: 'h', action: 'focusPrev',    hint: 'h prev',  stopPropagation: true },
+  { id: 'nav-right', mode: 'nav', chord: 'l', action: 'focusNext',    hint: 'l next',  stopPropagation: true },
 ];
 
 // ---------------------------------------------------------------------------
