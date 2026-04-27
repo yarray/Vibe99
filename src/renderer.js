@@ -2,6 +2,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import {
   openCommandPalette,
   closeCommandPalette,
@@ -1021,6 +1022,7 @@ function createPane(pane) {
   paneEl.append(shell);
 
   const terminal = new Terminal({
+    allowProposedApi: true,
     allowTransparency: true,
     convertEol: false,
     customGlyphs: true,
@@ -1037,6 +1039,12 @@ function createPane(pane) {
   const webLinksAddon = new WebLinksAddon(handleTerminalLinkActivation);
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(webLinksAddon);
+  // Unicode 11 width tables align xterm.js's wcwidth with what modern CLI
+  // apps (Node.js / Ink-based UIs like Claude Code) assume, so CJK
+  // characters reliably consume two cells instead of drifting between one
+  // and two when an app redraws after IME input.
+  terminal.loadAddon(new Unicode11Addon());
+  terminal.unicode.activeVersion = '11';
   terminal.open(terminalHost);
   try { terminal.loadAddon(new WebglAddon()); } catch {}
   terminal.attachCustomKeyEventHandler((event) => {
