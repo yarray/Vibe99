@@ -164,44 +164,59 @@ body {
 }
 
 .tab-swatch {
-  /* Non-focused tabs: accent colour fills the full height of the tab,
-     creating a prominent left-side colour bar so the pane number is visible */
+  /* Default: small colour dot, no number — matches original design */
   position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  transform: translateY(-50%);
+  background: var(--pane-accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+/* Nav mode: expand swatch to full tab height as the pane colour indicator bar */
+body.is-nav-mode .tab-swatch {
   left: 0;
   top: 0;
   width: 20px;
   height: 100%;
-  background: var(--pane-accent);
-  z-index: 1;
+  box-shadow: none;
+  transform: none;
 }
 
-/* Pane number badge — sits on the accent bar for all tabs */
+/* Pane number badge — hidden by default, shown in nav mode */
 .tab-pane-number {
+  display: none;
+}
+
+/* Nav mode: show pane number on the expanded swatch accent bar */
+body.is-nav-mode .tab-pane-number {
+  display: block;
   position: absolute;
-  left: 26px;
+  left: 3px;  /* centered within the 20px swatch */
   top: 50%;
   transform: translateY(-50%);
   font-size: 11px;
   font-weight: 700;
   color: var(--tab-text-color, #fff);
   pointer-events: none;
-  min-width: 16px;
+  min-width: 14px;
   text-align: center;
   font-family: inherit;
   line-height: 1;
   z-index: 2;
-  /* legibility on both light and dark accent colours */
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* Focused tab: accent colour already fills the whole tab via .is-focused;
-   swatch is redundant — hide it so the full-colour background shows through */
+/* Focused tab: swatch is redundant when tab itself is accent-filled — hide it */
 .tab.is-focused .tab-swatch {
   display: none;
 }
 
-/* Focused tab: number centred on the accent-filled background */
-.tab.is-focused .tab-pane-number {
+/* Nav mode + focused tab: number centred on the accent-filled background */
+body.is-nav-mode .tab.is-focused .tab-pane-number {
   left: 6px;
   font-size: 12px;
   font-weight: 800;
@@ -209,15 +224,14 @@ body {
 
 .tab-label {
   min-width: 0;
-  padding-left: 42px; /* leave room for swatch (20px) + badge (16px) + gap */
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Focused tab: swatch hidden, badge sits at left: 6px — reduce padding slightly */
-.tab.is-focused .tab-label {
+/* Nav mode: extra padding so label doesn't overlap the expanded swatch+badge */
+body.is-nav-mode .tab-label {
   padding-left: 30px;
 }
 
