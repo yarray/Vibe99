@@ -629,11 +629,6 @@ body {
   text-overflow: ellipsis;
 }
 
-#status-label.is-navigation-mode {
-  color: #ffd166;
-  font-weight: 700;
-}
-
 .status-hint {
   flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.45);
@@ -676,10 +671,23 @@ body {
   font-size: 14px;
 }
 
-/* Navigation mode hints highlighting - only kbd elements highlighted with yellow text */
+/* Navigation mode - entire status bar background color */
+body.is-navigation-mode .status-bar {
+  background: rgba(255, 209, 102, 0.12);
+}
+
+body.is-navigation-mode #status-label {
+  color: #ffd166;
+  font-weight: 600;
+}
+
 body.is-navigation-mode .hint kbd {
   color: #ffd166;
   font-weight: 600;
+}
+
+body.is-navigation-mode .hint-sep {
+  color: rgba(255, 209, 102, 0.4);
 }
 
 /* Compact hint bar mode */

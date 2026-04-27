@@ -2147,11 +2147,12 @@ function enterNavigationMode() {
 function cancelNavigationMode() {
   // Return focus to the pane that was focused when entering nav mode
   if (enterNavSourcePaneId) {
-    focusedPaneId = enterNavSourcePaneId;
+    focusPane(enterNavSourcePaneId, { focusTerminal: true });
     enterNavSourcePaneId = null;
+  } else {
+    setMode('terminal');
+    render();
   }
-  setMode('terminal');
-  render();
 }
 
 function updateStatus() {
