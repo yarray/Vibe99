@@ -14,10 +14,10 @@
 import { KEYMAP, parseChord, formatChord } from './input/keymap.js';
 
 // Customizable rows are those with an `id` field. Non-customizable rows
-// (palette, cycle-recent) live in the keymap but are not exposed through this
-// legacy API.
+// (palette, cycle-recent, digit ranges like 1..9) live in the keymap but are
+// not exposed through this legacy API.
 function customizableRows() {
-  return KEYMAP.filter((row) => typeof row.id === 'string');
+  return KEYMAP.filter((row) => typeof row.id === 'string' && !row.chord.includes('..'));
 }
 
 function chordToLegacy(chord) {
@@ -70,6 +70,7 @@ function legacyShortcut(row) {
     modifiers: override?.modifiers ?? base.modifiers,
     action: row.action,
     platform: 'all',
+    mode: row.mode,
   };
 }
 
@@ -176,6 +177,16 @@ export function loadShortcutsFromSettings(settings) {
   if (settings && typeof settings.shortcuts === 'object' && settings.shortcuts !== null) {
     for (const [id, shortcut] of Object.entries(settings.shortcuts)) {
       if (DEFAULTS_BY_ID[id] && shortcut && Array.isArray(shortcut.modifiers)) {
+        // Skip entries that match the current default — old saved defaults
+        // should not block keymap updates.
+        const defaultLegacy = DEFAULTS_BY_ID[id];
+        if (
+          normalizeLegacyKey(shortcut.key) === normalizeLegacyKey(defaultLegacy.key) &&
+          JSON.stringify([...shortcut.modifiers].sort()) ===
+            JSON.stringify([...defaultLegacy.modifiers].sort())
+        ) {
+          continue;
+        }
         overrides[id] = {
           key: shortcut.key,
           modifiers: [...shortcut.modifiers],
@@ -187,5 +198,12 @@ export function loadShortcutsFromSettings(settings) {
 }
 
 export function getShortcutsForSave() {
-  return getKeyboardShortcuts();
+  const out = {};
+  for (const [id, override] of Object.entries(overrides)) {
+    out[id] = {
+      key: override.key,
+      modifiers: [...override.modifiers],
+    };
+  }
+  return out;
 }
