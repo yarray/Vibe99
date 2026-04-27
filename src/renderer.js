@@ -1328,6 +1328,7 @@ function focusPane(paneId, options = {}) {
   paneCycleState = null;
   focusedPaneId = paneId;
   isNavigationMode = false;
+  document.body.classList.remove('is-nav-mode');
   recordPaneVisit(paneId);
   render();
   const node = paneNodeMap.get(paneId);
@@ -1740,6 +1741,7 @@ function cycleToRecentPane({ reverse = false } = {}) {
 
   focusedPaneId = targetId;
   isNavigationMode = false;
+  document.body.classList.remove('is-nav-mode');
   render();
 
   const node = paneNodeMap.get(targetId);
@@ -2231,12 +2233,15 @@ function enterNavigationMode() {
   }
 
   isNavigationMode = true;
+  document.body.classList.add('is-nav-mode');
   blurFocusedTerminal();
   render();
 }
 
 function updateStatus() {
   const focusedPane = panes[getFocusedIndex()];
+
+  document.body.classList.toggle('is-nav-mode', isNavigationMode);
 
   if (isNavigationMode) {
     statusLabelEl.classList.add('is-navigation-mode');
