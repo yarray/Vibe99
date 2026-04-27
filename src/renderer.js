@@ -868,14 +868,14 @@ function cloneProfile(profile) {
     shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
     defaultShellProfileId = config.defaultProfile ?? '';
 
-    // Select the cloned profile
+    // Enter edit mode with the cloned profile (same as New Profile but with content filled in)
     selectedShellProfileId = clonedProfile.id;
     editingShellProfile = {
       id: clonedProfile.id,
       name: clonedProfile.name,
       command: clonedProfile.command,
       args: formatArgs(clonedProfile.args ?? []),
-      isNew: false
+      isNew: true // Treat as new so user can edit the ID
     };
     renderModalShellProfiles();
   }).catch(reportError);

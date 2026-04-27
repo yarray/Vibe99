@@ -964,42 +964,71 @@ body.is-dragging-tabs {
 }
 
 /* Shell Profiles Modal - Two Column Layout */
-.shell-profiles-modal {
-  min-width: 700px !important;
-  max-width: 900px !important;
-  width: 90vw !important;
-  height: 600px !important;
-  display: flex !important;
-  flex-direction: column !important;
+.settings-modal.shell-profiles-modal {
+  min-width: 700px;
+  max-width: 900px;
+  width: 90vw;
+  height: 600px;
+  display: flex;
+  flex-direction: column;
 }
 
-.shell-profiles-modal-body {
-  display: flex !important;
-  gap: 16px !important;
-  flex: 1 !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-  margin-bottom: 0 !important;
+.settings-modal.shell-profiles-modal .shell-profiles-modal-body {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  margin-bottom: 0;
 }
 
-.shell-profiles-sidebar {
-  flex: 0 0 240px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
-  padding-right: 16px !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
+.settings-modal.shell-profiles-modal .shell-profiles-sidebar {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding-right: 16px;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.shell-profiles-sidebar-header {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  padding: 8px 0 !important;
-  margin-bottom: 8px !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  flex-shrink: 0 !important;
+.settings-modal.shell-profiles-modal .shell-profiles-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+/* Subtle scrollbar styling for shell profiles modal */
+.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-track,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-thumb,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-thumb:hover,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Firefox scrollbar styling */
+.settings-modal.shell-profiles-modal .shell-profile-list,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 .shell-profiles-add-btn {
@@ -1026,12 +1055,12 @@ body.is-dragging-tabs {
   transform: scale(1.05);
 }
 
-.shell-profiles-editor-panel {
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow-y: auto !important;
-  min-height: 0 !important;
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .shell-profiles-editor-placeholder {
