@@ -622,13 +622,13 @@ function openShellProfilesModal() {
     <div class="settings-modal shell-profiles-modal">
       <div class="settings-modal-header">
         <span>Shell Profiles</span>
-        <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+        <div class="settings-modal-header-actions">
+          <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">+</button>
+          <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+        </div>
       </div>
       <div class="settings-modal-body shell-profiles-modal-body">
         <div class="shell-profiles-sidebar">
-          <div class="shell-profiles-sidebar-header">
-            <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">+</button>
-          </div>
           <div class="shell-profile-list" id="modal-shell-profile-list"></div>
         </div>
         <div class="shell-profiles-editor-panel" id="modal-shell-profile-editor">

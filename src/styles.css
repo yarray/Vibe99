@@ -992,16 +992,6 @@ body.is-dragging-tabs {
   overflow: hidden;
 }
 
-.settings-modal.shell-profiles-modal .shell-profiles-sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 8px 0;
-  margin-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
-}
-
 /* Subtle scrollbar styling for shell profiles modal */
 .settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar,
 .settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar {
@@ -1102,6 +1092,23 @@ body.is-dragging-tabs {
 .settings-modal-close:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
+}
+
+/* Shell Profiles Modal Header Override */
+.settings-modal.shell-profiles-modal .settings-modal-header {
+  justify-content: center;
+  gap: 16px;
+}
+
+.settings-modal.shell-profiles-modal .settings-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.settings-modal.shell-profiles-modal .shell-profiles-add-btn {
+  order: -1;
 }
 
 .settings-modal-body {
