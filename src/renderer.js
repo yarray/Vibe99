@@ -1089,24 +1089,6 @@ function createPane(pane) {
     ) {
       return false;
     }
-    // In navigation mode, prevent xterm from handling single character keys
-    // that are used for navigation (h, l)
-    if (
-      event.type === 'keydown' &&
-      currentMode === 'nav' &&
-      event.key.length === 1 &&
-      /^[hl]$/.test(event.key.toLowerCase()) &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      !event.shiftKey
-    ) {
-      console.log('[xterm handler] Blocking nav mode key:', event.key, 'code:', event.code);
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      return false;
-    }
     if (!isWindowsCtrlVPasteHotkey(event)) {
       return true;
     }
@@ -2221,13 +2203,6 @@ const dispatchKeydown = createDispatcher({
   isInputFocused: () => document.activeElement?.tagName === 'INPUT',
   isCommandPaletteOpen,
 });
-
-// Debug: Verify the dispatcher is being called
-window.addEventListener('keydown', (event) => {
-  if (event.key === 'h' || event.key === 'l') {
-    console.log('[Global] Keydown listener triggered:', event.key, 'mode:', currentMode);
-  }
-}, true);
 
 window.addEventListener('keydown', dispatchKeydown, true);
 
