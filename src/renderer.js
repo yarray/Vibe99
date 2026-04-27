@@ -1001,6 +1001,10 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   const swatch = document.createElement('span');
   swatch.className = 'tab-swatch';
 
+  const paneNumber = document.createElement('span');
+  paneNumber.className = 'tab-pane-number';
+  paneNumber.textContent = index + 1;
+
   let label;
   if (renamingPaneId === pane.id) {
     label = document.createElement('input');
@@ -1047,7 +1051,7 @@ function createTab(pane, index, focusedIndex, dragMeta) {
     closePane(index);
   });
 
-  tabMain.append(swatch, label);
+  tabMain.append(swatch, paneNumber, label);
   tab.append(tabMain, close);
   return tab;
 }
@@ -1340,6 +1344,12 @@ function focusPaneAt(index) {
   paneCycleState = null;
   focusedPaneId = panes[index].id;
   render();  // stays in nav mode
+}
+
+// Wrapper so rename action can pass a paneId (string) instead of index (integer).
+function startInlineRenameById(paneId) {
+  const index = getPaneIndex(paneId);
+  if (index !== -1) beginRenamePane(index);
 }
 
 function addPane() {
@@ -2232,9 +2242,9 @@ function updateStatus() {
     statusLabelEl.classList.add('is-navigation-mode');
     statusLabelEl.textContent = 'Navigation Mode';
     if (pendingClosePaneId !== null) {
-      statusHintEl.textContent = 'Press c again to confirm close — Esc to cancel';
+      statusHintEl.textContent = 'Press x again to confirm close — Esc to cancel';
     } else {
-      statusHintEl.textContent = '← → 1-9 ↵ n c r ?';
+      statusHintEl.textContent = '← → 0 $ 1-9 ↵ n x r ?';
     }
     return;
   }
@@ -2263,7 +2273,7 @@ const keyboardActions = createActions({
   getFocusedPaneId: () => focusedPaneId,
   getPaneCount: () => panes.length,
   requestClosePane,
-  startInlineRename: beginRenamePane,
+  startInlineRenameById,
   openKeymapHelpModal,
   isCommandPaletteOpen,
   closeCommandPalette,

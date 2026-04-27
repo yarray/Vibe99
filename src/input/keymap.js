@@ -41,13 +41,13 @@ export const KEYMAP = [
   { id: 'focus-terminal',  mode: 'nav', chord: 'Enter',          action: 'commitFocus',           hint: '↵ focus' },
 
   // Navigation mode — movement
-  { id: 'focus-first',     mode: 'nav', chord: 'Home',           action: 'focusFirst',            hint: 'first' },
-  { id: 'focus-last',      mode: 'nav', chord: 'End',            action: 'focusLast',             hint: 'last' },
+  { id: 'focus-first',     mode: 'nav', chord: '0',             action: 'focusFirst',            hint: '0 first' },
+  { id: 'focus-last',      mode: 'nav', chord: 'Shift+$',      action: 'focusLast',             hint: '$ last' },
   { id: 'jump-to',         mode: 'nav', chord: '1..9',           action: 'jumpTo',                hint: '1-9 jump',         skipInInput: true },
 
   // Navigation mode — editing
   { id: 'new-pane',        mode: 'nav', chord: 'n',              action: 'newPane',               hint: 'n new',            skipInInput: true },
-  { id: 'close-pane',      mode: 'nav', chord: 'c',              action: 'closePane',             hint: 'c close',          skipInInput: true },
+  { id: 'close-pane',      mode: 'nav', chord: 'x',              action: 'closePane',             hint: 'x close',          skipInInput: true },
   { id: 'rename-pane',     mode: 'nav', chord: 'r',              action: 'renamePane',            hint: 'r rename',         skipInInput: true },
 
   // Navigation mode — help

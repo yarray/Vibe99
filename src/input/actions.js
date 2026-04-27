@@ -52,7 +52,7 @@ export function createActions(deps) {
 
     // Navigation mode — editing
     closePane:   () => deps.requestClosePane(deps.getFocusedPaneId()),
-    renamePane:  () => deps.startInlineRename(deps.getFocusedPaneId()),
+    renamePane:  () => deps.startInlineRenameById(deps.getFocusedPaneId()),
 
     // Navigation mode — help
     showKeymapHelp: () => deps.openKeymapHelpModal(),
