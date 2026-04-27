@@ -175,6 +175,22 @@ body {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
+/* Pane number badge shown on tabs so users can jump by number in nav mode */
+.tab-pane-number {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+  min-width: 10px;
+  text-align: center;
+  font-family: inherit;
+  line-height: 1;
+}
+
 .tab.is-focused .tab-swatch {
   display: none;
 }
