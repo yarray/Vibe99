@@ -175,20 +175,31 @@ body {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
-/* Pane number badge shown on tabs so users can jump by number in nav mode */
+/* Pane number badge — positioned to appear on the accent block when focused */
 .tab-pane-number {
   position: absolute;
-  left: 20px;
+  left: 22px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.4);
   pointer-events: none;
-  min-width: 10px;
+  min-width: 14px;
   text-align: center;
   font-family: inherit;
   line-height: 1;
+  z-index: 1;
+}
+
+/* When the tab is focused, the accent colour fills the tab — show the
+   number prominently on top of it, using the same text colour as the label */
+.tab.is-focused .tab-pane-number {
+  left: 8px;
+  color: var(--tab-text-color, #fff);
+  font-size: 12px;
+  min-width: 16px;
+  font-weight: 800;
 }
 
 .tab.is-focused .tab-swatch {
