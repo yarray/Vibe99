@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
+import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
 
 function getRuntimePlatform() {
   const platform = navigator.platform.toLowerCase();
@@ -220,7 +221,26 @@ let isNavigationMode = false;
 let pendingTabFocus = null;
 let sessionRestoreComplete = false;
 
+// Lit pane state: panes with "breathing" background that Ctrl+` can cycle through.
+let litPaneIds = new Set();
+let litCycleIndex = -1;
+
 const paneNodeMap = new Map();
+
+// Breathing-mask alert: controls the pulsing animation on background panes.
+const breathingMaskAlert = createBreathingMaskAlert();
+
+function setLitPanes(ids) {
+  litPaneIds = new Set(ids);
+  litCycleIndex = -1;
+  updateLitPaneMasks();
+}
+
+function updateLitPaneMasks() {
+  for (const [paneId, node] of paneNodeMap.entries()) {
+    breathingMaskAlert.setAlerted(node.root, litPaneIds.has(paneId));
+  }
+}
 
 const stageEl = document.getElementById('stage');
 const tabsListEl = document.getElementById('tabs-list');
@@ -1675,6 +1695,21 @@ function blurFocusedTerminal() {
   }
 }
 
+function cycleToNextLitPane() {
+  if (litPaneIds.size === 0) {
+    return;
+  }
+
+  const litArray = [...litPaneIds];
+  litCycleIndex = (litCycleIndex + 1) % litArray.length;
+  const targetId = litArray[litCycleIndex];
+
+  focusPane(targetId);
+
+  const nextLit = [...litPaneIds].filter((id) => id !== targetId);
+  setLitPanes(nextLit);
+}
+
 function enterNavigationMode() {
   if (panes.length === 0) {
     return;
@@ -1710,6 +1745,8 @@ window.addEventListener(
       : event.ctrlKey && !event.metaKey && !event.altKey && key === 't';
     const enterNavigationHotkey =
       event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && key === 'b';
+    const cycleLitPanesHotkey =
+      event.ctrlKey && !event.metaKey && !event.altKey && key === '`';
     const copyHotkey = isMac
       ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'c'
       : event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && key === 'c';
@@ -1739,6 +1776,12 @@ window.addEventListener(
     if ((pasteHotkey || windowsCtrlVPasteHotkey) && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();
       void pasteIntoTerminal();
+      return;
+    }
+
+    if (cycleLitPanesHotkey && document.activeElement?.tagName !== 'INPUT') {
+      event.preventDefault();
+      cycleToNextLitPane();
       return;
     }
 
@@ -1996,3 +2039,6 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   reportError(event.reason);
 });
+
+// Expose setLitPanes so the Tauri backend can update lit pane state.
+window.vibe99SetLitPanes = (ids) => setLitPanes(ids);

@@ -1,0 +1,1 @@
+Ctrl+` cycles through background panes that are lit (breathing mask). The target pane gains focus and stops breathing. No effect when no panes are lit.

@@ -319,6 +319,21 @@ body {
   gap: 8px;
 }
 
+.settings-hint-row {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: calc(var(--app-font-size) * 0.85);
+}
+
+.settings-hint-row kbd {
+  font-family: inherit;
+  font-size: inherit;
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+}
+
 .settings-divider {
   height: 1px;
   margin: 0;

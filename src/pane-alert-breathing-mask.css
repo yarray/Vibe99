@@ -1,0 +1,37 @@
+/* Breathing-mask alert: animates the existing `.pane::after` overlay so its
+   opacity pulses between fully transparent and the user's overlay strength
+   (max of 0.7 and the current overlay opacity), with an inset glow at the
+   peak. No extra DOM element needed. */
+
+@keyframes pane-breathing-pulse {
+  0%,
+  100% {
+    opacity: 0;
+    box-shadow: none;
+  }
+  50% {
+    opacity: max(0.7, calc(1 - var(--pane-bg-mask-opacity)));
+    box-shadow:
+      inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white),
+      inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent);
+  }
+}
+
+.pane.has-pending-activity::after {
+  animation: pane-breathing-pulse 2.4s ease-in-out infinite;
+}
+
+.pane.is-focused::after,
+.pane.is-navigation-target::after {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane.has-pending-activity::after {
+    animation: none;
+    opacity: max(0.7, calc(1 - var(--pane-bg-mask-opacity)));
+    box-shadow:
+      inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 80%, white),
+      inset 0 0 18px 4px color-mix(in srgb, var(--pane-accent) 70%, transparent);
+  }
+}
