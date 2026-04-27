@@ -77,8 +77,7 @@ const MOD_TOKENS = new Set(['ctrl', 'cmd', 'meta', 'shift', 'alt', 'option']);
  * @returns {Array<{key: string, ctrl: boolean, shift: boolean, alt: boolean}>}
  */
 export function parseChord(chord) {
-  const alternatives = chord.split('|').flatMap(parseChordAlt);
-  return alternatives;
+  return chord.split('|').map(parseChordAlt);
 }
 
 function parseChordAlt(alt) {
@@ -86,31 +85,24 @@ function parseChordAlt(alt) {
   if (tokens.length === 0) {
     throw new Error(`Empty chord alternative: ${alt}`);
   }
+
+  // Digit range pattern: '1..9' — matches any single digit 1–9.
+  if (tokens.length === 1 && /^\d\.\.\d$/.test(tokens[0])) {
+    const [lo, hi] = tokens[0].split('..').map(Number);
+    return {
+      key: '?',
+      ctrl: false,
+      shift: false,
+      alt: false,
+      _digitRange: { lo, hi }
+    };
+  }
+
   const key = tokens[tokens.length - 1];
   const mods = tokens.slice(0, -1).map((t) => t.toLowerCase());
   for (const m of mods) {
     if (!MOD_TOKENS.has(m)) {
       throw new Error(`Unknown modifier "${m}" in chord ${alt}`);
-    }
-  }
-
-  // Handle special key patterns: '1..9' expands to ['1', '2', ..., '9']
-  if (key.includes('..')) {
-    const [start, end] = key.split('..');
-    const startNum = parseInt(start, 10);
-    const endNum = parseInt(end, 10);
-    if (!isNaN(startNum) && !isNaN(endNum) && startNum < endNum) {
-      // Generate array of chord entries, one for each number in range
-      const results = [];
-      for (let i = startNum; i <= endNum; i++) {
-        results.push({
-          key: String(i),
-          ctrl: mods.includes('ctrl') || mods.includes('cmd') || mods.includes('meta'),
-          shift: mods.includes('shift'),
-          alt: mods.includes('alt') || mods.includes('option'),
-        });
-      }
-      return results;
     }
   }
 
@@ -138,6 +130,16 @@ export function matchesChord(event, parsedAlts) {
 }
 
 function matchesChordAlt(event, alt) {
+  // Digit range: '1..9' matches a single digit key without modifiers.
+  if (alt._digitRange) {
+    const { lo, hi } = alt._digitRange;
+    const digit = parseInt(event.key, 10);
+    if (Number.isNaN(digit)) return false;
+    if (digit < lo || digit > hi) return false;
+    if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    return true;
+  }
+
   if (alt.key === 'Tab') {
     if (event.code !== 'Tab') return false;
     if (event.repeat) return false;

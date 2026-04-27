@@ -33,6 +33,24 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
     }
   }
 
+  // For nav mode, prioritize VIB-33 hints and remove redundant ones
+  if (currentMode === 'nav') {
+    // Remove redundant h/l hints (have arrow equivalents)
+    entries = entries.filter(e => e.action !== 'focusPrev' || !e.id?.startsWith('nav-'));
+    entries = entries.filter(e => e.action !== 'focusNext' || !e.id?.startsWith('nav-'));
+
+    // Prioritize: keep only entries with hints, then take first 6
+    const priorityOrder = ['cancelNav', 'commitFocus', 'jumpTo', 'newPane', 'closePane', 'renamePane', 'showKeymapHelp', 'focusFirst', 'focusLast'];
+    entries.sort((a, b) => {
+      const aIndex = priorityOrder.indexOf(a.action);
+      const bIndex = priorityOrder.indexOf(b.action);
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return 0;
+    });
+  }
+
   // Show at most 6 items; only show entries with hint text
   const visible = entries.filter(entry => entry.hint).slice(0, 6);
 
