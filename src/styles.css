@@ -192,22 +192,21 @@ body.is-nav-mode .tab-swatch {
 }
 
 /* Nav mode: show pane number on the expanded swatch accent bar.
-   Fixed height + auto margin keeps it perfectly centered with no vertical jump
-   when font-size changes between focused and unfocused tabs. */
+   Number is centered both horizontally and vertically within the 20px swatch.
+   Position remains the same whether tab is focused or not. */
 body.is-nav-mode .tab-pane-number {
-  display: block;
+  display: flex;
   position: absolute;
-  left: 3px;
+  left: 0;
   top: 0;
-  height: 16px;
-  margin-top: auto;
-  margin-bottom: auto;
+  width: 20px;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
   font-size: 11px;
   font-weight: 700;
   color: var(--tab-text-color, #fff);
   pointer-events: none;
-  min-width: 14px;
-  text-align: center;
   font-family: inherit;
   line-height: 1;
   z-index: 2;
@@ -218,11 +217,9 @@ body.is-nav-mode .tab-pane-number {
   display: none;
 }
 
-/* Nav mode + focused tab: number centred on the accent-filled background */
+/* Nav mode + focused tab: number stays in same position */
 body.is-nav-mode .tab.is-focused .tab-pane-number {
-  left: 6px;
-  font-size: 12px;
-  font-weight: 800;
+  left: 0;
 }
 
 .tab-label {

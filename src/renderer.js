@@ -1414,11 +1414,10 @@ function requestClosePane(paneId) {
   // Already pending confirmation for the same pane — confirm and close.
   if (pendingClosePaneId === paneId) {
     clearCloseConfirm();
+    // Exit nav mode before closing so render() reflects the correct state
+    isNavigationMode = false;
     const index = getPaneIndex(paneId);
     if (index !== -1) closePane(index);
-    // Exiting nav mode after close: if the last remaining pane is still visible,
-    // the user should be in normal mode rather than stuck in nav mode.
-    isNavigationMode = false;
     return;
   }
 
@@ -1479,6 +1478,13 @@ function commitRenamePane(paneId, nextTitle) {
 
   try {
     render();
+    // Focus the terminal after renaming completes
+    const node = paneNodeMap.get(paneId);
+    if (node) {
+      requestAnimationFrame(() => {
+        node.terminal.focus();
+      });
+    }
   } catch (error) {
     reportError(error);
   }
