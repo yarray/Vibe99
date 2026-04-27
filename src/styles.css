@@ -191,13 +191,17 @@ body.is-nav-mode .tab-swatch {
   display: none;
 }
 
-/* Nav mode: show pane number on the expanded swatch accent bar */
+/* Nav mode: show pane number on the expanded swatch accent bar.
+   Fixed height + auto margin keeps it perfectly centered with no vertical jump
+   when font-size changes between focused and unfocused tabs. */
 body.is-nav-mode .tab-pane-number {
   display: block;
   position: absolute;
-  left: 3px;  /* centered within the 20px swatch */
-  top: 50%;
-  transform: translateY(-50%);
+  left: 3px;
+  top: 0;
+  height: 16px;
+  margin-top: auto;
+  margin-bottom: auto;
   font-size: 11px;
   font-weight: 700;
   color: var(--tab-text-color, #fff);
@@ -207,7 +211,6 @@ body.is-nav-mode .tab-pane-number {
   font-family: inherit;
   line-height: 1;
   z-index: 2;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 /* Focused tab: swatch is redundant when tab itself is accent-filled — hide it */
