@@ -601,7 +601,7 @@ body {
   padding: 0 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.65);
-  font-size: var(--app-font-size);
+  font-size: 14px;
 }
 
 #status-label {
@@ -611,15 +611,100 @@ body {
   text-overflow: ellipsis;
 }
 
-#status-label.is-navigation-mode {
-  color: #ffd166;
-  font-weight: 700;
-}
-
 .status-hint {
   flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
+}
+
+/* Hint bar styles */
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+.hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1;
+}
+
+.hint-sep {
+  margin: 0 6px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.hint-minimal {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+/* Navigation mode - entire status bar background color */
+body.is-navigation-mode .status-bar {
+  background: rgba(255, 209, 102, 0.12);
+}
+
+body.is-navigation-mode #status-label {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+body.is-navigation-mode .hint kbd {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+body.is-navigation-mode .hint-sep {
+  color: rgba(255, 209, 102, 0.4);
+}
+
+/* Compact hint bar mode */
+.is-minimal-hint .status-hint {
+  display: none;
+}
+
+/* Navigation mode - number badges in tabs */
+body.is-navigation-mode .tab-swatch {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--swatch-text-color, rgba(0, 0, 0, 0.75));
+	line-height: 1;
+}
+
+/* Pending close confirmation */
+.tab-close.pending-close {
+	color: #ff6b57;
+	font-weight: 700;
+	animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.6; }
+}
+
+/* Navigation mode - highlight focused tab */
+body.is-navigation-mode .tab.is-focused .tab-swatch {
+	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
 }
 
 body.is-dragging-tabs {

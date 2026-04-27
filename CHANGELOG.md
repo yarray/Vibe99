@@ -2,12 +2,24 @@
 
 <!-- towncrier release notes start -->
 
+## [Unreleased]
+
+### Added
+
+- Navigation mode enhancements (VIB-33):
+  - Number shortcuts (1-9) for jumping to specific panes
+  - Home/End keys for jumping to first/last pane
+  - Editing actions: n (new pane), x (close pane), r (rename pane)
+  - Help system with ? key to open keyboard shortcuts modal
+  - Two-step close confirmation with visual feedback
+  - Number badges in tabs during navigation mode
+  - Proper focus management (exit nav mode after close/rename, return focus to terminal)
+
 ## 0.7.2 - 2026-04-27
 
 ### Improved
 
 - Replaced pane default color palette with Okabe-Ito-based divergent colors (VIB-41). Adjacent colors are now visually distinct across the full hue circle, with alternating luminance for stronger separation. Covers accentPalette, presetPaneColors, and initialPanes.
-
 
 ## 0.7.1 - 2026-04-26
 

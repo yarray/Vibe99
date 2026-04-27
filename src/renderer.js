@@ -7,7 +7,6 @@ import {
   openCommandPalette,
   closeCommandPalette,
   isCommandPaletteOpen,
-  isCommandPaletteHotkey,
 } from './command-palette.js';
 import { createPaneActivityWatcher } from './pane-activity-watcher.js';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
@@ -16,6 +15,9 @@ import '@xterm/xterm/css/xterm.css';
 import * as ShortcutsRegistry from './shortcuts-registry.js';
 import * as ShortcutsUI from './shortcuts-ui.js';
 import * as ColorsRegistry from './colors-registry.js';
+import { createActions } from './input/actions.js';
+import { createDispatcher } from './input/dispatcher.js';
+import { renderHintBar } from './hint-bar.js';
 
 function getRuntimePlatform() {
   const platform = navigator.platform.toLowerCase();
@@ -231,9 +233,18 @@ let nextPaneNumber = panes.length + 1;
 let renamingPaneId = null;
 let isRenderingTabs = false; // Guard against re-entrant renderTabs calls
 let dragState = null;
-let isNavigationMode = false;
+let currentMode = 'terminal'; // 'terminal' | 'nav'
+let enterNavSourcePaneId = null; // Track which pane was focused when entering nav mode
 let pendingTabFocus = null;
 let sessionRestoreComplete = false;
+
+// Mode management
+function setMode(next) {
+  if (currentMode === next) return;
+  currentMode = next;
+  document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
+  render();
+}
 
 // Most-recently-used pane stack for Ctrl+` cycling. Index 0 is the most
 // recently visited pane (typically equals focusedPaneId when no cycle is in
@@ -268,6 +279,7 @@ const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
 const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
 const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
 const breathingAlertToggleEl = document.getElementById('breathing-alert-toggle');
+const compactHintBarToggleEl = document.getElementById('compact-hint-bar-toggle');
 const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
 
@@ -278,6 +290,7 @@ const settings = {
   paneMaskOpacity: 0.75,
   paneWidth: 720,
   breathingAlertEnabled: true,
+  compactHintBar: false,
 };
 let pendingSettingsSave = null;
 
@@ -391,6 +404,8 @@ function applySettings() {
   paneMaskOpacityValueEl.textContent = settings.paneMaskOpacity.toFixed(2);
   breathingAlertToggleEl.checked = settings.breathingAlertEnabled;
   paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+  compactHintBarToggleEl.checked = settings.compactHintBar;
+  document.body.classList.toggle('is-minimal-hint', settings.compactHintBar);
 }
 
 function applyPersistedSettings(nextSettings) {
@@ -435,6 +450,10 @@ function applyPersistedSettings(nextSettings) {
 
   if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
     settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
+  }
+
+  if (typeof uiSettings.compactHintBar === 'boolean') {
+    settings.compactHintBar = uiSettings.compactHintBar;
   }
 
   // Load keyboard shortcuts
@@ -933,6 +952,13 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   const swatch = document.createElement('span');
   swatch.className = 'tab-swatch';
 
+  // Show number badge in navigation mode
+  if (currentMode === 'nav') {
+    swatch.textContent = String(index + 1);
+    // Apply text color based on accent color brightness
+    swatch.style.setProperty('--swatch-text-color', 'var(--tab-text-color)');
+  }
+
   let label;
   if (renamingPaneId === pane.id) {
     label = document.createElement('input');
@@ -974,6 +1000,13 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   close.textContent = 'x';
   close.setAttribute('aria-label', `Close tab ${pane.id}`);
   close.disabled = panes.length === 1;
+
+  // Show pending close state
+  if (pendingClosePaneId === pane.id) {
+    close.classList.add('pending-close');
+    close.textContent = '?';
+  }
+
   close.addEventListener('click', (event) => {
     event.stopPropagation();
     closePane(index);
@@ -1255,7 +1288,7 @@ function focusPane(paneId, options = {}) {
   const { focusTerminal = true } = options;
   paneCycleState = null;
   focusedPaneId = paneId;
-  isNavigationMode = false;
+  setMode('terminal');
   recordPaneVisit(paneId);
   render();
   const node = paneNodeMap.get(paneId);
@@ -1349,11 +1382,8 @@ function commitRenamePane(paneId, nextTitle) {
     entry.id === paneId ? { ...entry, title: trimmedTitle || null } : entry
   );
 
-  try {
-    render();
-  } catch (error) {
-    reportError(error);
-  }
+  // Return focus to the renamed pane's terminal
+  focusPane(paneId, { focusTerminal: true });
 }
 
 function clearPendingTabFocus() {
@@ -1522,7 +1552,7 @@ function renderPanes(refit = false) {
     const accentColor = pane.customColor || pane.accent;
 
     node.root.classList.toggle('is-focused', isFocused);
-    node.root.classList.toggle('is-navigation-target', isFocused && isNavigationMode);
+    node.root.classList.toggle('is-navigation-target', isFocused && currentMode === 'nav');
     node.root.style.setProperty('--pane-accent', accentColor);
     node.root.style.left = `${left}px`;
     node.root.style.zIndex = String(index + 1);
@@ -1568,8 +1598,7 @@ function navigateLeft() {
   const nextIndex = focusedIndex - 1;
 
   if (nextIndex >= 0) {
-    focusedPaneId = panes[nextIndex].id;
-    render();
+    focusPane(panes[nextIndex].id);
   }
 }
 
@@ -1582,8 +1611,7 @@ function navigateRight() {
   const nextIndex = focusedIndex + 1;
 
   if (nextIndex < panes.length) {
-    focusedPaneId = panes[nextIndex].id;
-    render();
+    focusPane(panes[nextIndex].id);
   }
 }
 
@@ -1619,7 +1647,7 @@ function cycleToRecentPane({ reverse = false } = {}) {
   }
 
   focusedPaneId = targetId;
-  isNavigationMode = false;
+  setMode('terminal');
   render();
 
   const node = paneNodeMap.get(targetId);
@@ -2102,116 +2130,143 @@ function enterNavigationMode() {
     return;
   }
 
-  isNavigationMode = true;
+  // Save the source pane ID so we can return to it on cancel
+  enterNavSourcePaneId = focusedPaneId;
+  setMode('nav');
   blurFocusedTerminal();
   render();
 }
 
-function updateStatus() {
-  const focusedPane = panes[getFocusedIndex()];
-
-  if (isNavigationMode) {
-    statusLabelEl.classList.add('is-navigation-mode');
-    statusLabelEl.textContent = 'Navigation Mode';
-    statusHintEl.textContent = 'Left/Right or H/L to flip; Enter to Focus';
-    return;
+function cancelNavigationMode() {
+  // Return focus to the pane that was focused when entering nav mode
+  if (enterNavSourcePaneId) {
+    focusPane(enterNavSourcePaneId, { focusTerminal: true });
+    enterNavSourcePaneId = null;
+  } else {
+    setMode('terminal');
+    render();
   }
-
-  statusLabelEl.classList.remove('is-navigation-mode');
-  statusLabelEl.textContent = `Focused: ${getPaneLabel(focusedPane) || focusedPane.id}`;
-  statusHintEl.textContent = 'Ctrl+B to enter navigation mode'; // Note: this will be updated by keyboard shortcuts
 }
 
-window.addEventListener(
-  'keydown',
-  (event) => {
-    // Pane cycling: Ctrl+Tab cycles back through MRU; Ctrl+Shift+Tab cycles
-    // forward. Match by KeyboardEvent.code so the binding is layout-agnostic,
-    // and ignore auto-repeats so each press is one step.
-    const cycleRecentHotkey =
-      event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Tab' && !event.repeat;
+function updateStatus() {
+  const focusedPane = panes[getFocusedIndex()];
+  const focusedPaneLabel = getPaneLabel(focusedPane) || focusedPane.id;
 
-    // Command palette hotkey has highest priority
-    if (isCommandPaletteHotkey(event, bridge.platform)) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (isCommandPaletteOpen()) {
-        closeCommandPalette();
-      } else {
-        openTabSwitcher();
-      }
-      return;
-    }
+  // Use the hint bar system
+  const keymap = ShortcutsRegistry.getActiveKeymap();
+  const { modeLabel, hintsHtml } = renderHintBar(
+    keymap,
+    currentMode,
+    focusedPaneLabel,
+    settings.compactHintBar,
+    bridge.platform
+  );
 
-    // While the palette is open, let its own input handle keys so global
-    // hotkeys don't fire underneath.
-    if (isCommandPaletteOpen()) {
-      return;
-    }
+  statusLabelEl.textContent = modeLabel;
+  statusLabelEl.classList.toggle('is-navigation-mode', currentMode === 'nav');
+  statusHintEl.innerHTML = hintsHtml;
+}
 
-    if (cycleRecentHotkey && document.activeElement?.tagName !== 'INPUT') {
-      event.preventDefault();
-      // Stop propagation so xterm doesn't also send the Tab keystroke to the
-      // PTY as a literal `\t`, which would leak into the shell prompt.
-      event.stopPropagation();
-      cycleToRecentPane({ reverse: event.shiftKey });
-      return;
-    }
+// ---------------------------------------------------------------------------
+// VIB-33: Navigation mode enhancement functions
+// ---------------------------------------------------------------------------
 
-    // Check keyboard shortcuts from registry
-    const shortcuts = ShortcutsRegistry.getKeyboardShortcuts();
-    for (const [id, shortcut] of Object.entries(shortcuts)) {
-      if (ShortcutsRegistry.matchesShortcut(event, shortcut)) {
-        // Skip navigation mode shortcuts if not in navigation mode
-        if ((id === 'move-left' || id === 'move-right' || id === 'focus-terminal') &&
-            !isNavigationMode) {
-          continue;
-        }
+function focusPaneAt(index) {
+  if (panes.length === 0 || index < 0 || index >= panes.length) return;
+  paneCycleState = null;
+  focusedPaneId = panes[index].id;
+  // Stay in nav mode, just update which pane is focused
+  render();
+}
 
-        // Skip shortcuts that require no editable target
-        if (document.activeElement?.tagName === 'INPUT' &&
-            (id === 'navigation-mode' || id === 'copy' || id === 'paste')) {
-          continue;
-        }
+function getPaneCount() {
+  return panes.length;
+}
 
-        event.preventDefault();
+function getPaneIdAt(index) {
+  if (panes.length === 0 || index < 0 || index >= panes.length) return null;
+  return panes[index].id;
+}
 
-        // Execute the shortcut action
-        switch (shortcut.action) {
-          case 'addPane':
-            addPane();
-            break;
-          case 'enterNavigationMode':
-            enterNavigationMode();
-            break;
-          case 'copyTerminalSelection':
-            copyTerminalSelection();
-            break;
-          case 'pasteIntoTerminal':
-            void pasteIntoTerminal();
-            break;
-          case 'moveFocusLeft':
-            moveFocus(-1);
-            break;
-          case 'moveFocusRight':
-            moveFocus(1);
-            break;
-          case 'navigateLeft':
-            navigateLeft();
-            break;
-          case 'navigateRight':
-            navigateRight();
-            break;
-          case 'focusTerminal':
-            focusPane(focusedPaneId);
-            break;
-        }
-        return;
+// Two-step close confirmation state
+let pendingClosePaneId = null;
+
+function requestClosePane(paneId) {
+  if (pendingClosePaneId === paneId) {
+    // Second press - confirmed
+    const index = panes.findIndex((pane) => pane.id === paneId);
+    if (index !== -1) {
+      pendingClosePaneId = null;
+      closePane(index);
+
+      // Exit nav mode and return focus to the now-focused pane after close
+      if (currentMode === 'nav' && panes.length > 0) {
+        focusPane(focusedPaneId, { focusTerminal: true });
       }
     }
-  },
-  true
-);
+  } else {
+    // First press - show pending state
+    pendingClosePaneId = paneId;
+    render();
+  }
+}
+
+function startInlineRename(paneId) {
+  const index = panes.findIndex((pane) => pane.id === paneId);
+  if (index !== -1) {
+    // Exit nav mode before starting rename
+    if (currentMode === 'nav') {
+      setMode('terminal');
+    }
+    beginRenamePane(index);
+  }
+}
+
+function openKeymapHelpModal() {
+  ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+}
+
+// ---------------------------------------------------------------------------
+// Wire renderer-level callbacks into pure action handlers
+// ---------------------------------------------------------------------------
+
+// Wire renderer-level callbacks into pure action handlers, then route every
+// global keydown through the declarative keymap dispatcher. The keydown switch
+// that used to live here is now `KEYMAP` in `input/keymap.js` plus a few flag
+// columns (`mode`, `skipInInput`, `stopPropagation`) interpreted by the
+// dispatcher.
+const keyboardActions = createActions({
+  addPane,
+  enterNavigationMode,
+  cycleToRecentPane,
+  navigateLeft,
+  navigateRight,
+  copyTerminalSelection,
+  pasteIntoTerminal,
+  moveFocus,
+  focusPane,
+  cancelNavigationMode,
+  getFocusedPaneId: () => focusedPaneId,
+  isCommandPaletteOpen,
+  closeCommandPalette,
+  openTabSwitcher,
+  focusPaneAt,
+  getPaneCount,
+  getPaneIdAt,
+  requestClosePane,
+  startInlineRename,
+  openKeymapHelpModal,
+});
+
+const dispatchKeydown = createDispatcher({
+  getKeymap: ShortcutsRegistry.getActiveKeymap,
+  actions: keyboardActions,
+  getMode: () => currentMode,
+  isInputFocused: () => document.activeElement?.tagName === 'INPUT',
+  isCommandPaletteOpen,
+});
+
+window.addEventListener('keydown', dispatchKeydown, true);
 
 // Commit the pane cycle when the cycling modifier is released. Without this,
 // a user who presses Ctrl+` and then switches to a different pane via mouse
@@ -2422,6 +2477,12 @@ paneMaskOpacityInputEl.addEventListener('change', () => {
 breathingAlertToggleEl.addEventListener('change', () => {
   settings.breathingAlertEnabled = breathingAlertToggleEl.checked;
   paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+  scheduleSettingsSave();
+});
+
+compactHintBarToggleEl.addEventListener('change', () => {
+  settings.compactHintBar = compactHintBarToggleEl.checked;
+  document.body.classList.toggle('is-minimal-hint', settings.compactHintBar);
   scheduleSettingsSave();
 });
 
