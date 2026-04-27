@@ -47,7 +47,8 @@ export function createActions(deps) {
     focusLast:     () => deps.focusPaneAt(deps.getPaneCount() - 1),
     jumpTo: (e) => {
       const n = parseInt(e.key, 10);
-      if (n >= 0 && n < deps.getPaneCount()) deps.focusPaneAt(n);
+      // n is 1-9 from the '1..9' digit-range chord; subtract 1 for 0-based index
+      if (n >= 1 && n <= deps.getPaneCount()) deps.focusPaneAt(n - 1);
     },
 
     // Navigation mode — editing
