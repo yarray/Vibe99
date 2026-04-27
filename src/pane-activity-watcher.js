@@ -129,7 +129,6 @@ export function createPaneActivityWatcher(options = {}) {
       if (!isActive(paneId, s)) return;
       if (!s.hasBeenFocused) return;
       if (paneId === focusedPaneId) return;
-      if (s.alerted) return;
       // Inside the post-resize window: this chunk is almost certainly
       // SIGWINCH redraw residue. Don't fire an alert and don't even start
       // a settle timer — instead extend the resize window so we keep
@@ -137,6 +136,13 @@ export function createPaneActivityWatcher(options = {}) {
       if (s.resizeSettleTimer !== null) {
         armResizeSettle(s);
         return;
+      }
+      // If already alerted and new content arrives, cancel the alert
+      // and restart the quiet timer. This handles the case where the
+      // breathing light is already on but new real content arrives.
+      if (s.alerted) {
+        s.alerted = false;
+        onClear?.(paneId);
       }
       if (s.timer !== null) clearTimeout(s.timer);
       s.timer = setTimeout(() => {
