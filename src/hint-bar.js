@@ -32,6 +32,11 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
     // Normal mode: show all hints
     hintsHtml = visible
       .map(entry => {
+        // For nav mode, the hint text already contains the keys (like "←/h prev")
+        // so don't show the chord to avoid duplication
+        if (currentMode === 'nav' && entry.mode === 'nav') {
+          return `<span class="hint">${entry.hint}</span>`;
+        }
         const chord = formatChordForHint(entry.chord, platform);
         return `<span class="hint"><kbd>${chord}</kbd> ${entry.hint}</span>`;
       })
@@ -52,10 +57,20 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
 /**
  * Format a chord string for display in the hint bar.
  * Uses the first alternative if there are multiple.
+ * Prefers single characters over arrow key names.
  */
 function formatChordForHint(chord, platform) {
-  const [firstAlt] = chord.split('|');
-  const parts = firstAlt.split('+').map(p => p.trim());
+  const alternatives = chord.split('|');
+
+  // Prefer single character alternatives (like 'h', 'l') over arrow keys (like 'ArrowLeft')
+  const singleCharAlt = alternatives.find(alt => {
+    const parts = alt.trim().split('+');
+    const key = parts[parts.length - 1].trim();
+    return key.length === 1 && /^[a-zA-Z]$/.test(key);
+  });
+
+  const altToFormat = singleCharAlt || alternatives[0];
+  const parts = altToFormat.split('+').map(p => p.trim());
 
   // Extract modifiers and key
   const key = parts[parts.length - 1];

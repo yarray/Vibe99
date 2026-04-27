@@ -656,8 +656,8 @@ body {
   min-width: 22px;
   height: 20px;
   padding: 0 6px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  border: none;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.05);
   font-size: 13px;
   font-family: inherit;
@@ -683,9 +683,9 @@ body.is-navigation-mode .hint {
 
 body.is-navigation-mode .hint kbd {
   background: #ffd166;
-  border-color: #ffd166;
   color: #1a1a1a;
   font-weight: 600;
+  height: 20px; /* Match status bar height */
 }
 
 body.is-navigation-mode .hint-sep {
