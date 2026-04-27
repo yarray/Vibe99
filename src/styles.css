@@ -387,8 +387,7 @@ body {
 }
 
 .shell-profile-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
@@ -398,7 +397,6 @@ body {
   transition: all 120ms ease;
   border: 1px solid transparent;
   user-select: none;
-  min-width: 0;
 }
 
 .shell-profile-item:hover {
@@ -428,6 +426,8 @@ body {
 }
 
 .shell-profile-item .shell-profile-name {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--text);
   white-space: nowrap;
@@ -1099,6 +1099,12 @@ body.is-dragging-tabs {
 
 /* Shell Profiles Modal Header Override */
 .settings-modal.shell-profiles-modal .settings-modal-header {
+  justify-content: space-between;
+}
+
+.settings-modal.shell-profiles-modal .settings-modal-title-group {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 

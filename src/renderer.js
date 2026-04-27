@@ -621,8 +621,10 @@ function openShellProfilesModal() {
   overlay.innerHTML = `
     <div class="settings-modal shell-profiles-modal">
       <div class="settings-modal-header">
-        <span>Shell Profiles</span>
-        <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">+</button>
+        <div class="settings-modal-title-group">
+          <span>Shell Profiles</span>
+          <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">+</button>
+        </div>
         <button type="button" class="settings-modal-close" aria-label="Close">×</button>
       </div>
       <div class="settings-modal-body shell-profiles-modal-body">
