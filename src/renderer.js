@@ -457,10 +457,28 @@ function applyPersistedSettings(nextSettings) {
   }
 }
 
+/**
+ * @typedef {Object} PaneStateV2
+ * @property {string} paneId
+ * @property {string|null} title
+ * @property {string} cwd  — shell's real working directory (from OSC 7)
+ * @property {string} accent
+ * @property {string|undefined} customColor
+ * @property {string|null} shellProfileId
+ * @property {boolean} breathingMonitor
+ * @typedef {Object} SessionStateV2
+ * @property {number} version  — always 2
+ * @property {PaneStateV2[]} panes
+ * @property {number} focusedPaneIndex
+ */
+
+/** @returns {SessionStateV2} */
 function buildSessionData() {
   const focusedIndex = getFocusedIndex();
   return {
+    version: 2,
     panes: panes.map((p) => ({
+      paneId: p.id,
       title: p.title,
       cwd: p.cwd,
       accent: p.accent,
@@ -519,7 +537,7 @@ function scheduleSettingsSave() {
   pendingSettingsSave = window.setTimeout(() => {
     pendingSettingsSave = null;
     const settingsToSave = {
-      version: 4,
+      version: 5,
       ui: {
         ...settings,
         shortcuts: ShortcutsRegistry.getShortcutsForSave()
@@ -534,16 +552,20 @@ function flushSettingsSave() {
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
     pendingSettingsSave = null;
-    const settingsToSave = {
-      version: 4,
-      ui: {
-        ...settings,
-        shortcuts: ShortcutsRegistry.getShortcutsForSave()
-      },
-      session: buildSessionData()
-    };
-    void bridge.saveSettings(settingsToSave).catch(reportError);
   }
+  if (pendingSessionSave !== null) {
+    window.clearTimeout(pendingSessionSave);
+    pendingSessionSave = null;
+  }
+  const settingsToSave = {
+    version: 5,
+    ui: {
+      ...settings,
+      shortcuts: ShortcutsRegistry.getShortcutsForSave()
+    },
+    session: buildSessionData()
+  };
+  void bridge.saveSettings(settingsToSave).catch(reportError);
 }
 
 // ----------------------------------------------------------------
