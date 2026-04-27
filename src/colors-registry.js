@@ -31,7 +31,7 @@ export const ACCENT_PALETTE = [
  */
 export const PRESET_PANE_COLORS = [
   '#00a8e8', '#e84393', '#fdab0f', '#00cec9',
-  '#e17055', '#a29bfe', '#55efc4', '#d63031',
-  '#fdcb6e', '#636e72', '#0984e3', '#ff7675',
-  '#b2bec3', '#74b9ff', '#55a3ff', '#dfe6e9',
+  '#e17055', '#a29bfe', '#55efc4', '#27ae60',
+  '#fdcb6e', '#636e72', '#5e35b1', '#ff7675',
+  '#bf6000', '#74b9ff', '#0050a0', '#1b5e20',
 ];
