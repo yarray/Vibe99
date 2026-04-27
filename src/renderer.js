@@ -1417,7 +1417,16 @@ function requestClosePane(paneId) {
     // Exit nav mode before closing so render() reflects the correct state
     isNavigationMode = false;
     const index = getPaneIndex(paneId);
-    if (index !== -1) closePane(index);
+    if (index !== -1) {
+      closePane(index);
+      // Focus the terminal of the new focused pane after closing
+      const node = paneNodeMap.get(focusedPaneId);
+      if (node) {
+        requestAnimationFrame(() => {
+          node.terminal.focus();
+        });
+      }
+    }
     return;
   }
 

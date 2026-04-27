@@ -195,14 +195,12 @@ body.is-nav-mode .tab-swatch {
    Number is centered both horizontally and vertically within the 20px swatch.
    Position remains the same whether tab is focused or not. */
 body.is-nav-mode .tab-pane-number {
-  display: flex;
   position: absolute;
   left: 0;
-  top: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 20px;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
   font-size: 11px;
   font-weight: 700;
   color: var(--tab-text-color, #fff);
