@@ -239,50 +239,14 @@ const accentPalette = [
 // Released palette colors from deleted panes — reused before cycling the palette.
 let releasedColors = [];
 
-function hexToRgb(hex) {
-  return {
-    r: parseInt(hex.slice(1, 3), 16),
-    g: parseInt(hex.slice(3, 5), 16),
-    b: parseInt(hex.slice(5, 7), 16),
-  };
-}
-
-function colorDistance(c1, c2) {
-  const a = hexToRgb(c1);
-  const b = hexToRgb(c2);
-  return Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
-}
-
-// Returns the color from accentPalette that is most different from all existingColors.
-// Falls back to the remaining palette color with the smallest max-distance (i.e., least bad).
-function pickMostDifferentColor(existingColors) {
-  let bestColor = null;
-  let bestMinDist = -1;
-
-  for (const candidate of accentPalette) {
-    if (existingColors.includes(candidate)) {
-      continue;
-    }
-    const minDist = Math.min(...existingColors.map((c) => colorDistance(candidate, c)));
-    if (minDist > bestMinDist) {
-      bestMinDist = minDist;
-      bestColor = candidate;
-    }
-  }
-
-  // All palette colors are taken; pick the one with the largest min-distance.
-  if (!bestColor) {
-    let maxMinDist = -1;
-    for (const candidate of accentPalette) {
-      const minDist = Math.min(...existingColors.map((c) => colorDistance(candidate, c)));
-      if (minDist > maxMinDist) {
-        maxMinDist = minDist;
-        bestColor = candidate;
-      }
-    }
-  }
-
-  return bestColor;
+// Returns the first palette color not currently in use by any pane.
+// If all palette colors are taken, cycles back to the start (least-bad fallback).
+function pickUnusedPaletteColor() {
+  const inUse = new Set(getInUsePaletteColors());
+  const unused = accentPalette.find((c) => !inUse.has(c));
+  if (unused) return unused;
+  // All palette colors occupied — reuse the first one (least-bad fallback).
+  return accentPalette[0];
 }
 
 // Returns all active accent colors from existing panes (ignores custom overrides).
@@ -1285,8 +1249,7 @@ function createPaneData() {
   const inUse = new Set(getInUsePaletteColors());
   let accent = releasedColors.find((c) => !inUse.has(c));
   if (!accent) {
-    // Pick the palette color most different from all existing panes.
-    accent = pickMostDifferentColor(getInUsePaletteColors());
+    accent = pickUnusedPaletteColor();
   } else {
     // Mark this color as no longer released.
     releasedColors = releasedColors.filter((c) => c !== accent);
