@@ -16,9 +16,22 @@
  */
 export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal = false, platform = 'linux') {
   // Filter keymap entries for current mode
-  const entries = keymap.filter(entry =>
+  let entries = keymap.filter(entry =>
     (entry.mode === currentMode) || (currentMode === 'terminal' && entry.mode === '*')
   );
+
+  // Special handling: merge Ctrl+Tab and Ctrl+Shift+Tab hints
+  if (currentMode === 'terminal') {
+    const hasCycleRecent = entries.some(e => e.action === 'cycleRecent');
+    const hasCycleRecentReverse = entries.some(e => e.action === 'cycleRecentReverse');
+    if (hasCycleRecent && hasCycleRecentReverse) {
+      entries = entries.filter(e => e.action !== 'cycleRecentReverse');
+      const cycleEntry = entries.find(e => e.action === 'cycleRecent');
+      if (cycleEntry) {
+        cycleEntry.hint = 'Ctrl+Tab recent';
+      }
+    }
+  }
 
   // Show at most 6 items; only show entries with hint text
   const visible = entries.filter(entry => entry.hint).slice(0, 6);
@@ -32,10 +45,9 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
     // Normal mode: show all hints
     hintsHtml = visible
       .map(entry => {
-        // For nav mode, the hint text already contains the keys (like "←/h prev")
-        // so don't show the chord to avoid duplication
+        // For nav mode, wrap in kbd for emphasis
         if (currentMode === 'nav' && entry.mode === 'nav') {
-          return `<span class="hint">${entry.hint}</span>`;
+          return `<span class="hint"><kbd>${entry.hint}</kbd></span>`;
         }
         const chord = formatChordForHint(entry.chord, platform);
         return `<span class="hint"><kbd>${chord}</kbd> ${entry.hint}</span>`;

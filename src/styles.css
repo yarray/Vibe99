@@ -685,7 +685,10 @@ body.is-navigation-mode .hint kbd {
   background: #ffd166;
   color: #1a1a1a;
   font-weight: 600;
+  font-size: 14px;
   height: 20px; /* Match status bar height */
+  padding: 0 8px;
+  min-width: 24px;
 }
 
 body.is-navigation-mode .hint-sep {
