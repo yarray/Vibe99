@@ -15,6 +15,7 @@ import '@xterm/xterm/css/xterm.css';
 
 import * as ShortcutsRegistry from './shortcuts-registry.js';
 import * as ShortcutsUI from './shortcuts-ui.js';
+import * as ColorsRegistry from './colors-registry.js';
 
 function getRuntimePlatform() {
   const platform = navigator.platform.toLowerCase();
@@ -202,7 +203,7 @@ const initialPanes = [
     title: null,
     terminalTitle: bridge.defaultTabTitle,
     cwd: bridge.defaultCwd,
-    accent: '#00a8e8',
+    accent: ColorsRegistry.ACCENT_PALETTE[0],
     shellProfileId: null,
   },
   {
@@ -210,7 +211,7 @@ const initialPanes = [
     title: null,
     terminalTitle: bridge.defaultTabTitle,
     cwd: bridge.defaultCwd,
-    accent: '#e84393',
+    accent: ColorsRegistry.ACCENT_PALETTE[1],
     shellProfileId: null,
   },
   {
@@ -218,26 +219,11 @@ const initialPanes = [
     title: null,
     terminalTitle: bridge.defaultTabTitle,
     cwd: bridge.defaultCwd,
-    accent: '#fdab0f',
+    accent: ColorsRegistry.ACCENT_PALETTE[2],
     shellProfileId: null,
   },
 ];
 
-// High-saturation, high-contrast palette for dark backgrounds.
-// Each hue appears once; luminance alternates between bright and dark for
-// maximum visual separation across all adjacent pairs.
-const accentPalette = [
-  '#00a8e8', // vivid sky blue
-  '#e84393', // hot pink
-  '#fdab0f', // bright gold
-  '#00cec9', // bright teal
-  '#e17055', // coral red
-  '#a29bfe', // lavender
-  '#55efc4', // mint green
-  '#d63031', // vivid red
-  '#fdcb6e', // lemon yellow
-  '#636e72', // cool gray
-];
 
 let panes = initialPanes.map((pane) => ({ ...pane }));
 let focusedPaneId = panes[0].id;
@@ -1225,7 +1211,7 @@ function ensurePaneNodes() {
 }
 
 function createPaneData() {
-  const accent = accentPalette[(nextPaneNumber - 1) % accentPalette.length];
+  const accent = ColorsRegistry.ACCENT_PALETTE[(nextPaneNumber - 1) % ColorsRegistry.ACCENT_PALETTE.length];
   const focusedPane = panes[getFocusedIndex()];
   const pane = {
     id: `p${nextPaneNumber}`,
@@ -1906,15 +1892,6 @@ function showTabContextMenu(paneId, event) {
   showContextMenu(items, event.clientX, event.clientY, paneId);
 }
 
-// Preset colors for pane customization (VIB-10)
-// Uses the same high-contrast palette as accentPalette for visual consistency.
-const presetPaneColors = [
-  '#00a8e8', '#e84393', '#fdab0f', '#00cec9',
-  '#e17055', '#a29bfe', '#55efc4', '#d63031',
-  '#fdcb6e', '#636e72', '#0984e3', '#ff7675',
-  '#b2bec3', '#74b9ff', '#55a3ff', '#dfe6e9',
-];
-
 function showColorPicker(paneId) {
   hideContextMenu();
 
@@ -1933,7 +1910,7 @@ function showColorPicker(paneId) {
         <button type="button" class="color-picker-close" aria-label="Close">×</button>
       </div>
       <div class="color-picker-presets">
-        ${presetPaneColors.map(color => `
+        ${ColorsRegistry.PRESET_PANE_COLORS.map(color => `
           <button type="button" class="color-preset${color === currentColor ? ' is-selected' : ''}"
                   style="--color: ${color}" data-color="${color}" aria-label="Select ${color}"></button>
         `).join('')}
