@@ -38,8 +38,8 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
     entries = mergeNavModeHints(entries);
   }
 
-  // Show at most 6 items; only show entries with hint text
-  const visible = entries.filter(entry => entry.hint).slice(0, 6);
+  // Show all entries with hint text (no limit)
+  const visible = entries.filter(entry => entry.hint);
 
   // Build hints HTML
   let hintsHtml = '';
@@ -50,8 +50,14 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, isMinimal =
     // Normal mode: show all hints
     hintsHtml = visible
       .map(entry => {
-        // For nav mode, hint is already in display format
+        // For nav mode, hint is in "key description" format, wrap key in kbd
         if (currentMode === 'nav' && entry.mode === 'nav') {
+          const parts = entry.hint.split(' ');
+          if (parts.length >= 2) {
+            const keys = parts[0];
+            const desc = parts.slice(1).join(' ');
+            return `<span class="hint"><kbd>${keys}</kbd> ${desc}</span>`;
+          }
           return `<span class="hint">${entry.hint}</span>`;
         }
         const chord = formatChordForHint(entry.chord, platform);

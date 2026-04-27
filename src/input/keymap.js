@@ -46,8 +46,8 @@ export const KEYMAP = [
   { id: 'nav-right', mode: 'nav', chord: 'l', action: 'focusNext',    hint: 'l next',  stopPropagation: true },
 
   // Navigation mode — movement (VIB-33)
-  { id: 'focus-first',     mode: 'nav', chord: 'Home',           action: 'focusFirst',            hint: 'first' },
-  { id: 'focus-last',      mode: 'nav', chord: 'End',            action: 'focusLast',             hint: 'last' },
+  { id: 'focus-first',     mode: 'nav', chord: 'Home',           action: 'focusFirst',            hint: 'Home first' },
+  { id: 'focus-last',      mode: 'nav', chord: 'End',            action: 'focusLast',             hint: 'End last' },
   { id: 'jump-to',         mode: 'nav', chord: '1..9',           action: 'jumpTo',                hint: '1-9 jump',         skipInInput: true },
 
   // Navigation mode — editing (VIB-33)
