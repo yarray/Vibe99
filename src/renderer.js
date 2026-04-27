@@ -1390,16 +1390,8 @@ function commitRenamePane(paneId, nextTitle) {
     entry.id === paneId ? { ...entry, title: trimmedTitle || null } : entry
   );
 
-  // Exit nav mode and return focus to the renamed pane
-  if (currentMode === 'nav') {
-    focusPane(paneId, { focusTerminal: true });
-  } else {
-    try {
-      render();
-    } catch (error) {
-      reportError(error);
-    }
-  }
+  // Return focus to the renamed pane's terminal
+  focusPane(paneId, { focusTerminal: true });
 }
 
 function clearPendingTabFocus() {
