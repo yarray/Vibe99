@@ -52,7 +52,7 @@ export const KEYMAP = [
 
   // Navigation mode — editing (VIB-33)
   { id: 'new-pane',        mode: 'nav', chord: 'n',              action: 'newPane',               hint: 'n new',            skipInInput: true },
-  { id: 'close-pane',      mode: 'nav', chord: 'c',              action: 'closePane',             hint: 'c close',          skipInInput: true },
+  { id: 'close-pane',      mode: 'nav', chord: 'x',              action: 'closePane',             hint: 'x close',          skipInInput: true },
   { id: 'rename-pane',     mode: 'nav', chord: 'r',              action: 'renamePane',            hint: 'r rename',         skipInInput: true },
 ];
 

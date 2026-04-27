@@ -14,10 +14,10 @@
 import { KEYMAP, parseChord, formatChord } from './input/keymap.js';
 
 // Customizable rows are those with an `id` field. Non-customizable rows
-// (palette, cycle-recent) live in the keymap but are not exposed through this
-// legacy API.
+// (palette, cycle-recent, digit ranges like 1..9) live in the keymap but are
+// not exposed through this legacy API.
 function customizableRows() {
-  return KEYMAP.filter((row) => typeof row.id === 'string');
+  return KEYMAP.filter((row) => typeof row.id === 'string' && !row.chord.includes('..'));
 }
 
 function chordToLegacy(chord) {
