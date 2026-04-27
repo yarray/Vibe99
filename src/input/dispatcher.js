@@ -47,6 +47,18 @@ export function createDispatcher({
     const inputFocused = isInputFocused();
     const paletteOpen = isCommandPaletteOpen();
 
+    // Debug logging for single character keys in nav mode
+    if (mode === 'nav' && event.key.length === 1) {
+      console.log('[Dispatch] Nav mode key:', event.key, 'event:', {
+        key: event.key,
+        code: event.code,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        metaKey: event.metaKey,
+      });
+    }
+
     for (const entry of getParsed()) {
       if (entry.mode !== '*' && entry.mode !== mode) continue;
       if (paletteOpen && entry.action !== 'toggleCommandPalette') continue;
@@ -56,10 +68,21 @@ export function createDispatcher({
       const handler = actions[entry.action];
       if (!handler) continue;
 
+      if (mode === 'nav' && event.key.length === 1) {
+        console.log('[Dispatch] Matched entry:', entry.action, entry.chord);
+      }
+
       event.preventDefault();
-      if (entry.stopPropagation) event.stopPropagation();
+      if (entry.stopPropagation) {
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
       handler();
       return;
+    }
+
+    if (mode === 'nav' && event.key.length === 1) {
+      console.log('[Dispatch] No match found for key:', event.key);
     }
   };
 }
