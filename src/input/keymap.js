@@ -41,10 +41,9 @@ export const KEYMAP = [
   { id: 'focus-terminal',  mode: 'nav', chord: 'Enter',          action: 'commitFocus',           hint: '↵ focus' },
 
   // Navigation mode — movement
-  { id: 'focus-first',     mode: 'nav', chord: '0',             action: 'focusFirst',            hint: '0 ^ first' },
-  { id: 'focus-first-alt', mode: 'nav', chord: '^',             action: 'focusFirst',            hint: '0 ^ first' },
-  { id: 'focus-last',      mode: 'nav', chord: 'Shift+$',      action: 'focusLast',             hint: '$ last' },
-  { id: 'jump-to',         mode: 'nav', chord: '0..9',           action: 'jumpTo',                hint: '0-9 jump',         skipInInput: true },
+  { id: 'focus-first',     mode: 'nav', chord: '0',             action: 'focusFirst',            hint: '1 first' },
+  { id: 'focus-last',      mode: 'nav', chord: 'Shift+$',       action: 'focusLast',             hint: '$ last' },
+  { id: 'jump-to',         mode: 'nav', chord: '1..9',           action: 'jumpTo',                hint: '1-9 jump',         skipInInput: true },
 
   // Navigation mode — editing
   { id: 'new-pane',        mode: 'nav', chord: 'n',              action: 'newPane',               hint: 'n new',            skipInInput: true },

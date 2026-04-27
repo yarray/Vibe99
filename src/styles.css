@@ -164,54 +164,61 @@ body {
 }
 
 .tab-swatch {
+  /* Non-focused tabs: accent colour fills the full height of the tab,
+     creating a prominent left-side colour bar so the pane number is visible */
   position: absolute;
-  left: 8px;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  flex: 0 0 auto;
-  transform: translateY(-50%);
+  left: 0;
+  top: 0;
+  width: 20px;
+  height: 100%;
   background: var(--pane-accent);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  z-index: 1;
 }
 
-/* Pane number badge — positioned to appear on the accent block when focused */
+/* Pane number badge — sits on the accent bar for all tabs */
 .tab-pane-number {
   position: absolute;
-  left: 22px;
+  left: 26px;
   top: 50%;
   transform: translateY(-50%);
   font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--tab-text-color, #fff);
   pointer-events: none;
-  min-width: 14px;
+  min-width: 16px;
   text-align: center;
   font-family: inherit;
   line-height: 1;
-  z-index: 1;
+  z-index: 2;
+  /* legibility on both light and dark accent colours */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* When the tab is focused, the accent colour fills the tab — show the
-   number prominently on top of it, using the same text colour as the label */
-.tab.is-focused .tab-pane-number {
-  left: 8px;
-  color: var(--tab-text-color, #fff);
-  font-size: 12px;
-  min-width: 16px;
-  font-weight: 800;
-}
-
+/* Focused tab: accent colour already fills the whole tab via .is-focused;
+   swatch is redundant — hide it so the full-colour background shows through */
 .tab.is-focused .tab-swatch {
   display: none;
 }
 
+/* Focused tab: number centred on the accent-filled background */
+.tab.is-focused .tab-pane-number {
+  left: 6px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .tab-label {
   min-width: 0;
+  padding-left: 42px; /* leave room for swatch (20px) + badge (16px) + gap */
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Focused tab: swatch hidden, badge sits at left: 6px — reduce padding slightly */
+.tab.is-focused .tab-label {
+  padding-left: 30px;
 }
 
 .tab-input {
