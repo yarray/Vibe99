@@ -7,6 +7,7 @@
   --text: #f4f1e8;
   --app-font-size: 13px;
   --pane-opacity: 0.8;
+  --pane-bg-mask-opacity: 0.25;
   --pane-width: 720px;
   --tabs-height: 34px;
   --status-height: 20px;
@@ -49,7 +50,8 @@ body {
   align-items: center;
   gap: 0;
   padding: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: none;
+  /*border-bottom: 1px solid rgba(255, 255, 255, 0.06);*/
 }
 
 .tabs-list {
@@ -78,9 +80,11 @@ body {
 }
 
 .tab.is-focused {
-  color: var(--text);
-  background: color-mix(in srgb, var(--pane-accent) 10%, #1b1b1b);
-  box-shadow: inset 0 1px 0 0 var(--pane-accent);
+  color: var(--tab-text-color, #fff);
+  background: var(--pane-accent);
+  box-shadow: none;
+  border-bottom: 1px solid var(--pane-accent);
+  z-index: 1;
 }
 
 .tab.is-dragging {
@@ -102,7 +106,8 @@ body {
 .tab-main,
 .tab-close,
 .tabs-add,
-.tabs-settings {
+.tabs-settings,
+.tabs-fullscreen {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -144,6 +149,15 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.tab.is-focused .tab-close {
+  color: color-mix(in srgb, var(--tab-text-color) 50%, transparent);
+}
+
+.tab.is-focused .tab-close:hover {
+  color: color-mix(in srgb, var(--tab-text-color) 88%, transparent);
+  background: color-mix(in srgb, var(--tab-text-color) 5%, transparent);
+}
+
 .tab-close:disabled {
   opacity: 0.35;
   cursor: default;
@@ -159,6 +173,10 @@ body {
   transform: translateY(-50%);
   background: var(--pane-accent);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.tab.is-focused .tab-swatch {
+  display: none;
 }
 
 .tab-label {
@@ -189,11 +207,12 @@ body {
 
 .tabs-actions {
   display: inline-flex;
-  align-items: stretch;
+  align-items: center;
 }
 
 .tabs-add,
-.tabs-settings {
+.tabs-settings,
+.tabs-fullscreen {
   width: 34px;
   height: 33px;
   flex: 0 0 auto;
@@ -201,16 +220,19 @@ body {
   background: rgba(255, 255, 255, 0.02);
   color: rgba(255, 255, 255, 0.82);
   font-size: 18px;
-  line-height: 1;
-  transition:
-    background 120ms ease,
-    color 120ms ease;
+  line-height: 33px;
+  text-align: center;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .tabs-add:hover,
-.tabs-settings:hover {
+.tabs-settings:hover,
+.tabs-fullscreen:hover {
   background: rgba(255, 255, 255, 0.08);
 }
+
+.tabs-fullscreen.is-hidden { display: none; }
+.tabs-fullscreen.is-fullscreen { color: #ffd166; }
 
 .settings-panel {
   position: absolute;
@@ -259,6 +281,31 @@ body {
   font: inherit;
 }
 
+.settings-color {
+  width: 56px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.settings-color::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.settings-color::-webkit-color-swatch {
+  border: none;
+}
+
+.settings-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: rgba(255, 255, 255, 0.85);
+}
+
 .settings-section {
   padding: 8px;
   display: grid;
@@ -290,36 +337,104 @@ body {
     color 120ms ease;
 }
 
+.settings-action-btn {
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.settings-clickable-row {
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: 3px;
+  transition: background 120ms ease;
+}
+
+.settings-clickable-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-clickable-row:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-row-hint {
+  color: var(--panel-muted);
+  font-size: 14px;
+  transition: color 120ms ease;
+}
+
+.settings-clickable-row:hover .settings-row-hint {
+  color: rgba(255, 255, 255, 0.9);
+}
+
 .settings-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   color: var(--text);
 }
 
 .shell-profile-list {
-  display: grid;
-  gap: 2px;
-  max-height: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-gutter: stable;
 }
 
 .shell-profile-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px;
-  border-radius: 3px;
+  padding: 0 10px;
+  height: 36px;
+  border-radius: 4px;
   background: transparent;
-  cursor: default;
-  transition: background 120ms ease;
+  cursor: grab;
+  transition: all 120ms ease;
+  border: 1px solid transparent;
+  user-select: none;
+  min-width: 0;
 }
 
 .shell-profile-item:hover {
   background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.shell-profile-item.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  cursor: default;
 }
 
 .shell-profile-item.is-default {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.shell-profile-item.is-dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.shell-profile-item.drag-over {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(1.02);
+}
+
+.shell-profile-item .shell-profile-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .shell-profile-item.is-detected .shell-profile-name::after {
@@ -328,40 +443,33 @@ body {
   font-size: 11px;
 }
 
-.shell-profile-info {
-  display: grid;
-  gap: 0;
-  min-width: 0;
-  cursor: pointer;
-}
-
-.shell-profile-name {
-  color: var(--text);
-  font-size: var(--app-font-size);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.shell-profile-cmd {
-  color: var(--panel-muted);
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .shell-profile-actions {
   display: inline-flex;
   gap: 2px;
   flex-shrink: 0;
 }
 
+.shell-profile-actions {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .shell-profile-actions .settings-btn {
-  width: 18px;
-  height: 18px;
-  font-size: 11px;
-  border-color: transparent;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  pointer-events: auto;
+}
+
+.shell-profile-actions .settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
 }
 
 .shell-profile-empty {
@@ -372,55 +480,102 @@ body {
 
 .shell-profile-editor {
   display: grid;
-  gap: 6px;
-  padding: 8px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
 }
 
+.shell-profile-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.shell-profile-editor-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.shell-profile-editor-close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.shell-profile-editor-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
 .shell-profile-editor label {
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
 .shell-profile-editor input {
   width: 100%;
-  height: 24px;
-  padding: 0 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text);
   font: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .shell-profile-editor input:focus {
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
   outline: none;
 }
 
 .shell-profile-editor-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.shell-profile-editor-actions .settings-btn {
-  width: auto;
-  height: 22px;
-  padding: 0 8px;
-  font-size: 11px;
-  border-radius: 3px;
+.shell-profile-editor-btn {
+  width: auto !important;
+  height: 28px !important;
+  padding: 0 16px !important;
+  font-size: 13px !important;
+  border-radius: 4px !important;
+  font-weight: 500;
 }
 
 .shell-profile-editor-actions .settings-btn.is-primary {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.15) !important;
   color: var(--text);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .shell-profile-editor-actions .settings-btn.is-primary:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.25) !important;
 }
 
 .stage-wrap {
@@ -459,6 +614,20 @@ body {
   will-change: left;
 }
 
+/* Overlay mask: solid pane-accent board on top.
+   --pane-bg-mask-opacity directly controls overlay opacity:
+   0 = fully transparent, higher = more opaque mask. */
+.pane::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--pane-accent);
+  opacity: var(--pane-bg-mask-opacity);
+  transition: opacity 80ms ease;
+  z-index: 10;
+}
+
 .pane-shell {
   height: 100%;
 }
@@ -484,6 +653,12 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+.pane.is-focused::after,
+.pane.is-navigation-target::after {
+  opacity: 0;
+  transition: none;
+}
+
 .pane.is-navigation-target {
   opacity: 1;
   border-width: 4px;
@@ -501,7 +676,7 @@ body {
   padding: 0 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.65);
-  font-size: var(--app-font-size);
+  font-size: 14px;
 }
 
 #status-label {
@@ -511,15 +686,90 @@ body {
   text-overflow: ellipsis;
 }
 
-#status-label.is-navigation-mode {
-  color: #ffd166;
-  font-weight: 700;
-}
-
 .status-hint {
   flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
+}
+
+/* Hint bar styles */
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+.hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1;
+}
+
+.hint-sep {
+  margin: 0 6px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+/* Navigation mode - entire status bar background color */
+body.is-navigation-mode .status-bar {
+  background: rgba(255, 209, 102, 0.12);
+}
+
+body.is-navigation-mode #status-label {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+body.is-navigation-mode .hint kbd {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+body.is-navigation-mode .hint-sep {
+  color: rgba(255, 209, 102, 0.4);
+}
+
+/* Navigation mode - number badges in tabs */
+body.is-navigation-mode .tab-swatch {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--swatch-text-color, rgba(0, 0, 0, 0.75));
+	line-height: 1;
+}
+
+/* Pending close confirmation */
+.tab-close.pending-close {
+	color: #ff6b57;
+	font-weight: 700;
+	animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.6; }
+}
+
+/* Navigation mode - highlight focused tab */
+body.is-navigation-mode .tab.is-focused .tab-swatch {
+	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
 }
 
 body.is-dragging-tabs {
@@ -622,4 +872,583 @@ body.is-dragging-tabs {
 
 .context-menu-parent:hover > .context-menu-submenu {
   display: block;
+}
+
+/* VIB-10: Color Picker Overlay */
+.color-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.color-picker-dialog {
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  min-width: 260px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.color-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.color-picker-close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.color-picker-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.color-picker-presets {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.color-preset {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: var(--color);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.color-preset:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.color-preset.is-selected {
+  border-color: white;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.color-picker-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.color-picker-custom label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.color-picker-input {
+  appearance: none;
+  flex: 1;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.color-picker-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-picker-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.color-picker-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.color-picker-clear {
+  appearance: none;
+  padding: 6px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.color-picker-clear:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+/* Settings Modal Overlay */
+.settings-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.settings-modal {
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  min-width: 300px;
+  max-width: 400px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+/* Shell Profiles Modal - Two Column Layout */
+.settings-modal.shell-profiles-modal {
+  min-width: 700px;
+  max-width: 900px;
+  width: 90vw;
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal.shell-profiles-modal .shell-profiles-modal-body {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+.settings-modal.shell-profiles-modal .shell-profiles-sidebar {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding-right: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Subtle scrollbar styling for shell profiles modal */
+.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-track,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-thumb,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-thumb:hover,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Firefox scrollbar styling */
+.settings-modal.shell-profiles-modal .shell-profile-list,
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.shell-profiles-add-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.shell-profiles-add-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--text);
+  transform: scale(1.05);
+}
+
+.settings-modal.shell-profiles-modal .shell-profiles-editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.shell-profiles-editor-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--panel-muted);
+  font-size: 14px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+.settings-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.settings-modal-close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.settings-modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+/* Shell Profiles Modal Header Override */
+.settings-modal.shell-profiles-modal .settings-modal-header {
+  justify-content: space-between;
+}
+
+.settings-modal.shell-profiles-modal .settings-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-modal.shell-profiles-modal .shell-profiles-add-btn {
+  margin: 0;
+}
+
+.settings-modal-body {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.shell-profiles-modal .settings-modal-body {
+  max-height: none;
+  overflow: visible;
+}
+
+.settings-modal-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: var(--app-font-size);
+}
+
+.settings-modal-value {
+  color: var(--panel-muted);
+  font-size: 12px;
+}
+
+.settings-modal-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-modal-btn {
+  appearance: none;
+  padding: 6px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-modal-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.settings-modal-btn.primary {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.settings-modal-btn.primary:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Keyboard Shortcuts Interface */
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.shortcut-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.shortcut-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shortcut-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.shortcut-description {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.shortcut-mode-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 196, 93, 0.15);
+  color: #ffc45d;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.shortcut-binding {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: inherit;
+  min-width: 80px;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.shortcut-keys:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.shortcut-edit-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.shortcut-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.shortcut-recorder-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.shortcut-recorder-dialog {
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  padding: 24px;
+  min-width: 320px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  text-align: center;
+}
+
+.shortcut-recorder-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.shortcut-recorder-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 20px;
+}
+
+.shortcut-recorder-keys {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  min-height: 40px;
+}
+
+.shortcut-recorder-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.shortcut-recorder-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.shortcut-recorder-btn {
+  appearance: none;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.shortcut-recorder-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.shortcut-recorder-btn.is-primary {
+  background: rgba(255, 196, 93, 0.2);
+  border-color: rgba(255, 196, 93, 0.4);
+  color: #ffc45d;
+}
+
+.shortcut-recorder-btn.is-primary:hover {
+  background: rgba(255, 196, 93, 0.3);
+  border-color: rgba(255, 196, 93, 0.5);
+}
+
+.shortcut-conflict-warning {
+  font-size: 11px;
+  color: #ff6b57;
+  margin-top: 2px;
 }

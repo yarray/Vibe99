@@ -1,6 +1,6 @@
 [package]
 name = "vibe99"
-version = "0.5.0"
+version = "0.7.1"
 description = "Vibe99 terminal workspace"
 authors = [""]
 edition = "2021"
@@ -27,3 +27,4 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"

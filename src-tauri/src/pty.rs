@@ -48,6 +48,38 @@ struct TerminalDataPayload {
     data: String,
 }
 
+/// Returns the index of the last complete UTF-8 character boundary in
+/// `buf`. Bytes after this point form an incomplete multi-byte sequence
+/// and should be carried over to the next read. Returns `buf.len()` when
+/// the buffer already ends on a complete boundary.
+fn utf8_safe_cut(buf: &[u8]) -> usize {
+    let len = buf.len();
+    if len == 0 {
+        return 0;
+    }
+
+    // Walk backwards past continuation bytes (10xxxxxx) to find the leading byte.
+    let mut i = len - 1;
+    while i > 0 && buf[i] & 0xC0 == 0x80 {
+        i -= 1;
+    }
+
+    let expected: usize = match buf[i] {
+        0x00..=0x7F => 1,
+        0xC0..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF7 => 4,
+        _ => return len, // invalid leading byte – flush as-is
+    };
+
+    let actual = len - i;
+    if actual >= expected {
+        len
+    } else {
+        i
+    }
+}
+
 /// Payload emitted on `vibe99:terminal-exit`.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,7 +101,7 @@ struct PtySession {
     /// Join handle for the background reader thread.
     _reader_thread: std::thread::JoinHandle<()>,
     /// Join handle for the exit-watcher thread.
-    _exit_thread: std::thread::JoinHandle<()>,
+    exit_thread: std::thread::JoinHandle<()>,
 }
 
 /// Manages a collection of PTY sessions keyed by pane ID.
@@ -181,27 +213,40 @@ impl PtyManager {
         let pane_id_reader = pane_id_owned.clone();
         let _reader_thread = std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
+            // Holds incomplete UTF-8 tail bytes from a previous read so
+            // that multi-byte characters are not split across payloads.
+            let mut pending: Vec<u8> = Vec::with_capacity(4);
+
             loop {
                 match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        // Convert bytes to a UTF-8 string, replacing
-                        // invalid sequences so the JSON payload stays
-                        // valid. PTY output is almost always valid
-                        // UTF-8, but binary garbage can appear.
-                        let text = String::from_utf8_lossy(&buf[..n]);
-                        let _ = app_reader.emit(
-                            "vibe99:terminal-data",
-                            TerminalDataPayload {
-                                pane_id: pane_id_reader.clone(),
-                                data: text.into_owned(),
-                            },
-                        );
-                    }
-                    Err(_) => {
-                        // Reader errors (e.g. EIO when the child
-                        // exits) are expected – treat as EOF.
+                    Ok(0) | Err(_) => {
+                        // Flush any remaining bytes before closing.
+                        if !pending.is_empty() {
+                            let text = String::from_utf8_lossy(&pending);
+                            let _ = app_reader.emit(
+                                "vibe99:terminal-data",
+                                TerminalDataPayload {
+                                    pane_id: pane_id_reader.clone(),
+                                    data: text.into_owned(),
+                                },
+                            );
+                        }
                         break;
+                    }
+                    Ok(n) => {
+                        pending.extend_from_slice(&buf[..n]);
+                        let cut = utf8_safe_cut(&pending);
+                        if cut > 0 {
+                            let text = String::from_utf8_lossy(&pending[..cut]);
+                            let _ = app_reader.emit(
+                                "vibe99:terminal-data",
+                                TerminalDataPayload {
+                                    pane_id: pane_id_reader.clone(),
+                                    data: text.into_owned(),
+                                },
+                            );
+                            pending.drain(..cut);
+                        }
                     }
                 }
             }
@@ -210,7 +255,7 @@ impl PtyManager {
         // Watch for child exit on a blocking thread. Emit the exit event
         // and remove the session from the map, matching Electron behaviour.
         let manager = Arc::clone(self);
-        let _exit_thread = std::thread::spawn(move || {
+        let exit_thread = std::thread::spawn(move || {
             let exit_code = child.wait().map(|s| s.exit_code()).unwrap_or(1);
 
             // Emit the exit event before removing the session so the
@@ -235,7 +280,7 @@ impl PtyManager {
             writer,
             killer,
             _reader_thread,
-            _exit_thread,
+            exit_thread,
         };
 
         self.sessions
@@ -295,13 +340,22 @@ impl PtyManager {
         Ok(())
     }
 
-    /// Kill the child process and remove the session for `pane_id`.
+    /// Kill the child process, remove the session for `pane_id`, and join the
+    /// exit-watcher thread so no stale events are emitted after this returns.
     pub fn destroy(&self, pane_id: &str) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            if let Some(mut session) = sessions.remove(pane_id) {
-                let _ = session.killer.kill();
-            }
-        }
+        let exit_handle = {
+            let mut sessions = match self.sessions.lock() {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let Some(session) = sessions.remove(pane_id) else {
+                return;
+            };
+            let PtySession { mut killer, exit_thread, .. } = session;
+            let _ = killer.kill();
+            exit_thread
+        };
+        let _ = exit_handle.join();
     }
 
     /// Destroy all active sessions.

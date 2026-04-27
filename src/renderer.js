@@ -2,7 +2,22 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
+import {
+  openCommandPalette,
+  closeCommandPalette,
+  isCommandPaletteOpen,
+} from './command-palette.js';
+import { createPaneActivityWatcher } from './pane-activity-watcher.js';
+import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
 import '@xterm/xterm/css/xterm.css';
+
+import * as ShortcutsRegistry from './shortcuts-registry.js';
+import * as ShortcutsUI from './shortcuts-ui.js';
+import * as ColorsRegistry from './colors-registry.js';
+import { createActions } from './input/actions.js';
+import { createDispatcher } from './input/dispatcher.js';
+import { renderHintBar } from './hint-bar.js';
 
 function getRuntimePlatform() {
   const platform = navigator.platform.toLowerCase();
@@ -50,6 +65,20 @@ function splitArgs(str) {
   return args;
 }
 
+// Converts a string array back to a shell-quoted command-line string.
+// This is the inverse of splitArgs(): formatArgs(splitArgs(s)) === s for any s.
+function formatArgs(args) {
+  return args.map((arg) => {
+    // Arguments needing quoting: contain spaces, double quotes, backslashes, or are empty.
+    if (arg === '' || /[\s"]/.test(arg) || /\\/.test(arg)) {
+      // Escape backslashes and double quotes before wrapping in double quotes.
+      const escaped = arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      return `"${escaped}"`;
+    }
+    return arg;
+  }).join(' ');
+}
+
 
 function createUnavailableBridge() {
   const fail = () => {
@@ -91,7 +120,7 @@ function createTauriBridge(tauri) {
   const { getCurrentWindow } = tauri.window;
   const { readText: clipboardReadText, writeText: clipboardWriteText } =
     tauri.clipboardManager;
-  const { open: shellOpen } = tauri.shell;
+  const { openUrl } = tauri.opener;
 
   function base64Encode(str) {
     const bytes = new TextEncoder().encode(str);
@@ -143,10 +172,14 @@ function createTauriBridge(tauri) {
     readClipboardText: () => clipboardReadText(),
     writeClipboardText: (text) => clipboardWriteText(text),
     getClipboardSnapshot: async () => {
-      const text = await clipboardReadText();
-      return { text: text ?? '', hasImage: false };
+      try {
+        const text = await clipboardReadText();
+        return { text: text ?? '', hasImage: false };
+      } catch {
+        return { text: '', hasImage: false };
+      }
     },
-    openExternalUrl: (url) => shellOpen(url),
+    openExternalUrl: (url) => openUrl(url),
     showContextMenu: () => {},
     loadSettings: () => invoke('settings_load'),
     saveSettings: (payload) => invoke('settings_save', { settings: payload }),
@@ -172,7 +205,7 @@ const initialPanes = [
     title: null,
     terminalTitle: bridge.defaultTabTitle,
     cwd: bridge.defaultCwd,
-    accent: '#ff6b57',
+    accent: ColorsRegistry.ACCENT_PALETTE[0],
     shellProfileId: null,
   },
   {
@@ -180,7 +213,7 @@ const initialPanes = [
     title: null,
     terminalTitle: bridge.defaultTabTitle,
     cwd: bridge.defaultCwd,
-    accent: '#ff9f1c',
+    accent: ColorsRegistry.ACCENT_PALETTE[1],
     shellProfileId: null,
   },
   {
@@ -188,32 +221,41 @@ const initialPanes = [
     title: null,
     terminalTitle: bridge.defaultTabTitle,
     cwd: bridge.defaultCwd,
-    accent: '#ffd166',
+    accent: ColorsRegistry.ACCENT_PALETTE[2],
     shellProfileId: null,
   },
 ];
 
-const accentPalette = [
-  '#ff6b57',
-  '#ff9f1c',
-  '#ffd166',
-  '#06d6a0',
-  '#118ab2',
-  '#9b5de5',
-  '#ef476f',
-  '#7bd389',
-  '#5cc8ff',
-  '#f4a261',
-];
 
 let panes = initialPanes.map((pane) => ({ ...pane }));
 let focusedPaneId = panes[0].id;
 let nextPaneNumber = panes.length + 1;
 let renamingPaneId = null;
+let isRenderingTabs = false; // Guard against re-entrant renderTabs calls
 let dragState = null;
-let isNavigationMode = false;
+let currentMode = 'terminal'; // 'terminal' | 'nav'
+let enterNavSourcePaneId = null; // Track which pane was focused when entering nav mode
 let pendingTabFocus = null;
 let sessionRestoreComplete = false;
+
+// Mode management
+function setMode(next) {
+  if (currentMode === next) return;
+  currentMode = next;
+  document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
+  render();
+}
+
+// Most-recently-used pane stack for Ctrl+` cycling. Index 0 is the most
+// recently visited pane (typically equals focusedPaneId when no cycle is in
+// progress). All current pane IDs always appear exactly once.
+let paneMruOrder = panes.map((pane) => pane.id);
+
+// Transient state while the user is cycling with the modifier still held.
+// `snapshot` freezes the MRU order at the start of the cycle so repeated
+// presses step through a stable list. `index` points into that snapshot.
+// `null` means no cycle is in progress.
+let paneCycleState = null;
 
 const paneNodeMap = new Map();
 
@@ -223,6 +265,7 @@ const statusLabelEl = document.getElementById('status-label');
 const statusHintEl = document.getElementById('status-hint');
 const addPaneButtonEl = document.getElementById('tabs-add');
 const settingsButtonEl = document.getElementById('tabs-settings');
+const fullscreenButtonEl = document.getElementById('tabs-fullscreen');
 const settingsPanelEl = document.getElementById('settings-panel');
 const fontSizeInputEl = document.getElementById('font-size-input');
 const fontFamilyInputEl = document.getElementById('font-family-input');
@@ -232,27 +275,49 @@ const paneWidthValueEl = document.getElementById('pane-width-value');
 const paneOpacityRangeEl = document.getElementById('pane-opacity-range');
 const paneOpacityInputEl = document.getElementById('pane-opacity-input');
 const paneOpacityValueEl = document.getElementById('pane-opacity-value');
+const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
+const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
+const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
+const breathingAlertToggleEl = document.getElementById('breathing-alert-toggle');
+const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
+const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
 
 const settings = {
   fontSize: 13,
   fontFamily: getDefaultFontFamily(bridge.platform),
   paneOpacity: 0.8,
+  paneMaskOpacity: 0.75,
   paneWidth: 720,
+  breathingAlertEnabled: true,
 };
 let pendingSettingsSave = null;
 
 let shellProfiles = [];
 let defaultShellProfileId = '';
 let editingShellProfile = null; // null or { id?, name, command, args }
+let selectedShellProfileId = null; // ID of currently selected profile for editing
 
-const shellProfileListEl = document.getElementById('shell-profile-list');
-const shellProfileAddBtn = document.getElementById('shell-profile-add');
+// Surface "settled output on a backgrounded pane" via a pulsing mask. The
+// watcher just decides *when* a pane should alert; the alert renderer
+// decides *how* it looks. To switch styles (border flash, tab badge, …),
+// swap `createBreathingMaskAlert` for another renderer with the same shape.
+const paneAlert = createBreathingMaskAlert();
+const paneActivityWatcher = createPaneActivityWatcher({
+  onAlert: (paneId) => {
+    const node = paneNodeMap.get(paneId);
+    if (node) paneAlert.setAlerted(node.root, true);
+  },
+  onClear: (paneId) => {
+    const node = paneNodeMap.get(paneId);
+    if (node) paneAlert.setAlerted(node.root, false);
+  },
+});
 
 const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
   const node = paneNodeMap.get(paneId);
-  if (node) {
-    node.terminal.write(data);
-  }
+  if (!node) return;
+  node.terminal.write(data);
+  paneActivityWatcher.noteData(paneId);
 });
 
 const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode }) => {
@@ -323,6 +388,7 @@ function getPaneLabel(pane) {
 function applySettings() {
   document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
   document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
+  document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
   document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
   fontSizeInputEl.value = String(settings.fontSize);
   fontFamilyInputEl.value = settings.fontFamily;
@@ -332,6 +398,11 @@ function applySettings() {
   paneOpacityRangeEl.value = settings.paneOpacity.toFixed(2);
   paneOpacityInputEl.value = settings.paneOpacity.toFixed(2);
   paneOpacityValueEl.textContent = settings.paneOpacity.toFixed(2);
+  paneMaskOpacityRangeEl.value = settings.paneMaskOpacity.toFixed(2);
+  paneMaskOpacityInputEl.value = settings.paneMaskOpacity.toFixed(2);
+  paneMaskOpacityValueEl.textContent = settings.paneMaskOpacity.toFixed(2);
+  breathingAlertToggleEl.checked = settings.breathingAlertEnabled;
+  paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
 }
 
 function applyPersistedSettings(nextSettings) {
@@ -353,11 +424,36 @@ function applyPersistedSettings(nextSettings) {
   }
 
   if (Number.isFinite(uiSettings.paneOpacity)) {
-    settings.paneOpacity = uiSettings.paneOpacity;
+    settings.paneOpacity = Math.max(0.55, Math.min(1, uiSettings.paneOpacity));
+  }
+
+  if (Number.isFinite(uiSettings.paneMaskOpacity)) {
+    settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskOpacity));
+  }
+
+  // Migrate legacy paneMaskAlpha → paneMaskOpacity
+  if (Number.isFinite(uiSettings.paneMaskAlpha) && !Number.isFinite(uiSettings.paneMaskOpacity)) {
+    settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskAlpha));
+  }
+
+  // Migrate v3 inverted mask opacity: old value was 1 - overlay opacity.
+  if (nextSettings?.version != null && nextSettings.version < 4) {
+    settings.paneMaskOpacity = 1 - settings.paneMaskOpacity;
   }
 
   if (Number.isFinite(uiSettings.paneWidth)) {
     settings.paneWidth = uiSettings.paneWidth;
+  }
+
+  if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
+    settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
+  }
+
+  // Load keyboard shortcuts
+  if (typeof uiSettings.shortcuts === 'object' && uiSettings.shortcuts !== null) {
+    ShortcutsRegistry.loadShortcutsFromSettings(uiSettings);
+  } else {
+    ShortcutsRegistry.loadShortcutsFromSettings({});
   }
 }
 
@@ -368,7 +464,9 @@ function buildSessionData() {
       title: p.title,
       cwd: p.cwd,
       accent: p.accent,
+      customColor: p.customColor,
       shellProfileId: p.shellProfileId,
+      breathingMonitor: p.breathingMonitor !== false,
     })),
     focusedPaneIndex: focusedIndex >= 0 ? focusedIndex : 0,
   };
@@ -383,7 +481,9 @@ function restoreSession(session) {
       terminalTitle: bridge.defaultTabTitle,
       cwd: (typeof p.cwd === 'string' && p.cwd) || bridge.defaultCwd,
       accent: p.accent,
+      customColor: (typeof p.customColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.customColor) && p.customColor) || undefined,
       shellProfileId: (typeof p.shellProfileId === 'string' && p.shellProfileId) || null,
+      breathingMonitor: p.breathingMonitor !== false,
     }));
 
   if (validPanes.length === 0) {
@@ -394,6 +494,8 @@ function restoreSession(session) {
     }));
     focusedPaneId = panes[0].id;
     nextPaneNumber = panes.length + 1;
+    paneMruOrder = panes.map((p) => p.id);
+    paneCycleState = null;
     return;
   }
 
@@ -404,6 +506,9 @@ function restoreSession(session) {
   );
   focusedPaneId = panes[Math.max(0, focusedIndex)].id;
   nextPaneNumber = panes.length + 1;
+  // Initial MRU order: focused pane first, then remaining panes in tab order.
+  paneMruOrder = [focusedPaneId, ...panes.map((p) => p.id).filter((id) => id !== focusedPaneId)];
+  paneCycleState = null;
 }
 
 function scheduleSettingsSave() {
@@ -413,7 +518,15 @@ function scheduleSettingsSave() {
 
   pendingSettingsSave = window.setTimeout(() => {
     pendingSettingsSave = null;
-    void bridge.saveSettings({ version: 3, ui: settings, session: buildSessionData() }).catch(reportError);
+    const settingsToSave = {
+      version: 4,
+      ui: {
+        ...settings,
+        shortcuts: ShortcutsRegistry.getShortcutsForSave()
+      },
+      session: buildSessionData()
+    };
+    bridge.saveSettings(settingsToSave).catch(reportError);
   }, 150);
 }
 
@@ -421,7 +534,15 @@ function flushSettingsSave() {
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
     pendingSettingsSave = null;
-    void bridge.saveSettings({ version: 3, ui: settings, session: buildSessionData() }).catch(reportError);
+    const settingsToSave = {
+      version: 4,
+      ui: {
+        ...settings,
+        shortcuts: ShortcutsRegistry.getShortcutsForSave()
+      },
+      session: buildSessionData()
+    };
+    void bridge.saveSettings(settingsToSave).catch(reportError);
   }
 }
 
@@ -442,98 +563,7 @@ function loadShellProfiles() {
     // Merge: user profiles first, then detected ones not already present.
     shellProfiles = [...userProfiles, ...detected.filter((p) => !userIds.has(p.id))];
     defaultShellProfileId = config.defaultProfile ?? '';
-    renderShellProfiles();
   }).catch(reportError);
-}
-
-function renderShellProfiles() {
-  shellProfileListEl.replaceChildren();
-
-  if (editingShellProfile) {
-    shellProfileListEl.appendChild(createShellProfileEditor());
-    return;
-  }
-
-  if (shellProfiles.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'shell-profile-empty';
-    empty.textContent = 'No profiles configured';
-    shellProfileListEl.appendChild(empty);
-    return;
-  }
-
-  const detectedIds = new Set(detectedShellProfiles.map((p) => p.id));
-
-  for (const profile of shellProfiles) {
-    const isDetected = detectedIds.has(profile.id);
-    const item = document.createElement('div');
-    item.className = `shell-profile-item${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
-
-    const info = document.createElement('div');
-    info.className = 'shell-profile-info';
-
-    const name = document.createElement('div');
-    name.className = 'shell-profile-name';
-    name.textContent = profile.name || profile.id;
-
-    const cmd = document.createElement('div');
-    cmd.className = 'shell-profile-cmd';
-    cmd.textContent = profile.command + (profile.args?.length ? ` ${profile.args.join(' ')}` : '');
-
-    info.append(name, cmd);
-
-    // Click the profile info area to apply this shell to the focused pane.
-    info.addEventListener('click', () => {
-      if (focusedPaneId) {
-        changePaneShell(focusedPaneId, profile.id);
-      }
-    });
-
-    const actions = document.createElement('div');
-    actions.className = 'shell-profile-actions';
-
-    if (profile.id !== defaultShellProfileId) {
-      actions.appendChild(createProfileActionButton('★', 'Set as default', () => {
-        const apply = (config) => {
-          const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-          shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-          defaultShellProfileId = config.defaultProfile ?? '';
-          renderShellProfiles();
-        };
-        if (isDetected) {
-          bridge.addShellProfile(profile).then(() => {
-            bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-          }).catch(reportError);
-        } else {
-          bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-        }
-      }));
-    }
-
-    actions.appendChild(createProfileActionButton('✎', 'Edit', () => {
-      editingShellProfile = {
-        id: profile.id,
-        name: profile.name || '',
-        command: profile.command,
-        args: (profile.args ?? []).join(' '),
-      };
-      renderShellProfiles();
-    }));
-
-    if (!isDetected) {
-      actions.appendChild(createProfileActionButton('✕', 'Delete', () => {
-        bridge.removeShellProfile(profile.id).then((config) => {
-          const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-          shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-          defaultShellProfileId = config.defaultProfile ?? '';
-          renderShellProfiles();
-        }).catch(reportError);
-      }));
-    }
-
-    item.append(info, actions);
-    shellProfileListEl.appendChild(item);
-  }
 }
 
 function createProfileActionButton(label, title, onClick) {
@@ -547,96 +577,6 @@ function createProfileActionButton(label, title, onClick) {
     onClick();
   });
   return btn;
-}
-
-function createShellProfileEditor() {
-  const editor = document.createElement('div');
-  editor.className = 'shell-profile-editor';
-
-  const fields = [
-    { key: 'name', label: 'Name (optional)', placeholder: 'e.g. Zsh' },
-    { key: 'id', label: 'ID', placeholder: 'e.g. zsh' },
-    { key: 'command', label: 'Command', placeholder: '/bin/zsh' },
-    { key: 'args', label: 'Arguments', placeholder: '-il' },
-  ];
-
-  const inputs = {};
-  for (const field of fields) {
-    const label = document.createElement('label');
-    label.textContent = field.label;
-    label.setAttribute('for', `shell-edit-${field.key}`);
-
-    const input = document.createElement('input');
-    input.id = `shell-edit-${field.key}`;
-    input.type = 'text';
-    input.value = editingShellProfile[field.key] ?? '';
-    input.placeholder = field.placeholder;
-    input.dataset.field = field.key;
-    inputs[field.key] = input;
-
-    // Auto-fill id from name when creating new profile
-    if (field.key === 'name' && !editingShellProfile.id) {
-      input.addEventListener('input', () => {
-        const idInput = inputs.id;
-        if (!idInput.value && input.value.trim()) {
-          idInput.value = input.value.trim().toLowerCase().replace(/\s+/g, '-');
-        }
-      });
-    }
-
-    editor.append(label, input);
-  }
-
-  const actions = document.createElement('div');
-  actions.className = 'shell-profile-editor-actions';
-
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'settings-btn';
-  cancel.textContent = 'Cancel';
-  cancel.addEventListener('click', () => {
-    editingShellProfile = null;
-    renderShellProfiles();
-  });
-
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'settings-btn is-primary';
-  save.textContent = 'Save';
-  save.addEventListener('click', () => {
-    const profile = {
-      id: inputs.id.value.trim(),
-      name: inputs.name.value.trim(),
-      command: inputs.command.value.trim(),
-      args: splitArgs(inputs.args.value.trim()),
-    };
-
-    if (!profile.id || !profile.command) {
-      reportError(new Error('ID and Command are required'));
-      return;
-    }
-
-    bridge.addShellProfile(profile).then((config) => {
-      const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-      shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-      defaultShellProfileId = config.defaultProfile ?? '';
-      editingShellProfile = null;
-      renderShellProfiles();
-    }).catch(reportError);
-  });
-
-  actions.append(cancel, save);
-  editor.appendChild(actions);
-
-  queueMicrotask(() => {
-    const firstInput = editor.querySelector('input');
-    if (firstInput) {
-      firstInput.focus();
-      firstInput.select();
-    }
-  });
-
-  return editor;
 }
 
 function changePaneShell(paneId, profileId) {
@@ -666,6 +606,397 @@ function changePaneShell(paneId, profileId) {
       scheduleSettingsSave();
     }
   });
+}
+
+// ----------------------------------------------------------------
+// Settings modals for complex settings
+// ----------------------------------------------------------------
+
+function openShellProfilesModal() {
+  loadShellProfiles();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'settings-modal-overlay';
+
+  overlay.innerHTML = `
+    <div class="settings-modal shell-profiles-modal">
+      <div class="settings-modal-header">
+        <div class="settings-modal-title-group">
+          <span>Shell Profiles</span>
+          <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">+</button>
+        </div>
+        <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+      </div>
+      <div class="settings-modal-body shell-profiles-modal-body">
+        <div class="shell-profiles-sidebar">
+          <div class="shell-profile-list" id="modal-shell-profile-list"></div>
+        </div>
+        <div class="shell-profiles-editor-panel" id="modal-shell-profile-editor">
+          <div class="shell-profiles-editor-placeholder">Select a profile or create a new one</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const closeModal = () => {
+    overlay.remove();
+    editingShellProfile = null;
+    selectedShellProfileId = null;
+  };
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+
+  // Add profile button
+  overlay.querySelector('#modal-shell-profile-add').addEventListener('click', () => {
+    editingShellProfile = {
+      id: '',
+      name: '',
+      command: '',
+      args: '',
+      isNew: true
+    };
+    selectedShellProfileId = null;
+    renderModalShellProfiles();
+  });
+
+  document.body.appendChild(overlay);
+
+  // Store reference to modal elements for rendering
+  overlay._modalShellProfileList = overlay.querySelector('#modal-shell-profile-list');
+  overlay._modalShellProfileEditor = overlay.querySelector('#modal-shell-profile-editor');
+
+  // Select first profile by default if available
+  if (shellProfiles.length > 0) {
+    const firstProfile = shellProfiles[0];
+    selectedShellProfileId = firstProfile.id;
+    editingShellProfile = {
+      id: firstProfile.id,
+      name: firstProfile.name || '',
+      command: firstProfile.command,
+      args: formatArgs(firstProfile.args ?? []),
+      isNew: false
+    };
+  } else {
+    selectedShellProfileId = null;
+    editingShellProfile = null;
+  }
+
+  renderModalShellProfiles();
+}
+
+function renderModalShellProfiles() {
+  const overlay = document.querySelector('.settings-modal-overlay');
+  if (!overlay || !overlay._modalShellProfileList) return;
+
+  const listEl = overlay._modalShellProfileList;
+  const editorEl = overlay._modalShellProfileEditor;
+
+  if (!listEl || !editorEl) return;
+
+  listEl.replaceChildren();
+  editorEl.replaceChildren();
+
+  // Render sidebar list
+  if (shellProfiles.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'shell-profile-empty';
+    empty.textContent = 'No profiles configured';
+    listEl.appendChild(empty);
+  } else {
+    const detectedIds = new Set(detectedShellProfiles.map((p) => p.id));
+
+    for (const profile of shellProfiles) {
+      const isDetected = detectedIds.has(profile.id);
+      const item = document.createElement('div');
+      item.className = `shell-profile-item${profile.id === selectedShellProfileId ? ' is-selected' : ''}${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
+      item.dataset.profileId = profile.id;
+      item.draggable = !isDetected;
+
+      const name = document.createElement('div');
+      name.className = 'shell-profile-name';
+      name.textContent = profile.name || profile.id;
+
+      const actions = document.createElement('div');
+      actions.className = 'shell-profile-actions';
+
+      // Quick actions: set default, clone, delete
+      if (profile.id !== defaultShellProfileId) {
+        actions.appendChild(createProfileActionButton('★', 'Set as default', () => {
+          const apply = (config) => {
+            const userIds = new Set((config.profiles ?? []).map((p) => p.id));
+            shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
+            defaultShellProfileId = config.defaultProfile ?? '';
+            renderModalShellProfiles();
+          };
+          if (isDetected) {
+            bridge.addShellProfile(profile).then(() => {
+              bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
+            }).catch(reportError);
+          } else {
+            bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
+          }
+        }));
+      }
+
+      actions.appendChild(createProfileActionButton('⧉', 'Clone profile', () => {
+        cloneProfile(profile);
+      }));
+
+      if (!isDetected) {
+        actions.appendChild(createProfileActionButton('✕', 'Delete', () => {
+          if (selectedShellProfileId === profile.id) {
+            selectedShellProfileId = null;
+            editingShellProfile = null;
+          }
+          bridge.removeShellProfile(profile.id).then((config) => {
+            const userIds = new Set((config.profiles ?? []).map((p) => p.id));
+            shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
+            defaultShellProfileId = config.defaultProfile ?? '';
+            renderModalShellProfiles();
+          }).catch(reportError);
+        }));
+      }
+
+      item.append(name, actions);
+
+      // Click to select (but not when dragging)
+      let isDragging = false;
+      let dragStartTime = 0;
+
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.shell-profile-actions')) return;
+        if (isDragging) return;
+        selectedShellProfileId = profile.id;
+        editingShellProfile = {
+          id: profile.id,
+          name: profile.name || '',
+          command: profile.command,
+          args: formatArgs(profile.args ?? []),
+          isNew: false
+        };
+        renderModalShellProfiles();
+      });
+
+      // Drag events for reordering
+      if (!isDetected) {
+        item.addEventListener('dragstart', (e) => {
+          dragStartTime = Date.now();
+          isDragging = true;
+          item.classList.add('is-dragging');
+          e.dataTransfer.setData('text/plain', profile.id);
+          e.dataTransfer.effectAllowed = 'move';
+          // Set a drag image if possible
+          if (e.dataTransfer.setDragImage) {
+            e.dataTransfer.setDragImage(item, 0, 0);
+          }
+        });
+
+        item.addEventListener('dragend', (e) => {
+          const dragDuration = Date.now() - dragStartTime;
+          // If drag was very short, treat it as a click
+          if (dragDuration < 200) {
+            isDragging = false;
+          }
+          setTimeout(() => {
+            isDragging = false;
+          }, 100);
+          item.classList.remove('is-dragging');
+          document.querySelectorAll('.shell-profile-item').forEach(el => {
+            el.classList.remove('drag-over');
+          });
+        });
+
+        item.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'move';
+          const dragging = document.querySelector('.shell-profile-item.is-dragging');
+          if (dragging && dragging !== item) {
+            item.classList.add('drag-over');
+          }
+        });
+
+        item.addEventListener('dragleave', (e) => {
+          // Only remove drag-over if we're actually leaving the item
+          if (!item.contains(e.relatedTarget)) {
+            item.classList.remove('drag-over');
+          }
+        });
+
+        item.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          item.classList.remove('drag-over');
+          const draggedId = e.dataTransfer.getData('text/plain');
+          const targetId = profile.id;
+
+          if (draggedId !== targetId) {
+            reorderProfiles(draggedId, targetId);
+          }
+        });
+      }
+
+      listEl.appendChild(item);
+    }
+  }
+
+  // Render editor panel
+  if (editingShellProfile) {
+    editorEl.appendChild(createModalShellProfileEditor());
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'shell-profiles-editor-placeholder';
+    placeholder.textContent = 'Select a profile or create a new one';
+    editorEl.appendChild(placeholder);
+  }
+}
+
+function cloneProfile(profile) {
+  const clonedProfile = {
+    id: `${profile.id}-copy-${Date.now()}`,
+    name: `${profile.name || profile.id} (副本)`,
+    command: profile.command,
+    args: profile.args ? [...profile.args] : [],
+  };
+
+  bridge.addShellProfile(clonedProfile).then((config) => {
+    const userIds = new Set((config.profiles ?? []).map((p) => p.id));
+    shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
+    defaultShellProfileId = config.defaultProfile ?? '';
+
+    // Enter edit mode with the cloned profile (same as New Profile but with content filled in)
+    selectedShellProfileId = clonedProfile.id;
+    editingShellProfile = {
+      id: clonedProfile.id,
+      name: clonedProfile.name,
+      command: clonedProfile.command,
+      args: formatArgs(clonedProfile.args ?? []),
+      isNew: true // Treat as new so user can edit the ID
+    };
+    renderModalShellProfiles();
+  }).catch(reportError);
+}
+
+function reorderProfiles(draggedId, targetId) {
+  const draggedIndex = shellProfiles.findIndex(p => p.id === draggedId);
+  const targetIndex = shellProfiles.findIndex(p => p.id === targetId);
+
+  if (draggedIndex === -1 || targetIndex === -1) return;
+
+  // Remove dragged profile and insert at target position
+  const [draggedProfile] = shellProfiles.splice(draggedIndex, 1);
+  shellProfiles.splice(targetIndex, 0, draggedProfile);
+
+  // Save the new order (add all profiles to persist order)
+  const userProfiles = shellProfiles.filter(p => !detectedShellProfiles.some(dp => dp.id === p.id));
+  const savePromises = userProfiles.map(p => bridge.addShellProfile(p));
+
+  Promise.all(savePromises).then(() => {
+    renderModalShellProfiles();
+  }).catch(reportError);
+}
+
+function createModalShellProfileEditor() {
+  const editor = document.createElement('div');
+  editor.className = 'shell-profile-editor';
+
+  const fields = [
+    { key: 'name', label: 'Name (optional)', placeholder: 'e.g. Zsh' },
+    { key: 'id', label: 'ID', placeholder: 'e.g. zsh' },
+    { key: 'command', label: 'Command', placeholder: '/bin/zsh' },
+    { key: 'args', label: 'Arguments', placeholder: '-il' },
+  ];
+
+  const inputs = {};
+  for (const field of fields) {
+    const label = document.createElement('label');
+    label.textContent = field.label;
+    label.setAttribute('for', `modal-shell-edit-${field.key}`);
+
+    const input = document.createElement('input');
+    input.id = `modal-shell-edit-${field.key}`;
+    input.type = 'text';
+    input.value = editingShellProfile[field.key] ?? '';
+    input.placeholder = field.placeholder;
+    input.dataset.field = field.key;
+    inputs[field.key] = input;
+
+    if (field.key === 'name' && editingShellProfile.isNew) {
+      input.addEventListener('input', () => {
+        const idInput = inputs.id;
+        if (!idInput.value && input.value.trim()) {
+          idInput.value = input.value.trim().toLowerCase().replace(/\s+/g, '-');
+        }
+      });
+    }
+
+    editor.append(label, input);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'shell-profile-editor-actions';
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'settings-btn shell-profile-editor-btn';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => {
+    editingShellProfile = null;
+    selectedShellProfileId = null;
+    renderModalShellProfiles();
+  });
+
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'settings-btn shell-profile-editor-btn is-primary';
+  save.textContent = 'Save';
+  save.addEventListener('click', () => {
+    const profile = {
+      id: inputs.id.value.trim(),
+      name: inputs.name.value.trim(),
+      command: inputs.command.value.trim(),
+      args: splitArgs(inputs.args.value.trim()),
+    };
+
+    if (!profile.id || !profile.command) {
+      reportError(new Error('ID and Command are required'));
+      return;
+    }
+
+    bridge.addShellProfile(profile).then((config) => {
+      const userIds = new Set((config.profiles ?? []).map((p) => p.id));
+      shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
+      defaultShellProfileId = config.defaultProfile ?? '';
+
+      // Select the newly created/saved profile
+      selectedShellProfileId = profile.id;
+      editingShellProfile = {
+        id: profile.id,
+        name: profile.name,
+        command: profile.command,
+        args: formatArgs(profile.args),
+        isNew: false
+      };
+      renderModalShellProfiles();
+    }).catch(reportError);
+  });
+
+  actions.append(cancel, save);
+  editor.appendChild(actions);
+
+  queueMicrotask(() => {
+    const firstInput = editor.querySelector('input');
+    if (firstInput) {
+      firstInput.focus();
+      firstInput.select();
+    }
+  });
+
+  return editor;
 }
 
 function createTerminalTheme(accent) {
@@ -736,6 +1067,14 @@ function getPaneLeft(index, previewWidth, focusedIndex) {
   return focusedLeft + settings.paneWidth + (index - focusedIndex - 1) * previewWidth;
 }
 
+function getTextColorForBackground(hexColor) {
+  const r = parseInt(hexColor.slice(1, 3), 16);
+  const g = parseInt(hexColor.slice(3, 5), 16);
+  const b = parseInt(hexColor.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? '#000' : '#fff';
+}
+
 function createTab(pane, index, focusedIndex, dragMeta) {
   const tab = document.createElement('div');
   tab.className = `tab${index === focusedIndex ? ' is-focused' : ''}`;
@@ -746,7 +1085,9 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   if (dragMeta?.insertBefore) {
     tab.classList.add('insert-before');
   }
-  tab.style.setProperty('--pane-accent', pane.accent);
+  const accentColor = pane.customColor || pane.accent;
+  tab.style.setProperty('--pane-accent', accentColor);
+  tab.style.setProperty('--tab-text-color', getTextColorForBackground(accentColor));
   tab.dataset.paneId = pane.id;
   tab.addEventListener('contextmenu', (event) => {
     event.preventDefault();
@@ -767,6 +1108,13 @@ function createTab(pane, index, focusedIndex, dragMeta) {
 
   const swatch = document.createElement('span');
   swatch.className = 'tab-swatch';
+
+  // Show number badge in navigation mode
+  if (currentMode === 'nav') {
+    swatch.textContent = String(index + 1);
+    // Apply text color based on accent color brightness
+    swatch.style.setProperty('--swatch-text-color', 'var(--tab-text-color)');
+  }
 
   let label;
   if (renamingPaneId === pane.id) {
@@ -809,6 +1157,13 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   close.textContent = 'x';
   close.setAttribute('aria-label', `Close tab ${pane.id}`);
   close.disabled = panes.length === 1;
+
+  // Show pending close state
+  if (pendingClosePaneId === pane.id) {
+    close.classList.add('pending-close');
+    close.textContent = '?';
+  }
+
   close.addEventListener('click', (event) => {
     event.stopPropagation();
     closePane(index);
@@ -822,7 +1177,8 @@ function createTab(pane, index, focusedIndex, dragMeta) {
 function createPane(pane) {
   const paneEl = document.createElement('article');
   paneEl.className = 'pane';
-  paneEl.style.setProperty('--pane-accent', pane.accent);
+  const accentColor = pane.customColor || pane.accent;
+  paneEl.style.setProperty('--pane-accent', accentColor);
   paneEl.addEventListener('click', () => {
     focusPane(pane.id);
   });
@@ -840,12 +1196,15 @@ function createPane(pane) {
   terminalHost.className = 'terminal-host';
   surface.append(terminalHost);
   body.append(surface);
+  paneAlert.attach(paneEl, body);
   shell.append(body);
   paneEl.append(shell);
 
   const terminal = new Terminal({
+    allowProposedApi: true,
     allowTransparency: true,
-    convertEol: true,
+    convertEol: false,
+    customGlyphs: true,
     cursorBlink: true,
     disableStdin: false,
     drawBoldTextInBrightColors: false,
@@ -853,21 +1212,50 @@ function createPane(pane) {
     fontSize: settings.fontSize,
     lineHeight: 1.2,
     scrollback: 5000,
-    theme: createTerminalTheme(pane.accent),
+    theme: createTerminalTheme(accentColor),
   });
   const fitAddon = new FitAddon();
   const webLinksAddon = new WebLinksAddon(handleTerminalLinkActivation);
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(webLinksAddon);
+  // Unicode 11 width tables align xterm.js's wcwidth with what modern CLI
+  // apps (Node.js / Ink-based UIs like Claude Code) assume, so CJK
+  // characters reliably consume two cells instead of drifting between one
+  // and two when an app redraws after IME input.
+  terminal.loadAddon(new Unicode11Addon());
+  terminal.unicode.activeVersion = '11';
   terminal.open(terminalHost);
   try { terminal.loadAddon(new WebglAddon()); } catch {}
   terminal.attachCustomKeyEventHandler((event) => {
+    // Ctrl+Tab is reserved for pane MRU cycling — never let xterm forward
+    // the literal Tab keystroke to the PTY.
+    if (
+      event.type === 'keydown' &&
+      event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      event.code === 'Tab'
+    ) {
+      return false;
+    }
+    // Ctrl+Shift+C/V are reserved for copy/paste — handled by the
+    // window-level shortcut handler. Returning false here prevents xterm
+    // from consuming the event so it can bubble up and preventDefault()
+    // runs before the WebView intercepts it for DevTools/Carets.
+    if (
+      event.type === 'keydown' &&
+      event.ctrlKey &&
+      event.shiftKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      (event.key === 'C' || event.key === 'c' || event.key === 'V' || event.key === 'v')
+    ) {
+      return false;
+    }
     if (!isWindowsCtrlVPasteHotkey(event)) {
       return true;
     }
-
-    const clipboardSnapshot = getClipboardSnapshot();
-    return shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot);
+    return false;
   });
 
   const node = {
@@ -908,6 +1296,32 @@ function createPane(pane) {
     }
   });
 
+  terminal.onSelectionChange(() => {
+    const selection = terminal.getSelection();
+    if (selection) {
+      bridge.writeClipboardText(selection);
+    }
+  });
+
+  terminal.parser.registerOscHandler(52, (data) => {
+    const semicolon = data.indexOf(';');
+    if (semicolon === -1) {
+      return true;
+    }
+    const base64Text = data.slice(semicolon + 1);
+    if (!base64Text || base64Text === '?') {
+      return true;
+    }
+    try {
+      const bytes = atob(base64Text);
+      const text = new TextDecoder().decode(
+        Uint8Array.from(bytes, (c) => c.charCodeAt(0))
+      );
+      bridge.writeClipboardText(text);
+    } catch {}
+    return true;
+  });
+
   return node;
 }
 
@@ -931,6 +1345,9 @@ function fitTerminal(node, force = false) {
       cols,
       rows,
     });
+    // SIGWINCH on the PTY usually triggers a screen redraw — those bytes
+    // would otherwise look like background activity and trip the alert.
+    paneActivityWatcher.noteResize(node.paneId);
   }
 
   node.sizeKey = nextSizeKey;
@@ -962,6 +1379,7 @@ function ensurePaneNodes() {
 
   for (const [paneId, node] of paneNodeMap.entries()) {
     if (!activeIds.has(paneId)) {
+      paneActivityWatcher.forget(paneId);
       bridge.destroyTerminal({ paneId });
       node.terminal.dispose();
       node.root.remove();
@@ -974,6 +1392,7 @@ function ensurePaneNodes() {
       const node = createPane(pane);
       paneNodeMap.set(pane.id, node);
       stageEl.append(node.root);
+      paneActivityWatcher.setPaneEnabled(pane.id, pane.breathingMonitor !== false);
       requestAnimationFrame(() => {
         initializePaneTerminal(node);
       });
@@ -982,7 +1401,9 @@ function ensurePaneNodes() {
 }
 
 function createPaneData() {
-  const accent = accentPalette[(nextPaneNumber - 1) % accentPalette.length];
+  const usedAccents = new Set(panes.map((p) => p.accent.toLowerCase()));
+  const accent = ColorsRegistry.ACCENT_PALETTE.find((c) => !usedAccents.has(c.toLowerCase()))
+    || ColorsRegistry.ACCENT_PALETTE[(nextPaneNumber - 1) % ColorsRegistry.ACCENT_PALETTE.length];
   const focusedPane = panes[getFocusedIndex()];
   const pane = {
     id: `p${nextPaneNumber}`,
@@ -997,10 +1418,37 @@ function createPaneData() {
   return pane;
 }
 
+// Move `paneId` to the front of the MRU stack. Called when a pane is "really"
+// visited (clicked, navigation Enter, new pane, etc.) — not while previewing
+// in navigation mode and not while a cycle is in progress.
+function recordPaneVisit(paneId) {
+  if (!paneId) {
+    return;
+  }
+  if (paneMruOrder[0] === paneId) {
+    return;
+  }
+  paneMruOrder = [paneId, ...paneMruOrder.filter((id) => id !== paneId)];
+}
+
+// Drop dead pane IDs and append any new ones that snuck in. Keeps the MRU
+// invariant (one entry per current pane) without reshuffling the order.
+function syncPaneMruOrder() {
+  const known = new Set(panes.map((pane) => pane.id));
+  paneMruOrder = paneMruOrder.filter((id) => known.has(id));
+  for (const pane of panes) {
+    if (!paneMruOrder.includes(pane.id)) {
+      paneMruOrder.push(pane.id);
+    }
+  }
+}
+
 function focusPane(paneId, options = {}) {
   const { focusTerminal = true } = options;
+  paneCycleState = null;
   focusedPaneId = paneId;
-  isNavigationMode = false;
+  setMode('terminal');
+  recordPaneVisit(paneId);
   render();
   const node = paneNodeMap.get(paneId);
   if (node && focusTerminal) {
@@ -1012,8 +1460,10 @@ function focusPane(paneId, options = {}) {
 
 function addPane() {
   const newPane = createPaneData();
+  paneCycleState = null;
   panes = [...panes, newPane];
   focusedPaneId = newPane.id;
+  recordPaneVisit(newPane.id);
   render(true);
 }
 
@@ -1051,6 +1501,9 @@ function closePane(index, options = {}) {
     focusedPaneId = remainingPanes[fallbackIndex]?.id ?? remainingPanes[0]?.id ?? null;
   }
   panes = remainingPanes;
+  paneCycleState = null;
+  paneMruOrder = paneMruOrder.filter((id) => id !== closingPane.id);
+  recordPaneVisit(focusedPaneId);
 
   render(true);
 }
@@ -1063,12 +1516,21 @@ function beginRenamePane(index) {
 
   clearPendingTabFocus();
   renamingPaneId = pane.id;
-  render();
+  try {
+    render();
+  } catch (error) {
+    renamingPaneId = null;
+    reportError(error);
+  }
 }
 
 function cancelRenamePane() {
   renamingPaneId = null;
-  render();
+  try {
+    render();
+  } catch (error) {
+    reportError(error);
+  }
 }
 
 function commitRenamePane(paneId, nextTitle) {
@@ -1079,7 +1541,8 @@ function commitRenamePane(paneId, nextTitle) {
     entry.id === paneId ? { ...entry, title: trimmedTitle || null } : entry
   );
 
-  render();
+  // Return focus to the renamed pane's terminal
+  focusPane(paneId, { focusTerminal: true });
 }
 
 function clearPendingTabFocus() {
@@ -1206,6 +1669,10 @@ function getTabDropIndex(clientX) {
 }
 
 function renderTabs() {
+  if (isRenderingTabs) {
+    return;
+  }
+  isRenderingTabs = true;
   const focusedIndex = getFocusedIndex();
   const draggedPaneId = dragState?.paneId ?? null;
   let slot = 0;
@@ -1225,6 +1692,7 @@ function renderTabs() {
       return createTab(pane, index, focusedIndex, dragMeta);
     })
   );
+  isRenderingTabs = false;
 }
 
 function renderPanes(refit = false) {
@@ -1234,22 +1702,24 @@ function renderPanes(refit = false) {
   const focusedIndex = getFocusedIndex();
 
   ensurePaneNodes();
+  paneActivityWatcher.setFocus(focusedPaneId);
 
   panes.forEach((pane, index) => {
     const node = paneNodeMap.get(pane.id);
     const left = getPaneLeft(index, previewWidth, focusedIndex);
     const isFocused = index === focusedIndex;
+    const accentColor = pane.customColor || pane.accent;
 
     node.root.classList.toggle('is-focused', isFocused);
-    node.root.classList.toggle('is-navigation-target', isFocused && isNavigationMode);
-    node.root.style.setProperty('--pane-accent', pane.accent);
+    node.root.classList.toggle('is-navigation-target', isFocused && currentMode === 'nav');
+    node.root.style.setProperty('--pane-accent', accentColor);
     node.root.style.left = `${left}px`;
     node.root.style.zIndex = String(index + 1);
     node.root.style.height = `${stageHeight}px`;
 
-    if (node.accent !== pane.accent) {
-      node.terminal.options.theme = createTerminalTheme(pane.accent);
-      node.accent = pane.accent;
+    if (node.accent !== accentColor) {
+      node.terminal.options.theme = createTerminalTheme(accentColor);
+      node.accent = accentColor;
     }
 
     if (refit || node.needsFit) {
@@ -1278,6 +1748,85 @@ function moveFocus(delta) {
   render();
 }
 
+function navigateLeft() {
+  if (panes.length === 0) {
+    return;
+  }
+
+  const focusedIndex = getFocusedIndex();
+  const nextIndex = focusedIndex - 1;
+
+  if (nextIndex >= 0) {
+    focusPane(panes[nextIndex].id);
+  }
+}
+
+function navigateRight() {
+  if (panes.length === 0) {
+    return;
+  }
+
+  const focusedIndex = getFocusedIndex();
+  const nextIndex = focusedIndex + 1;
+
+  if (nextIndex < panes.length) {
+    focusPane(panes[nextIndex].id);
+  }
+}
+
+// Cycle to the previously-visited pane (similar to browser Ctrl+Tab).
+// First press steps from current to MRU[1]; subsequent presses while the
+// modifier is held step further back through the snapshot. Reverse cycles
+// (Shift+Ctrl+`) walk the snapshot the other way. The cycle commits when
+// the modifier is released (see commitPaneCycle).
+function cycleToRecentPane({ reverse = false } = {}) {
+  if (panes.length < 2) {
+    return;
+  }
+
+  syncPaneMruOrder();
+
+  if (!paneCycleState) {
+    paneCycleState = { snapshot: [...paneMruOrder], index: 0 };
+  }
+
+  const { snapshot } = paneCycleState;
+  if (snapshot.length < 2) {
+    return;
+  }
+
+  const step = reverse ? -1 : 1;
+  paneCycleState.index = (paneCycleState.index + step + snapshot.length) % snapshot.length;
+  const targetId = snapshot[paneCycleState.index];
+
+  if (!panes.some((pane) => pane.id === targetId)) {
+    // Target pane was closed mid-cycle — recover by aborting.
+    paneCycleState = null;
+    return;
+  }
+
+  focusedPaneId = targetId;
+  setMode('terminal');
+  render();
+
+  const node = paneNodeMap.get(targetId);
+  if (node) {
+    requestAnimationFrame(() => {
+      node.terminal.focus();
+    });
+  }
+}
+
+// Promote the cycle's final pane to the front of the MRU stack.
+// Called when the cycling modifier is released.
+function commitPaneCycle() {
+  if (!paneCycleState) {
+    return;
+  }
+  paneCycleState = null;
+  recordPaneVisit(focusedPaneId);
+}
+
 function isEditableTarget() {
   return (
     document.activeElement?.tagName === 'INPUT' ||
@@ -1293,8 +1842,12 @@ function getPaneNode(paneId) {
   return paneNodeMap.get(paneId) ?? null;
 }
 
-function getClipboardSnapshot() {
-  return bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+async function getClipboardSnapshot() {
+  try {
+    return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+  } catch {
+    return { text: '', hasImage: false };
+  }
 }
 
 function isWindowsCtrlVPasteHotkey(event) {
@@ -1306,10 +1859,6 @@ function isWindowsCtrlVPasteHotkey(event) {
     !event.shiftKey &&
     event.key.toLowerCase() === 'v'
   );
-}
-
-function shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot) {
-  return Boolean(clipboardSnapshot.hasImage && !clipboardSnapshot.text);
 }
 
 function copyTerminalSelection(paneId = focusedPaneId) {
@@ -1471,8 +2020,8 @@ function dismissContextMenuOnOutside(event) {
   }
 }
 
-function showTerminalContextMenu(node, event) {
-  const clipboardSnapshot = getClipboardSnapshot();
+async function showTerminalContextMenu(node, event) {
+  const clipboardSnapshot = await getClipboardSnapshot();
 
   const shellChildren = shellProfiles.map((p) => ({
     label: p.name || p.id,
@@ -1480,18 +2029,27 @@ function showTerminalContextMenu(node, event) {
     isDefault: p.id === defaultShellProfileId,
   }));
 
+  const pane = panes[getPaneIndex(node.paneId)];
+  const breathingOn = pane && pane.breathingMonitor !== false;
+
   const items = [
     { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
     { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
     { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
     { type: 'separator' },
+    { label: 'Change Color...', action: 'terminal-change-color' },
+    {
+      label: 'Background activity alert',
+      action: 'pane-toggle-breathing',
+      shortcut: breathingOn ? '✓' : '',
+    },
     { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
   ];
 
   if (shellChildren.length > 0) {
     items.push(
       { type: 'separator' },
-      { label: 'Change Shell', children: shellChildren },
+      { label: 'Change Profile', children: shellChildren },
     );
   }
 
@@ -1504,23 +2062,144 @@ function showTabContextMenu(paneId, event) {
     return;
   }
 
+  paneCycleState = null;
   focusedPaneId = paneId;
+  recordPaneVisit(paneId);
   render();
 
+  const pane = panes[paneIndex];
+  const hasCustomColor = pane && pane.customColor !== undefined;
+
   const items = [
+    { label: 'Change Color...', action: 'tab-change-color' },
+    { type: 'separator' },
     { label: 'Rename Tab', action: 'tab-rename' },
     { label: 'Close Tab', action: 'tab-close', disabled: panes.length <= 1 },
   ];
   showContextMenu(items, event.clientX, event.clientY, paneId);
 }
 
-function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
+function showColorPicker(paneId) {
+  hideContextMenu();
+
+  const paneIndex = getPaneIndex(paneId);
+  if (paneIndex === -1) return;
+
+  const pane = panes[paneIndex];
+  const currentColor = pane.customColor || pane.accent;
+
+  const picker = document.createElement('div');
+  picker.className = 'color-picker-overlay';
+  picker.innerHTML = `
+    <div class="color-picker-dialog">
+      <div class="color-picker-header">
+        <span>Pane Color</span>
+        <button type="button" class="color-picker-close" aria-label="Close">×</button>
+      </div>
+      <div class="color-picker-presets">
+        ${ColorsRegistry.PRESET_PANE_COLORS.map(color => `
+          <button type="button" class="color-preset${color === currentColor ? ' is-selected' : ''}"
+                  style="--color: ${color}" data-color="${color}" aria-label="Select ${color}"></button>
+        `).join('')}
+      </div>
+      <div class="color-picker-custom">
+        <label>Custom:</label>
+        <input type="color" class="color-picker-input" value="${currentColor}" />
+      </div>
+      <div class="color-picker-footer">
+        <button type="button" class="color-picker-clear">Clear Color</button>
+      </div>
+    </div>
+  `;
+
+  picker.addEventListener('click', (e) => {
+    if (e.target === picker) {
+      picker.remove();
+    }
+  });
+
+  picker.querySelector('.color-picker-close').addEventListener('click', () => picker.remove());
+
+  picker.querySelectorAll('.color-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const color = btn.dataset.color;
+      setPaneColor(paneId, color);
+      picker.remove();
+    });
+  });
+
+  const colorInput = picker.querySelector('.color-picker-input');
+  colorInput.addEventListener('input', () => {
+    setPaneColor(paneId, colorInput.value);
+  });
+
+  picker.querySelector('.color-picker-clear').addEventListener('click', () => {
+    clearPaneColor(paneId);
+    picker.remove();
+  });
+
+  document.body.appendChild(picker);
+  colorInput.focus();
+}
+
+function setPaneColor(paneId, color) {
+  const paneIndex = getPaneIndex(paneId);
+  if (paneIndex === -1) return;
+
+  panes[paneIndex] = { ...panes[paneIndex], customColor: color };
+  scheduleSettingsSave();
+  render();
+}
+
+function clearPaneColor(paneId) {
+  const paneIndex = getPaneIndex(paneId);
+  if (paneIndex === -1) return;
+
+  panes[paneIndex] = { ...panes[paneIndex], customColor: undefined };
+  scheduleSettingsSave();
+  render();
+}
+
+function togglePaneBreathingMonitor(paneId) {
+  const paneIndex = getPaneIndex(paneId);
+  if (paneIndex === -1) return;
+
+  const next = panes[paneIndex].breathingMonitor === false;
+  panes[paneIndex] = { ...panes[paneIndex], breathingMonitor: next };
+  paneActivityWatcher.setPaneEnabled(paneId, next);
+  scheduleSettingsSave();
+}
+
+// VIB-16: open the command palette over the current panes. Build a
+// feature-agnostic item list and let the palette module do the rest.
+function openTabSwitcher() {
+  hideContextMenu();
+  if (renamingPaneId !== null) {
+    cancelRenamePane();
+  }
+  if (!settingsPanelEl.classList.contains('is-hidden')) {
+    settingsPanelEl.classList.add('is-hidden');
+  }
+
+  const items = panes.map((pane) => ({
+    id: pane.id,
+    label: getPaneLabel(pane) || pane.id,
+    accent: pane.customColor || pane.accent,
+  }));
+
+  openCommandPalette(items, focusPane, {
+    placeholder: 'Switch tab by title…',
+    emptyText: 'No matching tabs',
+  });
+}
+
+async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
     return false;
   }
 
-  const clipboardSnapshot = options.clipboardSnapshot ?? getClipboardSnapshot();
+  const clipboardSnapshot = options.clipboardSnapshot ?? (await getClipboardSnapshot());
   if (!clipboardSnapshot.hasImage) {
     return false;
   }
@@ -1550,6 +2229,11 @@ function handleMenuAction(action, paneId) {
     return;
   }
 
+  if (action === 'terminal-change-color') {
+    showColorPicker(paneId);
+    return;
+  }
+
   if (action === 'tab-rename') {
     const paneIndex = getPaneIndex(paneId);
     if (paneIndex !== -1) {
@@ -1563,6 +2247,27 @@ function handleMenuAction(action, paneId) {
     if (paneIndex !== -1) {
       closePane(paneIndex);
     }
+    return;
+  }
+
+  if (action === 'tab-change-color') {
+    showColorPicker(paneId);
+    return;
+  }
+
+  if (action.startsWith('tab-set-color:')) {
+    const color = action.slice('tab-set-color:'.length);
+    setPaneColor(paneId, color);
+    return;
+  }
+
+  if (action === 'tab-clear-color') {
+    clearPaneColor(paneId);
+    return;
+  }
+
+  if (action === 'pane-toggle-breathing') {
+    togglePaneBreathingMonitor(paneId);
     return;
   }
 
@@ -1584,100 +2289,160 @@ function enterNavigationMode() {
     return;
   }
 
-  isNavigationMode = true;
+  // Save the source pane ID so we can return to it on cancel
+  enterNavSourcePaneId = focusedPaneId;
+  setMode('nav');
   blurFocusedTerminal();
   render();
 }
 
-function updateStatus() {
-  const focusedPane = panes[getFocusedIndex()];
-
-  if (isNavigationMode) {
-    statusLabelEl.classList.add('is-navigation-mode');
-    statusLabelEl.textContent = 'Navigation Mode';
-    statusHintEl.textContent = 'Left/Right or H/L to flip; Enter to Focus';
-    return;
+function cancelNavigationMode() {
+  // Return focus to the pane that was focused when entering nav mode
+  if (enterNavSourcePaneId) {
+    focusPane(enterNavSourcePaneId, { focusTerminal: true });
+    enterNavSourcePaneId = null;
+  } else {
+    setMode('terminal');
+    render();
   }
-
-  statusLabelEl.classList.remove('is-navigation-mode');
-  statusLabelEl.textContent = `Focused: ${getPaneLabel(focusedPane) || focusedPane.id}`;
-  statusHintEl.textContent = 'Ctrl+B to enter navigation mode';
 }
 
-window.addEventListener(
-  'keydown',
-  (event) => {
-    const key = event.key.toLowerCase();
-    const isMac = bridge.platform === 'darwin';
-    const openTabHotkey = isMac
-      ? event.metaKey && !event.ctrlKey && !event.altKey && key === 't'
-      : event.ctrlKey && !event.metaKey && !event.altKey && key === 't';
-    const enterNavigationHotkey =
-      event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && key === 'b';
-    const copyHotkey = isMac
-      ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'c'
-      : event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && key === 'c';
-    const pasteHotkey = isMac
-      ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'v'
-      : event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && key === 'v';
-    const windowsCtrlVPasteHotkey = isWindowsCtrlVPasteHotkey(event);
+function updateStatus() {
+  const focusedPane = panes[getFocusedIndex()];
+  const focusedPaneLabel = getPaneLabel(focusedPane) || focusedPane.id;
 
-    if (openTabHotkey) {
-      event.preventDefault();
-      addPane();
-      return;
-    }
+  // Use the hint bar system
+  const keymap = ShortcutsRegistry.getActiveKeymap();
+  const { modeLabel, hintsHtml } = renderHintBar(
+    keymap,
+    currentMode,
+    focusedPaneLabel,
+    bridge.platform
+  );
 
-    if (enterNavigationHotkey && document.activeElement?.tagName !== 'INPUT') {
-      event.preventDefault();
-      enterNavigationMode();
-      return;
-    }
+  statusLabelEl.textContent = modeLabel;
+  statusLabelEl.classList.toggle('is-navigation-mode', currentMode === 'nav');
+  statusHintEl.innerHTML = hintsHtml;
+}
 
-    if (copyHotkey && document.activeElement?.tagName !== 'INPUT') {
-      if (copyTerminalSelection()) {
-        event.preventDefault();
+// ---------------------------------------------------------------------------
+// VIB-33: Navigation mode enhancement functions
+// ---------------------------------------------------------------------------
+
+function focusPaneAt(index) {
+  if (panes.length === 0 || index < 0 || index >= panes.length) return;
+  paneCycleState = null;
+  focusedPaneId = panes[index].id;
+  // Stay in nav mode, just update which pane is focused
+  render();
+}
+
+function getPaneCount() {
+  return panes.length;
+}
+
+function getPaneIdAt(index) {
+  if (panes.length === 0 || index < 0 || index >= panes.length) return null;
+  return panes[index].id;
+}
+
+// Two-step close confirmation state
+let pendingClosePaneId = null;
+
+function requestClosePane(paneId) {
+  if (pendingClosePaneId === paneId) {
+    // Second press - confirmed
+    const index = panes.findIndex((pane) => pane.id === paneId);
+    if (index !== -1) {
+      pendingClosePaneId = null;
+      closePane(index);
+
+      // Exit nav mode and return focus to the now-focused pane after close
+      if (currentMode === 'nav' && panes.length > 0) {
+        focusPane(focusedPaneId, { focusTerminal: true });
       }
-      return;
     }
+  } else {
+    // First press - show pending state
+    pendingClosePaneId = paneId;
+    render();
+  }
+}
 
-    if ((pasteHotkey || windowsCtrlVPasteHotkey) && document.activeElement?.tagName !== 'INPUT') {
-      const clipboardSnapshot = getClipboardSnapshot();
-      if (
-        windowsCtrlVPasteHotkey &&
-        shouldDelegateWindowsCtrlVToTerminal(clipboardSnapshot)
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      void pasteIntoTerminal(undefined, { clipboardSnapshot });
-      return;
+function startInlineRename(paneId) {
+  const index = panes.findIndex((pane) => pane.id === paneId);
+  if (index !== -1) {
+    // Exit nav mode before starting rename
+    if (currentMode === 'nav') {
+      setMode('terminal');
     }
+    beginRenamePane(index);
+  }
+}
 
-    if (isEditableTarget() || !isNavigationMode) {
-      return;
-    }
+function openKeymapHelpModal() {
+  ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+}
 
-    if (event.key === 'ArrowLeft' || key === 'h') {
-      event.preventDefault();
-      moveFocus(-1);
-      return;
-    }
+// ---------------------------------------------------------------------------
+// Wire renderer-level callbacks into pure action handlers
+// ---------------------------------------------------------------------------
 
-    if (event.key === 'ArrowRight' || key === 'l') {
-      event.preventDefault();
-      moveFocus(1);
-      return;
-    }
+// Wire renderer-level callbacks into pure action handlers, then route every
+// global keydown through the declarative keymap dispatcher. The keydown switch
+// that used to live here is now `KEYMAP` in `input/keymap.js` plus a few flag
+// columns (`mode`, `skipInInput`, `stopPropagation`) interpreted by the
+// dispatcher.
+const keyboardActions = createActions({
+  addPane,
+  enterNavigationMode,
+  cycleToRecentPane,
+  navigateLeft,
+  navigateRight,
+  copyTerminalSelection,
+  pasteIntoTerminal,
+  moveFocus,
+  focusPane,
+  cancelNavigationMode,
+  getFocusedPaneId: () => focusedPaneId,
+  isCommandPaletteOpen,
+  closeCommandPalette,
+  openTabSwitcher,
+  focusPaneAt,
+  getPaneCount,
+  getPaneIdAt,
+  requestClosePane,
+  startInlineRename,
+  openKeymapHelpModal,
+});
 
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      focusPane(focusedPaneId);
-    }
-  },
-  true
-);
+const dispatchKeydown = createDispatcher({
+  getKeymap: ShortcutsRegistry.getActiveKeymap,
+  actions: keyboardActions,
+  getMode: () => currentMode,
+  isInputFocused: () => document.activeElement?.tagName === 'INPUT',
+  isCommandPaletteOpen,
+});
+
+window.addEventListener('keydown', dispatchKeydown, true);
+
+// Commit the pane cycle when the cycling modifier is released. Without this,
+// a user who presses Ctrl+` and then switches to a different pane via mouse
+// would not see their MRU updated to reflect the new active pane.
+window.addEventListener('keyup', (event) => {
+  if (paneCycleState && (event.key === 'Control' || event.key === 'Meta')) {
+    commitPaneCycle();
+  }
+});
+
+// If the window loses focus mid-cycle (alt-tab away), the keyup event for
+// the cycling modifier may never fire. Commit the cycle defensively so the
+// MRU stays consistent with what the user sees.
+window.addEventListener('blur', () => {
+  if (paneCycleState) {
+    commitPaneCycle();
+  }
+});
 
 addPaneButtonEl.addEventListener('click', () => {
   try {
@@ -1692,17 +2457,98 @@ settingsButtonEl.addEventListener('click', (event) => {
   const wasHidden = settingsPanelEl.classList.toggle('is-hidden');
   if (wasHidden) {
     editingShellProfile = null;
-    loadShellProfiles();
   }
 });
 
-settingsPanelEl.addEventListener('click', (event) => {
-  event.stopPropagation();
+// Shell profiles modal button (clickable row)
+shellProfilesSettingsBtn.addEventListener('click', () => {
+  openShellProfilesModal();
 });
 
-shellProfileAddBtn.addEventListener('click', () => {
-  editingShellProfile = { id: '', name: '', command: '', args: '' };
-  renderShellProfiles();
+shellProfilesSettingsBtn.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openShellProfilesModal();
+  }
+});
+
+// ----------------------------------------------------------------
+// Keyboard shortcuts modal
+// ----------------------------------------------------------------
+
+// Keyboard shortcuts modal button (clickable row)
+keyboardShortcutsSettingsBtn.addEventListener('click', () => {
+  ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+});
+
+keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+  }
+});
+
+// Fullscreen toggle
+function isFullscreenSupported() {
+  return (
+    document.documentElement.requestFullscreen ||
+    document.documentElement.webkitRequestFullscreen ||
+    false
+  );
+}
+
+function getIsFullscreen() {
+  return (
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    null
+  );
+}
+
+function updateFullscreenButton() {
+  const isFs = getIsFullscreen();
+  fullscreenButtonEl.classList.toggle('is-fullscreen', Boolean(isFs));
+  fullscreenButtonEl.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Enter fullscreen');
+}
+
+function toggleFullscreen() {
+  if (!isFullscreenSupported()) {
+    return;
+  }
+
+  if (getIsFullscreen()) {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  } else {
+    const elem = document.documentElement;
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen();
+    } else if (elem.webkitRequestFullscreen) {
+      elem.webkitRequestFullscreen();
+    }
+  }
+}
+
+function hideFullscreenButtonIfUnsupported() {
+  if (!isFullscreenSupported()) {
+    fullscreenButtonEl.classList.add('is-hidden');
+  }
+}
+
+document.addEventListener('fullscreenchange', updateFullscreenButton);
+document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+
+fullscreenButtonEl.addEventListener('click', () => {
+  toggleFullscreen();
+});
+
+hideFullscreenButtonIfUnsupported();
+
+settingsPanelEl.addEventListener('click', (event) => {
+  event.stopPropagation();
 });
 
 fontSizeInputEl.addEventListener('change', () => {
@@ -1750,6 +2596,18 @@ function updatePaneOpacity(nextValue) {
   scheduleSettingsSave();
 }
 
+function updatePaneMaskOpacity(nextValue) {
+  const parsedValue = Number(nextValue);
+  if (!Number.isFinite(parsedValue)) {
+    applySettings();
+    return;
+  }
+
+  settings.paneMaskOpacity = Math.max(0, Math.min(1, Number(parsedValue.toFixed(2))));
+  applySettings();
+  scheduleSettingsSave();
+}
+
 paneWidthRangeEl.addEventListener('input', () => {
   updatePaneWidth(paneWidthRangeEl.value);
 });
@@ -1764,6 +2622,20 @@ paneOpacityRangeEl.addEventListener('input', () => {
 
 paneOpacityInputEl.addEventListener('change', () => {
   updatePaneOpacity(paneOpacityInputEl.value);
+});
+
+paneMaskOpacityRangeEl.addEventListener('input', () => {
+  updatePaneMaskOpacity(paneMaskOpacityRangeEl.value);
+});
+
+paneMaskOpacityInputEl.addEventListener('change', () => {
+  updatePaneMaskOpacity(paneMaskOpacityInputEl.value);
+});
+
+breathingAlertToggleEl.addEventListener('change', () => {
+  settings.breathingAlertEnabled = breathingAlertToggleEl.checked;
+  paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+  scheduleSettingsSave();
 });
 
 window.addEventListener('pointerdown', (event) => {

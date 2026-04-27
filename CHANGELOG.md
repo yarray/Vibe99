@@ -2,6 +2,77 @@
 
 <!-- towncrier release notes start -->
 
+## [Unreleased]
+
+### Added
+
+- Navigation mode enhancements (VIB-33):
+  - Number shortcuts (1-9) for jumping to specific panes
+  - Home/End keys for jumping to first/last pane
+  - Editing actions: n (new pane), x (close pane), r (rename pane)
+  - Help system with ? key to open keyboard shortcuts modal
+  - Two-step close confirmation with visual feedback
+  - Number badges in tabs during navigation mode
+  - Proper focus management (exit nav mode after close/rename, return focus to terminal)
+
+## 0.7.2 - 2026-04-27
+
+### Improved
+
+- Replaced pane default color palette with Okabe-Ito-based divergent colors (VIB-41). Adjacent colors are now visually distinct across the full hue circle, with alternating luminance for stronger separation. Covers accentPalette, presetPaneColors, and initialPanes.
+
+## 0.7.1 - 2026-04-26
+
+### Misc
+
+- Updated changelog to cover the 0.6.0 and 0.7.0 releases.
+- Improved README with new shortcuts and features.
+
+
+## 0.7.0 - 2026-04-26
+
+### Added
+
+- Command palette for tab switching (VIB-16).
+- Keyboard shortcut editing interface with configurable defaults.
+- `Ctrl+Tab` / `Ctrl+Shift+Tab` pane cycling.
+- `Ctrl+Left` / `Ctrl+Right` spatial navigation between panes.
+- Breathing mask pulse on backgrounded panes with settled output (VIB-8).
+- Activity alert with global and per-pane toggles accessible from the pane context menu.
+- Complex settings (shell profiles, keyboard shortcuts) moved to independent modal dialogs.
+
+### Fixed
+
+- Quotes are now preserved in shell profile arguments round-trip.
+- BG mask opacity range extended to the full 0–1 range in both UI controls and settings sanitization.
+- Removed dead shell profile rendering code from an incomplete refactoring.
+
+### Misc
+
+- Extracted command palette into its own module.
+- Modularized keyboard shortcuts into separate files.
+
+
+## 0.6.0 - 2026-04-25
+
+### Added
+
+- Custom pane colors — each pane can have its own accent color visible on the tab and mask overlay (VIB-10).
+- Fullscreen toggle button in the toolbar.
+- Color mask overlay on background panes using the pane accent color.
+- Focused tab is filled with its theme color for better visibility.
+
+### Fixed
+
+- Terminal rendering glitches resolved with improved UTF-8 handling and batched writes per animation frame.
+- Clipboard: normal copy/paste, Shift+selection for edit mode, and OSC52 support.
+- Terminal links now open on click without a modifier key.
+- Tab rename error handling and re-entrant render race condition.
+- Race condition that could make keyboard input impossible in SSH sessions.
+- Linux GitHub Actions build and local dev setup.
+- Switched from deprecated `shell.open` to the opener plugin.
+
+
 ## 0.5.0 - 2026-04-25
 
 ### Added

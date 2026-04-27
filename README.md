@@ -33,16 +33,32 @@ Build release artifacts with:
 npm run tauri:build
 ```
 
-## Basic Controls
+## Features
 
-- `Cmd+T` on macOS or `Ctrl+T` elsewhere: add a pane
-- `Ctrl+B`: enter navigation mode
-- `Left` / `Right` or `H` / `L` in navigation mode: move focus
-- `Enter` in navigation mode: focus the selected terminal
-- double-click a tab: rename it
-- drag a tab: reorder panes
-- top-right `+`: add pane
-- top-right gear: open display settings
+- **Custom pane colors** — each pane can have its own accent color for quick visual identification.
+- **Activity alerts** — backgrounded panes with settled output show a pulsing breathing mask, with global and per-pane toggles.
+- **Command palette** — quick tab switching via a searchable palette.
+- **Configurable shortcuts** — keyboard shortcuts can be edited in the settings modal.
+- **Session restore** — pane layout, directories, shell profiles, and tab titles are preserved across restarts.
+- **WSL integration** — auto-detects all installed distributions and creates a shell profile for each one.
+- **Font selection** — pick any installed monospace font from settings.
+
+## Controls
+
+| Shortcut | Action |
+|---|---|
+| `Cmd+N` / `Ctrl+N` | Add a new pane |
+| `Ctrl+Tab` | Cycle to the most recently visited pane (add `Shift` to reverse) |
+| `Cmd+Shift+O` / `Ctrl+Shift+O` | Open the command palette (jump to any pane) |
+| `Ctrl+Left` / `Ctrl+Right` | Spatial navigation between panes |
+| `Ctrl+B` | Enter navigation mode (`H`/`L` or arrows to move, `Enter` to focus) |
+| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste in the focused terminal |
+| double-click tab | Rename it |
+| drag tab | Reorder panes |
+| top-right `+` | Add a pane |
+| top-right gear | Open display settings |
+
+Shortcuts are configurable from the gear menu → Keyboard Shortcuts.
 
 ## Platform Defaults And Known Issues
 
