@@ -161,10 +161,18 @@ impl PtyManager {
         // Build the shell command with fallback chain.
         let mut cmd = None;
         let mut last_error = String::new();
+        let mut shell_stem = String::new();
 
         for candidate in shell_candidates(&app, shell_profile_id) {
+            let stem = candidate
+                .shell
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
             match build_command(&candidate, &cwd) {
                 Ok(c) => {
+                    shell_stem = stem;
                     cmd = Some(c);
                     break;
                 }
@@ -185,6 +193,13 @@ impl PtyManager {
         // Ensure colour support environment variables are set.
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+
+        // Inject OSC 7 shell integration so the frontend can track cwd changes.
+        if shell_stem == "powershell" || shell_stem == "pwsh" {
+            cmd.arg("-NoExit");
+            cmd.arg("-Command");
+            cmd.arg(powershell_osc7_init());
+        }
 
         let mut child = pair
             .slave
@@ -779,4 +794,15 @@ fn is_executable(path: &Path) -> bool {
 #[cfg(not(unix))]
 fn is_executable(path: &Path) -> bool {
     path.is_file()
+}
+
+// ----------------------------------------------------------------
+// Shell integration helpers
+// ----------------------------------------------------------------
+
+/// PowerShell init script that wraps the prompt function to emit OSC 7
+/// on every prompt. Uses [char]27/[char]7 instead of backtick escapes to
+/// avoid quoting issues when passed as a -Command argument.
+fn powershell_osc7_init() -> String {
+    "$__v99_op=${function:prompt};function prompt{$osc=[char]27+']7;file://'+$env:COMPUTERNAME+'/'+$PWD.Path.Replace('\\','/')+[char]7;Write-Host -NoNewLine $osc;if($__v99_op){& $__v99_op}else{'PS > '}}".to_string()
 }

@@ -57,7 +57,12 @@ function extractPathFromOsc7(data) {
   if (slashIndex === -1) {
     return null;
   }
-  const encodedPath = afterPrefix.slice(slashIndex);
+  let encodedPath = afterPrefix.slice(slashIndex);
+  // Windows OSC 7 paths look like /C:/Users/... — strip the leading slash
+  // so the result is a valid Windows path (C:/Users/...).
+  if (/^\/[A-Za-z]:\//.test(encodedPath)) {
+    encodedPath = encodedPath.slice(1);
+  }
   try {
     return decodeURIComponent(encodedPath);
   } catch {
