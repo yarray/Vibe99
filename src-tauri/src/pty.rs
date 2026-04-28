@@ -392,7 +392,11 @@ impl PtyManager {
             let Some(session) = sessions.remove(pane_id) else {
                 return;
             };
-            let PtySession { mut killer, exit_thread, .. } = session;
+            let PtySession {
+                mut killer,
+                exit_thread,
+                ..
+            } = session;
             let _ = killer.kill();
             exit_thread
         };

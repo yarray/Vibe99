@@ -132,7 +132,7 @@ function createUnavailableBridge() {
     saveSettings: () => Promise.resolve({}),
     listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
     addShellProfile: fail,
-    listLayouts: () => Promise.resolve({ layouts: [], activeLayoutId: '' }),
+    listLayouts: () => Promise.resolve({ layouts: [], activeLayoutId: '', defaultLayoutId: '' }),
     saveLayout: fail,
     deleteLayout: fail,
     renameLayout: fail,
@@ -221,6 +221,7 @@ function createTauriBridge(tauri) {
     saveLayout: (layout) => invoke('layout_save', { layout }),
     deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
+    setLayoutDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
     openLayoutInNewWindow: (layoutId) => invoke('layout_open_in_new_window', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
@@ -276,6 +277,7 @@ let pendingTabFocus = null;
 let sessionRestoreComplete = false;
 let layouts = [];
 let activeLayoutId = '';
+let defaultLayoutId = '';
 let selectedLayoutId = null;
 
 // Mode management
@@ -680,6 +682,7 @@ async function saveCurrentLayout(name) {
     .then((config) => {
       layouts = config.layouts ?? [];
       activeLayoutId = config.activeLayoutId ?? layout.id;
+      defaultLayoutId = config.defaultLayoutId ?? '';
       scheduleSettingsSave();
     })
     .catch(reportError);
@@ -724,6 +727,7 @@ async function toggleLayoutsDropdown() {
     const config = await bridge.listLayouts();
     layouts = config.layouts ?? [];
     activeLayoutId = config.activeLayoutId ?? '';
+    defaultLayoutId = config.defaultLayoutId ?? '';
   } catch (error) {
     reportError(error);
   }
@@ -1177,6 +1181,7 @@ function openLayoutsModal() {
     .then((config) => {
       layouts = config.layouts ?? [];
       activeLayoutId = config.activeLayoutId ?? '';
+      defaultLayoutId = config.defaultLayoutId ?? '';
     })
     .catch(reportError)
     .finally(() => {
@@ -1231,6 +1236,7 @@ function openLayoutsModal() {
           .then((config) => {
             layouts = config.layouts ?? [];
             activeLayoutId = config.activeLayoutId ?? layout.id;
+            defaultLayoutId = config.defaultLayoutId ?? '';
             scheduleSettingsSave();
             renderModalLayouts(overlay);
           })
@@ -1265,14 +1271,24 @@ function renderModalLayouts(overlay) {
   } else {
     for (const layout of layouts) {
       const isActive = layout.id === activeLayoutId;
+      const isDefault = layout.id === defaultLayoutId;
       const isSelected = layout.id === selectedLayoutId;
       const item = document.createElement('div');
-      item.className = `layout-item${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`;
+      item.className = `layout-item${isActive ? ' is-active' : ''}${isDefault ? ' is-default' : ''}${isSelected ? ' is-selected' : ''}`;
       item.dataset.layoutId = layout.id;
 
       const nameEl = document.createElement('div');
       nameEl.className = 'layout-name';
       nameEl.textContent = layout.name || layout.id;
+
+      // Add star for default layout
+      if (isDefault) {
+        const star = document.createElement('span');
+        star.className = 'layout-default-star';
+        star.textContent = ' ⭐';
+        star.title = 'Default layout';
+        nameEl.appendChild(star);
+      }
 
       const info = document.createElement('div');
       info.className = 'layout-pane-count';
@@ -1311,6 +1327,7 @@ function renderModalLayouts(overlay) {
             .then((config) => {
               layouts = config.layouts ?? [];
               activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+              defaultLayoutId = config.defaultLayoutId ?? '';
               renderModalLayouts(overlay);
             })
             .catch(reportError);
@@ -1332,6 +1349,7 @@ function renderModalLayouts(overlay) {
             .then((config) => {
               layouts = config.layouts ?? [];
               activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+              defaultLayoutId = config.defaultLayoutId ?? '';
               if (selectedLayoutId === layout.id) selectedLayoutId = null;
               renderModalLayouts(overlay);
             })
@@ -1388,6 +1406,7 @@ function renderModalLayouts(overlay) {
         .then((config) => {
           layouts = config.layouts ?? [];
           activeLayoutId = config.activeLayoutId ?? selected.id;
+          defaultLayoutId = config.defaultLayoutId ?? '';
           scheduleSettingsSave();
           renderModalLayouts(overlay);
         })
@@ -1395,6 +1414,47 @@ function renderModalLayouts(overlay) {
     });
     actionsRow.appendChild(saveBtn);
     info.appendChild(actionsRow);
+
+    // Secondary actions row
+    const secondaryActionsRow = document.createElement('div');
+    secondaryActionsRow.className = 'layout-info-actions';
+
+    // Open in New Window button
+    const openInNewWindowBtn = document.createElement('button');
+    openInNewWindowBtn.type = 'button';
+    openInNewWindowBtn.className = 'settings-btn layout-info-btn';
+    openInNewWindowBtn.textContent = 'Open in New Window';
+    openInNewWindowBtn.addEventListener('click', async () => {
+      await bridge.openLayoutInNewWindow(selected.id).catch(reportError);
+      // Close modal after opening
+      overlay?.remove();
+    });
+    secondaryActionsRow.appendChild(openInNewWindowBtn);
+
+    // Set as Default button
+    const setDefaultBtn = document.createElement('button');
+    setDefaultBtn.type = 'button';
+    setDefaultBtn.className = 'settings-btn layout-info-btn';
+    const isDefault = selected.id === defaultLayoutId;
+    setDefaultBtn.textContent = isDefault ? '✓ Default' : 'Set as Default';
+    setDefaultBtn.disabled = isDefault;
+    if (isDefault) {
+      setDefaultBtn.classList.add('is-default');
+    }
+    setDefaultBtn.addEventListener('click', () => {
+      if (selected.id === defaultLayoutId) return;
+      bridge.setLayoutDefault(selected.id)
+        .then(() => bridge.listLayouts())
+        .then((config) => {
+          layouts = config.layouts ?? [];
+          defaultLayoutId = config.defaultLayoutId ?? '';
+          renderModalLayouts(overlay);
+        })
+        .catch(reportError);
+    });
+    secondaryActionsRow.appendChild(setDefaultBtn);
+
+    info.appendChild(secondaryActionsRow);
 
     const paneInfo = document.createElement('div');
     paneInfo.style.fontSize = '12px';
@@ -3608,6 +3668,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const layoutConfig = await bridge.listLayouts();
     layouts = layoutConfig.layouts ?? [];
     activeLayoutId = layoutConfig.activeLayoutId ?? '';
+    defaultLayoutId = layoutConfig.defaultLayoutId ?? '';
 
     // Migration: if layouts is empty and session.panes exists, auto-create Default
     if (layouts.length === 0 && savedSettings?.session?.panes?.length > 0) {

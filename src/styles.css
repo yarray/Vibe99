@@ -1420,6 +1420,34 @@ body.is-dragging-tabs {
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
+/* Default layout star indicator */
+.layout-default-star {
+  color: #f9d71c;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* Layout item with default styling */
+.layout-item.is-default {
+  border-color: rgba(249, 215, 28, 0.3);
+}
+
+.layout-item.is-default .layout-name {
+  color: #fff;
+  font-weight: 500;
+}
+
+/* Default button state in layout info panel */
+.layout-info-btn.is-default {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.layout-info-btn.is-default:hover {
+  opacity: 0.6;
+  background: transparent !important;
+}
+
 /* Settings Modal Overlay */
 .settings-modal-overlay {
   position: fixed;

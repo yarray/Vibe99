@@ -48,6 +48,7 @@ fn main() {
             layout::layout_save,
             layout::layout_delete,
             layout::layout_rename,
+            layout::layout_set_default,
             layout::layout_open_in_new_window,
             shell_profile::shell_profiles_list,
             shell_profile::shell_profile_set,
@@ -64,8 +65,7 @@ fn main() {
             if let Some(layout_id) = &layout_id_arg {
                 if let Some(window) = app.get_webview_window("main") {
                     if let Ok(mut url) = window.url() {
-                        url.query_pairs_mut()
-                            .append_pair("layoutId", layout_id);
+                        url.query_pairs_mut().append_pair("layoutId", layout_id);
                         let _ = window.navigate(url);
                     }
                 }
