@@ -11,6 +11,11 @@
   - `sanitize_layouts()` validates saved layout arrays (deduplicated by id).
   - `sanitize_active_layout_id()` ensures the active layout reference is valid.
   - `settings_save()` preserves existing layouts from disk when the frontend omits them.
+- Rust backend: Layout CRUD Tauri commands (VIB-60).
+  - `layouts_list` — returns all saved layouts and the active layout id.
+  - `layout_save` — upserts a layout (add or replace by id), returns full settings.
+  - `layout_delete` — removes a layout and clears `activeLayoutId` if it pointed to the deleted one.
+  - `layout_rename` — updates the name of an existing layout.
 
 ### Improved
 
