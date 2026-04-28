@@ -2240,26 +2240,49 @@ function openCommandList() {
     settingsPanelEl.classList.add('is-hidden');
   }
 
-  const keymap = ShortcutsRegistry.getActiveKeymap();
-  const seen = new Set();
-  const items = [];
-  for (const entry of keymap) {
-    if (entry.mode !== '*' || !entry.hint || entry.hint === 'palette' || entry.hint === 'commands') continue;
-    if (seen.has(entry.action)) continue;
-    seen.add(entry.action);
-    items.push({
-      id: entry.action,
-      label: entry.hint,
-    });
-  }
+  const items = [
+    { id: 'change-profile',  label: 'Change profile' },
+    { id: 'change-color',    label: 'Change color' },
+    { id: 'rename-pane',     label: 'Rename pane' },
+    { id: 'profile-settings',  label: 'Profile settings' },
+    { id: 'shortcuts-settings', label: 'Shortcuts settings' },
+  ];
 
-  openCommandPalette(items, (actionName) => {
-    if (keyboardActions[actionName]) {
-      keyboardActions[actionName]();
+  openCommandPalette(items, (commandId) => {
+    if (commandId === 'change-profile') {
+      openProfileSwitcher();
+    } else if (commandId === 'change-color') {
+      showColorPicker(focusedPaneId);
+    } else if (commandId === 'rename-pane') {
+      const index = getPaneIndex(focusedPaneId);
+      if (index !== -1) beginRenamePane(index);
+    } else if (commandId === 'profile-settings') {
+      openShellProfilesModal();
+    } else if (commandId === 'shortcuts-settings') {
+      ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
     }
   }, {
     placeholder: 'Type a command…',
     emptyText: 'No matching commands',
+  });
+}
+
+function openProfileSwitcher() {
+  if (shellProfiles.length === 0) {
+    loadShellProfiles();
+    return;
+  }
+
+  const items = shellProfiles.map((p) => ({
+    id: p.id,
+    label: p.name || p.id,
+  }));
+
+  openCommandPalette(items, (profileId) => {
+    changePaneShell(focusedPaneId, profileId);
+  }, {
+    placeholder: 'Select a profile…',
+    emptyText: 'No matching profiles',
   });
 }
 

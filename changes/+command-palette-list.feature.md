@@ -1,1 +1,1 @@
-Press Ctrl+Shift+P (Cmd+Shift+P on macOS) to open a command palette listing all keyboard actions — search by name, arrow keys to move, Enter to run, Esc to dismiss.
+Press Ctrl+Shift+P (Cmd+Shift+P on macOS) to open a command palette with curated actions: Change profile, Change color, Rename pane, Profile settings, Shortcuts settings. Selecting "Change profile" opens a second palette listing shell profiles for the focused pane.

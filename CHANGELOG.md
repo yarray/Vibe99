@@ -6,6 +6,10 @@
 
 ### Added
 
+- Command Palette (Ctrl+Shift+P) with curated actions: Change profile, Change color, Rename pane, Profile settings, Shortcuts settings (VIB-52).
+
+### Improved
+
 - Navigation mode enhancements (VIB-33):
   - Number shortcuts (1-9) for jumping to specific panes
   - Home/End keys for jumping to first/last pane
