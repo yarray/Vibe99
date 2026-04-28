@@ -136,6 +136,7 @@ function createUnavailableBridge() {
     saveLayout: fail,
     deleteLayout: fail,
     renameLayout: fail,
+    openLayoutWindow: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
@@ -220,6 +221,7 @@ function createTauriBridge(tauri) {
     saveLayout: (layout) => invoke('layout_save', { layout }),
     deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
+    openLayoutWindow: (layoutId) => invoke('layout_open_window', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
     detectShellProfiles: () => invoke('shell_profiles_detect'),
@@ -697,7 +699,7 @@ async function toggleLayoutsDropdown() {
 
       item.append(checkmark, label);
       item.addEventListener('click', () => {
-        switchLayout(layout.id);
+        bridge.openLayoutWindow(layout.id).catch(reportError);
         closeLayoutsDropdown();
       });
 
@@ -1229,10 +1231,8 @@ function renderModalLayouts(overlay) {
       switchBtn.title = 'Switch to layout';
       switchBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        switchLayout(layout.id);
-        // Close modal after switching
+        bridge.openLayoutWindow(layout.id).catch(reportError);
         overlay?.remove();
-        scheduleSettingsSave();
       });
       actions.appendChild(switchBtn);
 
@@ -2872,10 +2872,10 @@ function openCommandList() {
     } else if (commandId === 'layout-save') {
       saveCurrentLayout().catch(reportError);
     } else if (commandId === 'layout-default') {
-      switchLayout('default');
+      bridge.openLayoutWindow('default').catch(reportError);
     } else if (commandId.startsWith('layout-switch:')) {
       const layoutId = commandId.slice('layout-switch:'.length);
-      switchLayout(layoutId);
+      bridge.openLayoutWindow(layoutId).catch(reportError);
     } else if (commandId === 'layout-manage') {
       openLayoutsModal();
     }
@@ -3562,7 +3562,20 @@ window.addEventListener('DOMContentLoaded', async () => {
       activeLayoutId = 'default';
     }
 
-    if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
+    // window.__VIBE99_LAYOUT_ID__ set by Rust for new-window layouts
+    const newWindowLayoutId = window.__VIBE99_LAYOUT_ID__ || null;
+
+    if (newWindowLayoutId) {
+      const targetLayout = layouts.find((l) => l.id === newWindowLayoutId);
+      if (targetLayout) {
+        activeLayoutId = newWindowLayoutId;
+        switchLayout(newWindowLayoutId);
+      } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
+        switchLayout(activeLayoutId);
+      } else if (savedSettings?.session?.panes?.length > 0) {
+        restoreSession(savedSettings.session);
+      }
+    } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
       switchLayout(activeLayoutId);
     } else if (savedSettings?.session?.panes?.length > 0) {
       restoreSession(savedSettings.session);
