@@ -775,6 +775,16 @@ body {
   line-height: 1;
 }
 
+.hint kbd .mod {
+  font-size: 0.85em;
+  vertical-align: 0.05em;
+  margin-right: 1px;
+}
+
+.hint kbd .mod:last-of-type {
+  margin-right: 3px;
+}
+
 .hint-sep {
   margin: 0 6px;
   color: rgba(255, 255, 255, 0.2);

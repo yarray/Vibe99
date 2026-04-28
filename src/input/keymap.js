@@ -180,11 +180,11 @@ export function formatChord(chord, platform = 'linux') {
   const [first] = parseChord(chord);
   const isMac = platform === 'darwin';
   const parts = [];
-  if (first.ctrl)  parts.push(isMac ? '⌘' : 'Ctrl');
-  if (first.shift) parts.push(isMac ? '⇧' : 'Shift');
-  if (first.alt)   parts.push(isMac ? '⌥' : 'Alt');
+  if (first.ctrl)  parts.push(isMac ? '⌘' : '⌃');
+  if (first.shift) parts.push('⇧');
+  if (first.alt)   parts.push('⌥');
   parts.push(formatKeyForDisplay(first.key));
-  return parts.join(isMac ? '' : '+');
+  return parts.join('');
 }
 
 function formatKeyForDisplay(key) {

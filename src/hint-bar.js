@@ -6,13 +6,40 @@
 
 import { formatChord, parseChord } from './input/keymap.js';
 
+const MODIFIER_SYMBOLS = new Set(['⌃', '⇧', '⌥', '⌘']);
+
+/**
+ * Format a chord as styled HTML for the hint bar.
+ * Modifier symbols get wrapped in <span class="mod"> for individual styling.
+ */
+function formatChordHtml(chord, platform) {
+  const [first] = parseChord(chord);
+  const isMac = platform === 'darwin';
+  const parts = [];
+  if (first.ctrl)  parts.push({ mod: true, ch: isMac ? '⌘' : '⌃' });
+  if (first.shift) parts.push({ mod: true, ch: '⇧' });
+  if (first.alt)   parts.push({ mod: true, ch: '⌥' });
+  const key = first.key === ' ' ? 'Space' : first.key;
+  parts.push({ mod: false, ch: key });
+  return parts.map(p => p.mod ? `<span class="mod">${p.ch}</span>` : p.ch).join('');
+}
+
+/**
+ * Wrap modifier symbols in a merged key string with <span class="mod">.
+ */
+function wrapMergedKeys(keys) {
+  return [...keys].map(ch =>
+    MODIFIER_SYMBOLS.has(ch) ? `<span class="mod">${ch}</span>` : ch
+  ).join('');
+}
+
 /**
  * Pairs of actions whose hints should be merged into a single combined hint.
  * Format: [action1, action2, mergedDisplayKeys, mergedDescription]
  */
 const MERGE_GROUPS = [
-  ['navigateLeft', 'navigateRight', 'Ctrl+←→', 'change pane'],
-  ['cycleRecent', 'cycleRecentReverse', 'Ctrl+Tab', 'recent'],
+  ['navigateLeft', 'navigateRight', '⌃←→', 'change pane'],
+  ['cycleRecent', 'cycleRecentReverse', '⌃Tab', 'recent'],
 ];
 
 /**
@@ -103,9 +130,9 @@ function applyMerges(entries) {
  * Render a single hint as HTML.
  */
 function renderHint(entry, currentMode, platform) {
-  // Merged entry: use pre-formatted keys
+  // Merged entry: use pre-formatted keys with styled modifiers
   if (entry._mergedKeys) {
-    return `<span class="hint"><kbd>${entry._mergedKeys}</kbd> ${entry.hint}</span>`;
+    return `<span class="hint"><kbd>${wrapMergedKeys(entry._mergedKeys)}</kbd> ${entry.hint}</span>`;
   }
 
   // Nav mode hint: "key description" format (key already separated)
@@ -119,9 +146,8 @@ function renderHint(entry, currentMode, platform) {
     return `<span class="hint">${entry.hint}</span>`;
   }
 
-  // Default: format chord from keymap
-  const chord = formatChord(entry.chord, platform);
-  return `<span class="hint"><kbd>${chord}</kbd> ${entry.hint}</span>`;
+  // Default: format chord as styled HTML
+  return `<span class="hint"><kbd>${formatChordHtml(entry.chord, platform)}</kbd> ${entry.hint}</span>`;
 }
 
 /**
