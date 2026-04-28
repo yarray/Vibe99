@@ -28,12 +28,21 @@ export function createActions(deps) {
     copyTerminalSelection: () => deps.copyTerminalSelection(),
     pasteIntoTerminal: () => { void deps.pasteIntoTerminal(); },
 
-    // Command palette
+    // Command palette (tab switcher)
     toggleCommandPalette: () => {
       if (deps.isCommandPaletteOpen()) {
         deps.closeCommandPalette();
       } else {
         deps.openTabSwitcher();
+      }
+    },
+
+    // Command palette (command list)
+    toggleCommandList: () => {
+      if (deps.isCommandPaletteOpen()) {
+        deps.closeCommandPalette();
+      } else {
+        deps.openCommandList();
       }
     },
 

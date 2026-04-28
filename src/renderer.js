@@ -17,6 +17,7 @@ import * as ShortcutsUI from './shortcuts-ui.js';
 import * as ColorsRegistry from './colors-registry.js';
 import { createActions } from './input/actions.js';
 import { createDispatcher } from './input/dispatcher.js';
+import { formatChord } from './input/keymap.js';
 import { renderHintBar } from './hint-bar.js';
 
 function getRuntimePlatform() {
@@ -2215,6 +2216,38 @@ function openTabSwitcher() {
   });
 }
 
+function openCommandList() {
+  hideContextMenu();
+  if (renamingPaneId !== null) {
+    cancelRenamePane();
+  }
+  if (!settingsPanelEl.classList.contains('is-hidden')) {
+    settingsPanelEl.classList.add('is-hidden');
+  }
+
+  const keymap = ShortcutsRegistry.getActiveKeymap();
+  const seen = new Set();
+  const items = [];
+  for (const entry of keymap) {
+    if (entry.mode !== '*' || !entry.hint || entry.hint === 'palette' || entry.hint === 'commands') continue;
+    if (seen.has(entry.action)) continue;
+    seen.add(entry.action);
+    items.push({
+      id: entry.action,
+      label: entry.hint,
+    });
+  }
+
+  openCommandPalette(items, (actionName) => {
+    if (keyboardActions[actionName]) {
+      keyboardActions[actionName]();
+    }
+  }, {
+    placeholder: 'Type a command…',
+    emptyText: 'No matching commands',
+  });
+}
+
 async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
@@ -2430,6 +2463,7 @@ const keyboardActions = createActions({
   isCommandPaletteOpen,
   closeCommandPalette,
   openTabSwitcher,
+  openCommandList,
   focusPaneAt,
   getPaneCount,
   getPaneIdAt,
