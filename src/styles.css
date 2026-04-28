@@ -958,6 +958,12 @@ body.is-dragging-tabs {
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5);
 }
 
+.color-preset.is-focused {
+  outline: 2px solid white;
+  outline-offset: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 .color-picker-custom {
   display: flex;
   align-items: center;

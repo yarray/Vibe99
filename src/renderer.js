@@ -2125,6 +2125,11 @@ function showColorPicker(paneId) {
 
   const pane = panes[paneIndex];
   const currentColor = pane.customColor || pane.accent;
+  const presetColors = ColorsRegistry.PRESET_PANE_COLORS;
+
+  // Find the index of the currently selected color for initial keyboard focus
+  let focusedIndex = presetColors.indexOf(currentColor);
+  if (focusedIndex === -1) focusedIndex = 0;
 
   const picker = document.createElement('div');
   picker.className = 'color-picker-overlay';
@@ -2135,9 +2140,9 @@ function showColorPicker(paneId) {
         <button type="button" class="color-picker-close" aria-label="Close">×</button>
       </div>
       <div class="color-picker-presets">
-        ${ColorsRegistry.PRESET_PANE_COLORS.map(color => `
-          <button type="button" class="color-preset${color === currentColor ? ' is-selected' : ''}"
-                  style="--color: ${color}" data-color="${color}" aria-label="Select ${color}"></button>
+        ${presetColors.map((color, index) => `
+          <button type="button" class="color-preset${color === currentColor ? ' is-selected' : ''}${index === focusedIndex ? ' is-focused' : ''}"
+                  style="--color: ${color}" data-color="${color}" data-index="${index}" tabindex="-1" aria-label="Select ${color}"></button>
         `).join('')}
       </div>
       <div class="color-picker-custom">
@@ -2150,19 +2155,82 @@ function showColorPicker(paneId) {
     </div>
   `;
 
+  // Keyboard navigation for preset colors
+  const handleKeydown = (e) => {
+    const presetButtons = picker.querySelectorAll('.color-preset');
+
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        e.preventDefault();
+        // Remove focus from current button
+        presetButtons[focusedIndex].classList.remove('is-focused');
+        // Move to previous color, wrap around
+        focusedIndex = (focusedIndex - 1 + presetColors.length) % presetColors.length;
+        // Add focus to new button
+        presetButtons[focusedIndex].classList.add('is-focused');
+        break;
+
+      case 'ArrowRight':
+      case 'ArrowDown':
+        e.preventDefault();
+        // Remove focus from current button
+        presetButtons[focusedIndex].classList.remove('is-focused');
+        // Move to next color, wrap around
+        focusedIndex = (focusedIndex + 1) % presetColors.length;
+        // Add focus to new button
+        presetButtons[focusedIndex].classList.add('is-focused');
+        break;
+
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        // Select the focused color
+        const selectedColor = presetButtons[focusedIndex].dataset.color;
+        setPaneColor(paneId, selectedColor);
+        picker.removeEventListener('keydown', handleKeydown);
+        picker.remove();
+        // Return focus to the pane
+        focusPane(paneId);
+        break;
+
+      case 'Escape':
+        e.preventDefault();
+        picker.removeEventListener('keydown', handleKeydown);
+        picker.remove();
+        // Return focus to the pane
+        focusPane(paneId);
+        break;
+    }
+  };
+
   picker.addEventListener('click', (e) => {
     if (e.target === picker) {
+      picker.removeEventListener('keydown', handleKeydown);
       picker.remove();
     }
   });
 
-  picker.querySelector('.color-picker-close').addEventListener('click', () => picker.remove());
+  picker.querySelector('.color-picker-close').addEventListener('click', () => {
+    picker.removeEventListener('keydown', handleKeydown);
+    picker.remove();
+  });
 
   picker.querySelectorAll('.color-preset').forEach(btn => {
     btn.addEventListener('click', () => {
       const color = btn.dataset.color;
       setPaneColor(paneId, color);
+      picker.removeEventListener('keydown', handleKeydown);
       picker.remove();
+      // Return focus to the pane
+      focusPane(paneId);
+    });
+
+    // Update focused index on mouse hover for consistency
+    btn.addEventListener('mouseenter', () => {
+      presetButtons[focusedIndex].classList.remove('is-focused');
+      focusedIndex = parseInt(btn.dataset.index, 10);
+      btn.classList.add('is-focused');
     });
   });
 
@@ -2171,13 +2239,26 @@ function showColorPicker(paneId) {
     setPaneColor(paneId, colorInput.value);
   });
 
+  // When custom color input is focused, remove keyboard focus from presets
+  colorInput.addEventListener('focus', () => {
+    const presetButtons = picker.querySelectorAll('.color-preset');
+    presetButtons[focusedIndex].classList.remove('is-focused');
+  });
+
   picker.querySelector('.color-picker-clear').addEventListener('click', () => {
     clearPaneColor(paneId);
+    picker.removeEventListener('keydown', handleKeydown);
     picker.remove();
   });
 
   document.body.appendChild(picker);
-  colorInput.focus();
+
+  // Attach keyboard listener to the picker for capturing arrow keys
+  picker.addEventListener('keydown', handleKeydown);
+
+  // Focus the picker overlay to enable keyboard capture
+  picker.setAttribute('tabindex', '-1');
+  picker.focus();
 }
 
 function setPaneColor(paneId, color) {

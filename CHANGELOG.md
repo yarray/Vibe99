@@ -10,6 +10,14 @@
 
 ### Improved
 
+- Color picker panel now supports keyboard navigation (VIB-65):
+  - Arrow keys (Left/Right/Up/Down) to move highlight between preset colors
+  - Enter/Space to confirm selection
+  - Escape to cancel and close panel
+  - Panel auto-closes after selection, focus returns to current pane
+
+### Improved
+
 - Navigation mode enhancements (VIB-33):
   - Number shortcuts (1-9) for jumping to specific panes
   - Home/End keys for jumping to first/last pane
