@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use tauri::Manager;
 use vibe99_lib::commands::context_menu;
+use vibe99_lib::commands::layout;
 use vibe99_lib::commands::settings;
 use vibe99_lib::commands::shell_profile;
 use vibe99_lib::commands::terminal::{self, AppState};
@@ -27,6 +28,10 @@ fn main() {
             terminal::get_cwd,
             settings::settings_load,
             settings::settings_save,
+            layout::layouts_list,
+            layout::layout_save,
+            layout::layout_delete,
+            layout::layout_rename,
             shell_profile::shell_profiles_list,
             shell_profile::shell_profile_set,
             shell_profile::shell_profile_add,

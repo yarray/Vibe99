@@ -67,5 +67,8 @@ export function createActions(deps) {
     // Navigation mode — editing (VIB-33)
     closePane:   () => deps.requestClosePane(deps.getFocusedPaneId()),
     renamePane:  () => deps.startInlineRename(deps.getFocusedPaneId()),
+
+    // Layouts
+    openLayouts: () => deps.openLayoutsModal(),
   };
 }

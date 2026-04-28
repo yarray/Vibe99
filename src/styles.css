@@ -218,6 +218,7 @@ body {
 
 .tabs-add,
 .tabs-add-dropdown,
+.tabs-layouts,
 .tabs-settings,
 .tabs-fullscreen {
   appearance: none;
@@ -263,6 +264,7 @@ body {
 
 .tabs-add:hover,
 .tabs-add-dropdown:hover,
+.tabs-layouts:hover,
 .tabs-settings:hover,
 .tabs-fullscreen:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -272,6 +274,7 @@ body {
   color: rgba(255, 255, 255, 0.82);
 }
 
+.tabs-layouts,
 .tabs-settings,
 .tabs-fullscreen {
   width: 34px;
@@ -1132,6 +1135,281 @@ body.is-dragging-tabs {
   color: var(--text);
 }
 
+/* Layout Manager Modal - mirrors Shell Profiles Modal */
+.settings-modal.layouts-modal {
+  min-width: 700px;
+  max-width: 900px;
+  width: 90vw;
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal.layouts-modal .layouts-modal-body {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+.settings-modal.layouts-modal .layouts-sidebar {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding-right: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+.layout-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 36px;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 120ms ease;
+  border: 1px solid transparent;
+  user-select: none;
+  min-width: 0;
+}
+
+.layout-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.layout-item.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  cursor: default;
+}
+
+.layout-item.is-active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.layout-item.is-active .layout-name::after {
+  content: ' •';
+  color: #4ecdc4;
+  font-size: 10px;
+}
+
+.layout-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layout-pane-count {
+  font-size: 11px;
+  color: var(--panel-muted);
+  flex-shrink: 0;
+}
+
+.layout-actions {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.layout-actions .settings-btn {
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  pointer-events: auto;
+}
+
+.layout-actions .settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+.layout-empty {
+  color: var(--panel-muted);
+  font-size: var(--app-font-size);
+  padding: 4px 6px;
+}
+
+.layouts-add-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.layouts-add-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--text);
+  transform: scale(1.05);
+}
+
+.settings-modal.layouts-modal .layouts-editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.layouts-editor-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--panel-muted);
+  font-size: 14px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+.layout-info {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.layout-info label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.layout-info input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.layout-info input:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.layout-info-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.layout-info-btn {
+  width: auto !important;
+  height: 28px !important;
+  padding: 0 16px !important;
+  font-size: 13px !important;
+  border-radius: 4px !important;
+  font-weight: 500;
+}
+
+.layout-info-actions .settings-btn.is-primary {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.layout-info-actions .settings-btn.is-primary:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+}
+
+.settings-modal.layouts-modal .settings-modal-header {
+  justify-content: space-between;
+}
+
+.settings-modal.layouts-modal .settings-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-modal.layouts-modal .layouts-add-btn {
+  margin: 0;
+}
+
+.layouts-modal .settings-modal-body {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Subtle scrollbar styling for layouts modal */
+.settings-modal.layouts-modal .layout-list::-webkit-scrollbar,
+.settings-modal.layouts-modal .layouts-editor-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-modal.layouts-modal .layout-list::-webkit-scrollbar-track,
+.settings-modal.layouts-modal .layouts-editor-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-modal.layouts-modal .layout-list::-webkit-scrollbar-thumb,
+.settings-modal.layouts-modal .layouts-editor-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.settings-modal.layouts-modal .layout-list::-webkit-scrollbar-thumb:hover,
+.settings-modal.layouts-modal .layouts-editor-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Firefox scrollbar styling */
+.settings-modal.layouts-modal .layout-list,
+.settings-modal.layouts-modal .layouts-editor-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
 /* Settings Modal Overlay */
 .settings-modal-overlay {
   position: fixed;
@@ -1567,4 +1845,72 @@ body.is-dragging-tabs {
   font-size: 11px;
   color: #ff6b57;
   margin-top: 2px;
+}
+
+/* Layouts dropdown menu */
+.tabs-layouts {
+  position: relative;
+}
+
+.layouts-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 180px;
+  background: #171717;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  padding: 4px 0;
+}
+
+.layouts-dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: var(--app-font-size);
+  gap: 8px;
+}
+
+.layouts-dropdown-item.is-active {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.layouts-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.layouts-dropdown-check {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.layouts-dropdown-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layouts-dropdown-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+.layouts-dropdown-action {
+  padding: 6px 12px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.9em;
+}
+
+.layouts-dropdown-action:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
 }

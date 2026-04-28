@@ -10,11 +10,23 @@
 
 ### Added
 
+- Layout Manager Modal UI: two-column modal for viewing, creating, renaming, deleting, and switching between saved pane layouts. Accessible from Settings panel, mirrors Shell Profiles Modal design (VIB-62).
+- Tab bar Layout dropdown button (▦) with menu listing all saved layouts, active layout highlighting with ✓, "Save Current Layout…" action, and "Manage Layouts…" action (VIB-63).
+- Frontend Layout bridge and core logic: `listLayouts`, `saveLayout`, `deleteLayout`, `renameLayout` bridge methods; `saveCurrentLayout`, `switchLayout`, `deleteLayoutById`, `renameLayoutById` functions; layout state variables; settings payload now includes `activeLayoutId` (VIB-61).
 - Command Palette (Ctrl+Shift+P) with curated actions: Change profile, Change color, Rename pane, Profile settings, Shortcuts settings (VIB-52).
 - OSC 7 cwd tracking for session restore (VIB-28-impl-1):
   - Frontend captures shell's current working directory changes via xterm.js OSC 7 handler
   - Debounced (5s) auto-save of cwd changes to settings
   - Restores panes to their last working directory on application restart
+- Rust backend: Layout data types (`Layout`, `LayoutPane`) and settings schema v5 upgrade (VIB-59).
+  - `sanitize_layouts()` validates saved layout arrays (deduplicated by id).
+  - `sanitize_active_layout_id()` ensures the active layout reference is valid.
+  - `settings_save()` preserves existing layouts from disk when the frontend omits them.
+- Rust backend: Layout CRUD Tauri commands (VIB-60).
+  - `layouts_list` — returns all saved layouts and the active layout id.
+  - `layout_save` — upserts a layout (add or replace by id), returns full settings.
+  - `layout_delete` — removes a layout and clears `activeLayoutId` if it pointed to the deleted one.
+  - `layout_rename` — updates the name of an existing layout.
 
 ### Improved
 
@@ -25,7 +37,6 @@
   - Panel auto-closes after selection, focus returns to current pane
 
 ### Improved
-
 - Navigation mode enhancements (VIB-33):
   - Number shortcuts (1-9) for jumping to specific panes
   - Home/End keys for jumping to first/last pane
@@ -64,6 +75,7 @@
 
 ### Fixed
 
+- Build on Ubuntu 20.04: added setup script for Tauri v2 system dependencies (webkit2gtk-4.1, libsoup-3.0, glib >= 2.70) which are not available in default repos (VIB-69).
 - Quotes are now preserved in shell profile arguments round-trip.
 - BG mask opacity range extended to the full 0–1 range in both UI controls and settings sanitization.
 - Removed dead shell profile rendering code from an incomplete refactoring.
