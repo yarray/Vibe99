@@ -274,6 +274,7 @@ let pendingTabFocus = null;
 let sessionRestoreComplete = false;
 let layouts = [];
 let activeLayoutId = '';
+let selectedLayoutId = null;
 
 // Mode management
 function setMode(next) {
@@ -318,6 +319,7 @@ const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
 const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
 const breathingAlertToggleEl = document.getElementById('breathing-alert-toggle');
 const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
+const layoutsSettingsBtn = document.getElementById('layouts-settings-btn');
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
 
 const settings = {
@@ -994,6 +996,250 @@ function renderModalShellProfiles() {
     const placeholder = document.createElement('div');
     placeholder.className = 'shell-profiles-editor-placeholder';
     placeholder.textContent = 'Select a profile or create a new one';
+    editorEl.appendChild(placeholder);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Layouts modal (Layout Manager) - mirrors Shell Profiles modal pattern
+// ---------------------------------------------------------------------------
+function openLayoutsModal() {
+  // Load existing layouts from bridge
+  bridge.listLayouts()
+    .then((config) => {
+      layouts = config.layouts ?? [];
+      activeLayoutId = config.activeLayoutId ?? '';
+    })
+    .catch(reportError)
+    .finally(() => {
+      const overlay = document.createElement('div');
+      overlay.className = 'settings-modal-overlay';
+
+      overlay.innerHTML = `
+        <div class="settings-modal layouts-modal">
+          <div class="settings-modal-header">
+            <div class="settings-modal-title-group">
+              <span>Layouts</span>
+              <button type="button" class="layouts-add-btn" id="modal-layout-add" aria-label="Add Layout">+</button>
+            </div>
+            <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+          </div>
+          <div class="settings-modal-body layouts-modal-body">
+            <div class="layouts-sidebar">
+              <div class="layout-list" id="modal-layout-list"></div>
+            </div>
+            <div class="layouts-editor-panel" id="modal-layout-editor">
+              <div class="layouts-editor-placeholder">Select a layout or create a new one</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const closeModal = () => {
+        overlay.remove();
+        selectedLayoutId = null;
+      };
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeModal();
+      });
+
+      overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+
+      // Add Layout button
+      overlay.querySelector('#modal-layout-add').addEventListener('click', () => {
+        const name = window.prompt('Layout name:');
+        if (!name || !name.trim()) return;
+        const trimmed = name.trim();
+        const session = buildSessionData();
+        const layout = {
+          id: trimmed.toLowerCase().replace(/\s+/g, '-'),
+          name: trimmed,
+          panes: session.panes,
+          focusedPaneIndex: session.focusedPaneIndex,
+        };
+        bridge.saveLayout(layout)
+          .then(() => bridge.listLayouts())
+          .then((config) => {
+            layouts = config.layouts ?? [];
+            activeLayoutId = config.activeLayoutId ?? layout.id;
+            scheduleSettingsSave();
+            renderModalLayouts(overlay);
+          })
+          .catch(reportError);
+      });
+
+      document.body.appendChild(overlay);
+
+      // Store references for rendering
+      overlay._modalLayoutList = overlay.querySelector('#modal-layout-list');
+      overlay._modalLayoutEditor = overlay.querySelector('#modal-layout-editor');
+
+      // initial render
+      renderModalLayouts(overlay);
+    });
+}
+
+function renderModalLayouts(overlay) {
+  const listEl = overlay?._modalLayoutList ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-list');
+  const editorEl = overlay?._modalLayoutEditor ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-editor');
+  if (!listEl || !editorEl) return;
+
+  listEl.replaceChildren();
+  editorEl.replaceChildren();
+
+  // Left column: layout list
+  if (layouts.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'layout-empty';
+    empty.textContent = 'No layouts saved';
+    listEl.appendChild(empty);
+  } else {
+    for (const layout of layouts) {
+      const isActive = layout.id === activeLayoutId;
+      const isSelected = layout.id === selectedLayoutId;
+      const item = document.createElement('div');
+      item.className = `layout-item${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`;
+      item.dataset.layoutId = layout.id;
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'layout-name';
+      nameEl.textContent = layout.name || layout.id;
+
+      const info = document.createElement('div');
+      info.className = 'layout-pane-count';
+      const panesCount = (layout.panes?.length) ?? 0;
+      info.textContent = `${panesCount} pane${panesCount === 1 ? '' : 's'}`;
+
+      const actions = document.createElement('div');
+      actions.className = 'layout-actions';
+
+      // Switch layout button
+      const switchBtn = document.createElement('button');
+      switchBtn.type = 'button';
+      switchBtn.className = 'settings-btn';
+      switchBtn.textContent = '→';
+      switchBtn.title = 'Switch to layout';
+      switchBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        switchLayout(layout.id);
+        // Close modal after switching
+        overlay?.remove();
+        scheduleSettingsSave();
+      });
+      actions.appendChild(switchBtn);
+
+      // Rename button
+      const renameBtn = document.createElement('button');
+      renameBtn.type = 'button';
+      renameBtn.className = 'settings-btn';
+      renameBtn.textContent = '✎';
+      renameBtn.title = 'Rename layout';
+      renameBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newName = window.prompt('Rename layout', layout.name || layout.id);
+        if (newName) {
+          bridge.renameLayout(layout.id, newName)
+            .then(() => bridge.listLayouts())
+            .then((config) => {
+              layouts = config.layouts ?? [];
+              activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+              renderModalLayouts(overlay);
+            })
+            .catch(reportError);
+        }
+      });
+      actions.appendChild(renameBtn);
+
+      // Delete button (not allowed for default)
+      if (layout.id !== 'default') {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'settings-btn';
+        deleteBtn.textContent = '✕';
+        deleteBtn.title = 'Delete layout';
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          bridge.deleteLayout(layout.id)
+            .then(() => bridge.listLayouts())
+            .then((config) => {
+              layouts = config.layouts ?? [];
+              activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+              if (selectedLayoutId === layout.id) selectedLayoutId = null;
+              renderModalLayouts(overlay);
+            })
+            .catch(reportError);
+        });
+        actions.appendChild(deleteBtn);
+      }
+
+      item.append(nameEl, info, actions);
+
+      // Click selects layout (without triggering actions)
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.layout-actions')) return;
+        selectedLayoutId = layout.id;
+        renderModalLayouts(overlay);
+      });
+
+      listEl.appendChild(item);
+    }
+  }
+
+  // Right column: editor/info panel
+  const selected = layouts.find((l) => l.id === selectedLayoutId) || null;
+  if (selected) {
+    const info = document.createElement('div');
+    info.className = 'layout-info';
+
+    const nameLabel = document.createElement('label');
+    nameLabel.textContent = 'Name';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = selected.name || '';
+    info.appendChild(nameLabel);
+    info.appendChild(nameInput);
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'layout-info-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'settings-btn layout-info-btn is-primary';
+    saveBtn.textContent = 'Save Layout';
+    saveBtn.addEventListener('click', () => {
+      const newName = nameInput.value.trim();
+      if (!newName) return;
+      const session = buildSessionData();
+      const updatedLayout = {
+        id: selected.id,
+        name: newName,
+        panes: session.panes,
+        focusedPaneIndex: session.focusedPaneIndex,
+      };
+      bridge.saveLayout(updatedLayout)
+        .then(() => bridge.listLayouts())
+        .then((config) => {
+          layouts = config.layouts ?? [];
+          activeLayoutId = config.activeLayoutId ?? selected.id;
+          scheduleSettingsSave();
+          renderModalLayouts(overlay);
+        })
+        .catch(reportError);
+    });
+    actionsRow.appendChild(saveBtn);
+    info.appendChild(actionsRow);
+
+    const paneInfo = document.createElement('div');
+    paneInfo.style.fontSize = '12px';
+    paneInfo.style.color = 'var(--panel-muted)';
+    paneInfo.textContent = `${selected.panes?.length ?? 0} pane(s) in this layout`;
+    info.appendChild(paneInfo);
+
+    editorEl.appendChild(info);
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'layouts-editor-placeholder';
+    placeholder.textContent = 'Select a layout or create a new one';
     editorEl.appendChild(placeholder);
   }
 }
@@ -2927,6 +3173,20 @@ settingsButtonEl.addEventListener('click', (event) => {
 });
 
 // Shell profiles modal button (clickable row)
+// Layouts modal button (clickable row)
+if (layoutsSettingsBtn) {
+  layoutsSettingsBtn.addEventListener('click', () => {
+    openLayoutsModal();
+  });
+
+  layoutsSettingsBtn.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openLayoutsModal();
+    }
+  });
+}
+
 shellProfilesSettingsBtn.addEventListener('click', () => {
   openShellProfilesModal();
 });
