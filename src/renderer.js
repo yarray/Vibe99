@@ -275,6 +275,7 @@ let sessionRestoreComplete = false;
 let layouts = [];
 let activeLayoutId = '';
 let selectedLayoutId = null;
+let renamingLayoutId = null;
 
 // Mode management
 function setMode(next) {
@@ -601,8 +602,7 @@ function restoreSession(session) {
 
 function saveCurrentLayout(name) {
   if (!name || typeof name !== 'string' || !name.trim()) {
-    name = window.prompt('Layout name:');
-    if (!name) return;
+    return;
   }
   name = name.trim();
   const session = buildSessionData();
@@ -715,8 +715,46 @@ async function toggleLayoutsDropdown() {
   saveAction.className = 'layouts-dropdown-action';
   saveAction.textContent = 'Save Current Layout…';
   saveAction.addEventListener('click', () => {
-    saveCurrentLayout();
     closeLayoutsDropdown();
+
+    // Show inline popover input near the layouts button
+    const popover = document.createElement('div');
+    popover.className = 'layouts-inline-popover';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'layouts-inline-input';
+    input.placeholder = 'Layout name';
+    popover.appendChild(input);
+    layoutsButtonEl.appendChild(popover);
+
+    const cleanup = () => {
+      popover.remove();
+    };
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        const value = input.value.trim();
+        cleanup();
+        if (value) {
+          saveCurrentLayout(value);
+        }
+      }
+      if (event.key === 'Escape') {
+        cleanup();
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      const value = input.value.trim();
+      cleanup();
+      if (value) {
+        saveCurrentLayout(value);
+      }
+    });
+
+    queueMicrotask(() => {
+      input.focus();
+    });
   });
   layoutsDropdownEl.appendChild(saveAction);
 
@@ -744,6 +782,11 @@ function closeLayoutsDropdown() {
   if (layoutsDropdownEl) {
     layoutsDropdownEl.remove();
     layoutsDropdownEl = null;
+  }
+  // Also remove any lingering inline popover input
+  const popover = layoutsButtonEl?.querySelector('.layouts-inline-popover');
+  if (popover) {
+    popover.remove();
   }
   layoutsDropdownOpen = false;
   document.removeEventListener('click', handleLayoutsDropdownOutsideClick);
@@ -1153,27 +1196,66 @@ function openLayoutsModal() {
 
       overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
 
-      // Add Layout button
+      // Add Layout button — inserts inline input at top of list
       overlay.querySelector('#modal-layout-add').addEventListener('click', () => {
-        const name = window.prompt('Layout name:');
-        if (!name || !name.trim()) return;
-        const trimmed = name.trim();
-        const session = buildSessionData();
-        const layout = {
-          id: trimmed.toLowerCase().replace(/\s+/g, '-'),
-          name: trimmed,
-          panes: session.panes,
-          focusedPaneIndex: session.focusedPaneIndex,
+        const listEl = overlay._modalLayoutList;
+        if (!listEl) return;
+
+        // Remove any existing inline input
+        const existing = listEl.querySelector('.layout-item.is-editing');
+        if (existing) existing.remove();
+
+        const item = document.createElement('div');
+        item.className = 'layout-item is-editing';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'layout-name-input';
+        input.placeholder = 'Layout name';
+
+        const cleanup = () => {
+          item.remove();
         };
-        bridge.saveLayout(layout)
-          .then(() => bridge.listLayouts())
-          .then((config) => {
-            layouts = config.layouts ?? [];
-            activeLayoutId = config.activeLayoutId ?? layout.id;
-            scheduleSettingsSave();
-            renderModalLayouts(overlay);
-          })
-          .catch(reportError);
+
+        const confirm = () => {
+          const trimmed = input.value.trim();
+          cleanup();
+          if (!trimmed) return;
+          const session = buildSessionData();
+          const layout = {
+            id: trimmed.toLowerCase().replace(/\s+/g, '-'),
+            name: trimmed,
+            panes: session.panes,
+            focusedPaneIndex: session.focusedPaneIndex,
+          };
+          bridge.saveLayout(layout)
+            .then(() => bridge.listLayouts())
+            .then((config) => {
+              layouts = config.layouts ?? [];
+              activeLayoutId = config.activeLayoutId ?? layout.id;
+              scheduleSettingsSave();
+              renderModalLayouts(overlay);
+            })
+            .catch(reportError);
+        };
+
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            confirm();
+          }
+          if (event.key === 'Escape') {
+            cleanup();
+          }
+        });
+
+        input.addEventListener('blur', confirm);
+
+        item.appendChild(input);
+        listEl.insertBefore(item, listEl.firstChild);
+
+        queueMicrotask(() => {
+          input.focus();
+        });
       });
 
       document.body.appendChild(overlay);
@@ -1209,9 +1291,61 @@ function renderModalLayouts(overlay) {
       item.className = `layout-item${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`;
       item.dataset.layoutId = layout.id;
 
-      const nameEl = document.createElement('div');
-      nameEl.className = 'layout-name';
-      nameEl.textContent = layout.name || layout.id;
+      let nameEl;
+      if (renamingLayoutId === layout.id) {
+        nameEl = document.createElement('input');
+        nameEl.type = 'text';
+        nameEl.className = 'layout-name layout-name-input';
+        nameEl.value = layout.name || layout.id;
+        nameEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+        nameEl.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+        });
+        nameEl.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            const newName = nameEl.value.trim();
+            renamingLayoutId = null;
+            if (newName) {
+              bridge.renameLayout(layout.id, newName)
+                .then(() => bridge.listLayouts())
+                .then((config) => {
+                  layouts = config.layouts ?? [];
+                  activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+                  renderModalLayouts(overlay);
+                })
+                .catch(reportError);
+            } else {
+              renderModalLayouts(overlay);
+            }
+          }
+          if (event.key === 'Escape') {
+            renamingLayoutId = null;
+            renderModalLayouts(overlay);
+          }
+        });
+        nameEl.addEventListener('blur', () => {
+          const newName = nameEl.value.trim();
+          renamingLayoutId = null;
+          if (newName) {
+            bridge.renameLayout(layout.id, newName)
+              .then(() => bridge.listLayouts())
+              .then((config) => {
+                layouts = config.layouts ?? [];
+                activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+                renderModalLayouts(overlay);
+              })
+              .catch(reportError);
+          } else {
+            renderModalLayouts(overlay);
+          }
+        });
+      } else {
+        nameEl = document.createElement('div');
+        nameEl.className = 'layout-name';
+        nameEl.textContent = layout.name || layout.id;
+      }
 
       const info = document.createElement('div');
       info.className = 'layout-pane-count';
@@ -1244,17 +1378,16 @@ function renderModalLayouts(overlay) {
       renameBtn.title = 'Rename layout';
       renameBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const newName = window.prompt('Rename layout', layout.name || layout.id);
-        if (newName) {
-          bridge.renameLayout(layout.id, newName)
-            .then(() => bridge.listLayouts())
-            .then((config) => {
-              layouts = config.layouts ?? [];
-              activeLayoutId = config.activeLayoutId ?? activeLayoutId;
-              renderModalLayouts(overlay);
-            })
-            .catch(reportError);
-        }
+        renamingLayoutId = layout.id;
+        renderModalLayouts(overlay);
+        // Focus the input after re-render
+        queueMicrotask(() => {
+          const input = listEl.querySelector(`.layout-item[data-layout-id="${layout.id}"] .layout-name-input`);
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        });
       });
       actions.appendChild(renameBtn);
 
