@@ -2772,6 +2772,12 @@ function openCommandList() {
     { id: 'rename-pane',     label: 'Rename pane' },
     { id: 'profile-settings',  label: 'Profile settings' },
     { id: 'shortcuts-settings', label: 'Shortcuts settings' },
+    { id: 'layout-save',     label: 'Layout: Save Current Layout' },
+    { id: 'layout-default',  label: 'Layout: Switch to Default' },
+    ...layouts
+      .filter((l) => l.id !== 'default')
+      .map((l) => ({ id: `layout-switch:${l.id}`, label: `Layout: Switch to ${l.name}` })),
+    { id: 'layout-manage',   label: 'Layout: Manage Layouts' },
   ];
 
   openCommandPalette(items, (commandId) => {
@@ -2786,6 +2792,15 @@ function openCommandList() {
       openShellProfilesModal();
     } else if (commandId === 'shortcuts-settings') {
       ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+    } else if (commandId === 'layout-save') {
+      saveCurrentLayout().catch(reportError);
+    } else if (commandId === 'layout-default') {
+      switchLayout('default');
+    } else if (commandId.startsWith('layout-switch:')) {
+      const layoutId = commandId.slice('layout-switch:'.length);
+      switchLayout(layoutId);
+    } else if (commandId === 'layout-manage') {
+      openLayoutsModal();
     }
   }, {
     placeholder: 'Type a command…',
@@ -3035,6 +3050,7 @@ const keyboardActions = createActions({
   requestClosePane,
   startInlineRename,
   openKeymapHelpModal,
+  openLayoutsModal,
 });
 
 const dispatchKeydown = createDispatcher({
@@ -3314,6 +3330,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     const layoutConfig = await bridge.listLayouts();
     layouts = layoutConfig.layouts ?? [];
     activeLayoutId = layoutConfig.activeLayoutId ?? '';
+
+    // Migration: if layouts is empty and session.panes exists, auto-create Default
+    if (layouts.length === 0 && savedSettings?.session?.panes?.length > 0) {
+      const defaultLayout = {
+        id: 'default',
+        name: 'Default',
+        panes: savedSettings.session.panes,
+        focusedPaneIndex: savedSettings.session.focusedPaneIndex ?? 0,
+      };
+      await bridge.saveLayout(defaultLayout);
+      layouts = [defaultLayout];
+      activeLayoutId = 'default';
+    }
 
     if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
       switchLayout(activeLayoutId);
