@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Layout edit panel enhancements (VIB-88):
+  - "Set as Default" button to set a layout as the default layout (loaded on application startup)
+  - Visual indicator (★) for default layouts in the layout list
+  - Enhanced layout info display with pane list preview showing shell type and working directory for each pane
+  - `defaultLayoutId` field in settings schema to persist the default layout
+
 ### Improved
 
 - Replaced all Layout-related `window.prompt()` calls with a custom inline input dialog (`showInputDialog`), matching the existing modal design (dark theme, rounded corners, Enter/Esc shortcuts, auto-focus). Affected: Save Current Layout, Add Layout, Rename Layout (VIB-77).

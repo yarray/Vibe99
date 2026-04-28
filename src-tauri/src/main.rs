@@ -50,6 +50,7 @@ fn main() {
             layout::layout_rename,
             layout::layout_set_default,
             layout::layout_open_in_new_window,
+            layout::layout_set_default,
             shell_profile::shell_profiles_list,
             shell_profile::shell_profile_set,
             shell_profile::shell_profile_add,

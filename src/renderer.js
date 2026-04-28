@@ -137,6 +137,7 @@ function createUnavailableBridge() {
     deleteLayout: fail,
     renameLayout: fail,
     openLayoutInNewWindow: fail,
+    setLayoutAsDefault: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
@@ -223,6 +224,7 @@ function createTauriBridge(tauri) {
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
     setLayoutDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
     openLayoutInNewWindow: (layoutId) => invoke('layout_open_in_new_window', { layoutId }),
+    setLayoutAsDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
     detectShellProfiles: () => invoke('shell_profiles_detect'),
@@ -1279,7 +1281,8 @@ function renderModalLayouts(overlay) {
 
       const nameEl = document.createElement('div');
       nameEl.className = 'layout-name';
-      nameEl.textContent = layout.name || layout.id;
+      const nameText = layout.name || layout.id;
+      nameEl.textContent = isDefault ? `★ ${nameText}` : nameText;
 
       // Add star for default layout
       if (isDefault) {
@@ -1413,6 +1416,23 @@ function renderModalLayouts(overlay) {
         .catch(reportError);
     });
     actionsRow.appendChild(saveBtn);
+
+    // Set as Default button
+    const setDefaultBtn = document.createElement('button');
+    setDefaultBtn.type = 'button';
+    setDefaultBtn.className = 'settings-btn layout-info-btn';
+    const isDefault = selected.id === defaultLayoutId;
+    setDefaultBtn.textContent = isDefault ? '★ Default' : 'Set as Default';
+    setDefaultBtn.disabled = isDefault;
+    setDefaultBtn.addEventListener('click', () => {
+      bridge.setLayoutAsDefault(selected.id)
+        .then((config) => {
+          defaultLayoutId = config.defaultLayoutId ?? '';
+          renderModalLayouts(overlay);
+        })
+        .catch(reportError);
+    });
+    actionsRow.appendChild(setDefaultBtn);
     info.appendChild(actionsRow);
 
     // Secondary actions row
@@ -1457,10 +1477,42 @@ function renderModalLayouts(overlay) {
     info.appendChild(secondaryActionsRow);
 
     const paneInfo = document.createElement('div');
-    paneInfo.style.fontSize = '12px';
-    paneInfo.style.color = 'var(--panel-muted)';
-    paneInfo.textContent = `${selected.panes?.length ?? 0} pane(s) in this layout`;
+    paneInfo.className = 'layout-pane-info';
+    const panesCount = selected.panes?.length ?? 0;
+    const countText = document.createElement('strong');
+    countText.textContent = `${panesCount} pane${panesCount === 1 ? '' : 's'}`;
+    paneInfo.appendChild(countText);
+    const inThisText = document.createTextNode(' in this layout');
+    paneInfo.appendChild(inThisText);
     info.appendChild(paneInfo);
+
+    // Add pane list preview
+    if (panesCount > 0) {
+      const paneList = document.createElement('div');
+      paneList.className = 'layout-pane-list';
+
+      for (const pane of selected.panes) {
+        const paneItem = document.createElement('div');
+        paneItem.className = 'layout-pane-item';
+
+        const shellType = pane.shellProfile?.name || pane.shellProfile?.id || 'default';
+        const cwd = pane.shell?.cwd || '.';
+
+        const shellSpan = document.createElement('span');
+        shellSpan.className = 'pane-shell-type';
+        shellSpan.textContent = shellType;
+
+        const cwdSpan = document.createElement('span');
+        cwdSpan.className = 'pane-cwd';
+        cwdSpan.textContent = cwd;
+
+        paneItem.appendChild(shellSpan);
+        paneItem.appendChild(cwdSpan);
+        paneList.appendChild(paneItem);
+      }
+
+      info.appendChild(paneList);
+    }
 
     editorEl.appendChild(info);
   } else {
