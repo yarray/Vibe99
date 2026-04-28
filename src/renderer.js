@@ -755,113 +755,6 @@ function handleLayoutsDropdownOutsideClick(event) {
   }
 }
 
-function openLayoutsModal() {
-  // Reload layouts to ensure we have the latest list
-  bridge.listLayouts().then((config) => {
-    layouts = config.layouts ?? [];
-    activeLayoutId = config.activeLayoutId ?? '';
-  }).catch(reportError);
-
-  const overlay = document.createElement('div');
-  overlay.className = 'settings-modal-overlay';
-
-  overlay.innerHTML = `
-    <div class="settings-modal">
-      <div class="settings-modal-header">
-        <span>Manage Layouts</span>
-        <button type="button" class="settings-modal-close" aria-label="Close">×</button>
-      </div>
-      <div class="settings-modal-body" id="modal-layouts-list">
-      </div>
-      <div class="settings-modal-footer">
-        <button type="button" class="settings-modal-btn" id="modal-layouts-close">Close</button>
-      </div>
-    </div>
-  `;
-
-  const closeModal = () => {
-    overlay.remove();
-  };
-
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal();
-  });
-
-  overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
-  overlay.querySelector('#modal-layouts-close').addEventListener('click', closeModal);
-
-  document.body.appendChild(overlay);
-
-  // Render the layouts list
-  renderLayoutsList(overlay.querySelector('#modal-layouts-list'));
-}
-
-function renderLayoutsList(container) {
-  container.replaceChildren();
-
-  if (layouts.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'shell-profile-empty';
-    empty.textContent = 'No saved layouts';
-    container.appendChild(empty);
-    return;
-  }
-
-  for (const layout of layouts) {
-    const item = document.createElement('div');
-    item.className = 'shell-profile-item';
-    if (layout.id === activeLayoutId) {
-      item.classList.add('is-default');
-    }
-
-    const name = document.createElement('div');
-    name.className = 'shell-profile-name';
-    name.textContent = layout.name || layout.id;
-
-    const actions = document.createElement('div');
-    actions.className = 'shell-profile-actions';
-
-    // Load button (or show active indicator)
-    if (layout.id === activeLayoutId) {
-      const activeIndicator = document.createElement('span');
-      activeIndicator.className = 'shell-profile-name';
-      activeIndicator.textContent = 'Active';
-      activeIndicator.style.color = 'var(--panel-muted)';
-      activeIndicator.style.fontSize = '11px';
-      actions.appendChild(activeIndicator);
-    } else {
-      const loadBtn = createProfileActionButton('Load', 'Switch to this layout', () => {
-        switchLayout(layout.id);
-        // Refresh the list to show the new active layout
-        bridge.listLayouts().then((config) => {
-          layouts = config.layouts ?? [];
-          activeLayoutId = config.activeLayoutId ?? '';
-        }).catch(reportError);
-        const overlay = document.querySelector('.settings-modal-overlay');
-        if (overlay) {
-          renderLayoutsList(overlay.querySelector('#modal-layouts-list'));
-        }
-      });
-      actions.appendChild(loadBtn);
-    }
-
-    // Delete button
-    const deleteBtn = createProfileActionButton('✕', 'Delete layout', () => {
-      if (confirm(`Delete layout "${layout.name || layout.id}"?`)) {
-        deleteLayoutById(layout.id);
-        const overlay = document.querySelector('.settings-modal-overlay');
-        if (overlay) {
-          renderLayoutsList(overlay.querySelector('#modal-layouts-list'));
-        }
-      }
-    });
-    actions.appendChild(deleteBtn);
-
-    item.append(name, actions);
-    container.appendChild(item);
-  }
-}
-
 function scheduleSettingsSave() {
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
@@ -3395,7 +3288,6 @@ addPaneDropdownButtonEl.addEventListener('click', (event) => {
 layoutsButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
   toggleLayoutsDropdown();
-});
 });
 
 settingsButtonEl.addEventListener('click', (event) => {
