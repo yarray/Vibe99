@@ -622,13 +622,23 @@ function saveCurrentLayout(name) {
     .catch(reportError);
 }
 
-function switchLayout(layoutId) {
+async function switchLayout(layoutId) {
   const layout = layouts.find((l) => l.id === layoutId);
   if (!layout) return;
   restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
   ensurePaneNodes();
   activeLayoutId = layoutId;
-  scheduleSettingsSave();
+  // Save immediately and await completion to ensure activeLayoutId is persisted before dropdown reopens
+  const settingsToSave = {
+    version: 5,
+    ui: {
+      ...settings,
+      shortcuts: ShortcutsRegistry.getShortcutsForSave()
+    },
+    session: buildSessionData(),
+    activeLayoutId,
+  };
+  await bridge.saveSettings(settingsToSave).catch(reportError);
 }
 
 function deleteLayoutById(layoutId) {
@@ -696,8 +706,8 @@ async function toggleLayoutsDropdown() {
       label.textContent = layout.name || layout.id;
 
       item.append(checkmark, label);
-      item.addEventListener('click', () => {
-        switchLayout(layout.id);
+      item.addEventListener('click', async () => {
+        await switchLayout(layout.id);
         closeLayoutsDropdown();
       });
 
@@ -1227,12 +1237,11 @@ function renderModalLayouts(overlay) {
       switchBtn.className = 'settings-btn';
       switchBtn.textContent = '→';
       switchBtn.title = 'Switch to layout';
-      switchBtn.addEventListener('click', (e) => {
+      switchBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        switchLayout(layout.id);
+        await switchLayout(layout.id);
         // Close modal after switching
         overlay?.remove();
-        scheduleSettingsSave();
       });
       actions.appendChild(switchBtn);
 
@@ -3563,7 +3572,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
-      switchLayout(activeLayoutId);
+      await switchLayout(activeLayoutId);
     } else if (savedSettings?.session?.panes?.length > 0) {
       restoreSession(savedSettings.session);
     } else {

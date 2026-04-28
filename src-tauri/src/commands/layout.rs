@@ -103,6 +103,7 @@ pub fn layout_save(app: AppHandle, layout: Value) -> Result<Value, String> {
 
     if let Some(obj) = config.as_object_mut() {
         obj.insert("layouts".into(), Value::Array(layouts));
+        obj.insert("activeLayoutId".into(), Value::String(layout_id));
     }
 
     let sanitized = sanitize_config(&config);
