@@ -21,6 +21,7 @@ export function createActions(deps) {
     enterNav: () => deps.enterNavigationMode(),
     cycleRecent: () => deps.cycleToRecentPane({ reverse: false }),
     cycleRecentReverse: () => deps.cycleToRecentPane({ reverse: true }),
+    cycleLitPane: () => deps.cycleToNextLitPane(),
     navigateLeft: () => deps.navigateLeft(),
     navigateRight: () => deps.navigateRight(),
 
