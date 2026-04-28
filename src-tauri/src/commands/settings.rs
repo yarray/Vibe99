@@ -331,6 +331,27 @@ pub(crate) fn sanitize_active_layout_id(value: Option<&Value>, layouts: &[Value]
     }
 }
 
+/// Sanitize the default layout id.
+///
+/// Ensures the id refers to an existing layout. Returns an empty string
+/// if the referenced id is missing or the field is absent.
+pub(crate) fn sanitize_default_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
+    let raw = value.and_then(|v| v.as_str()).map(str::trim).unwrap_or("");
+
+    if raw.is_empty() {
+        return String::new();
+    }
+
+    if layouts
+        .iter()
+        .any(|l| l.get("id").and_then(|v| v.as_str()) == Some(raw))
+    {
+        raw.to_string()
+    } else {
+        String::new()
+    }
+}
+
 /// Resolve the path to `settings.json` inside the app data directory.
 pub(super) fn settings_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
@@ -459,6 +480,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
             let session = sanitize_session(obj.get("session"));
             let layouts = sanitize_layouts(obj.get("layouts"));
             let active_layout_id = sanitize_active_layout_id(obj.get("activeLayoutId"), &layouts);
+            let default_layout_id = sanitize_default_layout_id(obj.get("defaultLayoutId"), &layouts);
 
             let mut result = serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
@@ -484,6 +506,10 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                 .as_object_mut()
                 .unwrap()
                 .insert("activeLayoutId".into(), Value::String(active_layout_id));
+            result
+                .as_object_mut()
+                .unwrap()
+                .insert("defaultLayoutId".into(), Value::String(default_layout_id));
 
             result
         }
@@ -498,6 +524,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "defaultProfile": "",
                 },
                 "activeLayoutId": "",
+                "defaultLayoutId": "",
             })
         }
         _ => {
@@ -514,6 +541,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                         "defaultProfile": "",
                     },
                     "activeLayoutId": "",
+                    "defaultLayoutId": "",
                 });
             }
 
@@ -531,6 +559,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "defaultProfile": "",
                 },
                 "activeLayoutId": "",
+                "defaultLayoutId": "",
             })
         }
     }

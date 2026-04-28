@@ -29,6 +29,13 @@
   - `layout_save` — upserts a layout (add or replace by id), returns full settings.
   - `layout_delete` — removes a layout and clears `activeLayoutId` if it pointed to the deleted one.
   - `layout_rename` — updates the name of an existing layout.
+- Layout Manager Modal enhancements (VIB-94):
+  - "Set as Default" button in layout editor panel — sets a layout to be automatically restored on application startup
+  - Pane details display in layout editor — shows each pane's title, working directory (shortened), and shell profile
+  - "Open in New Window" button (⎆) in layout list — currently switches layout in place (fallback until Sub-4/VIB-92 is complete)
+  - Visual indicator (★) for default layout in the layout list
+  - Rust backend: `defaultLayoutId` field in settings schema with sanitization
+  - Startup logic now restores `defaultLayoutId` before falling back to `activeLayoutId`
 
 ### Improved
 
