@@ -1827,6 +1827,21 @@ function commitPaneCycle() {
   recordPaneVisit(focusedPaneId);
 }
 
+// Cycle focus through panes that have a breathing (activity) alert.
+// Jumps to the first lit pane on first press, then cycles forward.
+// Focusing a pane automatically clears its alert via paneActivityWatcher.
+function cycleToNextLitPane() {
+  const litIds = panes
+    .map((p) => p.id)
+    .filter((id) => paneNodeMap.get(id)?.root.classList.contains('has-pending-activity'));
+  if (litIds.length === 0) {
+    return;
+  }
+  const focusedIndex = litIds.indexOf(focusedPaneId);
+  const nextIndex = focusedIndex >= 0 ? (focusedIndex + 1) % litIds.length : 0;
+  focusPane(litIds[nextIndex]);
+}
+
 function isEditableTarget() {
   return (
     document.activeElement?.tagName === 'INPUT' ||
@@ -2397,6 +2412,7 @@ const keyboardActions = createActions({
   addPane,
   enterNavigationMode,
   cycleToRecentPane,
+  cycleToNextLitPane,
   navigateLeft,
   navigateRight,
   copyTerminalSelection,
