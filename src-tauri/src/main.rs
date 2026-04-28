@@ -35,6 +35,7 @@ fn main() {
             layout::layout_save,
             layout::layout_delete,
             layout::layout_rename,
+            layout::layout_open_in_new_window,
             shell_profile::shell_profiles_list,
             shell_profile::shell_profile_set,
             shell_profile::shell_profile_add,

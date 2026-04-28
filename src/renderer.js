@@ -136,6 +136,7 @@ function createUnavailableBridge() {
     saveLayout: fail,
     deleteLayout: fail,
     renameLayout: fail,
+    openLayoutInNewWindow: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
@@ -220,6 +221,7 @@ function createTauriBridge(tauri) {
     saveLayout: (layout) => invoke('layout_save', { layout }),
     deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
+    openLayoutInNewWindow: (layoutId) => invoke('layout_open_in_new_window', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
     detectShellProfiles: () => invoke('shell_profiles_detect'),
@@ -686,20 +688,7 @@ async function saveCurrentLayout(name) {
 async function switchLayout(layoutId) {
   const layout = layouts.find((l) => l.id === layoutId);
   if (!layout) return;
-  restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
-  ensurePaneNodes();
-  activeLayoutId = layoutId;
-  // Save immediately and await completion to ensure activeLayoutId is persisted before dropdown reopens
-  const settingsToSave = {
-    version: 5,
-    ui: {
-      ...settings,
-      shortcuts: ShortcutsRegistry.getShortcutsForSave()
-    },
-    session: buildSessionData(),
-    activeLayoutId,
-  };
-  await bridge.saveSettings(settingsToSave).catch(reportError);
+  await bridge.openLayoutInNewWindow(layoutId).catch(reportError);
 }
 
 function deleteLayoutById(layoutId) {
@@ -767,6 +756,7 @@ async function toggleLayoutsDropdown() {
       label.textContent = layout.name || layout.id;
 
       item.append(checkmark, label);
+      item.title = 'Open in new window';
       item.addEventListener('click', async () => {
         await switchLayout(layout.id);
         closeLayoutsDropdown();
@@ -1297,7 +1287,7 @@ function renderModalLayouts(overlay) {
       switchBtn.type = 'button';
       switchBtn.className = 'settings-btn';
       switchBtn.textContent = '→';
-      switchBtn.title = 'Switch to layout';
+      switchBtn.title = 'Open in new window';
       switchBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         await switchLayout(layout.id);
@@ -2918,10 +2908,10 @@ function openCommandList() {
     { id: 'profile-settings',  label: 'Profile settings' },
     { id: 'shortcuts-settings', label: 'Shortcuts settings' },
     { id: 'layout-save',     label: 'Layout: Save Current Layout' },
-    { id: 'layout-default',  label: 'Layout: Switch to Default' },
+    { id: 'layout-default',  label: 'Layout: Open Default' },
     ...layouts
       .filter((l) => l.id !== 'default')
-      .map((l) => ({ id: `layout-switch:${l.id}`, label: `Layout: Switch to ${l.name}` })),
+      .map((l) => ({ id: `layout-open:${l.id}`, label: `Layout: Open ${l.name}` })),
     { id: 'layout-manage',   label: 'Layout: Manage Layouts' },
   ];
 
@@ -2943,8 +2933,8 @@ function openCommandList() {
       saveCurrentLayout().catch(reportError);
     } else if (commandId === 'layout-default') {
       switchLayout('default');
-    } else if (commandId.startsWith('layout-switch:')) {
-      const layoutId = commandId.slice('layout-switch:'.length);
+    } else if (commandId.startsWith('layout-open:')) {
+      const layoutId = commandId.slice('layout-open:'.length);
       switchLayout(layoutId);
     } else if (commandId === 'layout-manage') {
       openLayoutsModal();
@@ -3632,8 +3622,18 @@ window.addEventListener('DOMContentLoaded', async () => {
       activeLayoutId = 'default';
     }
 
-    if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
-      await switchLayout(activeLayoutId);
+    const urlParams = new URLSearchParams(window.location.search);
+    const startupLayoutId = urlParams.get('layoutId');
+    const startupLayout = startupLayoutId ? layouts.find((l) => l.id === startupLayoutId) : null;
+
+    if (startupLayout) {
+      restoreSession({ panes: startupLayout.panes, focusedPaneIndex: startupLayout.focusedPaneIndex });
+      ensurePaneNodes();
+      activeLayoutId = startupLayoutId;
+    } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
+      const layout = layouts.find((l) => l.id === activeLayoutId);
+      restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
+      ensurePaneNodes();
     } else if (savedSettings?.session?.panes?.length > 0) {
       restoreSession(savedSettings.session);
     } else {
