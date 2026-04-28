@@ -2280,6 +2280,7 @@ function openProfileSwitcher() {
 
   openCommandPalette(items, (profileId) => {
     changePaneShell(focusedPaneId, profileId);
+    focusPane(focusedPaneId);
   }, {
     placeholder: 'Select a profile…',
     emptyText: 'No matching profiles',
