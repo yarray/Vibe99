@@ -6,6 +6,10 @@
 
 ### Added
 
+- OSC 7 cwd tracking for session restore (VIB-28-impl-1):
+  - Frontend captures shell's current working directory changes via xterm.js OSC 7 handler
+  - Debounced (5s) auto-save of cwd changes to settings
+  - Restores panes to their last working directory on application restart
 - Navigation mode enhancements (VIB-33):
   - Number shortcuts (1-9) for jumping to specific panes
   - Home/End keys for jumping to first/last pane
