@@ -4,6 +4,27 @@
  * Displays relevant keyboard shortcuts for the current mode in the status bar.
  */
 
+import { formatChord, parseChord } from './input/keymap.js';
+
+/**
+ * Pairs of actions whose hints should be merged into a single combined hint.
+ * Format: [action1, action2, mergedDisplayKeys, mergedDescription]
+ */
+const MERGE_GROUPS = [
+  ['navigateLeft', 'navigateRight', 'Ctrl+←→', 'change pane'],
+  ['cycleRecent', 'cycleRecentReverse', 'Ctrl+Tab', 'recent'],
+];
+
+/**
+ * Build a map for quick lookup of merge groups.
+ */
+const MERGE_MAP = new Map(
+  MERGE_GROUPS.map(([a1, a2, keys, desc]) => [
+    [a1, { partner: a2, keys, desc, isPrimary: true }],
+    [a2, { partner: a1, keys, desc, isPrimary: false }],
+  ]).flat()
+);
+
 /**
  * Render the hint bar based on current mode and settings.
  *
@@ -19,55 +40,88 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, platform = 
     (entry.mode === currentMode) || (currentMode === 'terminal' && entry.mode === '*')
   );
 
-  // Special handling: merge Ctrl+Tab and Ctrl+Shift+Tab hints
+  // Apply merge transformations for terminal mode
   if (currentMode === 'terminal') {
-    const hasCycleRecent = entries.some(e => e.action === 'cycleRecent');
-    const hasCycleRecentReverse = entries.some(e => e.action === 'cycleRecentReverse');
-    if (hasCycleRecent && hasCycleRecentReverse) {
-      entries = entries.filter(e => e.action !== 'cycleRecentReverse');
-      const cycleEntry = entries.find(e => e.action === 'cycleRecent');
-      if (cycleEntry) {
-        cycleEntry.hint = 'Ctrl+Tab recent';
-      }
-    }
+    entries = applyMerges(entries);
   }
 
-  // For nav mode, merge entries with same action and show hints directly
+  // For nav mode, merge entries with same action (e.g., 'h prev' and '← prev' → 'h/← prev')
   if (currentMode === 'nav') {
     entries = mergeNavModeHints(entries);
   }
 
-  // Show all entries with hint text (no limit)
+  // Show all entries with hint text
   const visible = entries.filter(entry => entry.hint);
 
   // Build hints HTML
-  let hintsHtml = '';
-  hintsHtml = visible
-      .map(entry => {
-        // For nav mode, hint is in "key description" format, wrap key in kbd
-        if (currentMode === 'nav' && entry.mode === 'nav') {
-          const parts = entry.hint.split(' ');
-          if (parts.length >= 2) {
-            const keys = parts[0];
-            const desc = parts.slice(1).join(' ');
-            return `<span class="hint"><kbd>${keys}</kbd> ${desc}</span>`;
-          }
-          return `<span class="hint">${entry.hint}</span>`;
-        }
-        const chord = formatChordForHint(entry.chord, platform);
-        return `<span class="hint"><kbd>${chord}</kbd> ${entry.hint}</span>`;
-      })
-      .join('<span class="hint-sep">·</span>');
+  const hintsHtml = visible
+    .map(entry => renderHint(entry, currentMode, platform))
+    .join('<span class="hint-sep">·</span>');
 
   // Determine mode label
-  let modeLabel;
-  if (currentMode === 'nav') {
-    modeLabel = 'Navigation Mode';
-  } else {
-    modeLabel = focusedPaneLabel || 'Terminal';
-  }
+  const modeLabel = currentMode === 'nav' ? 'Navigation Mode' : (focusedPaneLabel || 'Terminal');
 
   return { modeLabel, hintsHtml };
+}
+
+/**
+ * Apply merge transformations to keymap entries.
+ * Returns a new array with merged hints replacing pairs.
+ */
+function applyMerges(entries) {
+  const result = [];
+  const mergedActions = new Set();
+
+  for (const entry of entries) {
+    if (mergedActions.has(entry.action)) continue;
+
+    const mergeInfo = MERGE_MAP.get(entry.action);
+    if (mergeInfo && mergeInfo.isPrimary) {
+      // Check if partner exists
+      const hasPartner = entries.some(e => e.action === mergeInfo.partner);
+      if (hasPartner) {
+        // Create merged entry
+        result.push({
+          ...entry,
+          _mergedKeys: mergeInfo.keys,
+          hint: mergeInfo.desc,
+        });
+        mergedActions.add(entry.action);
+        mergedActions.add(mergeInfo.partner);
+        continue;
+      }
+    }
+
+    // No merge or not primary, keep original
+    result.push(entry);
+  }
+
+  return result;
+}
+
+/**
+ * Render a single hint as HTML.
+ */
+function renderHint(entry, currentMode, platform) {
+  // Merged entry: use pre-formatted keys
+  if (entry._mergedKeys) {
+    return `<span class="hint"><kbd>${entry._mergedKeys}</kbd> ${entry.hint}</span>`;
+  }
+
+  // Nav mode hint: "key description" format (key already separated)
+  if (currentMode === 'nav' && entry.mode === 'nav') {
+    const parts = entry.hint.split(' ');
+    if (parts.length >= 2) {
+      const keys = parts[0];
+      const desc = parts.slice(1).join(' ');
+      return `<span class="hint"><kbd>${keys}</kbd> ${desc}</span>`;
+    }
+    return `<span class="hint">${entry.hint}</span>`;
+  }
+
+  // Default: format chord from keymap
+  const chord = formatChord(entry.chord, platform);
+  return `<span class="hint"><kbd>${chord}</kbd> ${entry.hint}</span>`;
 }
 
 /**
@@ -82,7 +136,6 @@ function mergeNavModeHints(entries) {
 
     const parts = entry.hint.split(' ');
     if (parts.length < 2) {
-      // Keep as-is if hint doesn't have key + description format
       if (!actionMap.has(entry.action)) {
         actionMap.set(entry.action, { ...entry, keys: [] });
       }
@@ -104,7 +157,6 @@ function mergeNavModeHints(entries) {
   const merged = [];
   for (const [action, data] of actionMap) {
     if (data.keys.length > 0) {
-      // Merge keys with '/' separator
       data.hint = `${data.keys.join('/')} ${data.description}`;
     }
     delete data.keys;
@@ -126,61 +178,4 @@ function mergeNavModeHints(entries) {
   }
 
   return ordered;
-}
-
-/**
- * Format a chord string for display in the hint bar.
- * Uses the first alternative if there are multiple.
- * Prefers single characters over arrow key names.
- */
-function formatChordForHint(chord, platform) {
-  // Handle special chord patterns: '1..9' displays as '1-9'
-  if (chord === '1..9') {
-    return '1-9';
-  }
-
-  const alternatives = chord.split('|');
-
-  // Prefer single character alternatives (like 'h', 'l') over arrow keys (like 'ArrowLeft')
-  const singleCharAlt = alternatives.find(alt => {
-    const parts = alt.trim().split('+');
-    const key = parts[parts.length - 1].trim();
-    return key.length === 1 && /^[a-zA-Z]$/.test(key);
-  });
-
-  const altToFormat = singleCharAlt || alternatives[0];
-  const parts = altToFormat.split('+').map(p => p.trim());
-
-  // Extract modifiers and key
-  const key = parts[parts.length - 1];
-  const modifiers = parts.slice(0, -1).map(m => m.toLowerCase());
-
-  const isMac = platform === 'darwin';
-  const modSymbols = [];
-
-  if (modifiers.includes('ctrl') || modifiers.includes('cmd') || modifiers.includes('meta')) {
-    modSymbols.push(isMac ? '⌘' : 'Ctrl');
-  }
-  if (modifiers.includes('shift')) {
-    modSymbols.push(isMac ? '⇧' : 'Shift');
-  }
-  if (modifiers.includes('alt') || modifiers.includes('option')) {
-    modSymbols.push(isMac ? '⌥' : 'Alt');
-  }
-
-  // Format key for display
-  let displayKey = key;
-  if (key === ' ') {
-    displayKey = 'Space';
-  } else if (key === 'Home') {
-    displayKey = 'Home';
-  } else if (key === 'End') {
-    displayKey = 'End';
-  } else if (key === '?') {
-    displayKey = '?';
-  } else if (key.length === 1) {
-    displayKey = key.toUpperCase();
-  }
-
-  return [...modSymbols, displayKey].join(isMac ? '' : '+');
 }
