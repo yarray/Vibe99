@@ -1,0 +1,1 @@
+Merge the two pane-switch shortcut hints (Ctrl+← pane and Ctrl+→ pane) into a single compact `Ctrl+←→ change pane` hint in the status bar. Implemented via declarative merge groups instead of ad-hoc special cases.
