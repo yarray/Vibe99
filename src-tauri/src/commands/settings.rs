@@ -344,27 +344,6 @@ fn sanitize_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
     }
 }
 
-/// Sanitize the default layout id.
-///
-/// Ensures the id refers to an existing layout. Returns an empty string
-/// if the referenced id is missing or the field is absent.
-pub(crate) fn sanitize_default_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
-    let raw = value.and_then(|v| v.as_str()).map(str::trim).unwrap_or("");
-
-    if raw.is_empty() {
-        return String::new();
-    }
-
-    if layouts
-        .iter()
-        .any(|l| l.get("id").and_then(|v| v.as_str()) == Some(raw))
-    {
-        raw.to_string()
-    } else {
-        String::new()
-    }
-}
-
 /// Resolve the path to `settings.json` inside the app data directory.
 pub(super) fn settings_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
