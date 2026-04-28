@@ -6,7 +6,7 @@
 
 ### Fixed
 
-- Build on Ubuntu 20.04: added setup script for Tauri v2 system dependencies (webkit2gtk-4.1, libsoup-3.0, glib >= 2.70) which are not available in default repos (VIB-69).
+- Build on Ubuntu 20.04: added setup script for Tauri v2 system dependencies (webkit2gtk-4.1, libsoup-3.0, glib >= 2.70) which are not available in default repos. All custom libraries are installed to /opt (isolated) — no system-level changes (no ldconfig, no profile.d) (VIB-69).
 
 ### Improved
 
