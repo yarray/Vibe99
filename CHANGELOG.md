@@ -21,6 +21,7 @@
   - Two-step close confirmation with visual feedback
   - Number badges in tabs during navigation mode
   - Proper focus management (exit nav mode after close/rename, return focus to terminal)
+- Command Palette: switching pane profile now auto-focuses the pane and closes the palette (VIB-66).
 
 ## 0.7.2 - 2026-04-27
 
