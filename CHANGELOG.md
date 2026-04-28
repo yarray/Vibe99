@@ -10,6 +10,7 @@
 
 ### Added
 
+- Frontend Layout bridge and core logic: `listLayouts`, `saveLayout`, `deleteLayout`, `renameLayout` bridge methods; `saveCurrentLayout`, `switchLayout`, `deleteLayoutById`, `renameLayoutById` functions; layout state variables; settings payload now includes `activeLayoutId` (VIB-61).
 - Command Palette (Ctrl+Shift+P) with curated actions: Change profile, Change color, Rename pane, Profile settings, Shortcuts settings (VIB-52).
 - OSC 7 cwd tracking for session restore (VIB-28-impl-1):
   - Frontend captures shell's current working directory changes via xterm.js OSC 7 handler
