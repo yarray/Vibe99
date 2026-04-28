@@ -59,6 +59,7 @@
 
 ### Fixed
 
+- Build on Ubuntu 20.04: added setup script for Tauri v2 system dependencies (webkit2gtk-4.1, libsoup-3.0, glib >= 2.70) which are not available in default repos (VIB-69).
 - Quotes are now preserved in shell profile arguments round-trip.
 - BG mask opacity range extended to the full 0–1 range in both UI controls and settings sanitization.
 - Removed dead shell profile rendering code from an incomplete refactoring.
