@@ -1221,6 +1221,10 @@ body.is-dragging-tabs {
   font-size: 10px;
 }
 
+.layout-item.is-default .layout-name {
+  color: #ffc107;
+}
+
 .layout-name {
   flex: 1;
   min-width: 0;
@@ -1235,6 +1239,44 @@ body.is-dragging-tabs {
   font-size: 11px;
   color: var(--panel-muted);
   flex-shrink: 0;
+}
+
+.layout-pane-info {
+  font-size: 12px;
+  color: var(--panel-muted);
+  margin-top: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.layout-pane-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.layout-pane-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.pane-shell-type {
+  color: #4ecdc4;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.pane-cwd {
+  color: var(--panel-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .layout-actions {
@@ -1372,6 +1414,14 @@ body.is-dragging-tabs {
   background: rgba(255, 255, 255, 0.25) !important;
 }
 
+.layout-info-actions .settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(255, 193, 7, 0.15) !important;
+  color: #ffc107;
+  border-color: rgba(255, 193, 7, 0.3);
+}
+
 .settings-modal.layouts-modal .settings-modal-header {
   justify-content: space-between;
 }
@@ -1418,6 +1468,34 @@ body.is-dragging-tabs {
 .settings-modal.layouts-modal .layouts-editor-panel {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* Default layout star indicator */
+.layout-default-star {
+  color: #f9d71c;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* Layout item with default styling */
+.layout-item.is-default {
+  border-color: rgba(249, 215, 28, 0.3);
+}
+
+.layout-item.is-default .layout-name {
+  color: #fff;
+  font-weight: 500;
+}
+
+/* Default button state in layout info panel */
+.layout-info-btn.is-default {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.layout-info-btn.is-default:hover {
+  opacity: 0.6;
+  background: transparent !important;
 }
 
 /* Settings Modal Overlay */
@@ -1867,9 +1945,9 @@ body.is-dragging-tabs {
   top: 100%;
   right: 0;
   min-width: 180px;
-  background: #171717;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 100;
   padding: 4px 0;
@@ -1878,11 +1956,10 @@ body.is-dragging-tabs {
 .layouts-dropdown-item {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 6px 14px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: var(--app-font-size);
-  gap: 8px;
+  color: var(--text);
+  gap: 10px;
 }
 
 .layouts-dropdown-item.is-active {
@@ -1891,7 +1968,7 @@ body.is-dragging-tabs {
 }
 
 .layouts-dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .layouts-dropdown-check {
@@ -1902,6 +1979,7 @@ body.is-dragging-tabs {
 
 .layouts-dropdown-label {
   flex: 1;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1914,13 +1992,75 @@ body.is-dragging-tabs {
 }
 
 .layouts-dropdown-action {
-  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
   cursor: pointer;
   color: rgba(255, 255, 255, 0.65);
-  font-size: 0.9em;
 }
 
 .layouts-dropdown-action:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Inline input dialog */
+.input-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.input-dialog {
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  min-width: 320px;
+  max-width: 400px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.input-dialog-prompt {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.input-dialog-field {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  box-sizing: border-box;
+}
+
+.input-dialog-field:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.input-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
