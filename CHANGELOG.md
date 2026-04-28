@@ -6,6 +6,10 @@
 
 ### Improved
 
+- Layout creation and renaming: replaced system `window.prompt()` dialogs with inline input fields. Works in Layout dropdown ("Save Current Layout…"), Layout Manager Modal ("Add Layout" button), and Layout items ("Rename" button). Supports Enter to confirm, Escape to cancel, and rejects empty inputs (VIB-83).
+
+- Status bar shortcut hints: merged Ctrl+← and Ctrl+→ pane navigation into single compact hint `Ctrl+←→ change pane` (VIB-72).
+
 - Status bar shortcut hints: merged Ctrl+← and Ctrl+→ pane navigation into single compact hint `Ctrl+←→ change pane` (VIB-72).
 
 - ESC key: unified close behavior — closes the topmost modal/panel (settings panel, color picker, shell profiles modal, keyboard shortcuts modal), without affecting fullscreen state. Fullscreen exit is now only via the fullscreen button or F11 (VIB-67).

@@ -710,15 +710,33 @@ async function toggleLayoutsDropdown() {
   separator.className = 'layouts-dropdown-separator';
   layoutsDropdownEl.appendChild(separator);
 
-  // "Save Current Layout..." action
+  // "Save Current Layout..." action - with inline input
+  const saveActionWrapper = document.createElement('div');
+  saveActionWrapper.className = 'layouts-dropdown-save-wrapper';
+
   const saveAction = document.createElement('div');
   saveAction.className = 'layouts-dropdown-action';
   saveAction.textContent = 'Save Current Layout…';
   saveAction.addEventListener('click', () => {
-    saveCurrentLayout();
-    closeLayoutsDropdown();
+    // Replace action text with inline input
+    saveActionWrapper.innerHTML = '';
+    const { wrapper } = createInlineInput(
+      'Layout name',
+      (name) => {
+        saveCurrentLayout(name);
+        closeLayoutsDropdown();
+      },
+      () => {
+        // Cancel: restore the action button
+        saveActionWrapper.innerHTML = '';
+        saveActionWrapper.appendChild(saveAction);
+        queueMicrotask(() => saveAction.focus());
+      }
+    );
+    saveActionWrapper.appendChild(wrapper);
   });
-  layoutsDropdownEl.appendChild(saveAction);
+  saveActionWrapper.appendChild(saveAction);
+  layoutsDropdownEl.appendChild(saveActionWrapper);
 
   // "Manage Layouts..." action
   const manageAction = document.createElement('div');
@@ -827,6 +845,55 @@ function createProfileActionButton(label, title, onClick) {
     onClick();
   });
   return btn;
+}
+
+function createInlineInput(placeholder, onConfirm, onCancel) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'inline-input-wrapper';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'inline-input';
+  input.placeholder = placeholder || '';
+
+  const handleKeydown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      const value = input.value.trim();
+      if (value) {
+        onConfirm(value);
+      } else if (onCancel) {
+        onCancel();
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      if (onCancel) {
+        onCancel();
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    // Optional: handle blur as cancel or confirm
+    // For now, we'll just cancel on blur to avoid accidental saves
+    if (onCancel) {
+      onCancel();
+    }
+  };
+
+  input.addEventListener('keydown', handleKeydown);
+  input.addEventListener('blur', handleBlur);
+
+  wrapper.appendChild(input);
+
+  queueMicrotask(() => {
+    input.focus();
+    input.select();
+  });
+
+  return { wrapper, input };
 }
 
 function changePaneShell(paneId, profileId) {
@@ -1153,10 +1220,39 @@ function openLayoutsModal() {
 
       overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
 
-      // Add Layout button
+      // Add Layout button - show inline input in list area
       overlay.querySelector('#modal-layout-add').addEventListener('click', () => {
-        const name = window.prompt('Layout name:');
-        if (!name || !name.trim()) return;
+        renderModalLayouts(overlay, { mode: 'add' });
+      });
+
+      document.body.appendChild(overlay);
+
+      // Store references for rendering
+      overlay._modalLayoutList = overlay.querySelector('#modal-layout-list');
+      overlay._modalLayoutEditor = overlay.querySelector('#modal-layout-editor');
+
+      // initial render
+      renderModalLayouts(overlay);
+    });
+}
+
+function renderModalLayouts(overlay, options = {}) {
+  const listEl = overlay?._modalLayoutList ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-list');
+  const editorEl = overlay?._modalLayoutEditor ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-editor');
+  if (!listEl || !editorEl) return;
+
+  listEl.replaceChildren();
+  editorEl.replaceChildren();
+
+  // Handle add mode - show inline input at top of list
+  if (options.mode === 'add') {
+    const addItem = document.createElement('div');
+    addItem.className = 'layout-item is-selected';
+    addItem.style.padding = '4px 10px';
+
+    const { wrapper } = createInlineInput(
+      'Layout name',
+      (name) => {
         const trimmed = name.trim();
         const session = buildSessionData();
         const layout = {
@@ -1174,26 +1270,53 @@ function openLayoutsModal() {
             renderModalLayouts(overlay);
           })
           .catch(reportError);
-      });
+      },
+      () => {
+        // Cancel: re-render without input mode
+        renderModalLayouts(overlay);
+      }
+    );
+    addItem.appendChild(wrapper);
+    listEl.appendChild(addItem);
+    return;
+  }
 
-      document.body.appendChild(overlay);
+  // Handle rename mode - show inline input for the specified layout
+  if (options.mode === 'rename' && options.layoutId) {
+    const layout = layouts.find((l) => l.id === options.layoutId);
+    if (layout) {
+      const renameItem = document.createElement('div');
+      renameItem.className = 'layout-item is-selected';
+      renameItem.style.padding = '4px 10px';
 
-      // Store references for rendering
-      overlay._modalLayoutList = overlay.querySelector('#modal-layout-list');
-      overlay._modalLayoutEditor = overlay.querySelector('#modal-layout-editor');
-
-      // initial render
-      renderModalLayouts(overlay);
-    });
-}
-
-function renderModalLayouts(overlay) {
-  const listEl = overlay?._modalLayoutList ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-list');
-  const editorEl = overlay?._modalLayoutEditor ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-editor');
-  if (!listEl || !editorEl) return;
-
-  listEl.replaceChildren();
-  editorEl.replaceChildren();
+      const { wrapper } = createInlineInput(
+        'New name',
+        (newName) => {
+          const trimmed = newName.trim();
+          bridge.renameLayout(layout.id, trimmed)
+            .then(() => bridge.listLayouts())
+            .then((config) => {
+              layouts = config.layouts ?? [];
+              activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+              renderModalLayouts(overlay);
+            })
+            .catch(reportError);
+        },
+        () => {
+          // Cancel: re-render without input mode
+          renderModalLayouts(overlay);
+        }
+      );
+      // Set initial value
+      const input = wrapper.querySelector('input');
+      if (input) {
+        input.value = options.currentName || '';
+      }
+      renameItem.appendChild(wrapper);
+      listEl.appendChild(renameItem);
+      return;
+    }
+  }
 
   // Left column: layout list
   if (layouts.length === 0) {
@@ -1244,17 +1367,8 @@ function renderModalLayouts(overlay) {
       renameBtn.title = 'Rename layout';
       renameBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const newName = window.prompt('Rename layout', layout.name || layout.id);
-        if (newName) {
-          bridge.renameLayout(layout.id, newName)
-            .then(() => bridge.listLayouts())
-            .then((config) => {
-              layouts = config.layouts ?? [];
-              activeLayoutId = config.activeLayoutId ?? activeLayoutId;
-              renderModalLayouts(overlay);
-            })
-            .catch(reportError);
-        }
+        // Replace the layout item with inline input
+        renderModalLayouts(overlay, { mode: 'rename', layoutId: layout.id, currentName: layout.name || layout.id });
       });
       actions.appendChild(renameBtn);
 
