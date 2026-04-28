@@ -11,7 +11,7 @@
 ### Improved
 
 - Color picker panel now supports keyboard navigation (VIB-65):
-  - Arrow keys (Left/Right/Up/Down) to move highlight between preset colors
+  - Arrow keys with 2D grid navigation (Left/Right for columns, Up/Down for rows)
   - Enter/Space to confirm selection
   - Escape to cancel and close panel
   - Panel auto-closes after selection, focus returns to current pane
