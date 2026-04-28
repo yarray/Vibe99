@@ -13,3 +13,4 @@ target/
 src-tauri/gen/schemas/macOS-schema.json
 .codex
 .claude
+.gstack/

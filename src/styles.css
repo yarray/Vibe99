@@ -40,6 +40,7 @@ body {
 
 .app-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--tabs-height) 1fr var(--status-height);
   height: 100vh;
 }
@@ -631,6 +632,8 @@ body {
 
 .stage-wrap {
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   padding: var(--stage-padding);
 }
 
