@@ -4,9 +4,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Layout edit panel enhancements (VIB-88):
+  - "Set as Default" button to set a layout as the default layout (loaded on application startup)
+  - Visual indicator (★) for default layouts in the layout list
+  - Enhanced layout info display with pane list preview showing shell type and working directory for each pane
+  - `defaultLayoutId` field in settings schema to persist the default layout
+
 ### Improved
 
 - Layout dropdown (`.layouts-dropdown`): unified visual style with context-menu — matching background color (`#1e1e1e`), box-shadow, font, padding, hover effect, and separator margin (VIB-89).
+- Replaced all Layout-related `window.prompt()` calls with inline DOM inputs for layout operations — popover inputs near the trigger element for Save Current Layout and direct inline inputs in Layout Manager Modal for Add/Rename, matching the existing design (dark theme, Enter/Esc shortcuts, auto-focus) (VIB-77/VIB-90).
 - Status bar shortcut hints: merged Ctrl+← and Ctrl+→ pane navigation into single compact hint `Ctrl+←→ change pane` (VIB-72).
 
 - ESC key: unified close behavior — closes the topmost modal/panel (settings panel, color picker, shell profiles modal, keyboard shortcuts modal), without affecting fullscreen state. Fullscreen exit is now only via the fullscreen button or F11 (VIB-67).

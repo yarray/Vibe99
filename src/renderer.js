@@ -132,11 +132,13 @@ function createUnavailableBridge() {
     saveSettings: () => Promise.resolve({}),
     listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
     addShellProfile: fail,
-    listLayouts: () => Promise.resolve({ layouts: [], activeLayoutId: '' }),
+    listLayouts: () => Promise.resolve({ layouts: [], activeLayoutId: '', defaultLayoutId: '' }),
     saveLayout: fail,
     deleteLayout: fail,
     renameLayout: fail,
     openLayoutWindow: fail,
+    openLayoutInNewWindow: fail,
+    setLayoutAsDefault: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
@@ -222,6 +224,8 @@ function createTauriBridge(tauri) {
     deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
     openLayoutWindow: (layoutId) => invoke('layout_open_window', { layoutId }),
+    openLayoutInNewWindow: (layoutId) => invoke('layout_open_in_new_window', { layoutId }),
+    setLayoutAsDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
     detectShellProfiles: () => invoke('shell_profiles_detect'),
@@ -603,7 +607,7 @@ function restoreSession(session) {
   paneCycleState = null;
 }
 
-function saveCurrentLayout(name) {
+async function saveCurrentLayout(name) {
   if (!name || typeof name !== 'string' || !name.trim()) {
     return;
   }
@@ -633,7 +637,7 @@ function saveCurrentLayout(name) {
     .catch(reportError);
 }
 
-function switchLayout(layoutId) {
+async function switchLayout(layoutId) {
   const layout = layouts.find((l) => l.id === layoutId);
   if (!layout) return;
   restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
@@ -1346,6 +1350,7 @@ function renderModalLayouts(overlay) {
                 .then((config) => {
                   layouts = config.layouts ?? [];
                   activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+                  defaultLayoutId = config.defaultLayoutId ?? '';
                   renderModalLayouts(overlay);
                 })
                 .catch(reportError);
@@ -1367,6 +1372,7 @@ function renderModalLayouts(overlay) {
               .then((config) => {
                 layouts = config.layouts ?? [];
                 activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+                defaultLayoutId = config.defaultLayoutId ?? '';
                 renderModalLayouts(overlay);
               })
               .catch(reportError);
@@ -1377,7 +1383,8 @@ function renderModalLayouts(overlay) {
       } else {
         nameEl = document.createElement('div');
         nameEl.className = 'layout-name';
-        nameEl.textContent = layout.name || layout.id;
+        const nameText = layout.name || layout.id;
+        nameEl.textContent = isDefault ? `★ ${nameText}` : nameText;
       }
 
       const info = document.createElement('div');
@@ -1407,7 +1414,7 @@ function renderModalLayouts(overlay) {
       renameBtn.className = 'settings-btn';
       renameBtn.textContent = '✎';
       renameBtn.title = 'Rename layout';
-      renameBtn.addEventListener('click', (e) => {
+      renameBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         renamingLayoutId = layout.id;
         renderModalLayouts(overlay);
@@ -1501,7 +1508,7 @@ function renderModalLayouts(overlay) {
     });
     actionsRow.appendChild(saveBtn);
 
-    // "Set as Default" button
+    // "Set as Default" button — uses dedicated backend command for proper validation
     const isDefault = selected.id === defaultLayoutId;
     const setDefaultBtn = document.createElement('button');
     setDefaultBtn.type = 'button';
@@ -1510,19 +1517,7 @@ function renderModalLayouts(overlay) {
     setDefaultBtn.disabled = isDefault;
     setDefaultBtn.title = isDefault ? 'This is the default layout' : 'Set this layout to restore on startup';
     setDefaultBtn.addEventListener('click', () => {
-      defaultLayoutId = selected.id;
-      // Save defaultLayoutId via settings
-      const settingsToSave = {
-        version: 5,
-        ui: settings,
-        shell: { profiles: shellProfiles.filter(p => !detectedShellProfiles.some(dp => dp.id === p.id)), defaultProfile: defaultShellProfileId },
-        shortcuts: ShortcutsRegistry.getShortcutsForSave(),
-        session: buildSessionData(),
-        activeLayoutId,
-        defaultLayoutId,
-      };
-      bridge.saveSettings(settingsToSave)
-        .then(() => bridge.listLayouts())
+      bridge.setLayoutAsDefault(selected.id)
         .then((config) => {
           defaultLayoutId = config.defaultLayoutId ?? selected.id;
           renderModalLayouts(overlay);
@@ -3082,10 +3077,10 @@ function openCommandList() {
     { id: 'profile-settings',  label: 'Profile settings' },
     { id: 'shortcuts-settings', label: 'Shortcuts settings' },
     { id: 'layout-save',     label: 'Layout: Save Current Layout' },
-    { id: 'layout-default',  label: 'Layout: Switch to Default' },
+    { id: 'layout-default',  label: 'Layout: Open Default' },
     ...layouts
       .filter((l) => l.id !== 'default')
-      .map((l) => ({ id: `layout-switch:${l.id}`, label: `Layout: Switch to ${l.name}` })),
+      .map((l) => ({ id: `layout-open:${l.id}`, label: `Layout: Open ${l.name}` })),
     { id: 'layout-manage',   label: 'Layout: Manage Layouts' },
   ];
 
@@ -3780,7 +3775,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     loadShellProfiles();
 
     const urlParams = new URLSearchParams(window.location.search);
-    const cliLayoutId = urlParams.get('layout');
+    const cliLayoutId = urlParams.get('layoutId');
 
     const layoutConfig = await bridge.listLayouts();
     layouts = layoutConfig.layouts ?? [];
@@ -3801,7 +3796,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       defaultLayoutId = 'default';
     }
 
-    // window.__VIBE99_LAYOUT_ID__ set by Rust for new-window layouts
     const newWindowLayoutId = window.__VIBE99_LAYOUT_ID__ || null;
 
     if (cliLayoutId) {
@@ -3821,14 +3815,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         restoreSession(savedSettings.session);
       }
     } else if (defaultLayoutId && layouts.find((l) => l.id === defaultLayoutId)) {
-      // Restore default layout on startup
       activeLayoutId = defaultLayoutId;
       switchLayout(defaultLayoutId);
     } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
       switchLayout(activeLayoutId);
     } else if (savedSettings?.session?.panes?.length > 0) {
       restoreSession(savedSettings.session);
-      // Update layout indicator even when restoring from session (no active layout)
       updateLayoutsIndicator();
     } else {
       panes = panes.map((p) =>
@@ -3836,7 +3828,6 @@ window.addEventListener('DOMContentLoaded', async () => {
           ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
           : p
       );
-      // Update layout indicator on initial startup
       updateLayoutsIndicator();
     }
 

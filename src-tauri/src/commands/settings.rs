@@ -315,6 +315,19 @@ pub(crate) fn sanitize_layouts(value: Option<&Value>) -> Vec<Value> {
 /// Ensures the id refers to an existing layout. Returns an empty string
 /// if the referenced id is missing or the field is absent.
 pub(crate) fn sanitize_active_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
+    sanitize_layout_id(value, layouts)
+}
+
+/// Sanitize the default layout id.
+///
+/// Ensures the id refers to an existing layout. Returns an empty string
+/// if the referenced id is missing or the field is absent.
+pub(crate) fn sanitize_default_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
+    sanitize_layout_id(value, layouts)
+}
+
+/// Shared sanitization for layout id fields (activeLayoutId, defaultLayoutId).
+fn sanitize_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
     let raw = value.and_then(|v| v.as_str()).map(str::trim).unwrap_or("");
 
     if raw.is_empty() {
@@ -634,6 +647,17 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
             .and_then(|v| v.get("layouts").cloned());
         if let (Some(layouts), Some(obj)) = (layouts, settings.as_object_mut()) {
             obj.insert("layouts".into(), layouts);
+        }
+    }
+
+    // Preserve the existing `defaultLayoutId` from disk if the frontend does not send it.
+    if settings.get("defaultLayoutId").is_none() && path.exists() {
+        let default_layout_id = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .and_then(|v| v.get("defaultLayoutId").cloned());
+        if let (Some(default_layout_id), Some(obj)) = (default_layout_id, settings.as_object_mut()) {
+            obj.insert("defaultLayoutId".into(), default_layout_id);
         }
     }
 

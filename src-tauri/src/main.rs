@@ -10,6 +10,7 @@ use vibe99_lib::commands::terminal::{self, AppState};
 use vibe99_lib::commands::wsl as wsl_cmd;
 use vibe99_lib::pty::PtyManager;
 
+/// Parse `--layout <id>` from the command-line arguments.
 fn parse_layout_arg() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
@@ -48,6 +49,8 @@ fn main() {
             layout::layout_delete,
             layout::layout_rename,
             layout::layout_open_window,
+            layout::layout_set_default,
+            layout::layout_open_in_new_window,
             shell_profile::shell_profiles_list,
             shell_profile::shell_profile_set,
             shell_profile::shell_profile_add,
@@ -63,7 +66,7 @@ fn main() {
             if let Some(layout_id) = &layout_id_arg {
                 if let Some(window) = app.get_webview_window("main") {
                     if let Ok(mut url) = window.url() {
-                        url.query_pairs_mut().append_pair("layout", layout_id);
+                        url.query_pairs_mut().append_pair("layoutId", layout_id);
                         let _ = window.navigate(url);
                     }
                 }
