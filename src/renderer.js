@@ -45,6 +45,32 @@ function basename(path) {
   return path.replace(/\/+$/, '').split('/').pop() || '/';
 }
 
+// OSC 7 format: \x1b]7;file://hostname/path\x07
+// Extracts the path from the OSC 7 sequence and URL-decodes it.
+function extractPathFromOsc7(data) {
+  const prefix = 'file://';
+  if (!data.startsWith(prefix)) {
+    return null;
+  }
+  const afterPrefix = data.slice(prefix.length);
+  // Skip hostname part until the next slash
+  const slashIndex = afterPrefix.indexOf('/');
+  if (slashIndex === -1) {
+    return null;
+  }
+  let encodedPath = afterPrefix.slice(slashIndex);
+  // Windows OSC 7 paths look like /C:/Users/... — strip the leading slash
+  // so the result is a valid Windows path (C:/Users/...).
+  if (/^\/[A-Za-z]:\//.test(encodedPath)) {
+    encodedPath = encodedPath.slice(1);
+  }
+  try {
+    return decodeURIComponent(encodedPath);
+  } catch {
+    return null;
+  }
+}
+
 function splitArgs(str) {
   const args = [];
   let cur = '';
@@ -292,6 +318,31 @@ const settings = {
   breathingAlertEnabled: true,
 };
 let pendingSettingsSave = null;
+let pendingCwdSave = null;
+
+// Called when a pane's cwd changes via OSC 7. Immediately updates the pane
+// and schedules a debounced settings save.
+function onPaneCwdChanged(paneId, newCwd) {
+  const paneIndex = panes.findIndex((p) => p.id === paneId);
+  if (paneIndex === -1) {
+    return;
+  }
+  const existingCwd = panes[paneIndex].cwd;
+  if (existingCwd === newCwd) {
+    return;
+  }
+
+  panes[paneIndex] = { ...panes[paneIndex], cwd: newCwd };
+
+  // Clear any pending cwd save and schedule a new one
+  if (pendingCwdSave !== null) {
+    window.clearTimeout(pendingCwdSave);
+  }
+  pendingCwdSave = window.setTimeout(() => {
+    pendingCwdSave = null;
+    scheduleSettingsSave();
+  }, 5000);
+}
 
 let shellProfiles = [];
 let defaultShellProfileId = '';
@@ -554,9 +605,9 @@ function flushSettingsSave() {
     window.clearTimeout(pendingSettingsSave);
     pendingSettingsSave = null;
   }
-  if (pendingSessionSave !== null) {
-    window.clearTimeout(pendingSessionSave);
-    pendingSessionSave = null;
+  if (pendingCwdSave !== null) {
+    window.clearTimeout(pendingCwdSave);
+    pendingCwdSave = null;
   }
   const settingsToSave = {
     version: 5,
@@ -1342,6 +1393,17 @@ function createPane(pane) {
       );
       bridge.writeClipboardText(text);
     } catch {}
+    return true;
+  });
+
+  // OSC 7 handler for cwd tracking. Shells that support OSC 7 emit the
+  // current working directory in the format \x1b]7;file://hostname/path\x07.
+  // This allows us to track directory changes and persist them for session restore.
+  terminal.parser.registerOscHandler(7, (data) => {
+    const newCwd = extractPathFromOsc7(data);
+    if (newCwd) {
+      onPaneCwdChanged(pane.id, newCwd);
+    }
     return true;
   });
 
@@ -2375,6 +2437,7 @@ function openProfileSwitcher() {
 
   openCommandPalette(items, (profileId) => {
     changePaneShell(focusedPaneId, profileId);
+    focusPane(focusedPaneId);
   }, {
     placeholder: 'Select a profile…',
     emptyText: 'No matching profiles',

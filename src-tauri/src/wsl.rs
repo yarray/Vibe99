@@ -176,6 +176,19 @@ pub fn wsl_to_windows_path(wsl_path: &str) -> Option<String> {
     Some(format!("{}:\\{}", drive_char, rest.replace('/', "\\")))
 }
 
+/// Convert a Linux path inside WSL to a Windows UNC path.
+///
+/// ```
+/// wsl_path_to_unc("Ubuntu", "/home/user/projects")
+/// → \\wsl.localhost\Ubuntu\home\user\projects
+/// ```
+///
+/// The UNC path can be used as the working directory for `wsl.exe` on the
+/// Windows side — the Linux shell inside WSL will see the original path.
+pub fn wsl_path_to_unc(distro: &str, linux_path: &str) -> String {
+    format!("\\\\wsl.localhost\\{}{}", distro, linux_path)
+}
+
 // ----------------------------------------------------------------
 // Environment bridging
 // ----------------------------------------------------------------
@@ -183,10 +196,9 @@ pub fn wsl_to_windows_path(wsl_path: &str) -> Option<String> {
 /// Environment variables to forward from Windows into WSL.
 ///
 /// These are variables that carry user intent across the boundary:
-/// - `PATH`: preserves Windows tools accessible from WSL
-/// - `WSL_DISTRO_NAME`: lets the shell know which distro it's in
 /// - `TERM` / `COLORTERM`: terminal capability hints
-const WSLENV_FORWARD: &[&str] = &["TERM", "COLORTERM"];
+/// - `PROMPT_COMMAND`: OSC 7 cwd tracking injected by the host
+const WSLENV_FORWARD: &[&str] = &["TERM", "COLORTERM", "PROMPT_COMMAND"];
 
 /// Return the `WSLENV` value that instructs WSL to forward the selected
 /// environment variables from the Windows side.

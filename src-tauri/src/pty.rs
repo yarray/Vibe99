@@ -145,6 +145,10 @@ impl PtyManager {
         self.destroy(pane_id);
 
         let pty_system = native_pty_system();
+        // Preserve the raw cwd string before resolution — WSL Linux paths (e.g.
+        // "/home/user/projects") don't pass `is_dir()` on Windows, so they need
+        // to be forwarded to build_command separately.
+        let raw_cwd = cwd.map(|s| s.to_string());
         let cwd = resolve_working_directory(cwd);
         let cols = cols.unwrap_or(DEFAULT_COLS).max(MIN_COLS);
         let rows = rows.unwrap_or(DEFAULT_ROWS).max(MIN_ROWS);
@@ -161,10 +165,25 @@ impl PtyManager {
         // Build the shell command with fallback chain.
         let mut cmd = None;
         let mut last_error = String::new();
+        let mut shell_stem = String::new();
 
         for candidate in shell_candidates(&app, shell_profile_id) {
-            match build_command(&candidate, &cwd) {
+            let stem = candidate
+                .shell
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            match build_command(&candidate, &cwd, raw_cwd.as_deref()) {
                 Ok(c) => {
+                    // For WSL the outer process is wsl.exe — resolve to the
+                    // inner shell (e.g. /bin/bash → "bash") so that OSC 7
+                    // injection targets the right shell.
+                    if stem == "wsl" {
+                        shell_stem = extract_wsl_inner_shell(&candidate.args);
+                    } else {
+                        shell_stem = stem;
+                    }
                     cmd = Some(c);
                     break;
                 }
@@ -186,6 +205,19 @@ impl PtyManager {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
 
+        // Inject OSC 7 shell integration so the frontend can track cwd changes.
+        if shell_stem == "powershell" || shell_stem == "pwsh" {
+            cmd.arg("-NoExit");
+            cmd.arg("-Command");
+            cmd.arg(powershell_osc7_init());
+        } else if shell_stem == "bash" {
+            cmd.env(
+                "PROMPT_COMMAND",
+                r#"printf "\033]7;file://%s%s\007" "$(hostname)" "$PWD""#,
+            );
+        }
+        // zsh (chpwd) and sh (cd wrapper) are written to PTY stdin after spawn.
+
         let mut child = pair
             .slave
             .spawn_command(cmd)
@@ -196,10 +228,19 @@ impl PtyManager {
             .try_clone_reader()
             .map_err(|e| format!("failed to clone PTY reader: {e}"))?;
 
-        let writer = pair
+        let mut writer = pair
             .master
             .take_writer()
             .map_err(|e| format!("failed to get PTY writer: {e}"))?;
+
+        // For zsh, inject a chpwd hook via PTY stdin that emits OSC 7 on
+        // every directory change. The init line will be briefly visible in
+        // the terminal at startup.
+        if shell_stem == "zsh" {
+            let init = b"vibe99_osc7(){printf '\\033]7;file://%s%s\\007' \"$(hostname)\" \"$PWD\"};chpwd_functions+=(vibe99_osc7);vibe99_osc7\n";
+            let _ = writer.write_all(init);
+            let _ = writer.flush();
+        }
 
         let master = pair.master;
 
@@ -635,9 +676,20 @@ fn push_wsl_candidates(_candidates: &mut Vec<ShellCandidate>, _distro_override: 
 ///
 /// WSL candidates (shell == "wsl.exe") are handled specially: `wsl.exe`
 /// is verified on the Windows side, but the inner shell (e.g. `/bin/bash`)
-/// is not checked since it lives inside the WSL filesystem. The `cwd` is
-/// converted from Windows to WSL path format when the candidate is WSL.
-fn build_command(candidate: &ShellCandidate, cwd: &Path) -> Result<CommandBuilder, String> {
+/// is not checked since it lives inside the WSL filesystem.
+///
+/// `raw_cwd` carries the original cwd string from the frontend (before
+/// `resolve_working_directory` validated it). For WSL panes the saved cwd
+/// may be a Linux path like `/home/user/projects` that doesn't pass
+/// `is_dir()` on Windows. In that case we convert it to a UNC path
+/// (`\\wsl.localhost\<distro>/home/user/projects`) so `wsl.exe` can use it
+/// as its working directory, and the Linux shell inside sees the original
+/// path.
+fn build_command(
+    candidate: &ShellCandidate,
+    cwd: &Path,
+    raw_cwd: Option<&str>,
+) -> Result<CommandBuilder, String> {
     let is_wsl = cfg!(target_os = "windows")
         && candidate
             .shell
@@ -651,11 +703,17 @@ fn build_command(candidate: &ShellCandidate, cwd: &Path) -> Result<CommandBuilde
         let mut cmd = CommandBuilder::new(&wsl_path);
         cmd.args(&candidate.args);
 
-        // Convert Windows cwd to WSL path if it looks like a Windows path.
-        let cwd_str = cwd.to_string_lossy();
-        if let Some(wsl_cwd) = wsl::windows_to_wsl_path(&cwd_str) {
-            cmd.cwd(PathBuf::from(&wsl_cwd));
+        // Resolve the effective cwd for the WSL process.
+        if let Some(raw) = raw_cwd.filter(|s| s.starts_with('/')) {
+            // Linux path from OSC 7 — convert to UNC so wsl.exe can cd to it.
+            if let Some(distro) = extract_wsl_distro(&candidate.args) {
+                let unc = wsl::wsl_path_to_unc(distro, raw);
+                cmd.cwd(PathBuf::from(&unc));
+            } else {
+                cmd.cwd(cwd);
+            }
         } else {
+            // Windows path — use the resolved cwd (already validated).
             cmd.cwd(cwd);
         }
 
@@ -779,4 +837,40 @@ fn is_executable(path: &Path) -> bool {
 #[cfg(not(unix))]
 fn is_executable(path: &Path) -> bool {
     path.is_file()
+}
+
+// ----------------------------------------------------------------
+// Shell integration helpers
+// ----------------------------------------------------------------
+
+/// PowerShell init script that wraps the prompt function to emit OSC 7
+/// on every prompt. Uses [char]27/[char]7 instead of backtick escapes to
+/// avoid quoting issues when passed as a -Command argument.
+fn powershell_osc7_init() -> String {
+    "$__v99_op=${function:prompt};function prompt{$osc=[char]27+']7;file://'+$env:COMPUTERNAME+'/'+$PWD.Path.Replace('\\','/')+[char]7;Write-Host -NoNewLine $osc;if($__v99_op){& $__v99_op}else{'PS > '}}".to_string()
+}
+
+/// Extract the WSL distribution name from shell candidate args.
+///
+/// Looks for `--distribution <name>` in the args vector. Returns `None`
+/// if no distribution flag is found (default distro).
+fn extract_wsl_distro(args: &[String]) -> Option<&str> {
+    for i in 0..args.len().saturating_sub(1) {
+        if args[i] == "--distribution" {
+            return Some(&args[i + 1]);
+        }
+    }
+    None
+}
+
+/// Extract the inner shell stem from WSL candidate args.
+///
+/// Matches `--exec <path>` and returns the file stem (e.g. `/bin/bash` →
+/// `"bash"`). Returns `"bash"` as a fallback.
+fn extract_wsl_inner_shell(args: &[String]) -> String {
+    let re = regex::Regex::new(r"(?i)(?:^|\s)--exec\s+(?:.*/)?(\w+)").unwrap();
+    re.captures(&args.join(" "))
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().to_lowercase())
+        .unwrap_or_else(|| "bash".to_string())
 }
