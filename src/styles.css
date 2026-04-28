@@ -1221,6 +1221,10 @@ body.is-dragging-tabs {
   font-size: 10px;
 }
 
+.layout-item.is-default .layout-name {
+  color: #ffc107;
+}
+
 .layout-name {
   flex: 1;
   min-width: 0;
@@ -1235,6 +1239,44 @@ body.is-dragging-tabs {
   font-size: 11px;
   color: var(--panel-muted);
   flex-shrink: 0;
+}
+
+.layout-pane-info {
+  font-size: 12px;
+  color: var(--panel-muted);
+  margin-top: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.layout-pane-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.layout-pane-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.pane-shell-type {
+  color: #4ecdc4;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.pane-cwd {
+  color: var(--panel-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .layout-actions {
@@ -1370,6 +1412,14 @@ body.is-dragging-tabs {
 
 .layout-info-actions .settings-btn.is-primary:hover {
   background: rgba(255, 255, 255, 0.25) !important;
+}
+
+.layout-info-actions .settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(255, 193, 7, 0.15) !important;
+  color: #ffc107;
+  border-color: rgba(255, 193, 7, 0.3);
 }
 
 .settings-modal.layouts-modal .settings-modal-header {
