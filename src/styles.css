@@ -1867,9 +1867,9 @@ body.is-dragging-tabs {
   top: 100%;
   right: 0;
   min-width: 180px;
-  background: #171717;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 100;
   padding: 4px 0;
@@ -1878,11 +1878,10 @@ body.is-dragging-tabs {
 .layouts-dropdown-item {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 6px 14px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: var(--app-font-size);
-  gap: 8px;
+  color: var(--text);
+  gap: 10px;
 }
 
 .layouts-dropdown-item.is-active {
@@ -1891,7 +1890,7 @@ body.is-dragging-tabs {
 }
 
 .layouts-dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .layouts-dropdown-check {
@@ -1902,6 +1901,7 @@ body.is-dragging-tabs {
 
 .layouts-dropdown-label {
   flex: 1;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1914,13 +1914,14 @@ body.is-dragging-tabs {
 }
 
 .layouts-dropdown-action {
-  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
   cursor: pointer;
   color: rgba(255, 255, 255, 0.65);
-  font-size: 0.9em;
 }
 
 .layouts-dropdown-action:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.08);
 }
