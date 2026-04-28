@@ -717,6 +717,7 @@ function openShellProfilesModal() {
     overlay.remove();
     editingShellProfile = null;
     selectedShellProfileId = null;
+    unregisterModal(closeModal);
   };
 
   overlay.addEventListener('click', (e) => {
@@ -761,6 +762,7 @@ function openShellProfilesModal() {
   }
 
   renderModalShellProfiles();
+  registerModal(closeModal);
 }
 
 function renderModalShellProfiles() {
@@ -2285,12 +2287,13 @@ function showColorPicker(paneId) {
     if (e.target === picker) {
       picker.removeEventListener('keydown', handleKeydown);
       picker.remove();
+      unregisterModal(closeColorPicker);
     }
   });
 
-  picker.querySelector('.color-picker-close').addEventListener('click', () => {
+picker.querySelector('.color-picker-close').addEventListener('click', () => {
     picker.removeEventListener('keydown', handleKeydown);
-    picker.remove();
+    closeColorPicker();
   });
 
   picker.querySelectorAll('.color-preset').forEach(btn => {
@@ -2298,13 +2301,14 @@ function showColorPicker(paneId) {
       const color = btn.dataset.color;
       setPaneColor(paneId, color);
       picker.removeEventListener('keydown', handleKeydown);
-      picker.remove();
+      closeColorPicker();
       // Return focus to the pane
       focusPane(paneId);
     });
 
     // Update focused index on mouse hover for consistency
     btn.addEventListener('mouseenter', () => {
+      const presetButtons = picker.querySelectorAll('.color-preset');
       presetButtons[focusedIndex].classList.remove('is-focused');
       focusedIndex = parseInt(btn.dataset.index, 10);
       btn.classList.add('is-focused');
@@ -2325,7 +2329,7 @@ function showColorPicker(paneId) {
   picker.querySelector('.color-picker-clear').addEventListener('click', () => {
     clearPaneColor(paneId);
     picker.removeEventListener('keydown', handleKeydown);
-    picker.remove();
+    closeColorPicker();
   });
 
   document.body.appendChild(picker);
@@ -2336,6 +2340,13 @@ function showColorPicker(paneId) {
   // Focus the picker overlay to enable keyboard capture
   picker.setAttribute('tabindex', '-1');
   picker.focus();
+
+  function closeColorPicker() {
+    picker.remove();
+    unregisterModal(closeColorPicker);
+  }
+
+  registerModal(closeColorPicker);
 }
 
 function setPaneColor(paneId, color) {
@@ -2374,7 +2385,7 @@ function openTabSwitcher() {
     cancelRenamePane();
   }
   if (!settingsPanelEl.classList.contains('is-hidden')) {
-    settingsPanelEl.classList.add('is-hidden');
+    closeSettingsPanel();
   }
 
   const items = panes.map((pane) => ({
@@ -2395,7 +2406,7 @@ function openCommandList() {
     cancelRenamePane();
   }
   if (!settingsPanelEl.classList.contains('is-hidden')) {
-    settingsPanelEl.classList.add('is-hidden');
+    closeSettingsPanel();
   }
 
   const items = [
@@ -2417,6 +2428,8 @@ function openCommandList() {
     } else if (commandId === 'profile-settings') {
       openShellProfilesModal();
     } else if (commandId === 'shortcuts-settings') {
+      closeKeyboardShortcutsModal();
+      registerModal(closeKeyboardShortcutsModal);
       ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
     }
   }, {
@@ -2632,7 +2645,14 @@ function startInlineRename(paneId) {
   }
 }
 
+function closeKeyboardShortcutsModal() {
+  const overlay = document.querySelector('.settings-modal-overlay');
+  if (overlay) overlay.remove();
+}
+
 function openKeymapHelpModal() {
+  closeKeyboardShortcutsModal();
+  registerModal(closeKeyboardShortcutsModal);
   ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
 }
 
@@ -2697,6 +2717,31 @@ window.addEventListener('blur', () => {
     commitPaneCycle();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Modal stack — ESC closes the topmost modal/panel
+// ---------------------------------------------------------------------------
+const modalStack = [];
+
+function registerModal(closeFn) {
+  modalStack.push(closeFn);
+}
+
+function unregisterModal(closeFn) {
+  const idx = modalStack.indexOf(closeFn);
+  if (idx !== -1) modalStack.splice(idx, 1);
+}
+
+function closeTopModal() {
+  const closeFn = modalStack[modalStack.length - 1];
+  if (closeFn) closeFn();
+}
+
+function closeSettingsPanel() {
+  settingsPanelEl.classList.add('is-hidden');
+  editingShellProfile = null;
+  unregisterModal(closeSettingsPanel);
+}
 
 addPaneButtonEl.addEventListener('click', () => {
   try {
@@ -2805,7 +2850,9 @@ settingsButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
   const wasHidden = settingsPanelEl.classList.toggle('is-hidden');
   if (wasHidden) {
-    editingShellProfile = null;
+    closeSettingsPanel();
+  } else {
+    registerModal(closeSettingsPanel);
   }
 });
 
@@ -2827,12 +2874,16 @@ shellProfilesSettingsBtn.addEventListener('keydown', (event) => {
 
 // Keyboard shortcuts modal button (clickable row)
 keyboardShortcutsSettingsBtn.addEventListener('click', () => {
+  closeKeyboardShortcutsModal();
+  registerModal(closeKeyboardShortcutsModal);
   ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
 });
 
 keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
+    closeKeyboardShortcutsModal();
+    registerModal(closeKeyboardShortcutsModal);
     ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
   }
 });
@@ -2987,19 +3038,21 @@ breathingAlertToggleEl.addEventListener('change', () => {
   scheduleSettingsSave();
 });
 
+// Close settings panel via click-outside, keeping modal stack in sync
 window.addEventListener('pointerdown', (event) => {
   if (
     !settingsPanelEl.classList.contains('is-hidden') &&
     !settingsPanelEl.contains(event.target) &&
     !settingsButtonEl.contains(event.target)
   ) {
-    settingsPanelEl.classList.add('is-hidden');
+    closeSettingsPanel();
   }
 });
 
+// Global ESC: close the topmost modal/panel registered in the stack
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !settingsPanelEl.classList.contains('is-hidden')) {
-    settingsPanelEl.classList.add('is-hidden');
+  if (event.key === 'Escape') {
+    closeTopModal();
   }
 });
 
