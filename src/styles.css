@@ -1372,6 +1372,67 @@ body.is-dragging-tabs {
   background: rgba(255, 255, 255, 0.25) !important;
 }
 
+.layout-info-actions .settings-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Visual indicator for default layout */
+.layout-item.is-default .layout-name::before {
+  content: '★ ';
+  color: #f1c40f;
+  font-size: 10px;
+}
+
+/* Pane details list in layout editor */
+.layout-pane-count-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.layout-panes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.layout-pane-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.layout-pane-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.layout-pane-details {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.layout-pane-cwd {
+  color: rgba(255, 255, 255, 0.6);
+  font-family: ui-monospace, 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
+}
+
+.layout-pane-profile {
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
 .settings-modal.layouts-modal .settings-modal-header {
   justify-content: space-between;
 }

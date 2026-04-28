@@ -48,6 +48,15 @@ fn extract_active_layout_id(config: &Value) -> String {
         .to_string()
 }
 
+/// Extract the default layout id from sanitized config.
+fn extract_default_layout_id(config: &Value) -> String {
+    config
+        .get("defaultLayoutId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
 // ----------------------------------------------------------------
 // Tauri commands
 // ----------------------------------------------------------------
@@ -65,6 +74,7 @@ pub fn layouts_list(app: AppHandle) -> Result<Value, String> {
     Ok(serde_json::json!({
         "layouts": extract_layouts(&config),
         "activeLayoutId": extract_active_layout_id(&config),
+        "defaultLayoutId": extract_default_layout_id(&config),
     }))
 }
 
@@ -115,6 +125,7 @@ pub fn layout_save(app: AppHandle, layout: Value) -> Result<Value, String> {
 /// Delete a layout by `layout_id`.
 ///
 /// If the removed layout was the active one, `activeLayoutId` is cleared.
+/// If the removed layout was the default one, `defaultLayoutId` is cleared.
 /// Returns the updated full settings.
 #[tauri::command]
 pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String> {
@@ -136,6 +147,7 @@ pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String>
     }
 
     let active_is_deleted = extract_active_layout_id(&config) == layout_id;
+    let default_is_deleted = extract_default_layout_id(&config) == layout_id;
 
     if let Some(obj) = config.as_object_mut() {
         if layouts.is_empty() {
@@ -146,6 +158,9 @@ pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String>
 
         if active_is_deleted {
             obj.insert("activeLayoutId".into(), Value::String(String::new()));
+        }
+        if default_is_deleted {
+            obj.insert("defaultLayoutId".into(), Value::String(String::new()));
         }
     }
 
