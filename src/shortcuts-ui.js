@@ -26,6 +26,7 @@ function getShortcutActionName(actionId) {
     'new-pane': 'New Pane',
     'close-pane': 'Close Pane',
     'rename-pane': 'Rename Pane',
+    'cycle-lit': 'Cycle Alerted Panes',
   };
   return names[actionId] || actionId;
 }
@@ -49,6 +50,7 @@ function getShortcutActionDescription(actionId) {
     'new-pane': 'Create a new terminal pane (navigation mode)',
     'close-pane': 'Close current pane (navigation mode)',
     'rename-pane': 'Rename current pane (navigation mode)',
+    'cycle-lit': 'Cycle focus through panes with background activity alerts',
   };
   return descriptions[actionId] || '';
 }
