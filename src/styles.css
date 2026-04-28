@@ -205,6 +205,7 @@ body {
 .tabs-actions {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .tabs-add-group {
