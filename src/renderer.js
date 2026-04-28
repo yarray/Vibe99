@@ -303,6 +303,7 @@ const statusLabelEl = document.getElementById('status-label');
 const statusHintEl = document.getElementById('status-hint');
 const addPaneButtonEl = document.getElementById('tabs-add');
 const addPaneDropdownButtonEl = document.getElementById('tabs-add-dropdown');
+const layoutsButtonEl = document.getElementById('tabs-layouts');
 const settingsButtonEl = document.getElementById('tabs-settings');
 const fullscreenButtonEl = document.getElementById('tabs-fullscreen');
 const settingsPanelEl = document.getElementById('settings-panel');
@@ -361,6 +362,10 @@ let shellProfiles = [];
 let defaultShellProfileId = '';
 let editingShellProfile = null; // null or { id?, name, command, args }
 let selectedShellProfileId = null; // ID of currently selected profile for editing
+
+// Layout dropdown state
+let layoutsDropdownOpen = false;
+let layoutsDropdownEl = null;
 
 // Surface "settled output on a backgrounded pane" via a pulsing mask. The
 // watcher just decides *when* a pane should alert; the alert renderer
@@ -646,6 +651,215 @@ function renameLayoutById(layoutId, newName) {
       layouts = config.layouts ?? [];
     })
     .catch(reportError);
+}
+
+async function toggleLayoutsDropdown() {
+  if (layoutsDropdownOpen) {
+    closeLayoutsDropdown();
+    return;
+  }
+
+  // Reload layouts to ensure we have the latest list
+  try {
+    const config = await bridge.listLayouts();
+    layouts = config.layouts ?? [];
+    activeLayoutId = config.activeLayoutId ?? '';
+  } catch (error) {
+    reportError(error);
+  }
+
+  // Create dropdown menu
+  layoutsDropdownEl = document.createElement('div');
+  layoutsDropdownEl.className = 'layouts-dropdown';
+
+  // Add layout items
+  if (layouts.length === 0) {
+    const emptyItem = document.createElement('div');
+    emptyItem.className = 'layouts-dropdown-item';
+    emptyItem.textContent = 'No saved layouts';
+    emptyItem.style.color = 'var(--panel-muted)';
+    layoutsDropdownEl.appendChild(emptyItem);
+  } else {
+    for (const layout of layouts) {
+      const item = document.createElement('div');
+      item.className = 'layouts-dropdown-item';
+      if (layout.id === activeLayoutId) {
+        item.classList.add('is-active');
+      }
+
+      const checkmark = document.createElement('span');
+      checkmark.className = 'layouts-dropdown-check';
+      checkmark.textContent = layout.id === activeLayoutId ? '✓' : '';
+
+      const label = document.createElement('span');
+      label.className = 'layouts-dropdown-label';
+      label.textContent = layout.name || layout.id;
+
+      item.append(checkmark, label);
+      item.addEventListener('click', () => {
+        switchLayout(layout.id);
+        closeLayoutsDropdown();
+      });
+
+      layoutsDropdownEl.appendChild(item);
+    }
+  }
+
+  // Separator
+  const separator = document.createElement('div');
+  separator.className = 'layouts-dropdown-separator';
+  layoutsDropdownEl.appendChild(separator);
+
+  // "Save Current Layout..." action
+  const saveAction = document.createElement('div');
+  saveAction.className = 'layouts-dropdown-action';
+  saveAction.textContent = 'Save Current Layout…';
+  saveAction.addEventListener('click', () => {
+    saveCurrentLayout();
+    closeLayoutsDropdown();
+  });
+  layoutsDropdownEl.appendChild(saveAction);
+
+  // "Manage Layouts..." action
+  const manageAction = document.createElement('div');
+  manageAction.className = 'layouts-dropdown-action';
+  manageAction.textContent = 'Manage Layouts…';
+  manageAction.addEventListener('click', () => {
+    openLayoutsModal();
+    closeLayoutsDropdown();
+  });
+  layoutsDropdownEl.appendChild(manageAction);
+
+  // Position and append
+  layoutsButtonEl.appendChild(layoutsDropdownEl);
+  layoutsDropdownOpen = true;
+
+  // Close on outside click
+  requestAnimationFrame(() => {
+    document.addEventListener('click', handleLayoutsDropdownOutsideClick);
+  });
+}
+
+function closeLayoutsDropdown() {
+  if (layoutsDropdownEl) {
+    layoutsDropdownEl.remove();
+    layoutsDropdownEl = null;
+  }
+  layoutsDropdownOpen = false;
+  document.removeEventListener('click', handleLayoutsDropdownOutsideClick);
+}
+
+function handleLayoutsDropdownOutsideClick(event) {
+  if (!layoutsButtonEl.contains(event.target)) {
+    closeLayoutsDropdown();
+  }
+}
+
+function openLayoutsModal() {
+  // Reload layouts to ensure we have the latest list
+  bridge.listLayouts().then((config) => {
+    layouts = config.layouts ?? [];
+    activeLayoutId = config.activeLayoutId ?? '';
+  }).catch(reportError);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'settings-modal-overlay';
+
+  overlay.innerHTML = `
+    <div class="settings-modal">
+      <div class="settings-modal-header">
+        <span>Manage Layouts</span>
+        <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+      </div>
+      <div class="settings-modal-body" id="modal-layouts-list">
+      </div>
+      <div class="settings-modal-footer">
+        <button type="button" class="settings-modal-btn" id="modal-layouts-close">Close</button>
+      </div>
+    </div>
+  `;
+
+  const closeModal = () => {
+    overlay.remove();
+  };
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+  overlay.querySelector('#modal-layouts-close').addEventListener('click', closeModal);
+
+  document.body.appendChild(overlay);
+
+  // Render the layouts list
+  renderLayoutsList(overlay.querySelector('#modal-layouts-list'));
+}
+
+function renderLayoutsList(container) {
+  container.replaceChildren();
+
+  if (layouts.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'shell-profile-empty';
+    empty.textContent = 'No saved layouts';
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const layout of layouts) {
+    const item = document.createElement('div');
+    item.className = 'shell-profile-item';
+    if (layout.id === activeLayoutId) {
+      item.classList.add('is-default');
+    }
+
+    const name = document.createElement('div');
+    name.className = 'shell-profile-name';
+    name.textContent = layout.name || layout.id;
+
+    const actions = document.createElement('div');
+    actions.className = 'shell-profile-actions';
+
+    // Load button (or show active indicator)
+    if (layout.id === activeLayoutId) {
+      const activeIndicator = document.createElement('span');
+      activeIndicator.className = 'shell-profile-name';
+      activeIndicator.textContent = 'Active';
+      activeIndicator.style.color = 'var(--panel-muted)';
+      activeIndicator.style.fontSize = '11px';
+      actions.appendChild(activeIndicator);
+    } else {
+      const loadBtn = createProfileActionButton('Load', 'Switch to this layout', () => {
+        switchLayout(layout.id);
+        // Refresh the list to show the new active layout
+        bridge.listLayouts().then((config) => {
+          layouts = config.layouts ?? [];
+          activeLayoutId = config.activeLayoutId ?? '';
+        }).catch(reportError);
+        const overlay = document.querySelector('.settings-modal-overlay');
+        if (overlay) {
+          renderLayoutsList(overlay.querySelector('#modal-layouts-list'));
+        }
+      });
+      actions.appendChild(loadBtn);
+    }
+
+    // Delete button
+    const deleteBtn = createProfileActionButton('✕', 'Delete layout', () => {
+      if (confirm(`Delete layout "${layout.name || layout.id}"?`)) {
+        deleteLayoutById(layout.id);
+        const overlay = document.querySelector('.settings-modal-overlay');
+        if (overlay) {
+          renderLayoutsList(overlay.querySelector('#modal-layouts-list'));
+        }
+      }
+    });
+    actions.appendChild(deleteBtn);
+
+    item.append(name, actions);
+    container.appendChild(item);
+  }
 }
 
 function scheduleSettingsSave() {
@@ -3160,6 +3374,12 @@ addPaneDropdownButtonEl.addEventListener('click', (event) => {
   } catch (error) {
     reportError(error);
   }
+});
+
+layoutsButtonEl.addEventListener('click', (event) => {
+  event.stopPropagation();
+  toggleLayoutsDropdown();
+});
 });
 
 settingsButtonEl.addEventListener('click', (event) => {
