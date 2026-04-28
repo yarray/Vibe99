@@ -136,6 +136,7 @@ function createUnavailableBridge() {
     saveLayout: fail,
     deleteLayout: fail,
     renameLayout: fail,
+    openLayoutInWindow: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
@@ -220,6 +221,7 @@ function createTauriBridge(tauri) {
     saveLayout: (layout) => invoke('layout_save', { layout }),
     deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
+    openLayoutInWindow: (layoutId) => invoke('layout_open_in_window', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
     detectShellProfiles: () => invoke('shell_profiles_detect'),
@@ -622,13 +624,31 @@ function saveCurrentLayout(name) {
     .catch(reportError);
 }
 
-function switchLayout(layoutId) {
+/// Apply a layout to the current window (restore panes and persist activeLayoutId).
+async function applyLayout(layoutId) {
   const layout = layouts.find((l) => l.id === layoutId);
   if (!layout) return;
   restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
   ensurePaneNodes();
   activeLayoutId = layoutId;
-  scheduleSettingsSave();
+  // Save immediately to ensure activeLayoutId is persisted before any race.
+  const settingsToSave = {
+    version: 5,
+    ui: {
+      ...settings,
+      shortcuts: ShortcutsRegistry.getShortcutsForSave()
+    },
+    session: buildSessionData(),
+    activeLayoutId,
+  };
+  await bridge.saveSettings(settingsToSave).catch(reportError);
+}
+
+/// Open a layout in a new window instead of replacing the current session.
+function switchLayout(layoutId) {
+  const layout = layouts.find((l) => l.id === layoutId);
+  if (!layout) return;
+  bridge.openLayoutInWindow(layoutId).catch(reportError);
 }
 
 function deleteLayoutById(layoutId) {
@@ -1230,9 +1250,8 @@ function renderModalLayouts(overlay) {
       switchBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         switchLayout(layout.id);
-        // Close modal after switching
+        // Close modal after opening the new window
         overlay?.remove();
-        scheduleSettingsSave();
       });
       actions.appendChild(switchBtn);
 
@@ -3562,8 +3581,13 @@ window.addEventListener('DOMContentLoaded', async () => {
       activeLayoutId = 'default';
     }
 
-    if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
-      switchLayout(activeLayoutId);
+    const urlParams = new URLSearchParams(window.location.search);
+    const layoutParam = urlParams.get('layout');
+
+    if (layoutParam && layouts.find((l) => l.id === layoutParam)) {
+      await applyLayout(layoutParam);
+    } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
+      await applyLayout(activeLayoutId);
     } else if (savedSettings?.session?.panes?.length > 0) {
       restoreSession(savedSettings.session);
     } else {

@@ -103,6 +103,7 @@ pub fn layout_save(app: AppHandle, layout: Value) -> Result<Value, String> {
 
     if let Some(obj) = config.as_object_mut() {
         obj.insert("layouts".into(), Value::Array(layouts));
+        obj.insert("activeLayoutId".into(), Value::String(layout_id));
     }
 
     let sanitized = sanitize_config(&config);
@@ -152,6 +153,36 @@ pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String>
     write_settings(&app, &sanitized)?;
 
     Ok(sanitized)
+}
+
+/// Open a layout in a new webview window.
+///
+/// The new window loads with `?layout=<id>` in the URL so the frontend
+/// can restore the requested layout on startup.
+#[tauri::command]
+pub fn layout_open_in_window(app: AppHandle, layout_id: String) -> Result<(), String> {
+    let label = format!(
+        "layout-{}-{}",
+        layout_id,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::App(format!("index.html?layout={}", layout_id).into()),
+    )
+    .title("Vibe99")
+    .inner_size(1600.0, 920.0)
+    .min_inner_size(960.0, 640.0)
+    .center()
+    .build()
+    .map_err(|e| format!("failed to create window: {}", e))?;
+
+    Ok(())
 }
 
 /// Rename a layout by `layout_id`.
