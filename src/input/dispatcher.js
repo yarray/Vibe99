@@ -49,7 +49,7 @@ export function createDispatcher({
 
     for (const entry of getParsed()) {
       if (entry.mode !== '*' && entry.mode !== mode) continue;
-      if (paletteOpen && entry.action !== 'toggleCommandPalette') continue;
+      if (paletteOpen && entry.action !== 'toggleCommandPalette' && entry.action !== 'toggleCommandList') continue;
       if (!matchesChord(event, entry.parsedChord)) continue;
       if (inputFocused && entry.skipInInput) continue;
 

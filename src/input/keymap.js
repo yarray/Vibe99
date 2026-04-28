@@ -26,6 +26,7 @@
 export const KEYMAP = [
   // Global
   { mode: '*',   chord: 'Ctrl+Shift+O',    action: 'toggleCommandPalette',  hint: 'palette',          stopPropagation: true },
+  { mode: '*',   chord: 'Ctrl+Shift+P',    action: 'toggleCommandList',     hint: 'commands',         stopPropagation: true },
   { mode: '*',   chord: 'Ctrl+Tab',        action: 'cycleRecent',           hint: 'recent',           skipInInput: true, stopPropagation: true },
   { mode: '*',   chord: 'Ctrl+Shift+Tab',  action: 'cycleRecentReverse',    hint: 'recent',           skipInInput: true, stopPropagation: true },
   { id: 'cycle-lit',     mode: '*',   chord: 'Ctrl+`',          action: 'cycleLitPane',          hint: 'lit pane',         skipInInput: true, stopPropagation: true },

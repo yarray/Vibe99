@@ -17,6 +17,7 @@ import * as ShortcutsUI from './shortcuts-ui.js';
 import * as ColorsRegistry from './colors-registry.js';
 import { createActions } from './input/actions.js';
 import { createDispatcher } from './input/dispatcher.js';
+import { formatChord } from './input/keymap.js';
 import { renderHintBar } from './hint-bar.js';
 
 function getRuntimePlatform() {
@@ -457,10 +458,28 @@ function applyPersistedSettings(nextSettings) {
   }
 }
 
+/**
+ * @typedef {Object} PaneStateV2
+ * @property {string} paneId
+ * @property {string|null} title
+ * @property {string} cwd  — shell's real working directory (from OSC 7)
+ * @property {string} accent
+ * @property {string|undefined} customColor
+ * @property {string|null} shellProfileId
+ * @property {boolean} breathingMonitor
+ * @typedef {Object} SessionStateV2
+ * @property {number} version  — always 2
+ * @property {PaneStateV2[]} panes
+ * @property {number} focusedPaneIndex
+ */
+
+/** @returns {SessionStateV2} */
 function buildSessionData() {
   const focusedIndex = getFocusedIndex();
   return {
+    version: 2,
     panes: panes.map((p) => ({
+      paneId: p.id,
       title: p.title,
       cwd: p.cwd,
       accent: p.accent,
@@ -519,7 +538,7 @@ function scheduleSettingsSave() {
   pendingSettingsSave = window.setTimeout(() => {
     pendingSettingsSave = null;
     const settingsToSave = {
-      version: 4,
+      version: 5,
       ui: {
         ...settings,
         shortcuts: ShortcutsRegistry.getShortcutsForSave()
@@ -534,16 +553,20 @@ function flushSettingsSave() {
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
     pendingSettingsSave = null;
-    const settingsToSave = {
-      version: 4,
-      ui: {
-        ...settings,
-        shortcuts: ShortcutsRegistry.getShortcutsForSave()
-      },
-      session: buildSessionData()
-    };
-    void bridge.saveSettings(settingsToSave).catch(reportError);
   }
+  if (pendingSessionSave !== null) {
+    window.clearTimeout(pendingSessionSave);
+    pendingSessionSave = null;
+  }
+  const settingsToSave = {
+    version: 5,
+    ui: {
+      ...settings,
+      shortcuts: ShortcutsRegistry.getShortcutsForSave()
+    },
+    session: buildSessionData()
+  };
+  void bridge.saveSettings(settingsToSave).catch(reportError);
 }
 
 // ----------------------------------------------------------------
@@ -2208,6 +2231,38 @@ function openTabSwitcher() {
   });
 }
 
+function openCommandList() {
+  hideContextMenu();
+  if (renamingPaneId !== null) {
+    cancelRenamePane();
+  }
+  if (!settingsPanelEl.classList.contains('is-hidden')) {
+    settingsPanelEl.classList.add('is-hidden');
+  }
+
+  const keymap = ShortcutsRegistry.getActiveKeymap();
+  const seen = new Set();
+  const items = [];
+  for (const entry of keymap) {
+    if (entry.mode !== '*' || !entry.hint || entry.hint === 'palette' || entry.hint === 'commands') continue;
+    if (seen.has(entry.action)) continue;
+    seen.add(entry.action);
+    items.push({
+      id: entry.action,
+      label: entry.hint,
+    });
+  }
+
+  openCommandPalette(items, (actionName) => {
+    if (keyboardActions[actionName]) {
+      keyboardActions[actionName]();
+    }
+  }, {
+    placeholder: 'Type a command…',
+    emptyText: 'No matching commands',
+  });
+}
+
 async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
@@ -2424,6 +2479,7 @@ const keyboardActions = createActions({
   isCommandPaletteOpen,
   closeCommandPalette,
   openTabSwitcher,
+  openCommandList,
   focusPaneAt,
   getPaneCount,
   getPaneIdAt,
