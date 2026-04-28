@@ -2609,14 +2609,19 @@ function renderAddPaneProfilePopup(profiles) {
     }
   }
 
-  // Position popup below the add button group
-  const rect = addPaneButtonEl.getBoundingClientRect();
+  // Position popup below the dropdown button
+  const rect = addPaneDropdownButtonEl.getBoundingClientRect();
   popup.style.left = `${rect.left}px`;
   popup.style.top = `${rect.bottom + 2}px`;
   document.body.appendChild(popup);
 
-  // Dismiss on outside click (next tick to avoid immediate dismissal)
+  // Adjust if popup overflows the right edge of the viewport
   requestAnimationFrame(() => {
+    const popupRect = popup.getBoundingClientRect();
+    if (popupRect.right > window.innerWidth - 8) {
+      const overflow = popupRect.right - (window.innerWidth - 8);
+      popup.style.left = `${Math.max(8, parseFloat(popup.style.left) - overflow)}px`;
+    }
     document.addEventListener('click', dismissAddPaneProfilePopup);
   });
 }
