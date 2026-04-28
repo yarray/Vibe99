@@ -1,6 +1,6 @@
-use super::settings::{sanitize_config, sanitize_layout, settings_path};
+use super::settings::{sanitize_config, sanitize_layout, settings_path, SettingsState};
 use serde_json::Value;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// Read the raw settings file and return the sanitized config.
 fn read_settings(app: &AppHandle) -> Result<Value, String> {
@@ -54,6 +54,12 @@ fn extract_active_layout_id(config: &Value) -> String {
 /// List all saved layouts and the current active layout id.
 #[tauri::command]
 pub fn layouts_list(app: AppHandle) -> Result<Value, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let config = read_settings(&app)?;
     Ok(serde_json::json!({
         "layouts": extract_layouts(&config),
@@ -66,6 +72,12 @@ pub fn layouts_list(app: AppHandle) -> Result<Value, String> {
 /// The layout is sanitized before storage. Returns the updated full settings.
 #[tauri::command]
 pub fn layout_save(app: AppHandle, layout: Value) -> Result<Value, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let mut config = read_settings(&app)?;
 
     let sanitized_layout = sanitize_layout(&layout)
@@ -105,6 +117,12 @@ pub fn layout_save(app: AppHandle, layout: Value) -> Result<Value, String> {
 /// Returns the updated full settings.
 #[tauri::command]
 pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let mut config = read_settings(&app)?;
 
     let mut layouts = extract_layouts(&config);
@@ -141,6 +159,12 @@ pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String>
 /// Returns the updated full settings.
 #[tauri::command]
 pub fn layout_rename(app: AppHandle, layout_id: String, new_name: String) -> Result<Value, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let mut config = read_settings(&app)?;
 
     let mut layouts = extract_layouts(&config);

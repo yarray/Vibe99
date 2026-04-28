@@ -1,8 +1,19 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 const CURRENT_CONFIG_VERSION: u8 = 5;
+
+/// Global lock for all settings file operations.
+///
+/// `settings.json` is read and written by multiple commands
+/// (`settings_load`, `settings_save`, `layout_save`, `shell_profile_add`, …).
+/// Tauri commands may execute concurrently, so a shared mutex prevents
+/// interleaved reads/writes that could produce corrupted or stale data.
+pub struct SettingsState {
+    pub lock: Mutex<()>,
+}
 
 const DEFAULT_FONT_SIZE: u32 = 13;
 const DEFAULT_PANE_OPACITY: f64 = 0.8;
@@ -531,6 +542,12 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
 /// parsed, the default config is returned instead.
 #[tauri::command]
 pub fn settings_load(app: AppHandle) -> Result<Value, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let path = settings_path(&app)?;
 
     if !path.exists() {
@@ -552,6 +569,12 @@ pub fn settings_load(app: AppHandle) -> Result<Value, String> {
 /// canonical representation that was persisted.
 #[tauri::command]
 pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let path = settings_path(&app)?;
 
     // Create parent directory if it doesn't exist
