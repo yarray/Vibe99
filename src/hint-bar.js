@@ -19,8 +19,19 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, platform = 
     (entry.mode === currentMode) || (currentMode === 'terminal' && entry.mode === '*')
   );
 
-  // Special handling: merge Ctrl+Tab and Ctrl+Shift+Tab hints
+  // Special handling: merge Ctrl+ArrowLeft and Ctrl+ArrowRight into one hint
   if (currentMode === 'terminal') {
+    const hasNavLeft = entries.some(e => e.action === 'navigateLeft');
+    const hasNavRight = entries.some(e => e.action === 'navigateRight');
+    if (hasNavLeft && hasNavRight) {
+      entries = entries.filter(e => e.action !== 'navigateRight');
+      const navEntry = entries.find(e => e.action === 'navigateLeft');
+      if (navEntry) {
+        navEntry.hint = 'Ctrl+←→ change pane';
+      }
+    }
+
+    // Special handling: merge Ctrl+Tab and Ctrl+Shift+Tab hints
     const hasCycleRecent = entries.some(e => e.action === 'cycleRecent');
     const hasCycleRecentReverse = entries.some(e => e.action === 'cycleRecentReverse');
     if (hasCycleRecent && hasCycleRecentReverse) {
@@ -40,7 +51,7 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, platform = 
   // Show all entries with hint text (no limit)
   const visible = entries.filter(entry => entry.hint);
 
-  // Build hints HTML
+// Build hints HTML
   let hintsHtml = '';
   hintsHtml = visible
       .map(entry => {
@@ -53,6 +64,10 @@ export function renderHintBar(keymap, currentMode, focusedPaneLabel, platform = 
             return `<span class="hint"><kbd>${keys}</kbd> ${desc}</span>`;
           }
           return `<span class="hint">${entry.hint}</span>`;
+        }
+        // Special merged pane navigation hint: show Ctrl+←→ inline
+        if (entry.action === 'navigateLeft' && entry.hint === 'Ctrl+←→ change pane') {
+          return `<span class="hint"><kbd>Ctrl+←→</kbd> change pane</span>`;
         }
         const chord = formatChordForHint(entry.chord, platform);
         return `<span class="hint"><kbd>${chord}</kbd> ${entry.hint}</span>`;
