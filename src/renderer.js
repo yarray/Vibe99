@@ -2156,29 +2156,43 @@ function showColorPicker(paneId) {
   `;
 
   // Keyboard navigation for preset colors
+  // Grid layout: 8 columns, so up/down moves by 8, left/right moves by 1
+  const GRID_COLUMNS = 8;
+
   const handleKeydown = (e) => {
     const presetButtons = picker.querySelectorAll('.color-preset');
+    const totalColors = presetColors.length;
 
     switch (e.key) {
       case 'ArrowLeft':
-      case 'ArrowUp':
         e.preventDefault();
-        // Remove focus from current button
         presetButtons[focusedIndex].classList.remove('is-focused');
-        // Move to previous color, wrap around
-        focusedIndex = (focusedIndex - 1 + presetColors.length) % presetColors.length;
-        // Add focus to new button
+        // Move left one column, wrap to previous row if needed
+        focusedIndex = (focusedIndex - 1 + totalColors) % totalColors;
         presetButtons[focusedIndex].classList.add('is-focused');
         break;
 
       case 'ArrowRight':
+        e.preventDefault();
+        presetButtons[focusedIndex].classList.remove('is-focused');
+        // Move right one column, wrap to next row if needed
+        focusedIndex = (focusedIndex + 1) % totalColors;
+        presetButtons[focusedIndex].classList.add('is-focused');
+        break;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        presetButtons[focusedIndex].classList.remove('is-focused');
+        // Move up one row (8 columns)
+        focusedIndex = (focusedIndex - GRID_COLUMNS + totalColors) % totalColors;
+        presetButtons[focusedIndex].classList.add('is-focused');
+        break;
+
       case 'ArrowDown':
         e.preventDefault();
-        // Remove focus from current button
         presetButtons[focusedIndex].classList.remove('is-focused');
-        // Move to next color, wrap around
-        focusedIndex = (focusedIndex + 1) % presetColors.length;
-        // Add focus to new button
+        // Move down one row (8 columns)
+        focusedIndex = (focusedIndex + GRID_COLUMNS) % totalColors;
         presetButtons[focusedIndex].classList.add('is-focused');
         break;
 
