@@ -106,6 +106,10 @@ function createUnavailableBridge() {
     saveSettings: () => Promise.resolve({}),
     listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
     addShellProfile: fail,
+    listLayouts: () => Promise.resolve({ layouts: [], activeLayoutId: '' }),
+    saveLayout: fail,
+    deleteLayout: fail,
+    renameLayout: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
@@ -186,6 +190,10 @@ function createTauriBridge(tauri) {
     saveSettings: (payload) => invoke('settings_save', { settings: payload }),
     listShellProfiles: () => invoke('shell_profiles_list'),
     addShellProfile: (profile) => invoke('shell_profile_add', { profile }),
+    listLayouts: () => invoke('layouts_list'),
+    saveLayout: (layout) => invoke('layout_save', { layout }),
+    deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
+    renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
     detectShellProfiles: () => invoke('shell_profiles_detect'),
@@ -238,6 +246,8 @@ let currentMode = 'terminal'; // 'terminal' | 'nav'
 let enterNavSourcePaneId = null; // Track which pane was focused when entering nav mode
 let pendingTabFocus = null;
 let sessionRestoreComplete = false;
+let layouts = [];
+let activeLayoutId = '';
 
 // Mode management
 function setMode(next) {
@@ -530,6 +540,60 @@ function restoreSession(session) {
   paneCycleState = null;
 }
 
+function saveCurrentLayout(name) {
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    name = window.prompt('Layout name:');
+    if (!name) return;
+  }
+  name = name.trim();
+  const session = buildSessionData();
+  const layout = {
+    id: name.toLowerCase().replace(/\s+/g, '-'),
+    name,
+    panes: session.panes,
+    focusedPaneIndex: session.focusedPaneIndex,
+  };
+  bridge.saveLayout(layout)
+    .then(() => bridge.listLayouts())
+    .then((config) => {
+      layouts = config.layouts ?? [];
+      activeLayoutId = config.activeLayoutId ?? layout.id;
+      scheduleSettingsSave();
+    })
+    .catch(reportError);
+}
+
+function switchLayout(layoutId) {
+  const layout = layouts.find((l) => l.id === layoutId);
+  if (!layout) return;
+  restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
+  ensurePaneNodes();
+  activeLayoutId = layoutId;
+  scheduleSettingsSave();
+}
+
+function deleteLayoutById(layoutId) {
+  bridge.deleteLayout(layoutId)
+    .then(() => bridge.listLayouts())
+    .then((config) => {
+      layouts = config.layouts ?? [];
+      if (activeLayoutId === layoutId) {
+        activeLayoutId = '';
+      }
+      scheduleSettingsSave();
+    })
+    .catch(reportError);
+}
+
+function renameLayoutById(layoutId, newName) {
+  bridge.renameLayout(layoutId, newName)
+    .then(() => bridge.listLayouts())
+    .then((config) => {
+      layouts = config.layouts ?? [];
+    })
+    .catch(reportError);
+}
+
 function scheduleSettingsSave() {
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
@@ -543,7 +607,8 @@ function scheduleSettingsSave() {
         ...settings,
         shortcuts: ShortcutsRegistry.getShortcutsForSave()
       },
-      session: buildSessionData()
+      session: buildSessionData(),
+      activeLayoutId,
     };
     bridge.saveSettings(settingsToSave).catch(reportError);
   }, 150);
@@ -564,7 +629,8 @@ function flushSettingsSave() {
       ...settings,
       shortcuts: ShortcutsRegistry.getShortcutsForSave()
     },
-    session: buildSessionData()
+    session: buildSessionData(),
+    activeLayoutId,
   };
   void bridge.saveSettings(settingsToSave).catch(reportError);
 }
@@ -2766,7 +2832,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     applySettings();
     loadShellProfiles();
 
-    if (savedSettings?.session?.panes?.length > 0) {
+    const layoutConfig = await bridge.listLayouts();
+    layouts = layoutConfig.layouts ?? [];
+    activeLayoutId = layoutConfig.activeLayoutId ?? '';
+
+    if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
+      switchLayout(activeLayoutId);
+    } else if (savedSettings?.session?.panes?.length > 0) {
       restoreSession(savedSettings.session);
     } else {
       panes = panes.map((p) =>

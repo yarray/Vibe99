@@ -6,6 +6,7 @@
 
 ### Added
 
+- Frontend Layout bridge and core logic: `listLayouts`, `saveLayout`, `deleteLayout`, `renameLayout` bridge methods; `saveCurrentLayout`, `switchLayout`, `deleteLayoutById`, `renameLayoutById` functions; layout state variables; settings payload now includes `activeLayoutId` (VIB-61).
 - Command Palette (Ctrl+Shift+P) with curated actions: Change profile, Change color, Rename pane, Profile settings, Shortcuts settings (VIB-52).
 - Rust backend: Layout data types (`Layout`, `LayoutPane`) and settings schema v5 upgrade (VIB-59).
   - `sanitize_layouts()` validates saved layout arrays (deduplicated by id).
