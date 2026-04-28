@@ -145,7 +145,14 @@ impl PtyManager {
         self.destroy(pane_id);
 
         let pty_system = native_pty_system();
-        let cwd = resolve_working_directory(cwd);
+        let candidates = shell_candidates(&app, shell_profile_id);
+        let is_wsl = cfg!(target_os = "windows")
+            && candidates.first().map_or(false, |c| {
+                c.shell
+                    .file_name()
+                    .is_some_and(|n| n.eq_ignore_ascii_case("wsl.exe"))
+            });
+        let cwd = resolve_working_directory(cwd, is_wsl);
         let cols = cols.unwrap_or(DEFAULT_COLS).max(MIN_COLS);
         let rows = rows.unwrap_or(DEFAULT_ROWS).max(MIN_ROWS);
 
@@ -162,7 +169,7 @@ impl PtyManager {
         let mut cmd = None;
         let mut last_error = String::new();
 
-        for candidate in shell_candidates(&app, shell_profile_id) {
+        for candidate in candidates {
             match build_command(&candidate, &cwd) {
                 Ok(c) => {
                     cmd = Some(c);
@@ -695,10 +702,18 @@ fn build_command(candidate: &ShellCandidate, cwd: &Path) -> Result<CommandBuilde
 ///
 /// Mirrors `electron/main.js` → `getSpawnWorkingDirectory()`:
 /// 1. Use the provided `cwd` if it is a valid directory.
-/// 2. Fall back to the current working directory.
-/// 3. Fall back to the user's home directory.
-fn resolve_working_directory(cwd: Option<&str>) -> PathBuf {
+/// 2. For WSL shells, pass Unix absolute paths through without checking
+///    `is_dir()` on the Windows host.
+/// 3. Fall back to the current working directory.
+/// 4. Fall back to the user's home directory.
+fn resolve_working_directory(cwd: Option<&str>, is_wsl: bool) -> PathBuf {
     if let Some(cwd) = cwd {
+        // WSL Unix absolute paths (e.g. /home/user/project) do not exist
+        // on the Windows host, so skip the is_dir() check and pass them
+        // through directly. build_command handles Windows→WSL conversion.
+        if is_wsl && cwd.starts_with('/') {
+            return PathBuf::from(cwd);
+        }
         let p = PathBuf::from(cwd);
         if p.is_dir() {
             return p;

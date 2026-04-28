@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- WSL session restore: Unix absolute paths (e.g. `/home/user/project`) saved via OSC 7 are now passed through without checking `is_dir()` on the Windows host, preventing fallback to the wrong directory (VIB-51).
+
 ### Added
 
 - Navigation mode enhancements (VIB-33):
