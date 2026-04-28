@@ -1867,12 +1867,15 @@ body.is-dragging-tabs {
   top: 100%;
   right: 0;
   min-width: 180px;
-  background: #171717;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
   z-index: 100;
   padding: 4px 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  user-select: none;
 }
 
 .layouts-dropdown-item {
@@ -1881,7 +1884,7 @@ body.is-dragging-tabs {
   padding: 6px 12px;
   cursor: pointer;
   color: rgba(255, 255, 255, 0.82);
-  font-size: var(--app-font-size);
+  font: inherit;
   gap: 8px;
 }
 
@@ -1910,13 +1913,14 @@ body.is-dragging-tabs {
 .layouts-dropdown-separator {
   height: 1px;
   background: rgba(255, 255, 255, 0.08);
-  margin: 4px 0;
+  margin: 4px 10px;
 }
 
 .layouts-dropdown-action {
   padding: 6px 12px;
   cursor: pointer;
   color: rgba(255, 255, 255, 0.65);
+  font: inherit;
   font-size: 0.9em;
 }
 
