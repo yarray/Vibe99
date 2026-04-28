@@ -15,6 +15,10 @@
   - Frontend captures shell's current working directory changes via xterm.js OSC 7 handler
   - Debounced (5s) auto-save of cwd changes to settings
   - Restores panes to their last working directory on application restart
+- Rust backend: Layout data types (`Layout`, `LayoutPane`) and settings schema v5 upgrade (VIB-59).
+  - `sanitize_layouts()` validates saved layout arrays (deduplicated by id).
+  - `sanitize_active_layout_id()` ensures the active layout reference is valid.
+  - `settings_save()` preserves existing layouts from disk when the frontend omits them.
 
 ### Improved
 
@@ -25,7 +29,6 @@
   - Panel auto-closes after selection, focus returns to current pane
 
 ### Improved
-
 - Navigation mode enhancements (VIB-33):
   - Number shortcuts (1-9) for jumping to specific panes
   - Home/End keys for jumping to first/last pane
