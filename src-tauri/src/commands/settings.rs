@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
-const CURRENT_CONFIG_VERSION: u8 = 3;
+const CURRENT_CONFIG_VERSION: u8 = 5;
 
 const DEFAULT_FONT_SIZE: u32 = 13;
 const DEFAULT_PANE_OPACITY: f64 = 0.8;
@@ -83,6 +83,143 @@ fn sanitize_shell_profiles(profiles: Option<&Value>) -> Vec<ShellProfile> {
     }
 
     result
+}
+
+// ----------------------------------------------------------------
+// Layout types
+// ----------------------------------------------------------------
+
+/// A single pane within a layout. Mirrors the shape of a session pane
+/// but carries an optional `shellProfileId` so the pane can be pinned
+/// to a specific shell profile.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutPane {
+    pub title: Option<String>,
+    pub cwd: String,
+    pub accent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell_profile_id: Option<String>,
+}
+
+impl LayoutPane {
+    /// Validate and sanitize a raw pane value into a canonical `LayoutPane`.
+    ///
+    /// - `cwd` must be non-empty; whitespace is trimmed.
+    /// - `accent` must be a valid `#RRGGBB` hex color.
+    /// - `title` and `custom_color` are optional; whitespace trimmed.
+    /// - `shell_profile_id` is passed through as-is.
+    ///
+    /// Returns `None` if the pane lacks a usable cwd or accent.
+    pub fn sanitize(candidate: &Value) -> Option<Self> {
+        let obj = candidate.as_object()?;
+
+        let cwd = obj.get("cwd").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty())?;
+        let accent = obj
+            .get("accent")
+            .and_then(|v| v.as_str())
+            .filter(|s| s.starts_with('#') && s.len() == 7 && s[1..].chars().all(|c| c.is_ascii_hexdigit()))?;
+
+        let title = obj.get("title").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+        let custom_color = obj.get("customColor").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+        let shell_profile_id = obj.get("shellProfileId").and_then(|v| v.as_str()).map(str::trim).map(String::from);
+
+        Some(Self { title, cwd: cwd.to_string(), accent: accent.to_string(), custom_color, shell_profile_id })
+    }
+}
+
+/// A named layout composed of multiple panes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Layout {
+    pub id: String,
+    pub name: String,
+    pub panes: Vec<LayoutPane>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focused_pane_index: Option<usize>,
+}
+
+/// Sanitize the `layouts` array from the config.
+///
+/// Returns a vector of sanitized `Layout`s. Layouts with invalid or
+/// duplicate ids are silently dropped. Panes within each layout are
+/// sanitized via `LayoutPane::sanitize`; layouts with no valid panes
+/// are dropped.
+fn sanitize_layouts(layouts: Option<&Value>) -> Vec<Value> {
+    let arr = layouts.and_then(|v| v.as_array());
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+
+    if let Some(arr) = arr {
+        for item in arr {
+            let obj = match item.as_object() {
+                Some(o) => o,
+                None => continue,
+            };
+
+            let id = obj.get("id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty());
+            let name = obj.get("name").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty());
+
+            let id = match id {
+                Some(s) => s,
+                None => continue,
+            };
+
+            if !seen.insert(id.to_string()) {
+                continue;
+            }
+
+            let panes: Vec<LayoutPane> = obj
+                .get("panes")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(LayoutPane::sanitize).collect())
+                .unwrap_or_default();
+
+            if panes.is_empty() {
+                continue;
+            }
+
+            let focused_pane_index = obj
+                .get("focusedPaneIndex")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .filter(|&i| i < panes.len());
+
+            result.push(serde_json::json!({
+                "id": id,
+                "name": name.unwrap_or(id),
+                "panes": panes,
+                "focusedPaneIndex": focused_pane_index,
+            }));
+        }
+    }
+
+    result
+}
+
+/// Sanitize the `activeLayoutId` field.
+///
+/// Returns the id string if it refers to an existing layout; otherwise
+/// returns an empty string (signalling no active layout / traditional
+/// session restore).
+fn sanitize_active_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
+    let raw = value.and_then(|v| v.as_str()).map(str::trim).unwrap_or("");
+
+    if raw.is_empty() {
+        return String::new();
+    }
+
+    let exists = layouts.iter().any(|l| {
+        l.as_object().and_then(|o| o.get("id")).and_then(|v| v.as_str()) == Some(raw)
+    });
+
+    if exists {
+        raw.to_string()
+    } else {
+        String::new()
+    }
 }
 
 /// Sanitize the `shell` block of a config.
@@ -238,6 +375,8 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
             let obj = candidate.as_object().unwrap();
             let profiles = sanitize_shell_profiles(obj.get("shell").and_then(|s| s.get("profiles")));
             let session = sanitize_session(obj.get("session"));
+            let layouts = sanitize_layouts(obj.get("layouts"));
+            let active_layout_id = sanitize_active_layout_id(obj.get("activeLayoutId"), &layouts);
 
             let mut result = serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
@@ -247,6 +386,13 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
 
             if !session.is_null() {
                 result.as_object_mut().unwrap().insert("session".into(), session);
+            }
+
+            if !layouts.is_empty() {
+                result.as_object_mut().unwrap().insert("layouts".into(), Value::Array(layouts));
+                if !active_layout_id.is_empty() {
+                    result.as_object_mut().unwrap().insert("activeLayoutId".into(), Value::String(active_layout_id));
+                }
             }
 
             result
@@ -344,6 +490,17 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
         }
     }
 
+    // Similarly preserve the `layouts` block if not sent by the frontend.
+    if settings.get("layouts").is_none() && path.exists() {
+        let layouts = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .and_then(|v| v.get("layouts").cloned());
+        if let (Some(layouts), Some(obj)) = (layouts, settings.as_object_mut()) {
+            obj.insert("layouts".into(), layouts);
+        }
+    }
+
     let sanitized = sanitize_config(&settings);
     let serialized =
         serde_json::to_string_pretty(&sanitized).map_err(|e| format!("failed to serialize settings: {e}"))?;
@@ -351,4 +508,111 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
     std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
 
     Ok(sanitized)
+}
+
+// ----------------------------------------------------------------
+// Tests
+// ----------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_pane() -> Value {
+        serde_json::json!({
+            "cwd": "/home/user",
+            "accent": "#3b82f6",
+            "title": "main",
+            "customColor": "#ff0000",
+            "shellProfileId": "bash",
+        })
+    }
+
+    fn valid_layout() -> Value {
+        serde_json::json!({
+            "id": "layout-1",
+            "name": "Main Layout",
+            "panes": [valid_pane()],
+            "focusedPaneIndex": 0,
+        })
+    }
+
+    #[test]
+    fn test_sanitize_layouts_drops_invalid_and_keeps_valid() {
+        let input = serde_json::json!([
+            valid_layout(),
+            { "id": "", "name": "Bad", "panes": [] },
+            { "name": "Missing ID", "panes": [valid_pane()] },
+            valid_layout(), // duplicate
+        ]);
+
+        let result = sanitize_layouts(Some(&input));
+        assert_eq!(result.len(), 1);
+        let obj = result[0].as_object().unwrap();
+        assert_eq!(obj.get("id").and_then(|v| v.as_str()), Some("layout-1"));
+        assert_eq!(obj.get("name").and_then(|v| v.as_str()), Some("Main Layout"));
+    }
+
+    #[test]
+    fn test_sanitize_active_layout_id_valid() {
+        let layouts = serde_json::json!([
+            { "id": "layout-1", "name": "L1", "panes": [valid_pane()] },
+            { "id": "layout-2", "name": "L2", "panes": [valid_pane()] },
+        ]);
+        let layouts_val = sanitize_layouts(Some(&layouts));
+
+        let result = sanitize_active_layout_id(Some(&Value::String("layout-2".into())), &layouts_val);
+        assert_eq!(result, "layout-2");
+    }
+
+    #[test]
+    fn test_sanitize_active_layout_id_invalid_returns_empty() {
+        let layouts = serde_json::json!([
+            { "id": "layout-1", "name": "L1", "panes": [valid_pane()] },
+        ]);
+        let layouts_val = sanitize_layouts(Some(&layouts));
+
+        let result = sanitize_active_layout_id(Some(&Value::String("nonexistent".into())), &layouts_val);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_sanitize_active_layout_id_empty_returns_empty() {
+        let layouts: Vec<Value> = vec![];
+        let result = sanitize_active_layout_id(Some(&Value::String("".into())), &layouts);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_sanitize_config_v2_with_layouts() {
+        let input = serde_json::json!({
+            "version": 2,
+            "ui": { "fontSize": 14 },
+            "shell": { "profiles": [], "defaultProfile": "" },
+            "layouts": [valid_layout()],
+            "activeLayoutId": "layout-1",
+        });
+
+        let result = sanitize_config(&input);
+        let obj = result.as_object().unwrap();
+        assert_eq!(obj.get("version").and_then(|v| v.as_u64()), Some(5));
+        let layouts = obj.get("layouts").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(layouts.len(), 1);
+        assert_eq!(obj.get("activeLayoutId").and_then(|v| v.as_str()), Some("layout-1"));
+    }
+
+    #[test]
+    fn test_sanitize_config_v2_invalid_active_layout_id_dropped() {
+        let input = serde_json::json!({
+            "version": 2,
+            "ui": { "fontSize": 14 },
+            "shell": { "profiles": [], "defaultProfile": "" },
+            "layouts": [valid_layout()],
+            "activeLayoutId": "nonexistent",
+        });
+
+        let result = sanitize_config(&input);
+        let obj = result.as_object().unwrap();
+        assert!(obj.get("activeLayoutId").is_none());
+    }
 }
