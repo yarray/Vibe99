@@ -116,6 +116,8 @@ pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String>
         return Err(format!("layout not found: {layout_id}"));
     }
 
+    let active_is_deleted = extract_active_layout_id(&config) == layout_id;
+
     if let Some(obj) = config.as_object_mut() {
         if layouts.is_empty() {
             obj.remove("layouts");
@@ -123,7 +125,7 @@ pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String>
             obj.insert("layouts".into(), Value::Array(layouts));
         }
 
-        if extract_active_layout_id(&config) == layout_id {
+        if active_is_deleted {
             obj.insert("activeLayoutId".into(), Value::String(String::new()));
         }
     }
