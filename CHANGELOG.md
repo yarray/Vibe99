@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Build on Ubuntu 20.04: added setup script for Tauri v2 system dependencies (webkit2gtk-4.1, libsoup-3.0, glib >= 2.70) which are not available in default repos (VIB-69).
+
 ### Improved
 
 - ESC key: unified close behavior — closes the topmost modal/panel (settings panel, color picker, shell profiles modal, keyboard shortcuts modal), without affecting fullscreen state. Fullscreen exit is now only via the fullscreen button or F11 (VIB-67).
