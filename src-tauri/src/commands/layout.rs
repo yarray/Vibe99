@@ -1,6 +1,6 @@
 use super::settings::{sanitize_config, sanitize_layout, settings_path, SettingsState};
 use serde_json::Value;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, WebviewWindowBuilder};
 
 /// Read the raw settings file and return the sanitized config.
 fn read_settings(app: &AppHandle) -> Result<Value, String> {
@@ -110,6 +110,30 @@ pub fn layout_save(app: AppHandle, layout: Value) -> Result<Value, String> {
     write_settings(&app, &sanitized)?;
 
     Ok(sanitized)
+}
+
+/// Open a layout in a new window.
+///
+/// Creates a new webview window with a URL query parameter `layoutId`
+/// so the frontend can auto-load the target layout on startup.
+#[tauri::command]
+pub fn layout_open_in_new_window(app: AppHandle, layout_id: String) -> Result<(), String> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("time error: {e}"))?
+        .as_millis();
+    let label = format!("layout-{}-{}", layout_id, timestamp);
+    let url = tauri::WebviewUrl::App(format!("index.html?layoutId={}", layout_id).into());
+
+    WebviewWindowBuilder::new(&app, &label, url)
+        .title("Vibe99")
+        .inner_size(1600.0, 920.0)
+        .min_inner_size(960.0, 640.0)
+        .center()
+        .build()
+        .map_err(|e| format!("failed to create window: {e}"))?;
+
+    Ok(())
 }
 
 /// Delete a layout by `layout_id`.
