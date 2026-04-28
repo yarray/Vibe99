@@ -1288,7 +1288,6 @@ function openLayoutsModal() {
         queueMicrotask(() => {
           input.focus();
         });
->>>>>>> origin/autoproj/layout-improvements
       });
 
       document.body.appendChild(overlay);
