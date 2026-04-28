@@ -599,9 +599,70 @@ function restoreSession(session) {
   paneCycleState = null;
 }
 
-function saveCurrentLayout(name) {
+function showInputDialog(promptText, defaultValue = '') {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'input-dialog-overlay';
+
+    overlay.innerHTML = `
+      <div class="input-dialog">
+        <div class="input-dialog-prompt">${promptText}</div>
+        <input type="text" class="input-dialog-field" value="${defaultValue.replace(/"/g, '&quot;')}" />
+        <div class="input-dialog-actions">
+          <button type="button" class="settings-modal-btn" data-action="cancel">Cancel</button>
+          <button type="button" class="settings-modal-btn primary" data-action="ok">OK</button>
+        </div>
+      </div>
+    `;
+
+    const input = overlay.querySelector('.input-dialog-field');
+    const okBtn = overlay.querySelector('[data-action="ok"]');
+    const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+
+    const close = (value) => {
+      unregisterModal(close);
+      overlay.remove();
+      resolve(value);
+    };
+
+    const onOk = () => {
+      const value = input.value.trim();
+      close(value || null);
+    };
+
+    const onCancel = () => {
+      close(null);
+    };
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) onCancel();
+    });
+
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onOk();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    });
+
+    document.body.appendChild(overlay);
+    registerModal(close);
+    input.focus();
+    if (defaultValue) {
+      input.select();
+    }
+  });
+}
+
+async function saveCurrentLayout(name) {
   if (!name || typeof name !== 'string' || !name.trim()) {
-    name = window.prompt('Layout name:');
+    name = await showInputDialog('Layout name:');
     if (!name) return;
   }
   name = name.trim();
@@ -1154,8 +1215,8 @@ function openLayoutsModal() {
       overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
 
       // Add Layout button
-      overlay.querySelector('#modal-layout-add').addEventListener('click', () => {
-        const name = window.prompt('Layout name:');
+      overlay.querySelector('#modal-layout-add').addEventListener('click', async () => {
+        const name = await showInputDialog('Layout name:');
         if (!name || !name.trim()) return;
         const trimmed = name.trim();
         const session = buildSessionData();
@@ -1242,9 +1303,9 @@ function renderModalLayouts(overlay) {
       renameBtn.className = 'settings-btn';
       renameBtn.textContent = '✎';
       renameBtn.title = 'Rename layout';
-      renameBtn.addEventListener('click', (e) => {
+      renameBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const newName = window.prompt('Rename layout', layout.name || layout.id);
+        const newName = await showInputDialog('Rename layout', layout.name || layout.id);
         if (newName) {
           bridge.renameLayout(layout.id, newName)
             .then(() => bridge.listLayouts())

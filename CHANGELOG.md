@@ -6,6 +6,8 @@
 
 ### Improved
 
+- Replaced all Layout-related `window.prompt()` calls with a custom inline input dialog (`showInputDialog`), matching the existing modal design (dark theme, rounded corners, Enter/Esc shortcuts, auto-focus). Affected: Save Current Layout, Add Layout, Rename Layout (VIB-77).
+
 - Status bar shortcut hints: merged Ctrl+← and Ctrl+→ pane navigation into single compact hint `Ctrl+←→ change pane` (VIB-72).
 
 - ESC key: unified close behavior — closes the topmost modal/panel (settings panel, color picker, shell profiles modal, keyboard shortcuts modal), without affecting fullscreen state. Fullscreen exit is now only via the fullscreen button or F11 (VIB-67).
