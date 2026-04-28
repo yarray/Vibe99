@@ -616,8 +616,15 @@ function saveCurrentLayout(name) {
     .then(() => bridge.listLayouts())
     .then((config) => {
       layouts = config.layouts ?? [];
-      activeLayoutId = config.activeLayoutId ?? layout.id;
-      scheduleSettingsSave();
+      // Only update activeLayoutId if the backend confirms it
+      // This prevents overwriting a recent layout switch
+      if (config.activeLayoutId) {
+        activeLayoutId = config.activeLayoutId;
+      }
+      // Use immediate save to ensure activeLayoutId is persisted
+      flushSettingsSave();
+      // Update UI to reflect the current layout
+      updateLayoutsIndicator();
     })
     .catch(reportError);
 }
@@ -628,7 +635,22 @@ function switchLayout(layoutId) {
   restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
   ensurePaneNodes();
   activeLayoutId = layoutId;
-  scheduleSettingsSave();
+  // Use immediate save instead of debounced to prevent race conditions
+  // with other operations that might modify activeLayoutId
+  flushSettingsSave();
+  // Update UI to reflect the current layout
+  updateLayoutsIndicator();
+}
+
+/**
+ * Update the layouts button to reflect the current active layout.
+ * This updates the aria-label to include the current layout name.
+ */
+function updateLayoutsIndicator() {
+  if (!layoutsButtonEl) return;
+  const activeLayout = layouts.find((l) => l.id === activeLayoutId);
+  const layoutName = activeLayout ? activeLayout.name : 'No layout';
+  layoutsButtonEl.setAttribute('aria-label', `Switch layout (${layoutName})`);
 }
 
 function deleteLayoutById(layoutId) {
@@ -636,10 +658,12 @@ function deleteLayoutById(layoutId) {
     .then(() => bridge.listLayouts())
     .then((config) => {
       layouts = config.layouts ?? [];
-      if (activeLayoutId === layoutId) {
-        activeLayoutId = '';
-      }
-      scheduleSettingsSave();
+      // Use backend's activeLayoutId to ensure consistency
+      activeLayoutId = config.activeLayoutId ?? '';
+      // Use immediate save to ensure the cleared activeLayoutId is persisted
+      flushSettingsSave();
+      // Update UI to reflect the current layout
+      updateLayoutsIndicator();
     })
     .catch(reportError);
 }
@@ -3699,12 +3723,16 @@ window.addEventListener('DOMContentLoaded', async () => {
       switchLayout(activeLayoutId);
     } else if (savedSettings?.session?.panes?.length > 0) {
       restoreSession(savedSettings.session);
+      // Update layout indicator even when restoring from session (no active layout)
+      updateLayoutsIndicator();
     } else {
       panes = panes.map((p) =>
         p.title === null
           ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
           : p
       );
+      // Update layout indicator on initial startup
+      updateLayoutsIndicator();
     }
 
     render(true);
