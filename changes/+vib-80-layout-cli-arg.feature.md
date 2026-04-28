@@ -1,0 +1,1 @@
+Support `--layout <id>` command-line argument to launch Vibe99 with a specific layout on all platforms. The Rust backend parses the flag and appends it as a URL query parameter (`layoutId`), which the frontend reads on startup. If the requested layout does not exist, a console warning is emitted and the app falls back to the last active layout or default session.

@@ -3630,18 +3630,23 @@ window.addEventListener('DOMContentLoaded', async () => {
       restoreSession({ panes: startupLayout.panes, focusedPaneIndex: startupLayout.focusedPaneIndex });
       ensurePaneNodes();
       activeLayoutId = startupLayoutId;
-    } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
-      ensurePaneNodes();
-    } else if (savedSettings?.session?.panes?.length > 0) {
-      restoreSession(savedSettings.session);
     } else {
-      panes = panes.map((p) =>
-        p.title === null
-          ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
-          : p
-      );
+      if (startupLayoutId) {
+        console.warn(`[Vibe99] Layout "${startupLayoutId}" not found, falling back to default.`);
+      }
+      if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
+        const layout = layouts.find((l) => l.id === activeLayoutId);
+        restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
+        ensurePaneNodes();
+      } else if (savedSettings?.session?.panes?.length > 0) {
+        restoreSession(savedSettings.session);
+      } else {
+        panes = panes.map((p) =>
+          p.title === null
+            ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
+            : p
+        );
+      }
     }
 
     render(true);
