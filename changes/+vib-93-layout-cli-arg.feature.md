@@ -1,0 +1,1 @@
+Support `--layout <id>` command-line argument to launch Vibe99 with a specific layout. The Rust backend parses the flag and appends it as a URL query parameter, which the frontend reads on startup to switch to the requested layout instead of restoring the last session.

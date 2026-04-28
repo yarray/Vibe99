@@ -3702,6 +3702,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     applySettings();
     loadShellProfiles();
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const cliLayoutId = urlParams.get('layout');
+
     const layoutConfig = await bridge.listLayouts();
     layouts = layoutConfig.layouts ?? [];
     activeLayoutId = layoutConfig.activeLayoutId ?? '';
@@ -3722,7 +3725,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     // window.__VIBE99_LAYOUT_ID__ set by Rust for new-window layouts
     const newWindowLayoutId = window.__VIBE99_LAYOUT_ID__ || null;
 
-    if (newWindowLayoutId) {
+    if (cliLayoutId) {
+      const targetLayout = layouts.find((l) => l.id === cliLayoutId);
+      if (targetLayout) {
+        activeLayoutId = cliLayoutId;
+        switchLayout(cliLayoutId);
+      }
+    } else if (newWindowLayoutId) {
       const targetLayout = layouts.find((l) => l.id === newWindowLayoutId);
       if (targetLayout) {
         activeLayoutId = newWindowLayoutId;
