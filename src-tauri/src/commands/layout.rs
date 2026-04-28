@@ -228,40 +228,6 @@ pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String>
     Ok(sanitized)
 }
 
-/// Set a layout as the default layout.
-///
-/// The default layout is loaded on application startup when no layout is specified.
-/// Returns the updated full settings.
-#[tauri::command]
-pub fn layout_set_default(app: AppHandle, layout_id: String) -> Result<Value, String> {
-    let state = app.state::<SettingsState>();
-    let _guard = state
-        .lock
-        .lock()
-        .map_err(|e| format!("settings lock poisoned: {e}"))?;
-
-    let mut config = read_settings(&app)?;
-
-    // Verify the layout exists
-    let layouts = extract_layouts(&config);
-    let layout_exists = layouts
-        .iter()
-        .any(|l| l.get("id").and_then(|v| v.as_str()).unwrap_or("") == layout_id);
-
-    if !layout_exists {
-        return Err(format!("layout not found: {layout_id}"));
-    }
-
-    if let Some(obj) = config.as_object_mut() {
-        obj.insert("defaultLayoutId".into(), Value::String(layout_id));
-    }
-
-    let sanitized = sanitize_config(&config);
-    write_settings(&app, &sanitized)?;
-
-    Ok(sanitized)
-}
-
 /// Rename a layout by `layout_id`.
 ///
 /// Returns the updated full settings.

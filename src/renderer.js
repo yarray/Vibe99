@@ -222,7 +222,6 @@ function createTauriBridge(tauri) {
     saveLayout: (layout) => invoke('layout_save', { layout }),
     deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
-    setLayoutDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
     openLayoutInNewWindow: (layoutId) => invoke('layout_open_in_new_window', { layoutId }),
     setLayoutAsDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
@@ -1450,30 +1449,6 @@ function renderModalLayouts(overlay) {
       overlay?.remove();
     });
     secondaryActionsRow.appendChild(openInNewWindowBtn);
-
-    // Set as Default button
-    const setDefaultBtn = document.createElement('button');
-    setDefaultBtn.type = 'button';
-    setDefaultBtn.className = 'settings-btn layout-info-btn';
-    const isDefault = selected.id === defaultLayoutId;
-    setDefaultBtn.textContent = isDefault ? '✓ Default' : 'Set as Default';
-    setDefaultBtn.disabled = isDefault;
-    if (isDefault) {
-      setDefaultBtn.classList.add('is-default');
-    }
-    setDefaultBtn.addEventListener('click', () => {
-      if (selected.id === defaultLayoutId) return;
-      bridge.setLayoutDefault(selected.id)
-        .then(() => bridge.listLayouts())
-        .then((config) => {
-          layouts = config.layouts ?? [];
-          defaultLayoutId = config.defaultLayoutId ?? '';
-          renderModalLayouts(overlay);
-        })
-        .catch(reportError);
-    });
-    secondaryActionsRow.appendChild(setDefaultBtn);
-
     info.appendChild(secondaryActionsRow);
 
     const paneInfo = document.createElement('div');
