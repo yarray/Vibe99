@@ -173,7 +173,7 @@ fn is_valid_accent(v: &Value) -> bool {
 /// - `accent` must be a valid hex color (`#RRGGBB`).
 /// - `title` is optional.
 /// - `customColor` and `shellProfileId` are optional.
-fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
+pub(crate) fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
     let obj = candidate.as_object()?;
 
     let cwd = obj
@@ -233,7 +233,7 @@ fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
 /// - `name` must be non-empty.
 /// - `panes` must be a non-empty array of valid panes.
 /// - `focusedPaneIndex` is clamped to the valid pane range.
-fn sanitize_layout(candidate: &Value) -> Option<Value> {
+pub(crate) fn sanitize_layout(candidate: &Value) -> Option<Value> {
     let obj = candidate.as_object()?;
 
     let id = obj
@@ -276,7 +276,7 @@ fn sanitize_layout(candidate: &Value) -> Option<Value> {
 
 /// Sanitize a list of layouts, deduplicating by id.
 /// Layouts with invalid id, name, or panes are silently dropped.
-fn sanitize_layouts(value: Option<&Value>) -> Vec<Value> {
+pub(crate) fn sanitize_layouts(value: Option<&Value>) -> Vec<Value> {
     let arr = value.and_then(|v| v.as_array());
     let mut seen = std::collections::HashSet::new();
     let mut result = Vec::new();
@@ -303,7 +303,7 @@ fn sanitize_layouts(value: Option<&Value>) -> Vec<Value> {
 ///
 /// Ensures the id refers to an existing layout. Returns an empty string
 /// if the referenced id is missing or the field is absent.
-fn sanitize_active_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
+pub(crate) fn sanitize_active_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
     let raw = value.and_then(|v| v.as_str()).map(str::trim).unwrap_or("");
 
     if raw.is_empty() {
