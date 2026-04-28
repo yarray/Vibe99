@@ -10,7 +10,20 @@ use vibe99_lib::commands::terminal::{self, AppState};
 use vibe99_lib::commands::wsl as wsl_cmd;
 use vibe99_lib::pty::PtyManager;
 
+/// Parse `--layout <id>` from the command-line arguments.
+fn parse_layout_arg() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    for i in 0..args.len() {
+        if args[i] == "--layout" && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+    }
+    None
+}
+
 fn main() {
+    let layout_id_arg = parse_layout_arg();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
@@ -47,6 +60,18 @@ fn main() {
             wsl_cmd::wsl_convert_path,
             wsl_cmd::wsl_cwd,
         ])
+        .setup(move |app| {
+            if let Some(layout_id) = &layout_id_arg {
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Ok(mut url) = window.url() {
+                        url.query_pairs_mut()
+                            .append_pair("layoutId", layout_id);
+                        let _ = window.navigate(url);
+                    }
+                }
+            }
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 let state = window.state::<AppState>();
