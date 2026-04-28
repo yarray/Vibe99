@@ -7,6 +7,10 @@
 ### Added
 
 - Command Palette (Ctrl+Shift+P) with curated actions: Change profile, Change color, Rename pane, Profile settings, Shortcuts settings (VIB-52).
+- Rust backend: Layout data types (`Layout`, `LayoutPane`) and settings schema v5 upgrade (VIB-59).
+  - `sanitize_layouts()` validates saved layout arrays (deduplicated by id).
+  - `sanitize_active_layout_id()` ensures the active layout reference is valid.
+  - `settings_save()` preserves existing layouts from disk when the frontend omits them.
 
 ### Improved
 
