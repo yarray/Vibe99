@@ -1,0 +1,1 @@
+WSL+zsh: Ctrl+ArrowLeft/Right no longer sends garbage characters (e.g. `5D`) to the terminal. These sequences are now intercepted in xterm.js's `attachCustomKeyEventHandler` and returned false so the event reaches the window-level dispatcher for pane navigation (VIB-71).
