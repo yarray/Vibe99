@@ -44,10 +44,7 @@ pub struct MenuActionPayload {
 /// handles selection entirely on the frontend side) and the result is
 /// forwarded as a `menu-action` event with the `{ action, paneId }` contract.
 #[tauri::command]
-pub fn show_context_menu(
-    app: AppHandle,
-    payload: ShowContextMenuPayload,
-) -> Result<(), String> {
+pub fn show_context_menu(app: AppHandle, payload: ShowContextMenuPayload) -> Result<(), String> {
     if payload.kind != "terminal" && payload.kind != "tab" {
         return Err(format!("unknown context menu kind: {}", payload.kind));
     }

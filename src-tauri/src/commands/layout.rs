@@ -47,6 +47,15 @@ fn extract_active_layout_id(config: &Value) -> String {
         .to_string()
 }
 
+/// Extract the default layout id from sanitized config.
+fn extract_default_layout_id(config: &Value) -> String {
+    config
+        .get("defaultLayoutId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
 // ----------------------------------------------------------------
 // Tauri commands
 // ----------------------------------------------------------------
@@ -64,6 +73,7 @@ pub fn layouts_list(app: AppHandle) -> Result<Value, String> {
     Ok(serde_json::json!({
         "layouts": extract_layouts(&config),
         "activeLayoutId": extract_active_layout_id(&config),
+        "defaultLayoutId": extract_default_layout_id(&config),
     }))
 }
 
@@ -171,6 +181,40 @@ pub fn layout_delete(app: AppHandle, layout_id: String) -> Result<Value, String>
         if active_is_deleted {
             obj.insert("activeLayoutId".into(), Value::String(String::new()));
         }
+    }
+
+    let sanitized = sanitize_config(&config);
+    write_settings(&app, &sanitized)?;
+
+    Ok(sanitized)
+}
+
+/// Set a layout as the default layout.
+///
+/// The default layout is loaded on application startup when no layout is specified.
+/// Returns the updated full settings.
+#[tauri::command]
+pub fn layout_set_default(app: AppHandle, layout_id: String) -> Result<Value, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let mut config = read_settings(&app)?;
+
+    // Verify the layout exists
+    let layouts = extract_layouts(&config);
+    let layout_exists = layouts
+        .iter()
+        .any(|l| l.get("id").and_then(|v| v.as_str()).unwrap_or("") == layout_id);
+
+    if !layout_exists {
+        return Err(format!("layout not found: {layout_id}"));
+    }
+
+    if let Some(obj) = config.as_object_mut() {
+        obj.insert("defaultLayoutId".into(), Value::String(layout_id));
     }
 
     let sanitized = sanitize_config(&config);
