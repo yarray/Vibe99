@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
-const CURRENT_CONFIG_VERSION: u8 = 3;
+const CURRENT_CONFIG_VERSION: u8 = 5;
 
 const DEFAULT_FONT_SIZE: u32 = 13;
 const DEFAULT_PANE_OPACITY: f64 = 0.8;
@@ -34,7 +34,11 @@ pub struct ShellProfile {
 impl ShellProfile {
     /// Return the display name, falling back to the id.
     pub fn display_name(&self) -> &str {
-        if self.name.is_empty() { &self.id } else { &self.name }
+        if self.name.is_empty() {
+            &self.id
+        } else {
+            &self.name
+        }
     }
 
     /// Validate and sanitize a raw profile into a canonical form.
@@ -48,9 +52,22 @@ impl ShellProfile {
     pub fn sanitize(candidate: &Value) -> Option<Self> {
         let obj = candidate.as_object()?;
 
-        let id = obj.get("id").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty())?;
-        let command = obj.get("command").and_then(|v| v.as_str()).map(str::trim).filter(|s| !s.is_empty())?;
-        let name = obj.get("name").and_then(|v| v.as_str()).map(str::trim).unwrap_or("").to_string();
+        let id = obj
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?;
+        let command = obj
+            .get("command")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?;
+        let name = obj
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .unwrap_or("")
+            .to_string();
         let args = obj
             .get("args")
             .and_then(|v| v.as_array())
@@ -61,7 +78,12 @@ impl ShellProfile {
             })
             .unwrap_or_default();
 
-        Some(Self { id: id.to_string(), name, command: command.to_string(), args })
+        Some(Self {
+            id: id.to_string(),
+            name,
+            command: command.to_string(),
+            args,
+        })
     }
 }
 
@@ -90,10 +112,7 @@ fn sanitize_shell_profiles(profiles: Option<&Value>) -> Vec<ShellProfile> {
 /// Ensures `defaultProfile` refers to an existing profile. If the
 /// referenced id is missing or the field is absent, falls back to
 /// the first profile's id (or an empty string if no profiles exist).
-fn sanitize_shell_config(
-    shell: Option<&Value>,
-    profiles: &[ShellProfile],
-) -> Value {
+fn sanitize_shell_config(shell: Option<&Value>, profiles: &[ShellProfile]) -> Value {
     let raw_default = shell
         .and_then(|s| s.as_object())
         .and_then(|o| o.get("defaultProfile"))
@@ -111,6 +130,194 @@ fn sanitize_shell_config(
         "profiles": profiles,
         "defaultProfile": default_id,
     })
+}
+
+// ----------------------------------------------------------------
+// Layout types
+// ----------------------------------------------------------------
+
+/// A single pane inside a saved layout.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutPane {
+    pub title: Option<String>,
+    pub cwd: String,
+    pub accent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell_profile_id: Option<String>,
+}
+
+/// A named arrangement of panes that users can save and restore.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Layout {
+    pub id: String,
+    pub name: String,
+    pub panes: Vec<LayoutPane>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focused_pane_index: Option<usize>,
+}
+
+/// Validate that an `accent` value is a 7-char hex color (`#RRGGBB`).
+fn is_valid_accent(v: &Value) -> bool {
+    v.as_str().is_some_and(|s| {
+        s.starts_with('#') && s.len() == 7 && s[1..].chars().all(|c| c.is_ascii_hexdigit())
+    })
+}
+
+/// Sanitize a raw layout pane into a canonical form.
+///
+/// - `cwd` must be non-empty.
+/// - `accent` must be a valid hex color (`#RRGGBB`).
+/// - `title` is optional.
+/// - `customColor` and `shellProfileId` are optional.
+fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
+    let obj = candidate.as_object()?;
+
+    let cwd = obj
+        .get("cwd")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+    if !is_valid_accent(obj.get("accent")?) {
+        return None;
+    }
+
+    let mut result = serde_json::json!({
+        "cwd": cwd,
+        "accent": obj.get("accent").unwrap(),
+    });
+
+    let result_obj = result.as_object_mut().unwrap();
+
+    if let Some(title) = obj.get("title").and_then(|v| v.as_str()).map(str::trim) {
+        if !title.is_empty() {
+            result_obj.insert("title".into(), Value::String(title.to_string()));
+        }
+    }
+
+    if let Some(custom_color) = obj
+        .get("customColor")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+    {
+        if !custom_color.is_empty() {
+            result_obj.insert(
+                "customColor".into(),
+                Value::String(custom_color.to_string()),
+            );
+        }
+    }
+
+    if let Some(shell_profile_id) = obj
+        .get("shellProfileId")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+    {
+        if !shell_profile_id.is_empty() {
+            result_obj.insert(
+                "shellProfileId".into(),
+                Value::String(shell_profile_id.to_string()),
+            );
+        }
+    }
+
+    Some(result)
+}
+
+/// Sanitize a raw layout into a canonical form.
+///
+/// - `id` must be non-empty.
+/// - `name` must be non-empty.
+/// - `panes` must be a non-empty array of valid panes.
+/// - `focusedPaneIndex` is clamped to the valid pane range.
+fn sanitize_layout(candidate: &Value) -> Option<Value> {
+    let obj = candidate.as_object()?;
+
+    let id = obj
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+    let name = obj
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+
+    let panes = obj
+        .get("panes")
+        .and_then(|v| v.as_array())
+        .filter(|arr| !arr.is_empty())?;
+
+    let valid_panes: Vec<Value> = panes
+        .iter()
+        .filter_map(|p| sanitize_layout_pane(p))
+        .collect();
+    if valid_panes.is_empty() {
+        return None;
+    }
+
+    let focused_pane_index = obj
+        .get("focusedPaneIndex")
+        .and_then(|v| v.as_u64())
+        .map(|i| (i as usize).min(valid_panes.len() - 1))
+        .unwrap_or(0);
+
+    Some(serde_json::json!({
+        "id": id,
+        "name": name,
+        "panes": valid_panes,
+        "focusedPaneIndex": focused_pane_index,
+    }))
+}
+
+/// Sanitize a list of layouts, deduplicating by id.
+/// Layouts with invalid id, name, or panes are silently dropped.
+fn sanitize_layouts(value: Option<&Value>) -> Vec<Value> {
+    let arr = value.and_then(|v| v.as_array());
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+
+    if let Some(arr) = arr {
+        for item in arr {
+            if let Some(layout) = sanitize_layout(item) {
+                let id = layout
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !id.is_empty() && seen.insert(id) {
+                    result.push(layout);
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Sanitize the active layout id.
+///
+/// Ensures the id refers to an existing layout. Returns an empty string
+/// if the referenced id is missing or the field is absent.
+fn sanitize_active_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
+    let raw = value.and_then(|v| v.as_str()).map(str::trim).unwrap_or("");
+
+    if raw.is_empty() {
+        return String::new();
+    }
+
+    if layouts
+        .iter()
+        .any(|l| l.get("id").and_then(|v| v.as_str()) == Some(raw))
+    {
+        raw.to_string()
+    } else {
+        String::new()
+    }
 }
 
 /// Resolve the path to `settings.json` inside the app data directory.
@@ -160,18 +367,18 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
     });
 
     if !font_family.is_empty() {
-        result.as_object_mut().unwrap().insert(
-            "fontFamily".into(),
-            Value::String(font_family.to_string()),
-        );
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("fontFamily".into(), Value::String(font_family.to_string()));
     }
 
     // Preserve keyboard shortcuts if present
     if let Some(shortcuts) = ui.get("shortcuts").and_then(|v| v.as_object()) {
-        result.as_object_mut().unwrap().insert(
-            "shortcuts".into(),
-            Value::Object(shortcuts.clone()),
-        );
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("shortcuts".into(), Value::Object(shortcuts.clone()));
     }
 
     result
@@ -194,9 +401,9 @@ fn sanitize_session(session: Option<&Value>) -> Value {
     let valid: Vec<Value> = panes
         .iter()
         .filter(|p| {
-            p.get("accent")
-                .and_then(|v| v.as_str())
-                .is_some_and(|s| s.starts_with('#') && s.len() == 7 && s[1..].chars().all(|c| c.is_ascii_hexdigit()))
+            p.get("accent").and_then(|v| v.as_str()).is_some_and(|s| {
+                s.starts_with('#') && s.len() == 7 && s[1..].chars().all(|c| c.is_ascii_hexdigit())
+            })
         })
         .cloned()
         .collect();
@@ -234,10 +441,13 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
 
     match version {
         Some(v) if v >= 2 => {
-            // Version 2+ format: sanitize ui, shell, and optionally session blocks.
+            // Version 2+ format: sanitize ui, shell, session, and layouts.
             let obj = candidate.as_object().unwrap();
-            let profiles = sanitize_shell_profiles(obj.get("shell").and_then(|s| s.get("profiles")));
+            let profiles =
+                sanitize_shell_profiles(obj.get("shell").and_then(|s| s.get("profiles")));
             let session = sanitize_session(obj.get("session"));
+            let layouts = sanitize_layouts(obj.get("layouts"));
+            let active_layout_id = sanitize_active_layout_id(obj.get("activeLayoutId"), &layouts);
 
             let mut result = serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
@@ -246,13 +456,28 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
             });
 
             if !session.is_null() {
-                result.as_object_mut().unwrap().insert("session".into(), session);
+                result
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("session".into(), session);
             }
+
+            if !layouts.is_empty() {
+                result
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("layouts".into(), Value::Array(layouts));
+            }
+
+            result
+                .as_object_mut()
+                .unwrap()
+                .insert("activeLayoutId".into(), Value::String(active_layout_id));
 
             result
         }
         Some(v) if v == 1 => {
-            // Version 1 → 2 migration: preserve ui, add empty shell block.
+            // Version 1 → current migration: preserve ui, add empty shell block.
             let obj = candidate.as_object().unwrap();
             serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
@@ -261,12 +486,14 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "profiles": [],
                     "defaultProfile": "",
                 },
+                "activeLayoutId": "",
             })
         }
         _ => {
             // Check for legacy flat format (fields at top level, no version/ui nesting)
             if candidate.as_object().is_some_and(|obj| {
-                obj.keys().any(|k| ["fontSize", "paneOpacity", "paneWidth"].contains(&k.as_str()))
+                obj.keys()
+                    .any(|k| ["fontSize", "paneOpacity", "paneWidth"].contains(&k.as_str()))
             }) {
                 return serde_json::json!({
                     "version": CURRENT_CONFIG_VERSION,
@@ -275,6 +502,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                         "profiles": [],
                         "defaultProfile": "",
                     },
+                    "activeLayoutId": "",
                 });
             }
 
@@ -291,6 +519,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "profiles": [],
                     "defaultProfile": "",
                 },
+                "activeLayoutId": "",
             })
         }
     }
@@ -344,9 +573,21 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
         }
     }
 
+    // Similarly, preserve the existing `layouts` block from disk if the
+    // frontend does not send it.
+    if settings.get("layouts").is_none() && path.exists() {
+        let layouts = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .and_then(|v| v.get("layouts").cloned());
+        if let (Some(layouts), Some(obj)) = (layouts, settings.as_object_mut()) {
+            obj.insert("layouts".into(), layouts);
+        }
+    }
+
     let sanitized = sanitize_config(&settings);
-    let serialized =
-        serde_json::to_string_pretty(&sanitized).map_err(|e| format!("failed to serialize settings: {e}"))?;
+    let serialized = serde_json::to_string_pretty(&sanitized)
+        .map_err(|e| format!("failed to serialize settings: {e}"))?;
 
     std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
 
