@@ -3309,6 +3309,7 @@ settingsButtonEl.addEventListener('click', (event) => {
   if (wasHidden) {
     closeSettingsPanel();
   } else {
+    applySettings();
     registerModal(closeSettingsPanel);
   }
 });

@@ -1,6 +1,6 @@
-use super::settings::{sanitize_config, settings_path, ShellProfile};
+use super::settings::{sanitize_config, settings_path, SettingsState, ShellProfile};
 use serde_json::Value;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// Friendly names for common shell executables.
 fn friendly_label(shell: &str) -> (String, String) {
@@ -94,6 +94,12 @@ fn extract_default_profile(config: &Value) -> String {
 /// List all shell profiles and the current default profile id.
 #[tauri::command]
 pub fn shell_profiles_list(app: AppHandle) -> Result<ShellConfig, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let (_, shell_config) = read_shell_config(&app)?;
     Ok(shell_config)
 }
@@ -103,6 +109,12 @@ pub fn shell_profiles_list(app: AppHandle) -> Result<ShellConfig, String> {
 /// Returns an error if no profile with the given id exists.
 #[tauri::command]
 pub fn shell_profile_set(app: AppHandle, profile_id: String) -> Result<ShellConfig, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let (mut config, mut shell_config) = read_shell_config(&app)?;
 
     if !shell_config.profiles.iter().any(|p| p.id == profile_id) {
@@ -141,6 +153,12 @@ pub fn shell_profile_add(
     app: AppHandle,
     profile: Value,
 ) -> Result<ShellConfig, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let (mut config, mut shell_config) = read_shell_config(&app)?;
 
     let new_profile =
@@ -183,6 +201,12 @@ pub fn shell_profile_add(
 /// (set to the first remaining profile's id, or empty string).
 #[tauri::command]
 pub fn shell_profile_remove(app: AppHandle, profile_id: String) -> Result<ShellConfig, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
     let (mut config, mut shell_config) = read_shell_config(&app)?;
 
     let before_len = shell_config.profiles.len();

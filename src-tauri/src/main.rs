@@ -20,6 +20,9 @@ fn main() {
         .manage(AppState {
             pty: Arc::new(PtyManager::new()),
         })
+        .manage(settings::SettingsState {
+            lock: std::sync::Mutex::new(()),
+        })
         .invoke_handler(tauri::generate_handler![
             terminal::terminal_create,
             terminal::terminal_write,
