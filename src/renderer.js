@@ -265,6 +265,7 @@ const tabsListEl = document.getElementById('tabs-list');
 const statusLabelEl = document.getElementById('status-label');
 const statusHintEl = document.getElementById('status-hint');
 const addPaneButtonEl = document.getElementById('tabs-add');
+const addPaneDropdownButtonEl = document.getElementById('tabs-add-dropdown');
 const settingsButtonEl = document.getElementById('tabs-settings');
 const fullscreenButtonEl = document.getElementById('tabs-fullscreen');
 const settingsPanelEl = document.getElementById('settings-panel');
@@ -576,7 +577,7 @@ function flushSettingsSave() {
 let detectedShellProfiles = [];
 
 function loadShellProfiles() {
-  Promise.all([
+  return Promise.all([
     bridge.listShellProfiles(),
     bridge.detectShellProfiles().catch(() => []),
   ]).then(([config, detected]) => {
@@ -1423,7 +1424,7 @@ function ensurePaneNodes() {
   }
 }
 
-function createPaneData() {
+function createPaneData(shellProfileId = null) {
   const usedAccents = new Set(panes.map((p) => p.accent.toLowerCase()));
   const accent = ColorsRegistry.ACCENT_PALETTE.find((c) => !usedAccents.has(c.toLowerCase()))
     || ColorsRegistry.ACCENT_PALETTE[(nextPaneNumber - 1) % ColorsRegistry.ACCENT_PALETTE.length];
@@ -1434,7 +1435,7 @@ function createPaneData() {
     terminalTitle: bridge.defaultTabTitle,
     cwd: focusedPane?.cwd || bridge.defaultCwd,
     accent,
-    shellProfileId: null,
+    shellProfileId: shellProfileId ?? null,
   };
 
   nextPaneNumber += 1;
@@ -1481,8 +1482,8 @@ function focusPane(paneId, options = {}) {
   }
 }
 
-function addPane() {
-  const newPane = createPaneData();
+function addPane(shellProfileId = null) {
+  const newPane = createPaneData(shellProfileId);
   paneCycleState = null;
   panes = [...panes, newPane];
   focusedPaneId = newPane.id;
@@ -2542,6 +2543,96 @@ window.addEventListener('blur', () => {
 addPaneButtonEl.addEventListener('click', () => {
   try {
     addPane();
+  } catch (error) {
+    reportError(error);
+  }
+});
+
+function showAddPaneProfilePopup() {
+  // Ensure profiles are loaded
+  if (shellProfiles.length === 0) {
+    loadShellProfiles().then(() => {
+      renderAddPaneProfilePopup(shellProfiles);
+    });
+    return;
+  }
+  renderAddPaneProfilePopup(shellProfiles);
+}
+
+function renderAddPaneProfilePopup(profiles) {
+  // Remove any existing popup
+  const existing = document.querySelector('.add-pane-profile-popup');
+  if (existing) {
+    existing.remove();
+    document.removeEventListener('click', dismissAddPaneProfilePopup);
+    return;
+  }
+
+  const popup = document.createElement('div');
+  popup.className = 'add-pane-profile-popup';
+
+  if (profiles.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'add-pane-profile-empty';
+    empty.textContent = 'No profiles available';
+    popup.appendChild(empty);
+  } else {
+    for (const profile of profiles) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'add-pane-profile-item';
+
+      const name = document.createElement('span');
+      name.className = 'profile-name';
+      name.textContent = profile.name || profile.id;
+      item.appendChild(name);
+
+      if (profile.id === defaultShellProfileId) {
+        const mark = document.createElement('span');
+        mark.className = 'profile-default-mark';
+        mark.textContent = 'default';
+        item.appendChild(mark);
+      }
+
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        popup.remove();
+        document.removeEventListener('click', dismissAddPaneProfilePopup);
+        try {
+          addPane(profile.id);
+        } catch (error) {
+          reportError(error);
+        }
+      });
+
+      popup.appendChild(item);
+    }
+  }
+
+  // Position popup below the add button group
+  const rect = addPaneButtonEl.getBoundingClientRect();
+  popup.style.left = `${rect.left}px`;
+  popup.style.top = `${rect.bottom + 2}px`;
+  document.body.appendChild(popup);
+
+  // Dismiss on outside click (next tick to avoid immediate dismissal)
+  requestAnimationFrame(() => {
+    document.addEventListener('click', dismissAddPaneProfilePopup);
+  });
+}
+
+function dismissAddPaneProfilePopup(event) {
+  const popup = document.querySelector('.add-pane-profile-popup');
+  if (popup && !popup.contains(event.target) && event.target !== addPaneDropdownButtonEl) {
+    popup.remove();
+    document.removeEventListener('click', dismissAddPaneProfilePopup);
+  }
+}
+
+addPaneDropdownButtonEl.addEventListener('click', (event) => {
+  event.stopPropagation();
+  try {
+    showAddPaneProfilePopup();
   } catch (error) {
     reportError(error);
   }
