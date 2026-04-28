@@ -1329,6 +1329,19 @@ function createPane(pane) {
     ) {
       return false;
     }
+    // Ctrl+ArrowLeft/Right are reserved for spatial pane navigation (VIB-71).
+    // In WSL+zsh these send CSI sequences that xterm would forward to the PTY
+    // as literal characters (e.g. 5D). Returning false stops xterm from
+    // consuming the event so it reaches the window-level dispatcher.
+    if (
+      event.type === 'keydown' &&
+      event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      (event.code === 'ArrowLeft' || event.code === 'ArrowRight')
+    ) {
+      return false;
+    }
     if (!isWindowsCtrlVPasteHotkey(event)) {
       return true;
     }
