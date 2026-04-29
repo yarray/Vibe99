@@ -1367,6 +1367,65 @@ body.is-dragging-tabs {
   margin-bottom: 4px;
 }
 
+/* Name row: input + confirm + cancel on same line */
+.layout-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-name-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.layout-name-input:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.layout-name-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  flex-shrink: 0;
+}
+
+.layout-name-btn-confirm {
+  background: rgba(76, 175, 80, 0.2) !important;
+  color: #81c784 !important;
+  border-color: rgba(76, 175, 80, 0.4) !important;
+}
+
+.layout-name-btn-confirm:hover {
+  background: rgba(76, 175, 80, 0.35) !important;
+}
+
+.layout-name-btn-cancel {
+  background: rgba(244, 67, 54, 0.15) !important;
+  color: #e57373 !important;
+  border-color: rgba(244, 67, 54, 0.35) !important;
+}
+
+.layout-name-btn-cancel:hover {
+  background: rgba(244, 67, 54, 0.25) !important;
+}
+
 .layout-info input {
   width: 100%;
   height: 28px;

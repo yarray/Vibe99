@@ -1472,21 +1472,29 @@ function renderModalLayouts(overlay) {
     const info = document.createElement('div');
     info.className = 'layout-info';
 
-    const nameLabel = document.createElement('label');
-    nameLabel.textContent = 'Name';
+    // Name row: input + confirm + cancel
+    const nameRow = document.createElement('div');
+    nameRow.className = 'layout-name-row';
+
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
+    nameInput.className = 'layout-name-input';
     nameInput.value = selected.name || '';
-    info.appendChild(nameLabel);
-    info.appendChild(nameInput);
+    const originalName = selected.name || '';
 
-    const actionsRow = document.createElement('div');
-    actionsRow.className = 'layout-info-actions';
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.className = 'settings-btn layout-info-btn is-primary';
-    saveBtn.textContent = 'Save Layout';
-    saveBtn.addEventListener('click', () => {
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'settings-btn layout-name-btn layout-name-btn-confirm';
+    confirmBtn.textContent = '✓';
+    confirmBtn.title = 'Confirm (Enter)';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'settings-btn layout-name-btn layout-name-btn-cancel';
+    cancelBtn.textContent = '✕';
+    cancelBtn.title = 'Cancel (Esc)';
+
+    const doSave = () => {
       const newName = nameInput.value.trim();
       if (!newName) return;
       const session = buildSessionData();
@@ -1507,8 +1515,27 @@ function renderModalLayouts(overlay) {
           renderModalLayouts(overlay);
         })
         .catch(reportError);
+    };
+
+    const doCancel = () => {
+      nameInput.value = originalName;
+    };
+
+    confirmBtn.addEventListener('click', doSave);
+    cancelBtn.addEventListener('click', doCancel);
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+      if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
     });
-    actionsRow.appendChild(saveBtn);
+
+    nameRow.appendChild(nameInput);
+    nameRow.appendChild(confirmBtn);
+    nameRow.appendChild(cancelBtn);
+    info.appendChild(nameRow);
+
+    // Set as Default row
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'layout-info-actions';
 
     // "Set as Default" button — uses dedicated backend command for proper validation
     const isDefault = selected.id === defaultLayoutId;
@@ -1527,6 +1554,17 @@ function renderModalLayouts(overlay) {
         .catch(reportError);
     });
     actionsRow.appendChild(setDefaultBtn);
+
+    // Open in New Window button
+    const openInNewWindowBtn = document.createElement('button');
+    openInNewWindowBtn.type = 'button';
+    openInNewWindowBtn.className = 'settings-btn layout-info-btn';
+    openInNewWindowBtn.textContent = 'Open in New Window';
+    openInNewWindowBtn.addEventListener('click', async () => {
+      await bridge.openLayoutInNewWindow(selected.id).catch(reportError);
+      overlay?.remove();
+    });
+    actionsRow.appendChild(openInNewWindowBtn);
     info.appendChild(actionsRow);
 
     // Pane count and details
