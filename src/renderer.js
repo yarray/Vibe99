@@ -1269,7 +1269,8 @@ function openLayoutsModal() {
               layouts = config.layouts ?? [];
               activeLayoutId = config.activeLayoutId ?? layout.id;
               defaultLayoutId = config.defaultLayoutId ?? '';
-              scheduleSettingsSave();
+              flushSettingsSave();
+              updateLayoutsIndicator();
               renderModalLayouts(overlay);
             })
             .catch(reportError);
@@ -1501,7 +1502,8 @@ function renderModalLayouts(overlay) {
           layouts = config.layouts ?? [];
           activeLayoutId = config.activeLayoutId ?? selected.id;
           defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
-          scheduleSettingsSave();
+          flushSettingsSave();
+          updateLayoutsIndicator();
           renderModalLayouts(overlay);
         })
         .catch(reportError);
