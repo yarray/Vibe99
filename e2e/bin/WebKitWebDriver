@@ -1,0 +1,4 @@
+#!/bin/bash
+exec /home/linuxbrew/.linuxbrew/Cellar/glibc/2.39/lib/ld-linux-x86-64.so.2 \
+  /opt/webkit-jammy/usr/bin/WebKitWebDriver "$@" \
+  2>&1 | grep -v "libGL error\|swrast\|DRI_Mesa" || true
