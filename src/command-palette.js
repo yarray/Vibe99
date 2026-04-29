@@ -183,6 +183,7 @@ export function openCommandPalette(items, onSelect, options = {}) {
       }
     } else if (event.key === 'Escape') {
       event.preventDefault();
+      event.stopPropagation();
       closeCommandPalette();
     }
   });
