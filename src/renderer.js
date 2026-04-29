@@ -423,7 +423,7 @@ const tabsListEl = document.getElementById('tabs-list');
 const statusLabelEl = document.getElementById('status-label');
 const statusHintEl = document.getElementById('status-hint');
 const addPaneButtonEl = document.getElementById('tabs-add');
-const addPaneDropdownButtonEl = document.getElementById('tabs-add-dropdown');
+const addProfileButtonEl = document.getElementById('tabs-add-profile');
 const layoutsButtonEl = document.getElementById('tabs-layouts');
 const settingsButtonEl = document.getElementById('tabs-settings');
 const fullscreenButtonEl = document.getElementById('tabs-fullscreen');
@@ -3830,7 +3830,7 @@ function renderAddPaneProfilePopup(profiles) {
   }
 
   // Position popup aligned with the tabs panel bottom (same as Settings)
-  const rect = addPaneDropdownButtonEl.getBoundingClientRect();
+  const rect = addProfileButtonEl.getBoundingClientRect();
   const tabsPanelRect = document.querySelector('.tabs-panel').getBoundingClientRect();
   popup.style.left = `${rect.left}px`;
   popup.style.top = `${tabsPanelRect.bottom + 1}px`;
@@ -3850,15 +3850,15 @@ function renderAddPaneProfilePopup(profiles) {
 
 function dismissAddPaneProfilePopup(event) {
   const popup = document.querySelector('.add-pane-profile-popup');
-  if (popup && !popup.contains(event.target) && event.target !== addPaneDropdownButtonEl) {
+  if (popup && !popup.contains(event.target) && event.target !== addProfileButtonEl) {
     closeAddPaneProfilePopup();
   }
 }
 
-addPaneDropdownButtonEl.addEventListener('click', (event) => {
+addProfileButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
   try {
-    showAddPaneProfilePopup();
+    openNewPaneProfilePicker();
   } catch (error) {
     reportError(error);
   }
