@@ -405,7 +405,7 @@ impl PtyManager {
         };
         // Kill and join in background so we don't block the Tauri event thread.
         std::thread::spawn(move || {
-            for session in sessions_to_clean {
+            for mut session in sessions_to_clean {
                 let _ = session.killer.kill();
                 let _ = session.exit_thread.join();
             }

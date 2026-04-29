@@ -1,6 +1,6 @@
 use super::settings::{sanitize_config, sanitize_layout, settings_path, SettingsState};
 use serde_json::Value;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// Read the raw settings file and return the sanitized config.
 fn read_settings(app: &AppHandle) -> Result<Value, String> {

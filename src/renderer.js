@@ -151,7 +151,8 @@ function createUnavailableBridge() {
 
 function createTauriBridge(tauri) {
   const { invoke } = tauri.core;
-  const { getCurrentWindow, WebviewWindow } = tauri.window;
+  const { getCurrentWindow } = tauri.window;
+  const { WebviewWindow } = tauri.webviewWindow;
   const { readText: clipboardReadText, writeText: clipboardWriteText } =
     tauri.clipboardManager;
   const { openUrl } = tauri.opener;
