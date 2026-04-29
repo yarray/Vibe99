@@ -1,6 +1,7 @@
 use super::settings::{sanitize_config, sanitize_layout, settings_path, SettingsState};
 use serde_json::Value;
-use tauri::{AppHandle, Manager, WebviewWindowBuilder};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Read the raw settings file and return the sanitized config.
 fn read_settings(app: &AppHandle) -> Result<Value, String> {
@@ -265,4 +266,48 @@ pub fn layout_rename(app: AppHandle, layout_id: String, new_name: String) -> Res
     write_settings(&app, &sanitized)?;
 
     Ok(sanitized)
+}
+
+/// Open a new window with the specified layout applied.
+///
+/// The layout ID is injected via an initialization script so the frontend
+/// can detect it on load and restore the layout automatically.
+#[tauri::command]
+pub fn layout_open_window(app: AppHandle, layout_id: String) -> Result<(), String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let config = read_settings(&app)?;
+    let layouts = extract_layouts(&config);
+
+    let layout = layouts
+        .iter()
+        .find(|l| l.get("id").and_then(|v| v.as_str()).unwrap_or("") == layout_id)
+        .ok_or_else(|| format!("layout not found: {layout_id}"))?;
+
+    let layout_name = layout
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&layout_id);
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+
+    let label = format!("layout-{layout_id}-{timestamp}");
+    let title = format!("Vibe99 - {layout_name}");
+
+    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+        .title(&title)
+        .initialization_script(format!(
+            "window.__VIBE99_LAYOUT_ID__ = \"{layout_id}\";"
+        ))
+        .build()
+        .map_err(|e| format!("failed to create window: {e}"))?;
+
+    Ok(())
 }

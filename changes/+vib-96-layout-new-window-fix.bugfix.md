@@ -1,0 +1,1 @@
+Fixed layout "Open in New Window" causing the new window to show a white screen and freeze. PTY terminal-data and terminal-exit events are now scoped to the owning window via `emit_to`, and window destroy cleanup is per-window instead of destroying all sessions globally.

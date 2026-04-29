@@ -1,0 +1,1 @@
+Extend the Layout Manager Modal with default layout support, "Open in New Window" action, and per-pane detail display (cwd, shell profile). Adds `defaultLayoutId` to settings with backend sanitization.

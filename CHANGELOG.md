@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).
+
 ### Added
 
 - Layout edit panel enhancements (VIB-88):
@@ -14,8 +18,8 @@
 
 ### Improved
 
-- Replaced all Layout-related `window.prompt()` calls with a custom inline input dialog (`showInputDialog`), matching the existing modal design (dark theme, rounded corners, Enter/Esc shortcuts, auto-focus). Affected: Save Current Layout, Add Layout, Rename Layout (VIB-77).
-
+- Layout dropdown (`.layouts-dropdown`): unified visual style with context-menu — matching background color (`#1e1e1e`), box-shadow, font, padding, hover effect, and separator margin (VIB-89).
+- Replaced all Layout-related `window.prompt()` calls with inline DOM inputs for layout operations — popover inputs near the trigger element for Save Current Layout and direct inline inputs in Layout Manager Modal for Add/Rename, matching the existing design (dark theme, Enter/Esc shortcuts, auto-focus) (VIB-77/VIB-90).
 - Status bar shortcut hints: merged Ctrl+← and Ctrl+→ pane navigation into single compact hint `Ctrl+←→ change pane` (VIB-72).
 
 - ESC key: unified close behavior — closes the topmost modal/panel (settings panel, color picker, shell profiles modal, keyboard shortcuts modal), without affecting fullscreen state. Fullscreen exit is now only via the fullscreen button or F11 (VIB-67).
@@ -39,6 +43,13 @@
   - `layout_save` — upserts a layout (add or replace by id), returns full settings.
   - `layout_delete` — removes a layout and clears `activeLayoutId` if it pointed to the deleted one.
   - `layout_rename` — updates the name of an existing layout.
+- Layout Manager Modal enhancements (VIB-94):
+  - "Set as Default" button in layout editor panel — sets a layout to be automatically restored on application startup
+  - Pane details display in layout editor — shows each pane's title, working directory (shortened), and shell profile
+  - "Open in New Window" button (⎆) in layout list — currently switches layout in place (fallback until Sub-4/VIB-92 is complete)
+  - Visual indicator (★) for default layout in the layout list
+  - Rust backend: `defaultLayoutId` field in settings schema with sanitization
+  - Startup logic now restores `defaultLayoutId` before falling back to `activeLayoutId`
 
 ### Improved
 
