@@ -32,6 +32,7 @@ export const KEYMAP = [
   { id: 'cycle-lit',     mode: '*',   chord: 'Ctrl+`',          action: 'cycleLitPane',          hint: 'lit pane',         skipInInput: true, stopPropagation: true },
   { id: 'navigation-mode', mode: '*',   chord: 'Ctrl+B',          action: 'enterNav',              hint: 'navigate',         skipInInput: true, stopPropagation: true },
   { id: 'new-tab',         mode: '*',   chord: 'Ctrl+N',          action: 'newPane',               hint: 'new pane' },
+  { id: 'new-tab-profile', mode: '*',   chord: 'Ctrl+Shift+N',    action: 'newPaneWithProfile',    hint: 'new pane profile', stopPropagation: true },
   { id: 'layout-dropdown', mode: '*',   chord: 'Ctrl+Shift+L',    action: 'openLayouts',           hint: 'layouts',          stopPropagation: true },
   { id: 'navigate-left',   mode: '*',   chord: 'Ctrl+ArrowLeft',  action: 'navigateLeft',          hint: '← pane' },
   { id: 'navigate-right',  mode: '*',   chord: 'Ctrl+ArrowRight', action: 'navigateRight',         hint: '→ pane' },

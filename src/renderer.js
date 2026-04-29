@@ -3347,6 +3347,7 @@ function openCommandList() {
   }
 
   const items = [
+    { id: 'new-pane-with-profile', label: 'New Panel with Profile' },
     { id: 'change-profile',  label: 'Change profile' },
     { id: 'change-color',    label: 'Change color' },
     { id: 'rename-pane',     label: 'Rename pane' },
@@ -3361,7 +3362,9 @@ function openCommandList() {
   ];
 
   openCommandPalette(items, (commandId) => {
-    if (commandId === 'change-profile') {
+    if (commandId === 'new-pane-with-profile') {
+      openNewPaneProfilePicker();
+    } else if (commandId === 'change-profile') {
       openProfileSwitcher();
     } else if (commandId === 'change-color') {
       showColorPicker(focusedPaneId);
@@ -3408,6 +3411,42 @@ function openProfileSwitcher() {
     placeholder: 'Select a profile…',
     emptyText: 'No matching profiles',
   });
+}
+
+function openNewPaneProfilePicker() {
+  hideContextMenu();
+  if (renamingPaneId !== null) {
+    cancelRenamePane();
+  }
+  if (!settingsPanelEl.classList.contains('is-hidden')) {
+    closeSettingsPanel();
+  }
+
+  const doOpen = (profiles) => {
+    if (profiles.length === 0) {
+      statusLabelEl.textContent = 'No profiles available';
+      statusHintEl.textContent = '';
+      return;
+    }
+
+    const items = profiles.map((p) => ({
+      id: p.id,
+      label: p.name || p.id,
+    }));
+
+    openCommandPalette(items, (profileId) => {
+      addPane(profileId);
+    }, {
+      placeholder: 'Select a profile for new pane…',
+      emptyText: 'No matching profiles',
+    });
+  };
+
+  if (shellProfiles.length === 0) {
+    loadShellProfiles().then(() => doOpen(shellProfiles));
+  } else {
+    doOpen(shellProfiles);
+  }
 }
 
 async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
@@ -3641,6 +3680,7 @@ const keyboardActions = createActions({
   closeCommandPalette,
   openTabSwitcher,
   openCommandList,
+  openNewPaneProfilePicker,
   focusPaneAt,
   getPaneCount,
   getPaneIdAt,
