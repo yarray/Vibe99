@@ -867,7 +867,9 @@ async function toggleLayoutsDropdown() {
 
       const checkmark = document.createElement('span');
       checkmark.className = 'layouts-dropdown-check';
-      checkmark.textContent = layout.id === windowLayoutId ? '✓' : '';
+      if (layout.id === windowLayoutId) {
+        checkmark.classList.add('is-active');
+      }
 
       const label = document.createElement('span');
       label.className = 'layouts-dropdown-label';
@@ -3776,10 +3778,11 @@ function renderAddPaneProfilePopup(profiles) {
     }
   }
 
-  // Position popup below the dropdown button
+  // Position popup aligned with the tabs panel bottom (same as Settings)
   const rect = addPaneDropdownButtonEl.getBoundingClientRect();
+  const tabsPanelRect = document.querySelector('.tabs-panel').getBoundingClientRect();
   popup.style.left = `${rect.left}px`;
-  popup.style.top = `${rect.bottom + 2}px`;
+  popup.style.top = `${tabsPanelRect.bottom + 1}px`;
   document.body.appendChild(popup);
 
   // Adjust if popup overflows the right edge of the viewport

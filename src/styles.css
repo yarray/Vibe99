@@ -5,6 +5,7 @@
   --panel-border: #2b2b2b;
   --panel-muted: #8a8a8a;
   --text: #f4f1e8;
+  --status-highlight: #ffd166;
   --app-font-size: 13px;
   --pane-opacity: 0.8;
   --pane-bg-mask-opacity: 0.25;
@@ -359,9 +360,13 @@ body::after {
   gap: 0;
   width: 280px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #171717;
-  z-index: 50;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #1e1e1e;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 }
 
 .settings-panel.is-hidden {
@@ -463,13 +468,14 @@ body::after {
 
 .settings-clickable-row {
   cursor: pointer;
-  padding: 4px 0;
-  border-radius: 3px;
+  padding: 6px 14px;
+  margin: 0 -8px;
+  border-radius: 0;
   transition: background 120ms ease;
 }
 
 .settings-clickable-row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .settings-clickable-row:focus {
@@ -1142,7 +1148,7 @@ body.is-dragging-tabs {
   border-radius: 6px;
   background: #1e1e1e;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
-  z-index: 60;
+  z-index: 100;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 13px;
   user-select: none;
@@ -1168,7 +1174,7 @@ body.is-dragging-tabs {
 
 .add-pane-profile-item .profile-default-mark {
   flex: 0 0 auto;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--panel-muted);
   font-size: 11px;
 }
 
@@ -2165,13 +2171,9 @@ body.is-dragging-tabs {
 }
 
 /* Layouts dropdown menu */
-.tabs-layouts {
-  position: relative;
-}
-
 .layouts-dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 1px);
   right: 0;
   min-width: 180px;
   padding: 4px 0;
@@ -2202,7 +2204,7 @@ body.is-dragging-tabs {
 
 .layouts-dropdown-item.is-active {
   font-weight: 600;
-  color: var(--text);
+  color: var(--status-highlight);
 }
 
 .layouts-dropdown-item:hover {
@@ -2213,6 +2215,16 @@ body.is-dragging-tabs {
   width: 16px;
   text-align: center;
   flex-shrink: 0;
+}
+
+.layouts-dropdown-check.is-active::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-highlight);
+  vertical-align: middle;
 }
 
 .layouts-dropdown-label {
