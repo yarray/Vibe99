@@ -116,6 +116,7 @@ function createUnavailableBridge() {
 
   return {
     platform: getRuntimePlatform(),
+    currentWindowLabel: 'browser',
     defaultCwd,
     defaultTabTitle: basename(defaultCwd),
     createTerminal: fail,
@@ -132,7 +133,7 @@ function createUnavailableBridge() {
     saveSettings: () => Promise.resolve({}),
     listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
     addShellProfile: fail,
-    listLayouts: () => Promise.resolve({ layouts: [], activeLayoutId: '', defaultLayoutId: '' }),
+    listLayouts: () => Promise.resolve({ layouts: [], defaultLayoutId: '' }),
     saveLayout: fail,
     deleteLayout: fail,
     renameLayout: fail,
@@ -177,10 +178,41 @@ function createTauriBridge(tauri) {
   const _cwdReady = invoke('get_cwd')
     .then((cwd) => { _resolvedCwd = cwd; })
     .catch(() => {});
+  const currentWindow = getCurrentWindow();
 
-  function openLayoutWindow(layoutId) {
+  async function focusWindow(win) {
+    await win.unminimize().catch(() => {});
+    await win.show().catch(() => {});
+    await win.setFocus();
+  }
+
+  function getLayoutWindowLabel(layoutId) {
     const safeLabel = layoutId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const label = `layout-${safeLabel}-${Date.now()}`;
+    return `layout-${safeLabel}`;
+  }
+
+  async function openLayoutWindow(layoutId) {
+    if (layoutId === windowLayoutId) {
+      return focusWindow(currentWindow);
+    }
+
+    const boundLabel = getBoundLayoutWindowLabel(layoutId);
+    if (boundLabel) {
+      const bound = await WebviewWindow.getByLabel(boundLabel);
+      if (bound) {
+        return focusWindow(bound);
+      }
+      clearLayoutWindowBinding(layoutId, boundLabel);
+    }
+
+    const label = getLayoutWindowLabel(layoutId);
+    const existing = layoutId === 'default'
+      ? await WebviewWindow.getByLabel('main')
+      : await WebviewWindow.getByLabel(label);
+    if (existing) {
+      return focusWindow(existing);
+    }
+
     const url = `index.html?layoutId=${encodeURIComponent(layoutId)}`;
     const win = new WebviewWindow(label, {
       url,
@@ -196,6 +228,7 @@ function createTauriBridge(tauri) {
 
   return {
     platform: getRuntimePlatform(),
+    currentWindowLabel: currentWindow.label,
     get defaultCwd() { return _resolvedCwd; },
     get defaultTabTitle() { return basename(_resolvedCwd); },
     createTerminal: (payload) =>
@@ -262,7 +295,6 @@ const windowContext = (() => {
   const layoutId = params.get('layoutId');
   return layoutId ? { kind: 'layout', layoutId } : { kind: 'main' };
 })();
-const isMainWindow = windowContext.kind === 'main';
 
 const initialPanes = [
   {
@@ -301,12 +333,57 @@ let dragState = null;
 let currentMode = 'terminal'; // 'terminal' | 'nav'
 let enterNavSourcePaneId = null; // Track which pane was focused when entering nav mode
 let pendingTabFocus = null;
-let sessionRestoreComplete = false;
+let layoutRestoreComplete = false;
 let layouts = [];
-let activeLayoutId = '';
+let windowLayoutId = null;
 let defaultLayoutId = '';
 let selectedLayoutId = null;
 let renamingLayoutId = null;
+const LAYOUT_WINDOW_BINDINGS_KEY = 'vibe99.layoutWindowBindings';
+
+function readLayoutWindowBindings() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LAYOUT_WINDOW_BINDINGS_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLayoutWindowBindings(bindings) {
+  try {
+    window.localStorage.setItem(LAYOUT_WINDOW_BINDINGS_KEY, JSON.stringify(bindings));
+  } catch {
+    // Best effort only. The stable Tauri window label still prevents duplicates
+    // for layout windows created through the normal UI path.
+  }
+}
+
+function getBoundLayoutWindowLabel(layoutId) {
+  const label = readLayoutWindowBindings()[layoutId];
+  return typeof label === 'string' && label ? label : null;
+}
+
+function clearLayoutWindowBinding(layoutId, expectedLabel = null) {
+  if (!layoutId) return;
+  const bindings = readLayoutWindowBindings();
+  if (expectedLabel !== null && bindings[layoutId] !== expectedLabel) return;
+  delete bindings[layoutId];
+  writeLayoutWindowBindings(bindings);
+}
+
+function setWindowLayoutId(layoutId) {
+  if (!layoutId || windowLayoutId === layoutId) return;
+
+  if (windowLayoutId) {
+    clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
+  }
+
+  windowLayoutId = layoutId;
+  const bindings = readLayoutWindowBindings();
+  bindings[layoutId] = bridge.currentWindowLabel;
+  writeLayoutWindowBindings(bindings);
+}
 
 // Mode management
 function setMode(next) {
@@ -364,7 +441,7 @@ const settings = {
   breathingAlertEnabled: true,
 };
 let pendingSettingsSave = null;
-let pendingCwdSave = null;
+let pendingLayoutSave = null;
 
 // Called when a pane's cwd changes via OSC 7. Immediately updates the pane
 // and schedules a debounced settings save.
@@ -380,14 +457,7 @@ function onPaneCwdChanged(paneId, newCwd) {
 
   panes[paneIndex] = { ...panes[paneIndex], cwd: newCwd };
 
-  // Clear any pending cwd save and schedule a new one
-  if (pendingCwdSave !== null) {
-    window.clearTimeout(pendingCwdSave);
-  }
-  pendingCwdSave = window.setTimeout(() => {
-    pendingCwdSave = null;
-    scheduleSettingsSave();
-  }, 5000);
+  scheduleWindowLayoutSave(5000);
 }
 
 let shellProfiles = [];
@@ -637,32 +707,67 @@ function restoreSession(session) {
   paneCycleState = null;
 }
 
-async function saveCurrentLayout(name) {
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    return;
-  }
-  name = name.trim();
+function createLayoutFromCurrentWindow(layoutId, name) {
   const session = buildSessionData();
-  const layout = {
-    id: name.toLowerCase().replace(/\s+/g, '-'),
+  return {
+    id: layoutId,
     name,
     panes: session.panes,
     focusedPaneIndex: session.focusedPaneIndex,
   };
-  bridge.saveLayout(layout)
-    .then(() => bridge.listLayouts())
-    .then((config) => {
-      layouts = config.layouts ?? [];
-      if (config.activeLayoutId) {
-        activeLayoutId = config.activeLayoutId;
-      }
-      defaultLayoutId = config.defaultLayoutId ?? '';
-      if (isMainWindow) {
-        flushSettingsSave();
-      }
-      updateLayoutsIndicator();
-    })
-    .catch(reportError);
+}
+
+function createDefaultLayout() {
+  return {
+    id: 'default',
+    name: 'Default',
+    panes: initialPanes.map((p) => ({
+      paneId: p.id,
+      title: p.title,
+      cwd: bridge.defaultCwd,
+      accent: p.accent,
+      customColor: p.customColor,
+      shellProfileId: p.shellProfileId,
+      breathingMonitor: p.breathingMonitor !== false,
+    })),
+    focusedPaneIndex: 0,
+  };
+}
+
+async function refreshLayouts() {
+  const config = await bridge.listLayouts();
+  layouts = config.layouts ?? [];
+  defaultLayoutId = config.defaultLayoutId ?? '';
+  return config;
+}
+
+async function saveCurrentLayout() {
+  if (!windowLayoutId) {
+    throw new Error('Current window is not bound to a layout');
+  }
+
+  const existing = layouts.find((l) => l.id === windowLayoutId);
+  const layout = createLayoutFromCurrentWindow(
+    windowLayoutId,
+    existing?.name || windowLayoutId,
+  );
+  const config = await bridge.saveLayout(layout);
+  layouts = config.layouts ?? layouts;
+  defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
+  updateLayoutsIndicator();
+}
+
+async function saveLayoutAs(name) {
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return;
+  }
+  name = name.trim();
+  const layout = createLayoutFromCurrentWindow(name.toLowerCase().replace(/\s+/g, '-'), name);
+  const config = await bridge.saveLayout(layout);
+  layouts = config.layouts ?? [];
+  defaultLayoutId = config.defaultLayoutId ?? '';
+  setWindowLayoutId(layout.id);
+  updateLayoutsIndicator();
 }
 
 async function switchLayout(layoutId) {
@@ -670,34 +775,32 @@ async function switchLayout(layoutId) {
   if (!layout) return;
   restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
   ensurePaneNodes();
-  if (isMainWindow) {
-    activeLayoutId = layoutId;
-    flushSettingsSave();
-  }
+  setWindowLayoutId(layoutId);
+  flushWindowLayoutSave();
   updateLayoutsIndicator();
 }
 
 /**
- * Update the layouts button to reflect the current active layout.
- * This updates the aria-label to include the current layout name.
+ * Update the layouts button to reflect this window's bound layout.
  */
 function updateLayoutsIndicator() {
   if (!layoutsButtonEl) return;
-  const activeLayout = layouts.find((l) => l.id === activeLayoutId);
-  const layoutName = activeLayout ? activeLayout.name : 'No layout';
-  layoutsButtonEl.setAttribute('aria-label', `Switch layout (${layoutName})`);
+  const currentLayout = layouts.find((l) => l.id === windowLayoutId);
+  const layoutName = currentLayout ? currentLayout.name : 'No layout';
+  layoutsButtonEl.setAttribute('aria-label', `Layouts (${layoutName})`);
 }
 
 function deleteLayoutById(layoutId) {
-  bridge.deleteLayout(layoutId)
+  if (layoutId === windowLayoutId) {
+    reportError(new Error('Cannot delete the layout used by this window'));
+    return Promise.resolve();
+  }
+
+  return bridge.deleteLayout(layoutId)
     .then(() => bridge.listLayouts())
     .then((config) => {
       layouts = config.layouts ?? [];
-      activeLayoutId = config.activeLayoutId ?? '';
       defaultLayoutId = config.defaultLayoutId ?? '';
-      if (isMainWindow) {
-        flushSettingsSave();
-      }
       updateLayoutsIndicator();
     })
     .catch(reportError);
@@ -720,10 +823,7 @@ async function toggleLayoutsDropdown() {
 
   // Reload layouts to ensure we have the latest list
   try {
-    const config = await bridge.listLayouts();
-    layouts = config.layouts ?? [];
-    activeLayoutId = config.activeLayoutId ?? '';
-    defaultLayoutId = config.defaultLayoutId ?? '';
+    await refreshLayouts();
   } catch (error) {
     reportError(error);
   }
@@ -743,13 +843,13 @@ async function toggleLayoutsDropdown() {
     for (const layout of layouts) {
       const item = document.createElement('div');
       item.className = 'layouts-dropdown-item';
-      if (layout.id === activeLayoutId) {
+      if (layout.id === windowLayoutId) {
         item.classList.add('is-active');
       }
 
       const checkmark = document.createElement('span');
       checkmark.className = 'layouts-dropdown-check';
-      checkmark.textContent = layout.id === activeLayoutId ? '✓' : '';
+      checkmark.textContent = layout.id === windowLayoutId ? '✓' : '';
 
       const label = document.createElement('span');
       label.className = 'layouts-dropdown-label';
@@ -770,10 +870,20 @@ async function toggleLayoutsDropdown() {
   separator.className = 'layouts-dropdown-separator';
   layoutsDropdownEl.appendChild(separator);
 
-  // "Save Current Layout..." action
+  // "Save Layout" action
+  const saveCurrentAction = document.createElement('div');
+  saveCurrentAction.className = 'layouts-dropdown-action';
+  saveCurrentAction.textContent = 'Save Layout';
+  saveCurrentAction.addEventListener('click', () => {
+    saveCurrentLayout().catch(reportError);
+    closeLayoutsDropdown();
+  });
+  layoutsDropdownEl.appendChild(saveCurrentAction);
+
+  // "Save Layout As..." action
   const saveAction = document.createElement('div');
   saveAction.className = 'layouts-dropdown-action';
-  saveAction.textContent = 'Save Current Layout…';
+  saveAction.textContent = 'Save Layout As…';
   saveAction.addEventListener('click', () => {
     if (saveAction.classList.contains('is-editing')) return;
 
@@ -801,7 +911,7 @@ async function toggleLayoutsDropdown() {
     const restore = () => {
       saveAction.classList.remove('is-editing');
       saveAction.replaceChildren();
-      saveAction.textContent = 'Save Current Layout…';
+      saveAction.textContent = 'Save Layout As…';
     };
 
     const doConfirm = () => {
@@ -809,7 +919,7 @@ async function toggleLayoutsDropdown() {
       confirmed = true;
       const value = input.value.trim();
       if (value) {
-        saveCurrentLayout(value);
+        saveLayoutAs(value).catch(reportError);
       }
       closeLayoutsDropdown();
     };
@@ -871,25 +981,16 @@ function handleLayoutsDropdownOutsideClick(event) {
 }
 
 function buildSettingsPayloadForCurrentWindow() {
-  const payload = {
-    version: 5,
+  return {
+    version: 6,
     ui: {
       ...settings,
       shortcuts: ShortcutsRegistry.getShortcutsForSave()
     },
   };
-
-  if (isMainWindow) {
-    payload.session = buildSessionData();
-    payload.activeLayoutId = activeLayoutId;
-  }
-
-  return payload;
 }
 
 function scheduleSettingsSave() {
-  if (!isMainWindow) return;
-
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
   }
@@ -900,17 +1001,34 @@ function scheduleSettingsSave() {
   }, 150);
 }
 
+function scheduleWindowLayoutSave(delay = 250) {
+  if (!layoutRestoreComplete || !windowLayoutId) return;
+
+  if (pendingLayoutSave !== null) {
+    window.clearTimeout(pendingLayoutSave);
+  }
+
+  pendingLayoutSave = window.setTimeout(() => {
+    pendingLayoutSave = null;
+    saveCurrentLayout().catch(reportError);
+  }, delay);
+}
+
 function flushSettingsSave() {
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
     pendingSettingsSave = null;
   }
-  if (pendingCwdSave !== null) {
-    window.clearTimeout(pendingCwdSave);
-    pendingCwdSave = null;
+  void bridge.saveSettings(buildSettingsPayloadForCurrentWindow()).catch(reportError);
+}
+
+function flushWindowLayoutSave() {
+  if (pendingLayoutSave !== null) {
+    window.clearTimeout(pendingLayoutSave);
+    pendingLayoutSave = null;
   }
-  if (isMainWindow) {
-    void bridge.saveSettings(buildSettingsPayloadForCurrentWindow()).catch(reportError);
+  if (layoutRestoreComplete && windowLayoutId) {
+    void saveCurrentLayout().catch(reportError);
   }
 }
 
@@ -956,7 +1074,7 @@ function changePaneShell(paneId, profileId) {
   panes = panes.map((p) =>
     p.id === paneId ? { ...p, shellProfileId: profileId } : p
   );
-  scheduleSettingsSave();
+  scheduleWindowLayoutSave();
 
   // Suppress the exit handler — the old PTY is about to be replaced.
   // spawn() on the backend already destroys any previous session.
@@ -971,7 +1089,7 @@ function changePaneShell(paneId, profileId) {
       panes = panes.map((p) =>
         p.id === paneId ? { ...p, shellProfileId: previousProfileId } : p
       );
-      scheduleSettingsSave();
+      scheduleWindowLayoutSave();
     }
   });
 }
@@ -1233,7 +1351,6 @@ function openLayoutsModal() {
   bridge.listLayouts()
     .then((config) => {
       layouts = config.layouts ?? [];
-      activeLayoutId = config.activeLayoutId ?? '';
       defaultLayoutId = config.defaultLayoutId ?? '';
     })
     .catch(reportError)
@@ -1297,20 +1414,13 @@ function openLayoutsModal() {
           const trimmed = input.value.trim();
           cleanup();
           if (!trimmed) return;
-          const session = buildSessionData();
-          const layout = {
-            id: trimmed.toLowerCase().replace(/\s+/g, '-'),
-            name: trimmed,
-            panes: session.panes,
-            focusedPaneIndex: session.focusedPaneIndex,
-          };
+          const layout = createLayoutFromCurrentWindow(trimmed.toLowerCase().replace(/\s+/g, '-'), trimmed);
           bridge.saveLayout(layout)
             .then(() => bridge.listLayouts())
             .then((config) => {
               layouts = config.layouts ?? [];
-              activeLayoutId = config.activeLayoutId ?? layout.id;
               defaultLayoutId = config.defaultLayoutId ?? '';
-              flushSettingsSave();
+              setWindowLayoutId(layout.id);
               updateLayoutsIndicator();
               renderModalLayouts(overlay);
             })
@@ -1363,7 +1473,7 @@ function renderModalLayouts(overlay) {
     listEl.appendChild(empty);
   } else {
     for (const layout of layouts) {
-      const isActive = layout.id === activeLayoutId;
+      const isActive = layout.id === windowLayoutId;
       const isDefault = layout.id === defaultLayoutId;
       const isSelected = layout.id === selectedLayoutId;
       const item = document.createElement('div');
@@ -1391,8 +1501,8 @@ function renderModalLayouts(overlay) {
                 .then(() => bridge.listLayouts())
                 .then((config) => {
                   layouts = config.layouts ?? [];
-                  activeLayoutId = config.activeLayoutId ?? activeLayoutId;
                   defaultLayoutId = config.defaultLayoutId ?? '';
+                  updateLayoutsIndicator();
                   renderModalLayouts(overlay);
                 })
                 .catch(reportError);
@@ -1413,8 +1523,8 @@ function renderModalLayouts(overlay) {
               .then(() => bridge.listLayouts())
               .then((config) => {
                 layouts = config.layouts ?? [];
-                activeLayoutId = config.activeLayoutId ?? activeLayoutId;
                 defaultLayoutId = config.defaultLayoutId ?? '';
+                updateLayoutsIndicator();
                 renderModalLayouts(overlay);
               })
               .catch(reportError);
@@ -1472,7 +1582,7 @@ function renderModalLayouts(overlay) {
       actions.appendChild(renameBtn);
 
       // Delete button (not allowed for default)
-      if (layout.id !== 'default') {
+      if (layout.id !== 'default' && layout.id !== windowLayoutId) {
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'settings-btn';
@@ -1480,15 +1590,9 @@ function renderModalLayouts(overlay) {
         deleteBtn.title = 'Delete layout';
         deleteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          bridge.deleteLayout(layout.id)
-            .then(() => bridge.listLayouts())
-            .then((config) => {
-              layouts = config.layouts ?? [];
-              activeLayoutId = config.activeLayoutId ?? activeLayoutId;
-              defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
-              if (selectedLayoutId === layout.id) selectedLayoutId = null;
-              renderModalLayouts(overlay);
-            })
+          if (selectedLayoutId === layout.id) selectedLayoutId = null;
+          deleteLayoutById(layout.id)
+            .then(() => renderModalLayouts(overlay))
             .catch(reportError);
         });
         actions.appendChild(deleteBtn);
@@ -1538,20 +1642,11 @@ function renderModalLayouts(overlay) {
     const doSave = () => {
       const newName = nameInput.value.trim();
       if (!newName) return;
-      const session = buildSessionData();
-      const updatedLayout = {
-        id: selected.id,
-        name: newName,
-        panes: session.panes,
-        focusedPaneIndex: session.focusedPaneIndex,
-      };
-      bridge.saveLayout(updatedLayout)
+      bridge.renameLayout(selected.id, newName)
         .then(() => bridge.listLayouts())
         .then((config) => {
           layouts = config.layouts ?? [];
-          activeLayoutId = config.activeLayoutId ?? selected.id;
           defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
-          flushSettingsSave();
           updateLayoutsIndicator();
           renderModalLayouts(overlay);
         })
@@ -2562,8 +2657,8 @@ function render(refit = false) {
   renderTabs();
   renderPanes(refit);
   updateStatus();
-  if (sessionRestoreComplete) {
-    scheduleSettingsSave();
+  if (layoutRestoreComplete) {
+    scheduleWindowLayoutSave();
   }
 }
 
@@ -3096,7 +3191,7 @@ function setPaneColor(paneId, color) {
   if (paneIndex === -1) return;
 
   panes[paneIndex] = { ...panes[paneIndex], customColor: color };
-  scheduleSettingsSave();
+  scheduleWindowLayoutSave();
   render();
 }
 
@@ -3105,7 +3200,7 @@ function clearPaneColor(paneId) {
   if (paneIndex === -1) return;
 
   panes[paneIndex] = { ...panes[paneIndex], customColor: undefined };
-  scheduleSettingsSave();
+  scheduleWindowLayoutSave();
   render();
 }
 
@@ -3116,7 +3211,7 @@ function togglePaneBreathingMonitor(paneId) {
   const next = panes[paneIndex].breathingMonitor === false;
   panes[paneIndex] = { ...panes[paneIndex], breathingMonitor: next };
   paneActivityWatcher.setPaneEnabled(paneId, next);
-  scheduleSettingsSave();
+  scheduleWindowLayoutSave();
 }
 
 // VIB-16: open the command palette over the current panes. Build a
@@ -3157,7 +3252,7 @@ function openCommandList() {
     { id: 'rename-pane',     label: 'Rename pane' },
     { id: 'profile-settings',  label: 'Profile settings' },
     { id: 'shortcuts-settings', label: 'Shortcuts settings' },
-    { id: 'layout-save',     label: 'Layout: Save Current Layout' },
+    { id: 'layout-save',     label: 'Layout: Save Layout' },
     { id: 'layout-default',  label: 'Layout: Open Default' },
     ...layouts
       .filter((l) => l.id !== 'default')
@@ -3183,8 +3278,8 @@ function openCommandList() {
       saveCurrentLayout().catch(reportError);
     } else if (commandId === 'layout-default') {
       bridge.openLayoutWindow('default').catch(reportError);
-    } else if (commandId.startsWith('layout-switch:')) {
-      const layoutId = commandId.slice('layout-switch:'.length);
+    } else if (commandId.startsWith('layout-open:')) {
+      const layoutId = commandId.slice('layout-open:'.length);
       bridge.openLayoutWindow(layoutId).catch(reportError);
     } else if (commandId === 'layout-manage') {
       openLayoutsModal();
@@ -3855,51 +3950,39 @@ window.addEventListener('DOMContentLoaded', async () => {
     applySettings();
     loadShellProfiles();
 
-    const layoutConfig = await bridge.listLayouts();
-    layouts = layoutConfig.layouts ?? [];
-    activeLayoutId = layoutConfig.activeLayoutId ?? '';
-    defaultLayoutId = layoutConfig.defaultLayoutId ?? '';
+    await refreshLayouts();
 
-    if (isMainWindow && layouts.length === 0 && savedSettings?.session?.panes?.length > 0) {
-      const defaultLayout = {
-        id: 'default',
-        name: 'Default',
-        panes: savedSettings.session.panes,
-        focusedPaneIndex: savedSettings.session.focusedPaneIndex ?? 0,
-      };
-      await bridge.saveLayout(defaultLayout);
-      layouts = [defaultLayout];
-      activeLayoutId = 'default';
-      defaultLayoutId = 'default';
+    let defaultLayout = layouts.find((l) => l.id === defaultLayoutId)
+      || layouts.find((l) => l.id === 'default');
+
+    if (!defaultLayout) {
+      defaultLayout = createDefaultLayout();
+      const saved = await bridge.saveLayout(defaultLayout);
+      layouts = saved.layouts ?? [defaultLayout];
+      defaultLayoutId = saved.defaultLayoutId ?? defaultLayoutId;
     }
 
-    if (windowContext.kind === 'layout') {
-      const targetLayout = layouts.find((l) => l.id === windowContext.layoutId);
-      if (targetLayout) {
-        restoreSession({ panes: targetLayout.panes, focusedPaneIndex: targetLayout.focusedPaneIndex });
-        ensurePaneNodes();
-      }
-    } else if (defaultLayoutId && layouts.find((l) => l.id === defaultLayoutId)) {
-      activeLayoutId = defaultLayoutId;
-      restoreSession({ panes: layouts.find((l) => l.id === defaultLayoutId).panes, focusedPaneIndex: layouts.find((l) => l.id === defaultLayoutId).focusedPaneIndex });
-      ensurePaneNodes();
-    } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
-      ensurePaneNodes();
-    } else if (savedSettings?.session?.panes?.length > 0) {
-      restoreSession(savedSettings.session);
-    } else {
-      panes = panes.map((p) =>
-        p.title === null
-          ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
-          : p
-      );
+    if (defaultLayoutId !== defaultLayout.id) {
+      const config = await bridge.setLayoutAsDefault(defaultLayout.id);
+      layouts = config.layouts ?? layouts;
+      defaultLayoutId = config.defaultLayoutId ?? defaultLayout.id;
     }
+
+    const targetLayoutId = windowContext.kind === 'layout'
+      ? windowContext.layoutId
+      : defaultLayoutId;
+    const targetLayout = layouts.find((l) => l.id === targetLayoutId);
+    if (!targetLayout) {
+      throw new Error(`Layout not found: ${targetLayoutId}`);
+    }
+
+    setWindowLayoutId(targetLayout.id);
+    restoreSession({ panes: targetLayout.panes, focusedPaneIndex: targetLayout.focusedPaneIndex });
+    ensurePaneNodes();
 
     updateLayoutsIndicator();
     render(true);
-    sessionRestoreComplete = true;
+    layoutRestoreComplete = true;
   } catch (error) {
     reportError(error);
     const msg = error instanceof Error ? error.message : String(error);
@@ -3908,9 +3991,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 window.addEventListener('beforeunload', () => {
-  if (isMainWindow) {
-    flushSettingsSave();
-  }
+  flushWindowLayoutSave();
+  flushSettingsSave();
+  clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();

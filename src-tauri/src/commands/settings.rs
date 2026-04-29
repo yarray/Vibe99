@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-const CURRENT_CONFIG_VERSION: u8 = 5;
+const CURRENT_CONFIG_VERSION: u8 = 6;
 
 /// Global lock for all settings file operations.
 ///
@@ -310,14 +310,6 @@ pub(crate) fn sanitize_layouts(value: Option<&Value>) -> Vec<Value> {
     result
 }
 
-/// Sanitize the active layout id.
-///
-/// Ensures the id refers to an existing layout. Returns an empty string
-/// if the referenced id is missing or the field is absent.
-pub(crate) fn sanitize_active_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
-    sanitize_layout_id(value, layouts)
-}
-
 /// Sanitize the default layout id.
 ///
 /// Ensures the id refers to an existing layout. Returns an empty string
@@ -326,7 +318,7 @@ pub(crate) fn sanitize_default_layout_id(value: Option<&Value>, layouts: &[Value
     sanitize_layout_id(value, layouts)
 }
 
-/// Shared sanitization for layout id fields (activeLayoutId, defaultLayoutId).
+/// Shared sanitization for layout id fields.
 fn sanitize_layout_id(value: Option<&Value>, layouts: &[Value]) -> String {
     let raw = value.and_then(|v| v.as_str()).map(str::trim).unwrap_or("");
 
@@ -408,53 +400,11 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
     result
 }
 
-/// Sanitize the `session` block of a config.
-///
-/// Validates that each pane entry has a valid `accent` hex color.
-/// Returns `Value::Null` if the session is missing, empty, or has no valid panes.
-fn sanitize_session(session: Option<&Value>) -> Value {
-    let panes = match session
-        .and_then(|s| s.as_object())
-        .and_then(|o| o.get("panes"))
-        .and_then(|p| p.as_array())
-    {
-        Some(arr) => arr,
-        None => return Value::Null,
-    };
-
-    let valid: Vec<Value> = panes
-        .iter()
-        .filter(|p| {
-            p.get("accent").and_then(|v| v.as_str()).is_some_and(|s| {
-                s.starts_with('#') && s.len() == 7 && s[1..].chars().all(|c| c.is_ascii_hexdigit())
-            })
-        })
-        .cloned()
-        .collect();
-
-    if valid.is_empty() {
-        return Value::Null;
-    }
-
-    let focused_index = session
-        .and_then(|s| s.as_object())
-        .and_then(|o| o.get("focusedPaneIndex"))
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
-
-    let focused_index = focused_index.min(valid.len() - 1);
-
-    serde_json::json!({
-        "panes": valid,
-        "focusedPaneIndex": focused_index,
-    })
-}
-
 /// Sanitize an arbitrary config value into the current schema.
 ///
 /// Handles:
-/// - Current versioned format (`{ version: 2, ui: { ... }, shell: { ... } }`)
-/// - Version 1 format (`{ version: 1, ui: { ... } }`) → promoted to v2
+/// - Current versioned format (`{ version: 6, ui: { ... }, shell: { ... } }`)
+/// - Version 1 format (`{ version: 1, ui: { ... } }`) → promoted to current
 /// - Legacy flat format (`{ fontSize, paneOpacity, paneWidth }` without version/ui)
 /// - Null / invalid input → defaults
 pub(crate) fn sanitize_config(candidate: &Value) -> Value {
@@ -465,27 +415,19 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
 
     match version {
         Some(v) if v >= 2 => {
-            // Version 2+ format: sanitize ui, shell, session, and layouts.
+            // Version 2+ format: sanitize ui, shell, layouts, and default layout.
             let obj = candidate.as_object().unwrap();
             let profiles =
                 sanitize_shell_profiles(obj.get("shell").and_then(|s| s.get("profiles")));
-            let session = sanitize_session(obj.get("session"));
             let layouts = sanitize_layouts(obj.get("layouts"));
-            let active_layout_id = sanitize_active_layout_id(obj.get("activeLayoutId"), &layouts);
-            let default_layout_id = sanitize_default_layout_id(obj.get("defaultLayoutId"), &layouts);
+            let default_layout_id =
+                sanitize_default_layout_id(obj.get("defaultLayoutId"), &layouts);
 
             let mut result = serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
                 "ui": sanitize_ui_config(obj.get("ui")),
                 "shell": sanitize_shell_config(obj.get("shell"), &profiles),
             });
-
-            if !session.is_null() {
-                result
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("session".into(), session);
-            }
 
             if !layouts.is_empty() {
                 result
@@ -494,10 +436,6 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     .insert("layouts".into(), Value::Array(layouts));
             }
 
-            result
-                .as_object_mut()
-                .unwrap()
-                .insert("activeLayoutId".into(), Value::String(active_layout_id));
             result
                 .as_object_mut()
                 .unwrap()
@@ -515,7 +453,6 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "profiles": [],
                     "defaultProfile": "",
                 },
-                "activeLayoutId": "",
                 "defaultLayoutId": "",
             })
         }
@@ -532,7 +469,6 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                         "profiles": [],
                         "defaultProfile": "",
                     },
-                    "activeLayoutId": "",
                     "defaultLayoutId": "",
                 });
             }
@@ -550,7 +486,6 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "profiles": [],
                     "defaultProfile": "",
                 },
-                "activeLayoutId": "",
                 "defaultLayoutId": "",
             })
         }
@@ -604,7 +539,7 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
             .map_err(|e| format!("failed to create settings directory: {e}"))?;
     }
 
-    // The frontend may send a partial payload (only version, ui, session)
+    // The frontend may send a partial payload (only version and ui)
     // without the `shell` block. Preserve the existing `shell` block from
     // disk so that user-edited profiles are not silently wiped.
     if settings.get("shell").is_none() && path.exists() {
@@ -635,7 +570,8 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
             .ok()
             .and_then(|c| serde_json::from_str::<Value>(&c).ok())
             .and_then(|v| v.get("defaultLayoutId").cloned());
-        if let (Some(default_layout_id), Some(obj)) = (default_layout_id, settings.as_object_mut()) {
+        if let (Some(default_layout_id), Some(obj)) = (default_layout_id, settings.as_object_mut())
+        {
             obj.insert("defaultLayoutId".into(), default_layout_id);
         }
     }
