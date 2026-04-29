@@ -240,6 +240,16 @@ const bridge = window.__TAURI__
   ? createTauriBridge(window.__TAURI__)
   : window.vibe99 ?? createUnavailableBridge();
 
+// Change 1: WindowContext helper at module level
+function getWindowContext() {
+  const params = new URLSearchParams(window.location.search);
+  const layoutId = params.get('layoutId');
+  return layoutId ? { kind: 'layout', layoutId } : { kind: 'main' };
+}
+
+const windowContext = getWindowContext();
+const isMainWindow = windowContext.kind === 'main';
+
 const initialPanes = [
   {
     id: 'p1',
@@ -341,6 +351,24 @@ const settings = {
 };
 let pendingSettingsSave = null;
 let pendingCwdSave = null;
+
+// Change 2: Build payload depending on window type
+function buildSettingsPayloadForCurrentWindow() {
+  const payload = {
+    version: 5,
+    ui: {
+      ...settings,
+      shortcuts: ShortcutsRegistry.getShortcutsForSave(),
+    },
+  };
+
+  if (isMainWindow) {
+    payload.session = buildSessionData();
+    payload.activeLayoutId = activeLayoutId;
+  }
+
+  return payload;
+}
 
 // Called when a pane's cwd changes via OSC 7. Immediately updates the pane
 // and schedules a debounced settings save.
@@ -851,15 +879,7 @@ function scheduleSettingsSave() {
 
   pendingSettingsSave = window.setTimeout(() => {
     pendingSettingsSave = null;
-    const settingsToSave = {
-      version: 5,
-      ui: {
-        ...settings,
-        shortcuts: ShortcutsRegistry.getShortcutsForSave()
-      },
-      session: buildSessionData(),
-      activeLayoutId,
-    };
+    const settingsToSave = buildSettingsPayloadForCurrentWindow();
     bridge.saveSettings(settingsToSave).catch(reportError);
   }, 150);
 }
@@ -873,15 +893,7 @@ function flushSettingsSave() {
     window.clearTimeout(pendingCwdSave);
     pendingCwdSave = null;
   }
-  const settingsToSave = {
-    version: 5,
-    ui: {
-      ...settings,
-      shortcuts: ShortcutsRegistry.getShortcutsForSave()
-    },
-    session: buildSessionData(),
-    activeLayoutId,
-  };
+  const settingsToSave = buildSettingsPayloadForCurrentWindow();
   void bridge.saveSettings(settingsToSave).catch(reportError);
 }
 
@@ -3826,48 +3838,57 @@ window.addEventListener('DOMContentLoaded', async () => {
     applySettings();
     loadShellProfiles();
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const cliLayoutId = urlParams.get('layoutId');
-
+    // Load layouts once and decide per-window initialization strategy
     const layoutConfig = await bridge.listLayouts();
     layouts = layoutConfig.layouts ?? [];
     activeLayoutId = layoutConfig.activeLayoutId ?? '';
     defaultLayoutId = layoutConfig.defaultLayoutId ?? '';
 
-    // Migration: if layouts is empty and session.panes exists, auto-create Default
-    if (layouts.length === 0 && savedSettings?.session?.panes?.length > 0) {
-      const defaultLayout = {
-        id: 'default',
-        name: 'Default',
-        panes: savedSettings.session.panes,
-        focusedPaneIndex: savedSettings.session.focusedPaneIndex ?? 0,
-      };
-      await bridge.saveLayout(defaultLayout);
-      layouts = [defaultLayout];
-      activeLayoutId = 'default';
-      defaultLayoutId = 'default';
+    if (isMainWindow) {
+      // Main window: honor saved session and active/default layouts
+      // Migration: if layouts is empty and session.panes exists, auto-create Default
+      if (layouts.length === 0 && savedSettings?.session?.panes?.length > 0) {
+        const defaultLayout = {
+          id: 'default',
+          name: 'Default',
+          panes: savedSettings.session.panes,
+          focusedPaneIndex: savedSettings.session.focusedPaneIndex ?? 0,
+        };
+        await bridge.saveLayout(defaultLayout);
+        layouts = [defaultLayout];
+        activeLayoutId = 'default';
+        defaultLayoutId = 'default';
+      }
+
+      if (defaultLayoutId && layouts.find((l) => l.id === defaultLayoutId)) {
+        activeLayoutId = defaultLayoutId;
+        switchLayout(defaultLayoutId);
+      } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
+        switchLayout(activeLayoutId);
+      } else if (savedSettings?.session?.panes?.length > 0) {
+        restoreSession(savedSettings.session);
+      } else {
+        panes = panes.map((p) =>
+          p.title === null
+            ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
+            : p
+        );
+      }
+    } else {
+      // Layout window: restore specified layout, skip session/activeLayout persistence
+      const targetLayout = layouts.find((l) => l.id === windowContext.layoutId);
+      if (targetLayout) {
+        restoreSession({ panes: targetLayout.panes, focusedPaneIndex: targetLayout.focusedPaneIndex });
+      } else {
+        panes = panes.map((p) =>
+          p.title === null
+            ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
+            : p
+        );
+      }
     }
 
-    if (cliLayoutId) {
-      const targetLayout = layouts.find((l) => l.id === cliLayoutId);
-      if (targetLayout) {
-        activeLayoutId = cliLayoutId;
-        switchLayout(cliLayoutId);
-      }
-    } else if (defaultLayoutId && layouts.find((l) => l.id === defaultLayoutId)) {
-      activeLayoutId = defaultLayoutId;
-      switchLayout(defaultLayoutId);
-    } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
-      switchLayout(activeLayoutId);
-    } else if (savedSettings?.session?.panes?.length > 0) {
-      restoreSession(savedSettings.session);
-      updateLayoutsIndicator();
-    } else {
-      panes = panes.map((p) =>
-        p.title === null
-          ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
-          : p
-      );
+    if (isMainWindow) {
       updateLayoutsIndicator();
     }
 

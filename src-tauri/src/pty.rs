@@ -86,6 +86,7 @@ fn utf8_safe_cut(buf: &[u8]) -> usize {
 struct TerminalExitPayload {
     pane_id: String,
     exit_code: u32,
+    reason: String,
 }
 
 /// Holds the live resources for a single PTY session.
@@ -314,6 +315,7 @@ impl PtyManager {
                 TerminalExitPayload {
                     pane_id: pane_id_owned.clone(),
                     exit_code,
+                    reason: "exited".to_string(),
                 },
             );
 
@@ -340,7 +342,9 @@ impl PtyManager {
     }
 
     /// Write raw bytes to the PTY master for the given `pane_id`.
-    pub fn write(&self, pane_id: &str, data: &[u8]) -> Result<(), String> {
+    ///
+    /// Verifies that the session belongs to `window_label` before writing.
+    pub fn write(&self, pane_id: &str, data: &[u8], window_label: &str) -> Result<(), String> {
         let mut sessions = self
             .sessions
             .lock()
@@ -349,6 +353,13 @@ impl PtyManager {
         let session = sessions
             .get_mut(pane_id)
             .ok_or_else(|| format!("no session for pane {pane_id}"))?;
+
+        if session.window_label != window_label {
+            return Err(format!(
+                "session for pane {pane_id} belongs to window '{}', not '{window_label}'",
+                session.window_label
+            ));
+        }
 
         session
             .writer
@@ -365,7 +376,7 @@ impl PtyManager {
 
     /// Resize the PTY for the given `pane_id`. Column and row values are
     /// clamped to the configured minimums.
-    pub fn resize(&self, pane_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+    pub fn resize(&self, pane_id: &str, cols: u16, rows: u16, window_label: &str) -> Result<(), String> {
         let sessions = self
             .sessions
             .lock()
@@ -374,6 +385,13 @@ impl PtyManager {
         let session = sessions
             .get(pane_id)
             .ok_or_else(|| format!("no session for pane {pane_id}"))?;
+
+        if session.window_label != window_label {
+            return Err(format!(
+                "session for pane {pane_id} belongs to window '{}', not '{window_label}'",
+                session.window_label
+            ));
+        }
 
         session
             .master
@@ -390,24 +408,8 @@ impl PtyManager {
 
     /// Kill the child process, remove the session for `pane_id`, and join the
     /// exit-watcher thread so no stale events are emitted after this returns.
-    pub fn destroy(&self, pane_id: &str) {
-        let exit_handle = {
-            let mut sessions = match self.sessions.lock() {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-            let Some(session) = sessions.remove(pane_id) else {
-                return;
-            };
-            let PtySession {
-                mut killer,
-                exit_thread,
-                ..
-            } = session;
-            let _ = killer.kill();
-            exit_thread
-        };
-        let _ = exit_handle.join();
+    pub fn destroy(&self, pane_id: &str, window_label: &str) {
+        self.destroy_for_pane_in_window(pane_id, window_label);
     }
 
     /// Destroy all active sessions.
@@ -425,7 +427,7 @@ impl PtyManager {
     /// windows restore layouts that generate the same sequential pane IDs
     /// (p1, p2, …).
     pub fn destroy_for_pane_in_window(&self, pane_id: &str, window_label: &str) {
-        let exit_handle = {
+        let session = {
             let mut sessions = match self.sessions.lock() {
                 Ok(s) => s,
                 Err(_) => return,
@@ -436,37 +438,38 @@ impl PtyManager {
             if !should_remove {
                 return;
             }
-            let Some(session) = sessions.remove(pane_id) else {
-                return;
-            };
-            let PtySession {
-                mut killer,
-                exit_thread,
-                ..
-            } = session;
-            let _ = killer.kill();
-            exit_thread
+            sessions.remove(pane_id)
         };
-        let _ = exit_handle.join();
+        if let Some(PtySession { mut killer, exit_thread, .. }) = session {
+            std::thread::spawn(move || {
+                let _ = killer.kill();
+                let _ = exit_thread.join();
+            });
+        }
     }
 
-    /// Destroy all sessions owned by the given window.
     pub fn destroy_for_window(&self, window_label: &str) {
-        let mut sessions = match self.sessions.lock() {
-            Ok(s) => s,
-            Err(_) => return,
+        let removed: Vec<PtySession> = {
+            let mut sessions = match self.sessions.lock() {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let owned: Vec<String> = sessions
+                .iter()
+                .filter(|(_, s)| s.window_label == window_label)
+                .map(|(id, _)| id.clone())
+                .collect();
+            owned
+                .iter()
+                .filter_map(|id| sessions.remove(id))
+                .collect()
         };
-        let owned: Vec<String> = sessions
-            .iter()
-            .filter(|(_, s)| s.window_label == window_label)
-            .map(|(id, _)| id.clone())
-            .collect();
-        for id in owned {
-            if let Some(session) = sessions.remove(&id) {
+        std::thread::spawn(move || {
+            for session in removed {
                 let _ = session.killer.kill();
                 let _ = session.exit_thread.join();
             }
-        }
+        });
     }
 }
 

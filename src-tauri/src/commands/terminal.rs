@@ -53,29 +53,29 @@ pub fn terminal_create(
 /// `data` is expected to be a base64-encoded string of the bytes to write.
 #[tauri::command]
 pub fn terminal_write(
+    window: Window,
     state: State<'_, AppState>,
     pane_id: String,
     data: String,
 ) -> Result<(), String> {
     let bytes = base64_decode(&data).map_err(|e| format!("invalid base64 data: {e}"))?;
-    state.pty.write(&pane_id, &bytes)
+    state.pty.write(&pane_id, &bytes, window.label())
 }
 
-/// Resize the PTY for the given pane.
 #[tauri::command]
 pub fn terminal_resize(
+    window: Window,
     state: State<'_, AppState>,
     pane_id: String,
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    state.pty.resize(&pane_id, cols, rows)
+    state.pty.resize(&pane_id, cols, rows, window.label())
 }
 
-/// Destroy the PTY session for the given pane.
 #[tauri::command]
-pub fn terminal_destroy(state: State<'_, AppState>, pane_id: String) {
-    state.pty.destroy(&pane_id);
+pub fn terminal_destroy(window: Window, state: State<'_, AppState>, pane_id: String) {
+    state.pty.destroy(&pane_id, window.label());
 }
 
 /// Destroy all active PTY sessions.

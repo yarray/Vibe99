@@ -1,0 +1,1 @@
+Multi-window layout isolation: layout windows opened via `?layoutId=` URL parameter now have fully isolated state from the main window. Layout windows do not persist `settings.session` or `activeLayoutId`, terminal commands are window-scoped via `Window` parameter verification, PTY cleanup is non-blocking, and terminal-exit events include a `reason` field (VIB-104).
