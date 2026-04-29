@@ -2531,8 +2531,9 @@ function closePane(index, options = {}) {
     bridge.destroyTerminal({ paneId: closingPane.id });
   }
 
+  const wasFocused = closingPane.id === focusedPaneId;
   const remainingPanes = panes.filter((_, paneIndex) => paneIndex !== index);
-  if (closingPane.id === focusedPaneId) {
+  if (wasFocused) {
     const fallbackIndex = Math.max(0, index - 1);
     focusedPaneId = remainingPanes[fallbackIndex]?.id ?? remainingPanes[0]?.id ?? null;
   }
@@ -2542,6 +2543,17 @@ function closePane(index, options = {}) {
   recordPaneVisit(focusedPaneId);
 
   render(true);
+
+  // After closing a pane, if the focused pane was closed, focus the new pane's terminal
+  if (wasFocused && focusedPaneId) {
+    requestAnimationFrame(() => {
+      const node = paneNodeMap.get(focusedPaneId);
+      if (node) {
+        setMode('terminal');
+        node.terminal.focus();
+      }
+    });
+  }
 }
 
 function beginRenamePane(index) {
