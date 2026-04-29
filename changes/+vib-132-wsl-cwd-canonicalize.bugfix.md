@@ -1,0 +1,1 @@
+Fixed PowerShell sessions still failing with `cargo metadata` OS error 448 when the saved working directory is a forward-slash WSL UNC path (`//wsl.localhost/...`) or a Windows junction/symlink that resolves into the WSL filesystem. The cwd resolver now normalizes path separators before checking and canonicalizes accepted paths to detect indirect references to WSL mounts.
