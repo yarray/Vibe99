@@ -855,7 +855,7 @@ async function toggleLayoutsDropdown() {
       label.className = 'layouts-dropdown-label';
       label.textContent = layout.name || layout.id;
 
-      item.append(checkmark, label);
+      item.append(label, checkmark);
       item.addEventListener('click', () => {
         bridge.openLayoutWindow(layout.id).catch(reportError);
         closeLayoutsDropdown();
@@ -1598,7 +1598,12 @@ function renderModalLayouts(overlay) {
         actions.appendChild(deleteBtn);
       }
 
-      item.append(nameEl, info, actions);
+      // Active layout checkmark (positioned on the right)
+      const checkmark = document.createElement('span');
+      checkmark.className = 'layout-item-check';
+      checkmark.textContent = isActive ? '✓' : '';
+
+      item.append(nameEl, info, actions, checkmark);
 
       // Click selects layout (without triggering actions)
       item.addEventListener('click', (e) => {
