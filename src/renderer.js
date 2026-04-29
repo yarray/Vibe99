@@ -165,8 +165,10 @@ function createTauriBridge(tauri) {
     return btoa(binary);
   }
 
+  const currentWebview = tauri.webview.getCurrentWebview();
+
   function onTauriEvent(event, handler) {
-    const unlisten = tauri.event.listen(event, (e) => handler(e.payload));
+    const unlisten = currentWebview.listen(event, (e) => handler(e.payload));
     return () => unlisten.then((fn) => fn());
   }
 
@@ -885,6 +887,8 @@ function buildSettingsPayloadForCurrentWindow() {
 }
 
 function scheduleSettingsSave() {
+  if (!isMainWindow) return;
+
   if (pendingSettingsSave !== null) {
     window.clearTimeout(pendingSettingsSave);
   }
