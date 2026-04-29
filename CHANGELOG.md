@@ -22,6 +22,14 @@
 
 ### Added
 
+- E2E tests for Settings panel (VIB-113):
+  - Settings panel toggle tests (open/close via button, click outside to close)
+  - Font settings tests (font size with limits 10-24, font family)
+  - Pane size settings tests (pane width with limits 520-2000)
+  - Pane transparency settings tests (pane opacity with limits 0.55-1)
+  - BG mask transparency settings tests (mask opacity with limits 0-1)
+  - Breathing alert toggle tests (checkbox state, persistence)
+  - Settings persistence tests (individual and multiple settings)
 - Layout edit panel enhancements (VIB-88):
   - "Set as Default" button to set a layout as the default layout (loaded on application startup)
   - Visual indicator (★) for default layouts in the layout list

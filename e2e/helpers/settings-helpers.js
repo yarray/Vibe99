@@ -21,11 +21,20 @@ export async function resetSettings() {
   await browser.execute(() => {
     if (window.__TAURI__) {
       window.__TAURI__.core.invoke('settings_save', {
-        settings: {},
+        settings: {
+          version: 6,
+          ui: {
+            fontSize: 13,
+            paneOpacity: 0.8,
+            paneMaskOpacity: 0.75,
+            paneWidth: 720,
+            breathingAlertEnabled: true,
+          },
+        },
       });
     }
   });
-  await browser.pause(200);
+  await browser.pause(300);
 }
 
 export async function loadSettings() {
