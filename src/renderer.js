@@ -612,12 +612,17 @@ function saveCurrentLayout(name) {
     panes: session.panes,
     focusedPaneIndex: session.focusedPaneIndex,
   };
+  const hadActiveLayout = Boolean(activeLayoutId);
   bridge.saveLayout(layout)
     .then(() => bridge.listLayouts())
     .then((config) => {
       layouts = config.layouts ?? [];
-      activeLayoutId = config.activeLayoutId ?? layout.id;
-      scheduleSettingsSave();
+      // Don't let a stale backend activeLayoutId overwrite a recent local switch.
+      // Only associate the newly saved layout if there was no active layout before.
+      if (!hadActiveLayout) {
+        activeLayoutId = layout.id;
+      }
+      flushSettingsSave();
     })
     .catch(reportError);
 }
@@ -628,7 +633,9 @@ function switchLayout(layoutId) {
   restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
   ensurePaneNodes();
   activeLayoutId = layoutId;
-  scheduleSettingsSave();
+  // Use immediate save instead of debounced to prevent race conditions
+  // with dropdown/modal reopening before the backend is updated.
+  flushSettingsSave();
 }
 
 function deleteLayoutById(layoutId) {
@@ -636,10 +643,9 @@ function deleteLayoutById(layoutId) {
     .then(() => bridge.listLayouts())
     .then((config) => {
       layouts = config.layouts ?? [];
-      if (activeLayoutId === layoutId) {
-        activeLayoutId = '';
-      }
-      scheduleSettingsSave();
+      // Use backend's activeLayoutId to ensure consistency; fall back to local value.
+      activeLayoutId = config.activeLayoutId ?? activeLayoutId;
+      flushSettingsSave();
     })
     .catch(reportError);
 }
@@ -663,7 +669,9 @@ async function toggleLayoutsDropdown() {
   try {
     const config = await bridge.listLayouts();
     layouts = config.layouts ?? [];
-    activeLayoutId = config.activeLayoutId ?? '';
+    // Don't overwrite local activeLayoutId with the backend value.
+    // The local value reflects this window's actual current layout;
+    // the backend value may be stale due to debounced saves or other windows.
   } catch (error) {
     reportError(error);
   }
@@ -1115,7 +1123,9 @@ function openLayoutsModal() {
   bridge.listLayouts()
     .then((config) => {
       layouts = config.layouts ?? [];
-      activeLayoutId = config.activeLayoutId ?? '';
+      // Don't overwrite local activeLayoutId with the backend value.
+      // The local value reflects this window's actual current layout;
+      // the backend value may be stale due to debounced saves or other windows.
     })
     .catch(reportError)
     .finally(() => {
@@ -1165,12 +1175,16 @@ function openLayoutsModal() {
           panes: session.panes,
           focusedPaneIndex: session.focusedPaneIndex,
         };
+        const hadActiveLayout = Boolean(activeLayoutId);
         bridge.saveLayout(layout)
           .then(() => bridge.listLayouts())
           .then((config) => {
             layouts = config.layouts ?? [];
-            activeLayoutId = config.activeLayoutId ?? layout.id;
-            scheduleSettingsSave();
+            // Don't let a stale backend activeLayoutId overwrite a recent local switch.
+            if (!hadActiveLayout) {
+              activeLayoutId = layout.id;
+            }
+            flushSettingsSave();
             renderModalLayouts(overlay);
           })
           .catch(reportError);
@@ -1327,8 +1341,7 @@ function renderModalLayouts(overlay) {
         .then(() => bridge.listLayouts())
         .then((config) => {
           layouts = config.layouts ?? [];
-          activeLayoutId = config.activeLayoutId ?? selected.id;
-          scheduleSettingsSave();
+          flushSettingsSave();
           renderModalLayouts(overlay);
         })
         .catch(reportError);
