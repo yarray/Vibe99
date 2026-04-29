@@ -839,6 +839,14 @@ async function toggleLayoutsDropdown() {
     return;
   }
 
+  // Close other menus
+  closeSettingsPanel();
+  const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
+  if (existingProfilePopup) {
+    existingProfilePopup.remove();
+    document.removeEventListener('click', dismissAddPaneProfilePopup);
+  }
+
   // Reload layouts to ensure we have the latest list
   try {
     await refreshLayouts();
@@ -3737,6 +3745,10 @@ function renderAddPaneProfilePopup(profiles) {
     return;
   }
 
+  // Close other menus
+  closeSettingsPanel();
+  closeLayoutsDropdown();
+
   const popup = document.createElement('div');
   popup.className = 'add-pane-profile-popup';
 
@@ -3820,6 +3832,15 @@ layoutsButtonEl.addEventListener('click', (event) => {
 
 settingsButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
+
+  // Close other menus
+  const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
+  if (existingProfilePopup) {
+    existingProfilePopup.remove();
+    document.removeEventListener('click', dismissAddPaneProfilePopup);
+  }
+  closeLayoutsDropdown();
+
   const wasHidden = settingsPanelEl.classList.toggle('is-hidden');
   if (wasHidden) {
     closeSettingsPanel();

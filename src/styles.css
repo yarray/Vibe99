@@ -355,7 +355,7 @@ body::after {
 .settings-panel {
   position: absolute;
   top: calc(100% + 1px);
-  right: 0;
+  right: 4px;
   display: grid;
   gap: 0;
   width: 280px;
@@ -1165,7 +1165,7 @@ body.is-dragging-tabs {
   font: inherit;
   text-align: left;
   cursor: default;
-  gap: 8px;
+  gap: 16px;
 }
 
 .add-pane-profile-item:hover {
@@ -1186,7 +1186,7 @@ body.is-dragging-tabs {
 }
 
 .add-pane-profile-empty {
-  padding: 8px 14px;
+  padding: 6px 14px;
   color: var(--panel-muted);
   font-size: 13px;
 }
@@ -2174,7 +2174,7 @@ body.is-dragging-tabs {
 .layouts-dropdown {
   position: absolute;
   top: calc(100% + 1px);
-  right: 0;
+  right: 4px;
   min-width: 180px;
   padding: 4px 0;
   border: 1px solid rgba(255, 255, 255, 0.1);
