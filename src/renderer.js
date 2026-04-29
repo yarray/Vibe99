@@ -432,14 +432,12 @@ const fontSizeInputEl = document.getElementById('font-size-input');
 const fontFamilyInputEl = document.getElementById('font-family-input');
 const paneWidthRangeEl = document.getElementById('pane-width-range');
 const paneWidthInputEl = document.getElementById('pane-width-input');
-const paneWidthValueEl = document.getElementById('pane-width-value');
 const paneOpacityRangeEl = document.getElementById('pane-opacity-range');
 const paneOpacityInputEl = document.getElementById('pane-opacity-input');
-const paneOpacityValueEl = document.getElementById('pane-opacity-value');
 const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
 const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
-const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
 const breathingAlertToggleEl = document.getElementById('breathing-alert-toggle');
+const breathingAlertDotEl = document.getElementById('breathing-alert-dot');
 const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
 const layoutsSettingsBtn = document.getElementById('layouts-settings-btn');
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
@@ -590,14 +588,12 @@ function applySettings() {
   fontFamilyInputEl.value = settings.fontFamily;
   paneWidthRangeEl.value = String(settings.paneWidth);
   paneWidthInputEl.value = String(settings.paneWidth);
-  paneWidthValueEl.textContent = `${settings.paneWidth}px`;
   paneOpacityRangeEl.value = settings.paneOpacity.toFixed(2);
   paneOpacityInputEl.value = settings.paneOpacity.toFixed(2);
-  paneOpacityValueEl.textContent = settings.paneOpacity.toFixed(2);
   paneMaskOpacityRangeEl.value = settings.paneMaskOpacity.toFixed(2);
   paneMaskOpacityInputEl.value = settings.paneMaskOpacity.toFixed(2);
-  paneMaskOpacityValueEl.textContent = settings.paneMaskOpacity.toFixed(2);
   breathingAlertToggleEl.checked = settings.breathingAlertEnabled;
+  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
   paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
 }
 
@@ -874,7 +870,7 @@ async function toggleLayoutsDropdown() {
       }
 
       const checkmark = document.createElement('span');
-      checkmark.className = 'layouts-dropdown-check';
+      checkmark.className = 'layout-item-current';
       if (layout.id === windowLayoutId) {
         checkmark.classList.add('is-active');
       }
@@ -1663,10 +1659,10 @@ function renderModalLayouts(overlay) {
         actions.appendChild(deleteBtn);
       }
 
-      // Active layout checkmark (positioned on the right)
+      // Active layout indicator (small yellow dot, matching dropdown style)
       const checkmark = document.createElement('span');
-      checkmark.className = 'layout-item-check';
-      checkmark.textContent = isActive ? '✓' : '';
+      checkmark.className = 'layout-item-current';
+      if (isActive) checkmark.classList.add('is-active');
 
       item.append(nameEl, info, actions, checkmark);
 
@@ -4081,8 +4077,23 @@ paneMaskOpacityInputEl.addEventListener('change', () => {
   updatePaneMaskOpacity(paneMaskOpacityInputEl.value);
 });
 
+const breathingAlertRowEl = document.getElementById('breathing-alert-row');
+
+function toggleBreathingAlert() {
+  breathingAlertToggleEl.checked = !breathingAlertToggleEl.checked;
+  settings.breathingAlertEnabled = breathingAlertToggleEl.checked;
+  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
+  paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+  scheduleSettingsSave();
+}
+
+breathingAlertRowEl.addEventListener('click', () => {
+  toggleBreathingAlert();
+});
+
 breathingAlertToggleEl.addEventListener('change', () => {
   settings.breathingAlertEnabled = breathingAlertToggleEl.checked;
+  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
   paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
   scheduleSettingsSave();
 });

@@ -36,7 +36,6 @@
 
             <label class="settings-row" for="pane-width-range">
               <span>Pane width</span>
-              <span id="pane-width-value">720px</span>
             </label>
             <div class="settings-dual">
               <input id="pane-width-range" type="range" min="520" max="2000" step="10" value="720" />
@@ -45,7 +44,6 @@
 
             <label class="settings-row" for="pane-opacity-range">
               <span>Pane opacity</span>
-              <span id="pane-opacity-value">0.80</span>
             </label>
             <div class="settings-dual">
               <input id="pane-opacity-range" type="range" min="0.55" max="1" step="0.01" value="0.8" />
@@ -54,17 +52,17 @@
 
             <label class="settings-row" for="pane-mask-alpha-range">
               <span>BG mask opacity</span>
-              <span id="pane-mask-alpha-value">0.75</span>
             </label>
             <div class="settings-dual">
               <input id="pane-mask-alpha-range" type="range" min="0" max="1" step="0.01" value="0.75" />
               <input class="settings-number" id="pane-mask-alpha-input" type="number" min="0" max="1" step="0.01" value="0.75" />
             </div>
 
-            <label class="settings-row" for="breathing-alert-toggle">
+            <div class="settings-row settings-clickable-row" id="breathing-alert-row" role="button" tabindex="0" aria-label="Toggle background activity alert">
               <span>Background activity alert</span>
-              <input id="breathing-alert-toggle" class="settings-checkbox" type="checkbox" checked />
-            </label>
+              <span id="breathing-alert-dot" class="settings-toggle-dot is-active"></span>
+            </div>
+            <input id="breathing-alert-toggle" type="checkbox" checked style="display:none" />
 
           </div>
 
