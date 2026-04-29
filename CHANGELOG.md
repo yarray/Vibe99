@@ -28,6 +28,8 @@
   - Enhanced layout info display with pane list preview showing shell type and working directory for each pane
   - `defaultLayoutId` field in settings schema to persist the default layout
 
+- Top-right Layout button icon replaced with terminal split-screen SVG (VIB-125): now shows three vertical panes instead of a generic grid (▦) icon, matching the product's actual layout concept.
+
 ### Improved
 
 - Layout dropdown (`.layouts-dropdown`): unified visual style with context-menu — matching background color (`#1e1e1e`), box-shadow, font, padding, hover effect, and separator margin (VIB-89).

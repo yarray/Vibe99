@@ -305,6 +305,11 @@ body {
   text-align: center;
 }
 
+.tabs-layouts svg {
+  width: 16px;
+  height: 16px;
+}
+
 .tabs-fullscreen.is-hidden { display: none; }
 .tabs-fullscreen.is-fullscreen { color: #ffd166; }
 
