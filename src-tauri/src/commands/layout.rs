@@ -1,7 +1,6 @@
 use super::settings::{sanitize_config, sanitize_layout, settings_path, SettingsState};
 use serde_json::Value;
-use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::AppHandle;
 
 /// Read the raw settings file and return the sanitized config.
 fn read_settings(app: &AppHandle) -> Result<Value, String> {
@@ -123,30 +122,6 @@ pub fn layout_save(app: AppHandle, layout: Value) -> Result<Value, String> {
     Ok(sanitized)
 }
 
-/// Open a layout in a new window.
-///
-/// Creates a new webview window with a URL query parameter `layoutId`
-/// so the frontend can auto-load the target layout on startup.
-#[tauri::command]
-pub fn layout_open_in_new_window(app: AppHandle, layout_id: String) -> Result<(), String> {
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("time error: {e}"))?
-        .as_millis();
-    let label = format!("layout-{}-{}", layout_id, timestamp);
-    let url = tauri::WebviewUrl::App(format!("index.html?layoutId={}", layout_id).into());
-
-    WebviewWindowBuilder::new(&app, &label, url)
-        .title("Vibe99")
-        .inner_size(1600.0, 920.0)
-        .min_inner_size(960.0, 640.0)
-        .center()
-        .build()
-        .map_err(|e| format!("failed to create window: {e}"))?;
-
-    Ok(())
-}
-
 /// Set a layout as the default layout.
 ///
 /// The default layout is automatically loaded when the application starts.
@@ -266,49 +241,4 @@ pub fn layout_rename(app: AppHandle, layout_id: String, new_name: String) -> Res
     write_settings(&app, &sanitized)?;
 
     Ok(sanitized)
-}
-
-/// Open a new window with the specified layout applied.
-///
-/// The layout ID is passed as a URL query parameter (`?layoutId=…`)
-/// so the frontend can detect it on load and restore the layout automatically.
-#[tauri::command]
-pub fn layout_open_window(app: AppHandle, layout_id: String) -> Result<(), String> {
-    let state = app.state::<SettingsState>();
-    let _guard = state
-        .lock
-        .lock()
-        .map_err(|e| format!("settings lock poisoned: {e}"))?;
-
-    let config = read_settings(&app)?;
-    let layouts = extract_layouts(&config);
-
-    let layout = layouts
-        .iter()
-        .find(|l| l.get("id").and_then(|v| v.as_str()).unwrap_or("") == layout_id)
-        .ok_or_else(|| format!("layout not found: {layout_id}"))?;
-
-    let layout_name = layout
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or(&layout_id);
-
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-
-    let label = format!("layout-{layout_id}-{timestamp}");
-    let title = format!("Vibe99 - {layout_name}");
-    let url = WebviewUrl::App(format!("index.html?layoutId={layout_id}").into());
-
-    WebviewWindowBuilder::new(&app, &label, url)
-        .title(&title)
-        .inner_size(1600.0, 920.0)
-        .min_inner_size(960.0, 640.0)
-        .center()
-        .build()
-        .map_err(|e| format!("failed to create window: {e}"))?;
-
-    Ok(())
 }
