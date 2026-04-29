@@ -1252,7 +1252,10 @@ function openLayoutsModal() {
           item.remove();
         };
 
+        let confirmed = false;
         const confirm = () => {
+          if (confirmed) return;
+          confirmed = true;
           const trimmed = input.value.trim();
           cleanup();
           if (!trimmed) return;
@@ -1364,6 +1367,8 @@ function renderModalLayouts(overlay) {
           }
         });
         nameEl.addEventListener('blur', () => {
+          if (nameEl._renamed) return;
+          nameEl._renamed = true;
           const newName = nameEl.value.trim();
           renamingLayoutId = null;
           if (newName) {
