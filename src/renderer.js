@@ -749,46 +749,63 @@ async function toggleLayoutsDropdown() {
   saveAction.className = 'layouts-dropdown-action';
   saveAction.textContent = 'Save Current Layout…';
   saveAction.addEventListener('click', () => {
-    closeLayoutsDropdown();
+    if (saveAction.classList.contains('is-editing')) return;
 
-    // Show inline popover input near the layouts button
-    const popover = document.createElement('div');
-    popover.className = 'layouts-inline-popover';
+    saveAction.classList.add('is-editing');
+
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'layouts-inline-input';
+    input.className = 'layouts-dropdown-input';
     input.placeholder = 'Layout name';
-    popover.appendChild(input);
-    layoutsButtonEl.appendChild(popover);
 
-    const cleanup = () => {
-      popover.remove();
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-confirm';
+    confirmBtn.textContent = '✓';
+    confirmBtn.title = 'Confirm (Enter)';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-cancel';
+    cancelBtn.textContent = '✕';
+    cancelBtn.title = 'Cancel (Esc)';
+
+    let confirmed = false;
+
+    const restore = () => {
+      saveAction.classList.remove('is-editing');
+      saveAction.replaceChildren();
+      saveAction.textContent = 'Save Current Layout…';
     };
 
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        const value = input.value.trim();
-        cleanup();
-        if (value) {
-          saveCurrentLayout(value);
-        }
-      }
-      if (event.key === 'Escape') {
-        cleanup();
-      }
-    });
-
-    input.addEventListener('blur', () => {
+    const doConfirm = () => {
+      if (confirmed) return;
+      confirmed = true;
       const value = input.value.trim();
-      cleanup();
       if (value) {
         saveCurrentLayout(value);
       }
+      closeLayoutsDropdown();
+    };
+
+    const doCancel = () => {
+      if (confirmed) return;
+      confirmed = true;
+      restore();
+    };
+
+    confirmBtn.addEventListener('click', (e) => { e.stopPropagation(); doConfirm(); });
+    cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); doCancel(); });
+
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); doConfirm(); }
+      if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
     });
 
-    queueMicrotask(() => {
-      input.focus();
-    });
+    saveAction.replaceChildren();
+    saveAction.append(input, confirmBtn, cancelBtn);
+    queueMicrotask(() => input.focus());
   });
   layoutsDropdownEl.appendChild(saveAction);
 
@@ -816,11 +833,6 @@ function closeLayoutsDropdown() {
   if (layoutsDropdownEl) {
     layoutsDropdownEl.remove();
     layoutsDropdownEl = null;
-  }
-  // Also remove any lingering inline popover input
-  const popover = layoutsButtonEl?.querySelector('.layouts-inline-popover');
-  if (popover) {
-    popover.remove();
   }
   layoutsDropdownOpen = false;
   document.removeEventListener('click', handleLayoutsDropdownOutsideClick);
