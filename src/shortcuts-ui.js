@@ -90,6 +90,13 @@ function showConfirmDialog(message) {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) cleanup(false);
     });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        cleanup(false);
+      }
+    });
 
     okBtn.focus();
   });
