@@ -340,7 +340,13 @@ impl PtyManager {
         Ok(())
     }
 
-    pub fn resize(&self, window_label: &str, pane_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+    pub fn resize(
+        &self,
+        window_label: &str,
+        pane_id: &str,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(), String> {
         let key = PaneRef {
             window_label: window_label.to_string(),
             pane_id: pane_id.to_string(),
@@ -395,10 +401,8 @@ impl PtyManager {
                 .filter(|k| k.window_label == window_label)
                 .cloned()
                 .collect();
-            let removed: Vec<PtySession> = owned
-                .iter()
-                .filter_map(|k| sessions.remove(k))
-                .collect();
+            let removed: Vec<PtySession> =
+                owned.iter().filter_map(|k| sessions.remove(k)).collect();
             // Release lock before joining threads.
             drop(sessions);
             removed
@@ -772,22 +776,46 @@ fn build_command(
 // Working directory resolution
 // ----------------------------------------------------------------
 
+/// Whether a path string refers to a WSL UNC mount point.
+///
+/// These paths (e.g. `\\wsl.localhost\Ubuntu\home\user` or `\\wsl$\Ubuntu`)
+/// are untrusted NTFS reparse points that cause OS error 448 when accessed
+/// by native Windows tools like `cargo metadata`.
+fn is_wsl_unc_path(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    lower.starts_with(r"\\wsl.localhost\") || lower.starts_with(r"\\wsl$\")
+}
+
+/// Whether a path string looks like a Linux/POSIX absolute path.
+fn is_posix_path(path: &str) -> bool {
+    path.starts_with('/') && !path.starts_with(r"\\")
+}
+
 /// Resolve the working directory for a new PTY session.
 ///
 /// Mirrors `electron/main.js` → `getSpawnWorkingDirectory()`:
 /// 1. Use the provided `cwd` if it is a valid directory.
 /// 2. Fall back to the current working directory.
 /// 3. Fall back to the user's home directory.
+///
+/// WSL UNC paths (`\\wsl.localhost\...`) and POSIX paths (`/home/...`) are
+/// rejected on Windows because they are inaccessible to native Windows shells
+/// (PowerShell, cmd) and cause OS error 448 from NTFS untrusted mount points.
 fn resolve_working_directory(cwd: Option<&str>) -> PathBuf {
     if let Some(cwd) = cwd {
         let p = PathBuf::from(cwd);
         if p.is_dir() {
-            return p;
+            if cfg!(target_os = "windows") && (is_wsl_unc_path(cwd) || is_posix_path(cwd)) {
+                // WSL paths cause OS error 448 in native Windows shells — fall through.
+            } else {
+                return p;
+            }
         }
     }
 
     if let Ok(cwd) = std::env::current_dir() {
-        if cwd.is_dir() {
+        if cwd.is_dir() && !(cfg!(target_os = "windows") && is_wsl_unc_path(&cwd.to_string_lossy()))
+        {
             return cwd;
         }
     }
@@ -896,4 +924,49 @@ fn extract_wsl_inner_shell(args: &[String]) -> String {
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_lowercase())
         .unwrap_or_else(|| "bash".to_string())
+}
+
+#[cfg(test)]
+mod tests_pty {
+    use super::*;
+
+    #[test]
+    fn wsl_unc_path_localhost() {
+        assert!(is_wsl_unc_path(r"\\wsl.localhost\Ubuntu\home\user"));
+    }
+
+    #[test]
+    fn wsl_unc_path_legacy() {
+        assert!(is_wsl_unc_path(r"\\wsl$\Ubuntu\home\user"));
+    }
+
+    #[test]
+    fn wsl_unc_path_case_insensitive() {
+        assert!(is_wsl_unc_path(r"\\WSL.LOCALHOST\Ubuntu\home"));
+        assert!(is_wsl_unc_path(r"\\Wsl$\Ubuntu"));
+    }
+
+    #[test]
+    fn not_wsl_unc_path() {
+        assert!(!is_wsl_unc_path(r"C:\Users\user"));
+        assert!(!is_wsl_unc_path(r"\\server\share"));
+        assert!(!is_wsl_unc_path("/home/user"));
+        assert!(!is_wsl_unc_path("relative/path"));
+    }
+
+    #[test]
+    fn posix_path_detection() {
+        assert!(is_posix_path("/home/user/project"));
+        assert!(is_posix_path("/"));
+        assert!(!is_posix_path(r"C:\Windows"));
+        assert!(!is_posix_path(r"\\wsl$\Ubuntu"));
+        assert!(!is_posix_path("relative/path"));
+    }
+
+    #[test]
+    fn display_name_to_id_samples() {
+        assert_eq!(display_name_to_id("WSL (Ubuntu)"), "wsl-ubuntu");
+        assert_eq!(display_name_to_id("PowerShell"), "powershell");
+        assert_eq!(display_name_to_id("Git Bash (x64)"), "git-bash-x64");
+    }
 }
