@@ -1338,6 +1338,7 @@ body.is-dragging-tabs {
   flex-direction: column;
   overflow-y: auto;
   min-height: 0;
+  scrollbar-gutter: stable;
 }
 
 .layouts-editor-placeholder {
