@@ -1,0 +1,1 @@
+Layout modifications (add/remove/rename pane, change color/shell/profile) now automatically save to the active layout, instead of only persisting to the transient session state. This ensures that switching back to a layout reflects recent edits.

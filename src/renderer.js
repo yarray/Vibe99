@@ -631,6 +631,27 @@ function switchLayout(layoutId) {
   scheduleSettingsSave();
 }
 
+function saveActiveLayout() {
+  if (!activeLayoutId) return;
+
+  const activeLayout = layouts.find((l) => l.id === activeLayoutId);
+  if (!activeLayout) return;
+
+  const session = buildSessionData();
+  const updatedLayout = {
+    ...activeLayout,
+    panes: session.panes,
+    focusedPaneIndex: session.focusedPaneIndex,
+  };
+
+  bridge.saveLayout(updatedLayout)
+    .then(() => bridge.listLayouts())
+    .then((config) => {
+      layouts = config.layouts ?? [];
+    })
+    .catch(reportError);
+}
+
 function deleteLayoutById(layoutId) {
   bridge.deleteLayout(layoutId)
     .then(() => bridge.listLayouts())
@@ -854,6 +875,9 @@ function changePaneShell(paneId, profileId) {
         p.id === paneId ? { ...p, shellProfileId: previousProfileId } : p
       );
       scheduleSettingsSave();
+    } else {
+      // Successfully changed shell - save to active layout
+      saveActiveLayout();
     }
   });
 }
@@ -1985,6 +2009,7 @@ function addPane(shellProfileId = null) {
   focusedPaneId = newPane.id;
   recordPaneVisit(newPane.id);
   render(true);
+  saveActiveLayout();
 }
 
 function closePane(index, options = {}) {
@@ -2026,6 +2051,7 @@ function closePane(index, options = {}) {
   recordPaneVisit(focusedPaneId);
 
   render(true);
+  saveActiveLayout();
 }
 
 function beginRenamePane(index) {
@@ -2063,6 +2089,7 @@ function commitRenamePane(paneId, nextTitle) {
 
   // Return focus to the renamed pane's terminal
   focusPane(paneId, { focusTerminal: true });
+  saveActiveLayout();
 }
 
 function clearPendingTabFocus() {
@@ -2788,6 +2815,7 @@ function setPaneColor(paneId, color) {
   panes[paneIndex] = { ...panes[paneIndex], customColor: color };
   scheduleSettingsSave();
   render();
+  saveActiveLayout();
 }
 
 function clearPaneColor(paneId) {
@@ -2797,6 +2825,7 @@ function clearPaneColor(paneId) {
   panes[paneIndex] = { ...panes[paneIndex], customColor: undefined };
   scheduleSettingsSave();
   render();
+  saveActiveLayout();
 }
 
 function togglePaneBreathingMonitor(paneId) {
@@ -2807,6 +2836,7 @@ function togglePaneBreathingMonitor(paneId) {
   panes[paneIndex] = { ...panes[paneIndex], breathingMonitor: next };
   paneActivityWatcher.setPaneEnabled(paneId, next);
   scheduleSettingsSave();
+  saveActiveLayout();
 }
 
 // VIB-16: open the command palette over the current panes. Build a
