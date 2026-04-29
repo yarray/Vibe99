@@ -18,6 +18,7 @@ export function createActions(deps) {
   return {
     // Pane lifecycle / focus
     newPane: () => deps.addPane(),
+    newPaneWithProfile: () => deps.openNewPaneProfilePicker(),
     enterNav: () => deps.enterNavigationMode(),
     cycleRecent: () => deps.cycleToRecentPane({ reverse: false }),
     cycleRecentReverse: () => deps.cycleToRecentPane({ reverse: true }),
