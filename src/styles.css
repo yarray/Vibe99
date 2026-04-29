@@ -529,10 +529,6 @@ body::after {
   cursor: default;
 }
 
-.shell-profile-item.is-default {
-  background: rgba(255, 255, 255, 0.06);
-}
-
 .shell-profile-item.is-dragging {
   opacity: 0.4;
   cursor: grabbing;
@@ -1741,11 +1737,6 @@ body.is-dragging-tabs {
   color: #f9d71c;
   font-size: 12px;
   margin-left: 4px;
-}
-
-/* Layout item with default styling */
-.layout-item.is-default {
-  border-color: rgba(249, 215, 28, 0.3);
 }
 
 .layout-item.is-default .layout-name {

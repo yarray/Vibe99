@@ -506,6 +506,7 @@ const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
 
 bridge.onLayoutFocusNotice?.(() => {
   if (!windowLayoutId) return;
+  refocusCurrentPaneTerminal();
   showLayoutFocusNotice(windowLayoutId);
 });
 
@@ -2440,6 +2441,16 @@ function focusPane(paneId, options = {}) {
       node.terminal.focus();
     });
   }
+}
+
+function refocusCurrentPaneTerminal() {
+  const node = paneNodeMap.get(focusedPaneId);
+  if (!node) return;
+  paneCycleState = null;
+  setMode('terminal');
+  requestAnimationFrame(() => {
+    node.terminal.focus();
+  });
 }
 
 function getLayoutDisplayName(layoutId) {
