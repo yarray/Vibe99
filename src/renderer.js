@@ -839,6 +839,14 @@ async function toggleLayoutsDropdown() {
     return;
   }
 
+  // Close other menus
+  closeSettingsPanel();
+  const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
+  if (existingProfilePopup) {
+    existingProfilePopup.remove();
+    document.removeEventListener('click', dismissAddPaneProfilePopup);
+  }
+
   // Reload layouts to ensure we have the latest list
   try {
     await refreshLayouts();
@@ -867,7 +875,9 @@ async function toggleLayoutsDropdown() {
 
       const checkmark = document.createElement('span');
       checkmark.className = 'layouts-dropdown-check';
-      checkmark.textContent = layout.id === windowLayoutId ? '✓' : '';
+      if (layout.id === windowLayoutId) {
+        checkmark.classList.add('is-active');
+      }
 
       const label = document.createElement('span');
       label.className = 'layouts-dropdown-label';
@@ -2386,7 +2396,7 @@ function ensurePaneNodes() {
 }
 
 function createPaneData(shellProfileId = null) {
-  const usedAccents = new Set(panes.map((p) => p.accent.toLowerCase()));
+  const usedAccents = new Set(panes.map((p) => (p.customColor || p.accent).toLowerCase()));
   const accent = ColorsRegistry.ACCENT_PALETTE.find((c) => !usedAccents.has(c.toLowerCase()))
     || ColorsRegistry.ACCENT_PALETTE[(nextPaneNumber - 1) % ColorsRegistry.ACCENT_PALETTE.length];
   const focusedPane = panes[getFocusedIndex()];
@@ -3347,6 +3357,7 @@ function openCommandList() {
   }
 
   const items = [
+    { id: 'new-pane-with-profile', label: 'New Panel with Profile' },
     { id: 'change-profile',  label: 'Change profile' },
     { id: 'change-color',    label: 'Change color' },
     { id: 'rename-pane',     label: 'Rename pane' },
@@ -3361,7 +3372,9 @@ function openCommandList() {
   ];
 
   openCommandPalette(items, (commandId) => {
-    if (commandId === 'change-profile') {
+    if (commandId === 'new-pane-with-profile') {
+      openNewPaneProfilePicker();
+    } else if (commandId === 'change-profile') {
       openProfileSwitcher();
     } else if (commandId === 'change-color') {
       showColorPicker(focusedPaneId);
@@ -3408,6 +3421,43 @@ function openProfileSwitcher() {
     placeholder: 'Select a profile…',
     emptyText: 'No matching profiles',
   });
+}
+
+function openNewPaneProfilePicker() {
+  hideContextMenu();
+  if (renamingPaneId !== null) {
+    cancelRenamePane();
+  }
+  if (!settingsPanelEl.classList.contains('is-hidden')) {
+    closeSettingsPanel();
+  }
+
+  const doOpen = (profiles) => {
+    if (profiles.length === 0) {
+      statusLabelEl.textContent = 'No profiles available';
+      statusHintEl.textContent = '';
+      return;
+    }
+
+    const items = profiles.map((p) => ({
+      id: p.id,
+      label: p.name || p.id,
+    }));
+
+    openCommandPalette(items, (profileId) => {
+      addPane(profileId);
+      focusPane(focusedPaneId);
+    }, {
+      placeholder: 'Select a profile for new pane…',
+      emptyText: 'No matching profiles',
+    });
+  };
+
+  if (shellProfiles.length === 0) {
+    loadShellProfiles().then(() => doOpen(shellProfiles));
+  } else {
+    doOpen(shellProfiles);
+  }
 }
 
 async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
@@ -3641,6 +3691,7 @@ const keyboardActions = createActions({
   closeCommandPalette,
   openTabSwitcher,
   openCommandList,
+  openNewPaneProfilePicker,
   focusPaneAt,
   getPaneCount,
   getPaneIdAt,
@@ -3735,6 +3786,10 @@ function renderAddPaneProfilePopup(profiles) {
     return;
   }
 
+  // Close other menus
+  closeSettingsPanel();
+  closeLayoutsDropdown();
+
   const popup = document.createElement('div');
   popup.className = 'add-pane-profile-popup';
 
@@ -3776,10 +3831,11 @@ function renderAddPaneProfilePopup(profiles) {
     }
   }
 
-  // Position popup below the dropdown button
+  // Position popup aligned with the tabs panel bottom (same as Settings)
   const rect = addPaneDropdownButtonEl.getBoundingClientRect();
+  const tabsPanelRect = document.querySelector('.tabs-panel').getBoundingClientRect();
   popup.style.left = `${rect.left}px`;
-  popup.style.top = `${rect.bottom + 2}px`;
+  popup.style.top = `${tabsPanelRect.bottom + 1}px`;
   document.body.appendChild(popup);
 
   // Adjust if popup overflows the right edge of the viewport
@@ -3817,6 +3873,15 @@ layoutsButtonEl.addEventListener('click', (event) => {
 
 settingsButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
+
+  // Close other menus
+  const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
+  if (existingProfilePopup) {
+    existingProfilePopup.remove();
+    document.removeEventListener('click', dismissAddPaneProfilePopup);
+  }
+  closeLayoutsDropdown();
+
   const wasHidden = settingsPanelEl.classList.toggle('is-hidden');
   if (wasHidden) {
     closeSettingsPanel();

@@ -1,0 +1,1 @@
+Fixed new panes being assigned the same color as an existing pane when the existing pane had a custom color. The color deduplication logic now considers both `customColor` and `accent` when building the used-colors set.
