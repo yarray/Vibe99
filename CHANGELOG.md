@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).
+
 ### Added
 
 - Layout edit panel enhancements (VIB-88):

@@ -102,6 +102,10 @@ struct PtySession {
     _reader_thread: std::thread::JoinHandle<()>,
     /// Join handle for the exit-watcher thread.
     exit_thread: std::thread::JoinHandle<()>,
+    /// Label of the webview window that owns this session.
+    /// Used to scope terminal-data/exit events to the correct window
+    /// and to clean up sessions when a specific window is destroyed.
+    window_label: String,
 }
 
 /// Manages a collection of PTY sessions keyed by pane ID.
@@ -140,6 +144,7 @@ impl PtyManager {
         rows: Option<u16>,
         cwd: Option<&str>,
         shell_profile_id: Option<&str>,
+        window_label: &str,
     ) -> Result<(), String> {
         // Kill any previous session for this pane.
         self.destroy(pane_id);
@@ -249,9 +254,9 @@ impl PtyManager {
 
         let pane_id_owned = pane_id.to_string();
 
-        // Read PTY output on a blocking thread and emit Tauri events.
         let app_reader = app.clone();
         let pane_id_reader = pane_id_owned.clone();
+        let window_label_reader = window_label.to_string();
         let _reader_thread = std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
             // Holds incomplete UTF-8 tail bytes from a previous read so
@@ -264,7 +269,8 @@ impl PtyManager {
                         // Flush any remaining bytes before closing.
                         if !pending.is_empty() {
                             let text = String::from_utf8_lossy(&pending);
-                            let _ = app_reader.emit(
+                            let _ = app_reader.emit_to(
+                                &window_label_reader,
                                 "vibe99:terminal-data",
                                 TerminalDataPayload {
                                     pane_id: pane_id_reader.clone(),
@@ -279,7 +285,8 @@ impl PtyManager {
                         let cut = utf8_safe_cut(&pending);
                         if cut > 0 {
                             let text = String::from_utf8_lossy(&pending[..cut]);
-                            let _ = app_reader.emit(
+                            let _ = app_reader.emit_to(
+                                &window_label_reader,
                                 "vibe99:terminal-data",
                                 TerminalDataPayload {
                                     pane_id: pane_id_reader.clone(),
@@ -293,15 +300,14 @@ impl PtyManager {
             }
         });
 
-        // Watch for child exit on a blocking thread. Emit the exit event
-        // and remove the session from the map, matching Electron behaviour.
         let manager = Arc::clone(self);
+        let app_exit = app.clone();
+        let window_label_exit = window_label.to_string();
         let exit_thread = std::thread::spawn(move || {
             let exit_code = child.wait().map(|s| s.exit_code()).unwrap_or(1);
 
-            // Emit the exit event before removing the session so the
-            // frontend always receives it.
-            let _ = app.emit(
+            let _ = app_exit.emit_to(
+                &window_label_exit,
                 "vibe99:terminal-exit",
                 TerminalExitPayload {
                     pane_id: pane_id_owned.clone(),
@@ -309,8 +315,6 @@ impl PtyManager {
                 },
             );
 
-            // Remove the session from the map (matches Electron's
-            // `terminalSessions.delete(paneId)`).
             if let Ok(mut sessions) = manager.sessions.lock() {
                 sessions.remove(&pane_id_owned);
             }
@@ -322,6 +326,7 @@ impl PtyManager {
             killer,
             _reader_thread,
             exit_thread,
+            window_label: window_label.to_string(),
         };
 
         self.sessions
@@ -410,6 +415,25 @@ impl PtyManager {
                 let _ = session.killer.kill();
             }
             sessions.clear();
+        }
+    }
+
+    /// Destroy all sessions owned by the given window.
+    pub fn destroy_for_window(&self, window_label: &str) {
+        let mut sessions = match self.sessions.lock() {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let owned: Vec<String> = sessions
+            .iter()
+            .filter(|(_, s)| s.window_label == window_label)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in owned {
+            if let Some(session) = sessions.remove(&id) {
+                let _ = session.killer.kill();
+                let _ = session.exit_thread.join();
+            }
         }
     }
 }
