@@ -894,16 +894,6 @@ async function toggleLayoutsDropdown() {
   separator.className = 'layouts-dropdown-separator';
   layoutsDropdownEl.appendChild(separator);
 
-  // "Save Layout" action
-  const saveCurrentAction = document.createElement('div');
-  saveCurrentAction.className = 'layouts-dropdown-action';
-  saveCurrentAction.textContent = 'Save Layout';
-  saveCurrentAction.addEventListener('click', () => {
-    saveCurrentLayout().catch(reportError);
-    closeLayoutsDropdown();
-  });
-  layoutsDropdownEl.appendChild(saveCurrentAction);
-
   // "Save Layout As..." action
   const saveAction = document.createElement('div');
   saveAction.className = 'layouts-dropdown-action';
@@ -3359,7 +3349,6 @@ function openCommandList() {
     { id: 'rename-pane',     label: 'Rename pane' },
     { id: 'profile-settings',  label: 'Profile settings' },
     { id: 'shortcuts-settings', label: 'Shortcuts settings' },
-    { id: 'layout-save',     label: 'Layout: Save Layout' },
     { id: 'layout-default',  label: 'Layout: Open Default' },
     ...layouts
       .filter((l) => l.id !== 'default')
@@ -3383,8 +3372,6 @@ function openCommandList() {
       closeKeyboardShortcutsModal();
       registerModal(closeKeyboardShortcutsModal);
       ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
-    } else if (commandId === 'layout-save') {
-      saveCurrentLayout().catch(reportError);
     } else if (commandId === 'layout-default') {
       bridge.openLayoutWindow('default').catch(reportError);
     } else if (commandId.startsWith('layout-open:')) {
