@@ -1407,14 +1407,11 @@ body.is-dragging-tabs {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.layout-item.is-active .layout-name::after {
-  content: ' •';
+.layout-item-check {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
   color: #4ecdc4;
-  font-size: 10px;
-}
-
-.layout-item.is-default .layout-name {
-  color: #ffc107;
 }
 
 .layout-name {
@@ -1669,13 +1666,6 @@ body.is-dragging-tabs {
 .layout-info-actions .settings-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* Visual indicator for default layout */
-.layout-item.is-default .layout-name::before {
-  content: '★ ';
-  color: #f1c40f;
-  font-size: 10px;
 }
 
 /* Pane details list in layout editor */

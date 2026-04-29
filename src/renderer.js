@@ -349,6 +349,10 @@ let layoutFocusNotice = null;
 let layoutFocusNoticeTimer = null;
 const LAYOUT_WINDOW_BINDINGS_KEY = 'vibe99.layoutWindowBindings';
 
+// Auto-refresh polling for Layouts modal
+const LAYOUT_MODAL_POLL_INTERVAL = 3000; // 3 seconds
+let layoutModalPollTimer = null;
+
 function readLayoutWindowBindings() {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(LAYOUT_WINDOW_BINDINGS_KEY) || '{}');
@@ -868,7 +872,7 @@ async function toggleLayoutsDropdown() {
       label.className = 'layouts-dropdown-label';
       label.textContent = layout.name || layout.id;
 
-      item.append(checkmark, label);
+      item.append(label, checkmark);
       item.addEventListener('click', () => {
         bridge.openLayoutWindow(layout.id).catch(reportError);
         closeLayoutsDropdown();
@@ -1392,6 +1396,11 @@ function openLayoutsModal() {
       `;
 
       const closeModal = () => {
+        // Clear the polling timer when modal closes
+        if (layoutModalPollTimer) {
+          clearInterval(layoutModalPollTimer);
+          layoutModalPollTimer = null;
+        }
         overlay.remove();
         selectedLayoutId = null;
       };
@@ -1467,6 +1476,38 @@ function openLayoutsModal() {
 
       // initial render
       renderModalLayouts(overlay);
+
+      // Start polling for layout updates
+      layoutModalPollTimer = setInterval(async () => {
+        try {
+          const config = await bridge.listLayouts();
+          const newLayouts = config.layouts ?? [];
+          const newDefaultLayoutId = config.defaultLayoutId ?? '';
+
+          // Check if layouts have changed (compare IDs and names)
+          const layoutsChanged =
+            newLayouts.length !== layouts.length ||
+            newDefaultLayoutId !== defaultLayoutId ||
+            newLayouts.some((newLayout) => {
+              const existing = layouts.find((l) => l.id === newLayout.id);
+              if (!existing) return true;
+              // Check if name or panes have changed
+              return existing.name !== newLayout.name ||
+                     JSON.stringify(existing.panes) !== JSON.stringify(newLayout.panes);
+            }) ||
+            layouts.some((existing) => !newLayouts.find((l) => l.id === existing.id));
+
+          if (layoutsChanged) {
+            layouts = newLayouts;
+            defaultLayoutId = newDefaultLayoutId;
+            updateLayoutsIndicator();
+            renderModalLayouts(overlay);
+          }
+        } catch (err) {
+          // Silently ignore polling errors to avoid disrupting the UI
+          console.error('Layout modal poll error:', err);
+        }
+      }, LAYOUT_MODAL_POLL_INTERVAL);
     });
 }
 
@@ -1611,7 +1652,12 @@ function renderModalLayouts(overlay) {
         actions.appendChild(deleteBtn);
       }
 
-      item.append(nameEl, info, actions);
+      // Active layout checkmark (positioned on the right)
+      const checkmark = document.createElement('span');
+      checkmark.className = 'layout-item-check';
+      checkmark.textContent = isActive ? '✓' : '';
+
+      item.append(nameEl, info, actions, checkmark);
 
       // Click selects layout (without triggering actions)
       item.addEventListener('click', (e) => {
