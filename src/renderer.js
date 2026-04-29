@@ -2396,7 +2396,7 @@ function ensurePaneNodes() {
 }
 
 function createPaneData(shellProfileId = null) {
-  const usedAccents = new Set(panes.map((p) => p.accent.toLowerCase()));
+  const usedAccents = new Set(panes.map((p) => (p.customColor || p.accent).toLowerCase()));
   const accent = ColorsRegistry.ACCENT_PALETTE.find((c) => !usedAccents.has(c.toLowerCase()))
     || ColorsRegistry.ACCENT_PALETTE[(nextPaneNumber - 1) % ColorsRegistry.ACCENT_PALETTE.length];
   const focusedPane = panes[getFocusedIndex()];
