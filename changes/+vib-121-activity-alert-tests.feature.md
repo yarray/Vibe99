@@ -1,0 +1,1 @@
++[VIB-121] feat: add E2E tests for activity alert (breathing mask) and pane cycling
