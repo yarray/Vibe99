@@ -45,6 +45,8 @@ function basename(path) {
   return path.replace(/\/+$/, '').split('/').pop() || '/';
 }
 
+const LAYOUT_FOCUS_NOTICE_EVENT = 'vibe99:layout-focus-notice';
+
 // OSC 7 format: \x1b]7;file://hostname/path\x07
 // Extracts the path from the OSC 7 sequence and URL-decodes it.
 function extractPathFromOsc7(data) {
@@ -146,6 +148,7 @@ function createUnavailableBridge() {
     onTerminalData: () => () => {},
     onTerminalExit: () => () => {},
     onMenuAction: () => () => {},
+    onLayoutFocusNotice: undefined,
     cwdReady: Promise.resolve(),
   };
 }
@@ -184,6 +187,8 @@ function createTauriBridge(tauri) {
     await win.unminimize().catch(() => {});
     await win.show().catch(() => {});
     await win.setFocus();
+    await Promise.resolve(tauri.event?.emitTo?.(win.label, LAYOUT_FOCUS_NOTICE_EVENT))
+      .catch(() => {});
   }
 
   function getLayoutWindowLabel(layoutId) {
@@ -282,6 +287,7 @@ function createTauriBridge(tauri) {
     onTerminalData: (handler) => onTauriEvent('vibe99:terminal-data', handler),
     onTerminalExit: (handler) => onTauriEvent('vibe99:terminal-exit', handler),
     onMenuAction: (handler) => onTauriEvent('vibe99:menu-action', handler),
+    onLayoutFocusNotice: (handler) => onTauriEvent(LAYOUT_FOCUS_NOTICE_EVENT, handler),
     cwdReady: _cwdReady,
   };
 }
@@ -339,6 +345,8 @@ let windowLayoutId = null;
 let defaultLayoutId = '';
 let selectedLayoutId = null;
 let renamingLayoutId = null;
+let layoutFocusNotice = null;
+let layoutFocusNoticeTimer = null;
 const LAYOUT_WINDOW_BINDINGS_KEY = 'vibe99.layoutWindowBindings';
 
 function readLayoutWindowBindings() {
@@ -490,6 +498,11 @@ const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
   if (!node) return;
   node.terminal.write(data);
   paneActivityWatcher.noteData(paneId);
+});
+
+bridge.onLayoutFocusNotice?.(() => {
+  if (!windowLayoutId) return;
+  showLayoutFocusNotice(windowLayoutId);
 });
 
 const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
@@ -2383,6 +2396,36 @@ function focusPane(paneId, options = {}) {
   }
 }
 
+function getLayoutDisplayName(layoutId) {
+  if (!layoutId) return 'Layout';
+  const layout = layouts.find((item) => item.id === layoutId);
+  return layout?.name || (layoutId === 'default' ? 'Default' : layoutId);
+}
+
+function getFocusedPaneAccent() {
+  const pane = panes[getFocusedIndex()];
+  return pane?.customColor || pane?.accent || '#ffd166';
+}
+
+function showLayoutFocusNotice(layoutId) {
+  const layoutName = getLayoutDisplayName(layoutId);
+  layoutFocusNotice = { layoutId };
+  document.body.style.setProperty('--layout-focus-accent', getFocusedPaneAccent());
+  document.body.dataset.layoutFocusName = layoutName;
+  document.body.classList.remove('is-layout-focus-notice');
+  void document.body.offsetWidth;
+  document.body.classList.add('is-layout-focus-notice');
+  updateStatus();
+
+  window.clearTimeout(layoutFocusNoticeTimer);
+  layoutFocusNoticeTimer = window.setTimeout(() => {
+    layoutFocusNotice = null;
+    delete document.body.dataset.layoutFocusName;
+    document.body.classList.remove('is-layout-focus-notice');
+    updateStatus();
+  }, 1400);
+}
+
 function addPane(shellProfileId = null) {
   const newPane = createPaneData(shellProfileId);
   paneCycleState = null;
@@ -3425,6 +3468,13 @@ function cancelNavigationMode() {
 }
 
 function updateStatus() {
+  if (layoutFocusNotice) {
+    statusLabelEl.textContent = 'Layout focused';
+    statusLabelEl.classList.remove('is-navigation-mode');
+    statusHintEl.textContent = getLayoutDisplayName(layoutFocusNotice.layoutId);
+    return;
+  }
+
   const focusedPane = panes[getFocusedIndex()];
   const focusedPaneLabel = getPaneLabel(focusedPane) || focusedPane.id;
 
