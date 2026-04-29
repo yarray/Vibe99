@@ -3737,7 +3737,6 @@ function unregisterModal(closeFn) {
 function closeTopModal() {
   const closeFn = modalStack[modalStack.length - 1];
   if (closeFn) closeFn();
-  // Return focus to the current pane only when the last modal is closed
   if (focusedPaneId && modalStack.length === 0) {
     focusPane(focusedPaneId, { focusTerminal: true });
   }
