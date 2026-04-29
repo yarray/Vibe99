@@ -281,6 +281,7 @@ body::after {
 
 .tabs-add,
 .tabs-layouts,
+.tabs-add-profile,
 .tabs-settings,
 .tabs-fullscreen {
   appearance: none;
