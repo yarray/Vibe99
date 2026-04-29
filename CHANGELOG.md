@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Multi-window architecture refactor (VIB-104):**
+  - PTY sessions now keyed by `(window_label, pane_id)` compound address (`PaneRef`) instead of `pane_id` alone, preventing cross-window collisions when multiple windows use the same sequential pane IDs.
+  - Layout window creation moved from Rust (`layout_open_window`, `layout_open_in_new_window`) to frontend using Tauri's `WebviewWindow` API. Window creation is now UI navigation owned by the frontend.
+  - Layout windows no longer write `settings.session` or `activeLayoutId` to disk. Only the main window persists session state.
+  - `WindowContext` introduced via URL `?layoutId=xxx` to distinguish main vs layout windows at startup.
+  - Terminal exit events now include a `reason` field (`"exited"` / `"killed"`). Killed sessions (backend cleanup) no longer auto-close UI panes.
+  - Window cleanup (`destroy_for_window`) is now non-blocking: sessions are removed from the registry under lock, then killed in a background thread to avoid blocking the Tauri window event thread.
+  - Removed `layout_open_window` and `layout_open_in_new_window` Rust commands from the backend.
+  - Added `core:webview:allow-create-webview-window` capability.
+
 ### Fixed
 
 - Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).

@@ -8,6 +8,24 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::wsl;
 
+/// Compound key for PTY session lookup: (window_label, pane_id).
+///
+/// Using a composite key prevents cross-window collisions when multiple
+/// windows restore layouts that generate the same sequential pane IDs
+/// (p1, p2, …). The frontend never passes `windowLabel` explicitly —
+/// Tauri commands derive it from the `Window` parameter automatically.
+#[derive(Clone, Eq, Hash, PartialEq)]
+struct PaneRef {
+    window_label: String,
+    pane_id: String,
+}
+
+impl std::fmt::Display for PaneRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.window_label, self.pane_id)
+    }
+}
+
 /// Minimum column count for a PTY session.
 const MIN_COLS: u16 = 20;
 
@@ -86,31 +104,19 @@ fn utf8_safe_cut(buf: &[u8]) -> usize {
 struct TerminalExitPayload {
     pane_id: String,
     exit_code: u32,
+    reason: String,
 }
 
-/// Holds the live resources for a single PTY session.
 struct PtySession {
-    /// The master end of the PTY pair. Kept alive so the child process
-    /// has a valid controlling terminal. Dropping this causes the child
-    /// to receive SIGHUP.
     master: Box<dyn MasterPty + Send>,
-    /// Writer to the PTY master (stdin of the child process).
     writer: Box<dyn Write + Send>,
-    /// Killer handle to terminate the child process.
     killer: Box<dyn ChildKiller + Send + Sync>,
-    /// Join handle for the background reader thread.
     _reader_thread: std::thread::JoinHandle<()>,
-    /// Join handle for the exit-watcher thread.
     exit_thread: std::thread::JoinHandle<()>,
-    /// Label of the webview window that owns this session.
-    /// Used to scope terminal-data/exit events to the correct window
-    /// and to clean up sessions when a specific window is destroyed.
-    window_label: String,
 }
 
-/// Manages a collection of PTY sessions keyed by pane ID.
 pub struct PtyManager {
-    sessions: Mutex<HashMap<String, PtySession>>,
+    sessions: Mutex<HashMap<PaneRef, PtySession>>,
 }
 
 impl PtyManager {
@@ -120,22 +126,6 @@ impl PtyManager {
         }
     }
 
-    // ----------------------------------------------------------------
-    // Public API
-    // ----------------------------------------------------------------
-
-    /// Spawn a new PTY session for the given `pane_id`.
-    ///
-    /// Emits `vibe99:terminal-data` events with `{ paneId, data }` for
-    /// each chunk of output, and `vibe99:terminal-exit` with
-    /// `{ paneId, exitCode }` when the child process exits. On exit the
-    /// session is automatically removed from the internal map, matching
-    /// the Electron behaviour.
-    ///
-    /// If a session already exists for `pane_id` it is destroyed first.
-    ///
-    /// `shell_profile_id` overrides the default shell resolution: only
-    /// the matching profile (and auto-detected fallbacks) are tried.
     pub fn spawn(
         self: &Arc<Self>,
         app: AppHandle,
@@ -146,15 +136,14 @@ impl PtyManager {
         shell_profile_id: Option<&str>,
         window_label: &str,
     ) -> Result<(), String> {
-        // Kill any previous session for this pane *in the same window*.
-        // Using the global destroy(pane_id) would kill sessions in other
-        // windows that happen to use the same pane ID.
-        self.destroy_for_pane_in_window(pane_id, window_label);
+        let key = PaneRef {
+            window_label: window_label.to_string(),
+            pane_id: pane_id.to_string(),
+        };
+
+        self.destroy_by_ref(&key);
 
         let pty_system = native_pty_system();
-        // Preserve the raw cwd string before resolution — WSL Linux paths (e.g.
-        // "/home/user/projects") don't pass `is_dir()` on Windows, so they need
-        // to be forwarded to build_command separately.
         let raw_cwd = cwd.map(|s| s.to_string());
         let cwd = resolve_working_directory(cwd);
         let cols = cols.unwrap_or(DEFAULT_COLS).max(MIN_COLS);
@@ -169,7 +158,6 @@ impl PtyManager {
             })
             .map_err(|e| format!("failed to open PTY: {e}"))?;
 
-        // Build the shell command with fallback chain.
         let mut cmd = None;
         let mut last_error = String::new();
         let mut shell_stem = String::new();
@@ -183,9 +171,6 @@ impl PtyManager {
                 .to_lowercase();
             match build_command(&candidate, &cwd, raw_cwd.as_deref()) {
                 Ok(c) => {
-                    // For WSL the outer process is wsl.exe — resolve to the
-                    // inner shell (e.g. /bin/bash → "bash") so that OSC 7
-                    // injection targets the right shell.
                     if stem == "wsl" {
                         shell_stem = extract_wsl_inner_shell(&candidate.args);
                     } else {
@@ -208,11 +193,9 @@ impl PtyManager {
             }
         })?;
 
-        // Ensure colour support environment variables are set.
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
 
-        // Inject OSC 7 shell integration so the frontend can track cwd changes.
         if shell_stem == "powershell" || shell_stem == "pwsh" {
             cmd.arg("-NoExit");
             cmd.arg("-Command");
@@ -223,7 +206,6 @@ impl PtyManager {
                 r#"printf "\033]7;file://%s%s\007" "$(hostname)" "$PWD""#,
             );
         }
-        // zsh (chpwd) and sh (cd wrapper) are written to PTY stdin after spawn.
 
         let mut child = pair
             .slave
@@ -240,9 +222,6 @@ impl PtyManager {
             .take_writer()
             .map_err(|e| format!("failed to get PTY writer: {e}"))?;
 
-        // For zsh, inject a chpwd hook via PTY stdin that emits OSC 7 on
-        // every directory change. The init line will be briefly visible in
-        // the terminal at startup.
         if shell_stem == "zsh" {
             let init = b"vibe99_osc7(){printf '\\033]7;file://%s%s\\007' \"$(hostname)\" \"$PWD\"};chpwd_functions+=(vibe99_osc7);vibe99_osc7\n";
             let _ = writer.write_all(init);
@@ -250,8 +229,6 @@ impl PtyManager {
         }
 
         let master = pair.master;
-
-        // Clone a killer handle before moving the child into the exit task.
         let killer = child.clone_killer();
 
         let pane_id_owned = pane_id.to_string();
@@ -261,14 +238,11 @@ impl PtyManager {
         let window_label_reader = window_label.to_string();
         let _reader_thread = std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
-            // Holds incomplete UTF-8 tail bytes from a previous read so
-            // that multi-byte characters are not split across payloads.
             let mut pending: Vec<u8> = Vec::with_capacity(4);
 
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) | Err(_) => {
-                        // Flush any remaining bytes before closing.
                         if !pending.is_empty() {
                             let text = String::from_utf8_lossy(&pending);
                             let _ = app_reader.emit_to(
@@ -304,21 +278,22 @@ impl PtyManager {
 
         let manager = Arc::clone(self);
         let app_exit = app.clone();
-        let window_label_exit = window_label.to_string();
+        let exit_key = key.clone();
         let exit_thread = std::thread::spawn(move || {
             let exit_code = child.wait().map(|s| s.exit_code()).unwrap_or(1);
 
             let _ = app_exit.emit_to(
-                &window_label_exit,
+                &exit_key.window_label,
                 "vibe99:terminal-exit",
                 TerminalExitPayload {
-                    pane_id: pane_id_owned.clone(),
+                    pane_id: exit_key.pane_id.clone(),
                     exit_code,
+                    reason: "exited".into(),
                 },
             );
 
             if let Ok(mut sessions) = manager.sessions.lock() {
-                sessions.remove(&pane_id_owned);
+                sessions.remove(&exit_key);
             }
         });
 
@@ -328,26 +303,28 @@ impl PtyManager {
             killer,
             _reader_thread,
             exit_thread,
-            window_label: window_label.to_string(),
         };
 
         self.sessions
             .lock()
             .map_err(|e| format!("lock poisoned: {e}"))?
-            .insert(pane_id.to_string(), session);
+            .insert(key, session);
 
         Ok(())
     }
 
-    /// Write raw bytes to the PTY master for the given `pane_id`.
-    pub fn write(&self, pane_id: &str, data: &[u8]) -> Result<(), String> {
+    pub fn write(&self, window_label: &str, pane_id: &str, data: &[u8]) -> Result<(), String> {
+        let key = PaneRef {
+            window_label: window_label.to_string(),
+            pane_id: pane_id.to_string(),
+        };
         let mut sessions = self
             .sessions
             .lock()
             .map_err(|e| format!("lock poisoned: {e}"))?;
 
         let session = sessions
-            .get_mut(pane_id)
+            .get_mut(&key)
             .ok_or_else(|| format!("no session for pane {pane_id}"))?;
 
         session
@@ -363,16 +340,18 @@ impl PtyManager {
         Ok(())
     }
 
-    /// Resize the PTY for the given `pane_id`. Column and row values are
-    /// clamped to the configured minimums.
-    pub fn resize(&self, pane_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+    pub fn resize(&self, window_label: &str, pane_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+        let key = PaneRef {
+            window_label: window_label.to_string(),
+            pane_id: pane_id.to_string(),
+        };
         let sessions = self
             .sessions
             .lock()
             .map_err(|e| format!("lock poisoned: {e}"))?;
 
         let session = sessions
-            .get(pane_id)
+            .get(&key)
             .ok_or_else(|| format!("no session for pane {pane_id}"))?;
 
         session
@@ -388,29 +367,14 @@ impl PtyManager {
         Ok(())
     }
 
-    /// Kill the child process, remove the session for `pane_id`, and join the
-    /// exit-watcher thread so no stale events are emitted after this returns.
-    pub fn destroy(&self, pane_id: &str) {
-        let exit_handle = {
-            let mut sessions = match self.sessions.lock() {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-            let Some(session) = sessions.remove(pane_id) else {
-                return;
-            };
-            let PtySession {
-                mut killer,
-                exit_thread,
-                ..
-            } = session;
-            let _ = killer.kill();
-            exit_thread
+    pub fn destroy(&self, window_label: &str, pane_id: &str) {
+        let key = PaneRef {
+            window_label: window_label.to_string(),
+            pane_id: pane_id.to_string(),
         };
-        let _ = exit_handle.join();
+        self.destroy_by_ref(&key);
     }
 
-    /// Destroy all active sessions.
     pub fn destroy_all(&self) {
         if let Ok(mut sessions) = self.sessions.lock() {
             for session in sessions.values_mut() {
@@ -420,23 +384,41 @@ impl PtyManager {
         }
     }
 
-    /// Destroy the session matching `pane_id` only if it belongs to
-    /// `window_label`. Prevents cross-window collisions when multiple
-    /// windows restore layouts that generate the same sequential pane IDs
-    /// (p1, p2, …).
-    pub fn destroy_for_pane_in_window(&self, pane_id: &str, window_label: &str) {
+    pub fn destroy_for_window(&self, window_label: &str) {
+        let sessions_to_clean = {
+            let mut sessions = match self.sessions.lock() {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let owned: Vec<PaneRef> = sessions
+                .keys()
+                .filter(|k| k.window_label == window_label)
+                .cloned()
+                .collect();
+            let removed: Vec<PtySession> = owned
+                .iter()
+                .filter_map(|k| sessions.remove(k))
+                .collect();
+            // Release lock before joining threads.
+            drop(sessions);
+            removed
+        };
+        // Kill and join in background so we don't block the Tauri event thread.
+        std::thread::spawn(move || {
+            for session in sessions_to_clean {
+                let _ = session.killer.kill();
+                let _ = session.exit_thread.join();
+            }
+        });
+    }
+
+    fn destroy_by_ref(&self, key: &PaneRef) {
         let exit_handle = {
             let mut sessions = match self.sessions.lock() {
                 Ok(s) => s,
                 Err(_) => return,
             };
-            let should_remove = sessions
-                .get(pane_id)
-                .is_some_and(|s| s.window_label == window_label);
-            if !should_remove {
-                return;
-            }
-            let Some(session) = sessions.remove(pane_id) else {
+            let Some(session) = sessions.remove(key) else {
                 return;
             };
             let PtySession {
@@ -448,25 +430,6 @@ impl PtyManager {
             exit_thread
         };
         let _ = exit_handle.join();
-    }
-
-    /// Destroy all sessions owned by the given window.
-    pub fn destroy_for_window(&self, window_label: &str) {
-        let mut sessions = match self.sessions.lock() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let owned: Vec<String> = sessions
-            .iter()
-            .filter(|(_, s)| s.window_label == window_label)
-            .map(|(id, _)| id.clone())
-            .collect();
-        for id in owned {
-            if let Some(session) = sessions.remove(&id) {
-                let _ = session.killer.kill();
-                let _ = session.exit_thread.join();
-            }
-        }
     }
 }
 
