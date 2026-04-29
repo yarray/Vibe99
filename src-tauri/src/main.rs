@@ -76,7 +76,12 @@ fn main() {
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 let state = window.state::<AppState>();
-                terminal::destroy_all_terminals(&state);
+                let label = window.label().to_string();
+                if label == "main" {
+                    terminal::destroy_all_terminals(&state);
+                } else {
+                    terminal::destroy_terminals_for_window(&state, &label);
+                }
             }
         })
         .run(tauri::generate_context!())

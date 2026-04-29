@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, Window};
 
 use crate::pty::PtyManager;
 
@@ -13,7 +13,11 @@ pub struct AppState {
 /// If a session already exists for the given `pane_id` it is destroyed
 /// before the new one is spawned.
 ///
-/// PTY output is forwarded to the frontend via the `vibe99:terminal-data` event:
+/// Terminal data and exit events are scoped to the calling window so
+/// multiple windows can operate independent PTY sessions without
+/// cross-talk.
+///
+/// PTY output is forwarded to the calling window via the `vibe99:terminal-data` event:
 /// ```json
 /// { "paneId": "...", "data": "<utf8>" }
 /// ```
@@ -25,6 +29,7 @@ pub struct AppState {
 #[tauri::command]
 pub fn terminal_create(
     app: AppHandle,
+    window: Window,
     state: State<'_, AppState>,
     pane_id: String,
     cols: Option<u16>,
@@ -39,6 +44,7 @@ pub fn terminal_create(
         rows,
         cwd.as_deref(),
         shell_profile_id.as_deref(),
+        window.label(),
     )
 }
 
@@ -77,6 +83,14 @@ pub fn terminal_destroy(state: State<'_, AppState>, pane_id: String) {
 /// Called during application shutdown to ensure child processes are cleaned up.
 pub fn destroy_all_terminals(state: &AppState) {
     state.pty.destroy_all();
+}
+
+/// Destroy all PTY sessions owned by the given window.
+///
+/// Called when a specific window is destroyed to clean up only its
+/// terminals without affecting other windows.
+pub fn destroy_terminals_for_window(state: &AppState, window_label: &str) {
+    state.pty.destroy_for_window(window_label);
 }
 
 /// Return the current working directory as a string.
