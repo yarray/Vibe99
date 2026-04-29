@@ -3436,6 +3436,7 @@ function openNewPaneProfilePicker() {
 
     openCommandPalette(items, (profileId) => {
       addPane(profileId);
+      focusPane(focusedPaneId);
     }, {
       placeholder: 'Select a profile for new pane…',
       emptyText: 'No matching profiles',
