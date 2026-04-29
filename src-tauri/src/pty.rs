@@ -146,8 +146,10 @@ impl PtyManager {
         shell_profile_id: Option<&str>,
         window_label: &str,
     ) -> Result<(), String> {
-        // Kill any previous session for this pane.
-        self.destroy(pane_id);
+        // Kill any previous session for this pane *in the same window*.
+        // Using the global destroy(pane_id) would kill sessions in other
+        // windows that happen to use the same pane ID.
+        self.destroy_for_pane_in_window(pane_id, window_label);
 
         let pty_system = native_pty_system();
         // Preserve the raw cwd string before resolution — WSL Linux paths (e.g.
@@ -416,6 +418,36 @@ impl PtyManager {
             }
             sessions.clear();
         }
+    }
+
+    /// Destroy the session matching `pane_id` only if it belongs to
+    /// `window_label`. Prevents cross-window collisions when multiple
+    /// windows restore layouts that generate the same sequential pane IDs
+    /// (p1, p2, …).
+    pub fn destroy_for_pane_in_window(&self, pane_id: &str, window_label: &str) {
+        let exit_handle = {
+            let mut sessions = match self.sessions.lock() {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let should_remove = sessions
+                .get(pane_id)
+                .is_some_and(|s| s.window_label == window_label);
+            if !should_remove {
+                return;
+            }
+            let Some(session) = sessions.remove(pane_id) else {
+                return;
+            };
+            let PtySession {
+                mut killer,
+                exit_thread,
+                ..
+            } = session;
+            let _ = killer.kill();
+            exit_thread
+        };
+        let _ = exit_handle.join();
     }
 
     /// Destroy all sessions owned by the given window.

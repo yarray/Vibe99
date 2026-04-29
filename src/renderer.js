@@ -3836,23 +3836,11 @@ window.addEventListener('DOMContentLoaded', async () => {
       defaultLayoutId = 'default';
     }
 
-    const newWindowLayoutId = window.__VIBE99_LAYOUT_ID__ || null;
-
     if (cliLayoutId) {
       const targetLayout = layouts.find((l) => l.id === cliLayoutId);
       if (targetLayout) {
         activeLayoutId = cliLayoutId;
         switchLayout(cliLayoutId);
-      }
-    } else if (newWindowLayoutId) {
-      const targetLayout = layouts.find((l) => l.id === newWindowLayoutId);
-      if (targetLayout) {
-        activeLayoutId = newWindowLayoutId;
-        switchLayout(newWindowLayoutId);
-      } else if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
-        switchLayout(activeLayoutId);
-      } else if (savedSettings?.session?.panes?.length > 0) {
-        restoreSession(savedSettings.session);
       }
     } else if (defaultLayoutId && layouts.find((l) => l.id === defaultLayoutId)) {
       activeLayoutId = defaultLayoutId;
@@ -3875,6 +3863,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     sessionRestoreComplete = true;
   } catch (error) {
     reportError(error);
+    const msg = error instanceof Error ? error.message : String(error);
+    document.body.innerHTML = `<div style="color:#e06c75;padding:2em;font-family:monospace;white-space:pre-wrap">Initialization failed: ${msg}</div>`;
   }
 });
 

@@ -1,0 +1,1 @@
+Fixed layout new-window white screen: PTY `spawn()` now only destroys sessions in the same window (preventing cross-window pane ID collisions), `layout_open_window` uses URL query params instead of `initialization_script` for reliable layout detection, and init failures now show a visible error instead of a blank page.

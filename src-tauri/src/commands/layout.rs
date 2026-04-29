@@ -270,8 +270,8 @@ pub fn layout_rename(app: AppHandle, layout_id: String, new_name: String) -> Res
 
 /// Open a new window with the specified layout applied.
 ///
-/// The layout ID is injected via an initialization script so the frontend
-/// can detect it on load and restore the layout automatically.
+/// The layout ID is passed as a URL query parameter (`?layoutId=…`)
+/// so the frontend can detect it on load and restore the layout automatically.
 #[tauri::command]
 pub fn layout_open_window(app: AppHandle, layout_id: String) -> Result<(), String> {
     let state = app.state::<SettingsState>();
@@ -300,12 +300,13 @@ pub fn layout_open_window(app: AppHandle, layout_id: String) -> Result<(), Strin
 
     let label = format!("layout-{layout_id}-{timestamp}");
     let title = format!("Vibe99 - {layout_name}");
+    let url = WebviewUrl::App(format!("index.html?layoutId={layout_id}").into());
 
-    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+    WebviewWindowBuilder::new(&app, &label, url)
         .title(&title)
-        .initialization_script(format!(
-            "window.__VIBE99_LAYOUT_ID__ = \"{layout_id}\";"
-        ))
+        .inner_size(1600.0, 920.0)
+        .min_inner_size(960.0, 640.0)
+        .center()
         .build()
         .map_err(|e| format!("failed to create window: {e}"))?;
 
