@@ -13,7 +13,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test:e2e": "cd e2e && npm install && npx wdio run wdio.conf.js"
+    "test:e2e": "cd e2e && npm install && npx wdio run wdio.conf.js",
+    "test:e2e:setup": "sudo bash scripts/setup-build-deps-ubuntu2004.sh && source .build-env.sh"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
