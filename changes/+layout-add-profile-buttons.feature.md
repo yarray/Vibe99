@@ -1,0 +1,1 @@
+Added independent Profile button (▥) next to the + button in the tab bar, opening Command Palette with searchable profile list for new pane creation. The + button now only adds a default pane (no dropdown). The Layout dropdown icon changed to 🗔 (U+1F5D4). Ctrl+Shift+N also triggers the new pane with profile action (VIB-133).
