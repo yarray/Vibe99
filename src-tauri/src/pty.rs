@@ -776,46 +776,61 @@ fn build_command(
 // Working directory resolution
 // ----------------------------------------------------------------
 
-/// Whether a path string refers to a WSL UNC mount point.
-///
-/// These paths (e.g. `\\wsl.localhost\Ubuntu\home\user` or `\\wsl$\Ubuntu`)
-/// are untrusted NTFS reparse points that cause OS error 448 when accessed
-/// by native Windows tools like `cargo metadata`.
+/// Detects WSL UNC paths in any common representation (backslash, forward-slash,
+/// extended-length `\\?\UNC\…`, canonicalized).  Returns true when the normalized
+/// path starts with `wsl.localhost/` or `wsl$/`.
 fn is_wsl_unc_path(path: &str) -> bool {
-    let lower = path.to_lowercase();
-    lower.starts_with(r"\\wsl.localhost\") || lower.starts_with(r"\\wsl$\")
+    let lower = path.to_lowercase().replace('\\', "/");
+    let s = lower
+        .trim_start_matches("//?/")
+        .trim_start_matches("unc/")
+        .trim_start_matches('/');
+    s.starts_with("wsl.localhost/") || s.starts_with("wsl$/")
 }
 
-/// Whether a path string looks like a Linux/POSIX absolute path.
 fn is_posix_path(path: &str) -> bool {
     path.starts_with('/') && !path.starts_with(r"\\")
 }
 
+/// Returns true when a directory path resolves (via canonicalize) to a WSL
+/// mount, including through junctions or reparse points.  A canonicalize
+/// failure is treated as "untrusted" — safer to fall back than to risk error 448.
+fn is_wsl_resolved_path(path: &Path) -> bool {
+    if is_wsl_unc_path(&path.to_string_lossy()) {
+        return true;
+    }
+    match path.canonicalize() {
+        Ok(canonical) => is_wsl_unc_path(&canonical.to_string_lossy()),
+        Err(_) => true,
+    }
+}
+
 /// Resolve the working directory for a new PTY session.
 ///
-/// Mirrors `electron/main.js` → `getSpawnWorkingDirectory()`:
-/// 1. Use the provided `cwd` if it is a valid directory.
-/// 2. Fall back to the current working directory.
-/// 3. Fall back to the user's home directory.
-///
-/// WSL UNC paths (`\\wsl.localhost\...`) and POSIX paths (`/home/...`) are
-/// rejected on Windows because they are inaccessible to native Windows shells
-/// (PowerShell, cmd) and cause OS error 448 from NTFS untrusted mount points.
+/// Order: saved cwd → process cwd → home directory.
+/// On Windows, obvious WSL/POSIX strings are rejected before any filesystem
+/// call.  For paths that pass the string check, canonicalization detects
+/// junctions and symlinks that ultimately point into the WSL filesystem.
 fn resolve_working_directory(cwd: Option<&str>) -> PathBuf {
     if let Some(cwd) = cwd {
-        let p = PathBuf::from(cwd);
-        if p.is_dir() {
-            if cfg!(target_os = "windows") && (is_wsl_unc_path(cwd) || is_posix_path(cwd)) {
-                // WSL paths cause OS error 448 in native Windows shells — fall through.
-            } else {
-                return p;
+        if cfg!(target_os = "windows") && (is_wsl_unc_path(cwd) || is_posix_path(cwd)) {
+            // String-level WSL / POSIX — skip filesystem probe entirely.
+        } else {
+            let p = PathBuf::from(cwd);
+            if p.is_dir() {
+                if cfg!(target_os = "windows") && is_wsl_resolved_path(&p) {
+                    // Junction / symlink targets WSL — fall through.
+                } else {
+                    return p;
+                }
             }
         }
     }
 
     if let Ok(cwd) = std::env::current_dir() {
-        if cwd.is_dir() && !(cfg!(target_os = "windows") && is_wsl_unc_path(&cwd.to_string_lossy()))
-        {
+        if cfg!(target_os = "windows") && is_wsl_resolved_path(&cwd) {
+            // Process cwd resolves to WSL — skip.
+        } else if cwd.is_dir() {
             return cwd;
         }
     }
@@ -947,11 +962,29 @@ mod tests_pty {
     }
 
     #[test]
+    fn wsl_unc_path_forward_slash() {
+        // Forward-slash UNC paths from PowerShell OSC 7 ($PWD.Path.Replace('\\','/'))
+        assert!(is_wsl_unc_path("//wsl.localhost/Ubuntu/home/user"));
+        assert!(is_wsl_unc_path("//wsl$/Ubuntu/home/user"));
+    }
+
+    #[test]
+    fn wsl_unc_path_canonicalized() {
+        // Windows canonicalize() returns extended-length paths
+        assert!(is_wsl_unc_path(r"\\?\UNC\wsl.localhost\Ubuntu\home\user"));
+        assert!(is_wsl_unc_path(r"\\?\UNC\wsl$\Ubuntu\home\user"));
+        assert!(is_wsl_unc_path(r"\\?\wsl.localhost\Ubuntu\home\user"));
+        assert!(is_wsl_unc_path("//?/UNC/wsl.localhost/Ubuntu/home/user"));
+    }
+
+    #[test]
     fn not_wsl_unc_path() {
         assert!(!is_wsl_unc_path(r"C:\Users\user"));
         assert!(!is_wsl_unc_path(r"\\server\share"));
         assert!(!is_wsl_unc_path("/home/user"));
         assert!(!is_wsl_unc_path("relative/path"));
+        assert!(!is_wsl_unc_path(r"\\?\C:\Users\user"));
+        assert!(!is_wsl_unc_path(r"\\?\UNC\server\share\path"));
     }
 
     #[test]
