@@ -982,6 +982,7 @@ async function toggleLayoutsDropdown() {
   // Position and append
   layoutsButtonEl.appendChild(layoutsDropdownEl);
   layoutsDropdownOpen = true;
+  registerModal(closeLayoutsDropdown);
 
   // Close on outside click
   requestAnimationFrame(() => {
@@ -996,6 +997,7 @@ function closeLayoutsDropdown() {
   }
   layoutsDropdownOpen = false;
   document.removeEventListener('click', handleLayoutsDropdownOutsideClick);
+  unregisterModal(closeLayoutsDropdown);
 }
 
 function handleLayoutsDropdownOutsideClick(event) {
@@ -1410,6 +1412,7 @@ function openLayoutsModal() {
         }
         overlay.remove();
         selectedLayoutId = null;
+        unregisterModal(closeModal);
       };
 
       overlay.addEventListener('click', (e) => {
@@ -1417,6 +1420,7 @@ function openLayoutsModal() {
       });
 
       overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+      registerModal(closeModal);
 
       // Add Layout button — inserts inline input at top of list
       overlay.querySelector('#modal-layout-add').addEventListener('click', () => {
@@ -2102,6 +2106,7 @@ function createTab(pane, index, focusedIndex, dragMeta) {
       }
 
       if (event.key === 'Escape') {
+        event.stopPropagation();
         cancelRenamePane();
       }
     });
@@ -3048,6 +3053,7 @@ function showContextMenu(items, x, y, paneId) {
   queueMicrotask(() => {
     document.addEventListener('pointerdown', dismissContextMenuOnOutside);
     window.addEventListener('blur', hideContextMenu);
+    registerModal(hideContextMenu);
   });
 }
 
@@ -3058,6 +3064,7 @@ function hideContextMenu() {
   }
   document.removeEventListener('pointerdown', dismissContextMenuOnOutside);
   window.removeEventListener('blur', hideContextMenu);
+  unregisterModal(hideContextMenu);
 }
 
 function dismissContextMenuOnOutside(event) {
@@ -3653,6 +3660,7 @@ function startInlineRename(paneId) {
 function closeKeyboardShortcutsModal() {
   const overlay = document.querySelector('.settings-modal-overlay');
   if (overlay) overlay.remove();
+  unregisterModal(closeKeyboardShortcutsModal);
 }
 
 function openKeymapHelpModal() {
@@ -3742,8 +3750,8 @@ function unregisterModal(closeFn) {
 function closeTopModal() {
   const closeFn = modalStack[modalStack.length - 1];
   if (closeFn) closeFn();
-  // Return focus to the current pane after closing a modal
-  if (focusedPaneId) {
+  // Return focus to the current pane only when the last modal is closed
+  if (focusedPaneId && modalStack.length === 0) {
     focusPane(focusedPaneId, { focusTerminal: true });
   }
 }
@@ -3773,12 +3781,20 @@ function showAddPaneProfilePopup() {
   renderAddPaneProfilePopup(shellProfiles);
 }
 
+function closeAddPaneProfilePopup() {
+  const popup = document.querySelector('.add-pane-profile-popup');
+  if (popup) {
+    popup.remove();
+  }
+  document.removeEventListener('click', dismissAddPaneProfilePopup);
+  unregisterModal(closeAddPaneProfilePopup);
+}
+
 function renderAddPaneProfilePopup(profiles) {
   // Remove any existing popup
   const existing = document.querySelector('.add-pane-profile-popup');
   if (existing) {
-    existing.remove();
-    document.removeEventListener('click', dismissAddPaneProfilePopup);
+    closeAddPaneProfilePopup();
     return;
   }
 
@@ -3814,8 +3830,7 @@ function renderAddPaneProfilePopup(profiles) {
 
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-        popup.remove();
-        document.removeEventListener('click', dismissAddPaneProfilePopup);
+        closeAddPaneProfilePopup();
         try {
           addPane(profile.id);
         } catch (error) {
@@ -3842,14 +3857,14 @@ function renderAddPaneProfilePopup(profiles) {
       popup.style.left = `${Math.max(8, parseFloat(popup.style.left) - overflow)}px`;
     }
     document.addEventListener('click', dismissAddPaneProfilePopup);
+    registerModal(closeAddPaneProfilePopup);
   });
 }
 
 function dismissAddPaneProfilePopup(event) {
   const popup = document.querySelector('.add-pane-profile-popup');
   if (popup && !popup.contains(event.target) && event.target !== addPaneDropdownButtonEl) {
-    popup.remove();
-    document.removeEventListener('click', dismissAddPaneProfilePopup);
+    closeAddPaneProfilePopup();
   }
 }
 
@@ -3873,8 +3888,7 @@ settingsButtonEl.addEventListener('click', (event) => {
   // Close other menus
   const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
   if (existingProfilePopup) {
-    existingProfilePopup.remove();
-    document.removeEventListener('click', dismissAddPaneProfilePopup);
+    closeAddPaneProfilePopup();
   }
   closeLayoutsDropdown();
 
@@ -4112,6 +4126,7 @@ window.addEventListener('pointerdown', (event) => {
 // Global ESC: close the topmost modal/panel registered in the stack
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    event.preventDefault();
     closeTopModal();
   }
 });
