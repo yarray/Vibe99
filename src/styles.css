@@ -20,6 +20,25 @@
 * {
   box-sizing: border-box;
   margin: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 html,
@@ -949,6 +968,7 @@ body.is-dragging-tabs {
   min-width: 180px;
   max-height: 320px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 4px 0;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
@@ -1554,35 +1574,6 @@ body.is-dragging-tabs {
   overflow: visible;
 }
 
-/* Subtle scrollbar styling for layouts modal */
-.settings-modal.layouts-modal .layout-list::-webkit-scrollbar,
-.settings-modal.layouts-modal .layouts-editor-panel::-webkit-scrollbar {
-  width: 6px;
-}
-
-.settings-modal.layouts-modal .layout-list::-webkit-scrollbar-track,
-.settings-modal.layouts-modal .layouts-editor-panel::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-modal.layouts-modal .layout-list::-webkit-scrollbar-thumb,
-.settings-modal.layouts-modal .layouts-editor-panel::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
-}
-
-.settings-modal.layouts-modal .layout-list::-webkit-scrollbar-thumb:hover,
-.settings-modal.layouts-modal .layouts-editor-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-/* Firefox scrollbar styling */
-.settings-modal.layouts-modal .layout-list,
-.settings-modal.layouts-modal .layouts-editor-panel {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-}
-
 /* Default layout star indicator */
 .layout-default-star {
   color: #f9d71c;
@@ -1610,7 +1601,6 @@ body.is-dragging-tabs {
   opacity: 0.6;
   background: transparent !important;
 }
-
 /* Settings Modal Overlay */
 .settings-modal-overlay {
   position: fixed;
@@ -1667,35 +1657,6 @@ body.is-dragging-tabs {
   overflow: hidden;
 }
 
-/* Subtle scrollbar styling for shell profiles modal */
-.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar,
-.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar {
-  width: 6px;
-}
-
-.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-track,
-.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-thumb,
-.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
-}
-
-.settings-modal.shell-profiles-modal .shell-profile-list::-webkit-scrollbar-thumb:hover,
-.settings-modal.shell-profiles-modal .shell-profiles-editor-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-/* Firefox scrollbar styling */
-.settings-modal.shell-profiles-modal .shell-profile-list,
-.settings-modal.shell-profiles-modal .shell-profiles-editor-panel {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-}
-
 .shell-profiles-add-btn {
   appearance: none;
   display: inline-flex;
@@ -1725,6 +1686,7 @@ body.is-dragging-tabs {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   min-height: 0;
 }
 
@@ -1790,6 +1752,7 @@ body.is-dragging-tabs {
   margin-bottom: 16px;
   max-height: 400px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .shell-profiles-modal .settings-modal-body {
