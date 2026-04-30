@@ -6,6 +6,8 @@
 
 ### Changed
 
+- **CSS architecture (VIB-146):** Split `src/styles.css` (2344 lines) into 8 purpose-oriented files under `src/styles/`: `base.css` (CSS variables, resets, app-shell), `tabs.css` (tabs panel & actions), `panes.css` (stage, pane, terminal, status bar), `settings-modal.css` (settings panel, keyboard shortcuts), `shell-profiles.css` (shell profiles list & editor), `overlays.css` (context menu, color picker), `layouts.css` (layout manager modal, layouts dropdown), `animations.css` (keyframes, reduced-motion). All rules preserved; no behavior change.
+
 - **Multi-window architecture refactor (VIB-104):**
   - PTY sessions now keyed by `(window_label, pane_id)` compound address (`PaneRef`) instead of `pane_id` alone, preventing cross-window collisions when multiple windows use the same sequential pane IDs.
   - Layout window creation moved from Rust (`layout_open_window`, `layout_open_in_new_window`) to frontend using Tauri's `WebviewWindow` API. Window creation is now UI navigation owned by the frontend.
