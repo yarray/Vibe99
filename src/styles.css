@@ -299,17 +299,11 @@ body::after {
 .tabs-add {
   width: 28px;
   height: 33px;
-  font-size: 18px;
-  line-height: 33px;
-  text-align: center;
 }
 
 .tabs-add-profile {
   width: 28px;
   height: 33px;
-  font-size: 18px;
-  line-height: 33px;
-  text-align: center;
 }
 
 .tabs-add:hover,
@@ -327,9 +321,6 @@ body::after {
   height: 33px;
   flex: 0 0 auto;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 18px;
-  line-height: 33px;
-  text-align: center;
 }
 
 .tabs-fullscreen.is-hidden { display: none; }
@@ -1254,8 +1245,6 @@ body.is-dragging-tabs {
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  font-size: 20px;
-  line-height: 1;
   border-radius: 4px;
 }
 
@@ -1536,8 +1525,6 @@ body.is-dragging-tabs {
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.8);
-  font-size: 20px;
-  line-height: 1;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -1859,8 +1846,6 @@ body.is-dragging-tabs {
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.8);
-  font-size: 20px;
-  line-height: 1;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -1912,8 +1897,6 @@ body.is-dragging-tabs {
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  font-size: 20px;
-  line-height: 1;
   border-radius: 4px;
 }
 
