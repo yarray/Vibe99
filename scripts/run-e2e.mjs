@@ -22,6 +22,8 @@ Usage:
 Options:
   --spec, -s <file>    WDIO spec path. Short names like "layout" map to ./tests/layout.spec.js.
   --grep, -g <text>    Run Mocha tests whose full title matches the text or regex.
+  -v                   Verbose (info level).
+  -vv                  Very verbose (info + debug level).
   --help, -h           Show this help.
 
 Any other options are passed through to WDIO.
@@ -60,9 +62,11 @@ function requireValue(args, index, flag) {
 }
 
 const args = process.argv.slice(2);
+const LOG_LEVELS = ['warn', 'info', 'debug'];
 const specs = [];
 const passThrough = [];
 let grep = '';
+let verbosity = 0;
 
 try {
   for (let i = 0; i < args.length; i += 1) {
@@ -92,6 +96,16 @@ try {
 
     if (arg.startsWith('--spec=')) {
       specs.push(normalizeSpec(arg.slice('--spec='.length)));
+      continue;
+    }
+
+    if (arg === '-vv') {
+      verbosity = 2;
+      continue;
+    }
+
+    if (arg === '-v') {
+      verbosity = Math.min(verbosity + 1, 2);
       continue;
     }
 
@@ -125,6 +139,7 @@ const child = spawn(wdioBin, wdioArgs, {
   env: {
     ...process.env,
     E2E_GREP: grep,
+    E2E_LOG_LEVEL: LOG_LEVELS[verbosity],
   },
   shell: isWindows,
   stdio: 'inherit',
