@@ -1,0 +1,84 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      grep:
+        description: 'Mocha grep pattern (optional)'
+        required: false
+        type: string
+      spec:
+        description: 'Spec file or short name (optional)'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 6 * * 1'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npx tauri build
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver
+
+      - name: Install E2E dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Run E2E tests
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.spec }}" ]; then
+            ARGS="$ARGS --spec ${{ github.event.inputs.spec }}"
+          fi
+          if [ -n "${{ github.event.inputs.grep }}" ]; then
+            ARGS="$ARGS --grep '${{ github.event.inputs.grep }}'"
+          fi
+          npm run test:e2e -- $ARGS -vv
+
+      - name: Upload E2E screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: e2e/screenshots/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload E2E logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: e2e/logs/
+          if-no-files-found: ignore
+          retention-days: 14
