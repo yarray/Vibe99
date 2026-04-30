@@ -586,6 +586,7 @@ function getPaneLabel(pane) {
 
 function applySettings() {
   document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
+  document.documentElement.style.setProperty('--app-font-family', settings.fontFamily);
   document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
   document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
   document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
@@ -885,7 +886,8 @@ async function toggleLayoutsDropdown() {
       label.textContent = layout.name || layout.id;
 
       item.append(label, checkmark);
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (event) => {
+        event.stopPropagation();
         bridge.openLayoutWindow(layout.id).catch(reportError);
         closeLayoutsDropdown();
       });
@@ -903,7 +905,8 @@ async function toggleLayoutsDropdown() {
   const saveAction = document.createElement('div');
   saveAction.className = 'layouts-dropdown-action';
   saveAction.textContent = 'Save Layout As…';
-  saveAction.addEventListener('click', () => {
+  saveAction.addEventListener('click', (event) => {
+    event.stopPropagation();
     if (saveAction.classList.contains('is-editing')) return;
 
     saveAction.classList.add('is-editing');
@@ -968,7 +971,8 @@ async function toggleLayoutsDropdown() {
   const manageAction = document.createElement('div');
   manageAction.className = 'layouts-dropdown-action';
   manageAction.textContent = 'Manage Layouts…';
-  manageAction.addEventListener('click', () => {
+  manageAction.addEventListener('click', (event) => {
+    event.stopPropagation();
     openLayoutsModal();
     closeLayoutsDropdown();
   });
@@ -2192,6 +2196,7 @@ function createPane(pane) {
   terminal.loadAddon(new Unicode11Addon());
   terminal.unicode.activeVersion = '11';
   terminal.open(terminalHost);
+  terminalHost._xterm = terminal;
   try { terminal.loadAddon(new WebglAddon()); } catch {}
   terminal.attachCustomKeyEventHandler((event) => {
     // Ctrl+Tab is reserved for pane MRU cycling — never let xterm forward
@@ -2442,6 +2447,9 @@ function focusPane(paneId, options = {}) {
   recordPaneVisit(paneId);
   render();
   const node = paneNodeMap.get(paneId);
+  if (node) {
+    paneAlert.setAlerted(node.root, false);
+  }
   if (node && focusTerminal) {
     requestAnimationFrame(() => {
       node.terminal.focus();
@@ -2492,6 +2500,8 @@ function showLayoutFocusNotice(layoutId) {
 function addPane(shellProfileId = null) {
   const newPane = createPaneData(shellProfileId);
   paneCycleState = null;
+  currentMode = 'terminal';
+  document.body.classList.remove('is-navigation-mode');
   panes = [...panes, newPane];
   focusedPaneId = newPane.id;
   recordPaneVisit(newPane.id);

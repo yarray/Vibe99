@@ -1,0 +1,1 @@
+Added E2E tests for Tab management: double-click rename (Enter confirm, Esc cancel, empty-value fallback), close button, single-tab close disable, and right-click context menu (Change Color, Rename Tab, Close Tab).

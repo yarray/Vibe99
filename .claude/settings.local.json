@@ -3,7 +3,12 @@
     "allow": [
       "Bash(npm run *)",
       "Bash(cargo check *)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(rtk ls *)",
+      "Bash(rtk read *)"
     ]
+  },
+  "enabledPlugins": {
+    "ralph-loop@claude-plugins-official": true
   }
 }
