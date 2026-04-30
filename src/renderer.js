@@ -141,6 +141,8 @@ function createUnavailableBridge() {
     renameLayout: fail,
     openLayoutWindow: fail,
     openLayoutInNewWindow: fail,
+    isWindowFullscreen: undefined,
+    setWindowFullscreen: undefined,
     setLayoutAsDefault: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
@@ -280,6 +282,8 @@ function createTauriBridge(tauri) {
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
     openLayoutWindow: (layoutId) => openLayoutWindow(layoutId),
     openLayoutInNewWindow: (layoutId) => openLayoutWindow(layoutId),
+    isWindowFullscreen: () => getCurrentWindow().isFullscreen(),
+    setWindowFullscreen: (fullscreen) => getCurrentWindow().setFullscreen(fullscreen),
     setLayoutAsDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
@@ -3946,7 +3950,14 @@ keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
 });
 
 // Fullscreen toggle
-function isFullscreenSupported() {
+function isNativeFullscreenSupported() {
+  return (
+    typeof bridge.isWindowFullscreen === 'function' &&
+    typeof bridge.setWindowFullscreen === 'function'
+  );
+}
+
+function isDomFullscreenSupported() {
   return (
     document.documentElement.requestFullscreen ||
     document.documentElement.webkitRequestFullscreen ||
@@ -3954,7 +3965,11 @@ function isFullscreenSupported() {
   );
 }
 
-function getIsFullscreen() {
+function isFullscreenSupported() {
+  return isNativeFullscreenSupported() || isDomFullscreenSupported();
+}
+
+function getDomFullscreenElement() {
   return (
     document.fullscreenElement ||
     document.webkitFullscreenElement ||
@@ -3962,27 +3977,41 @@ function getIsFullscreen() {
   );
 }
 
-function updateFullscreenButton() {
-  const isFs = getIsFullscreen();
+async function getIsFullscreen() {
+  if (isNativeFullscreenSupported()) {
+    return bridge.isWindowFullscreen();
+  }
+  return Boolean(getDomFullscreenElement());
+}
+
+async function updateFullscreenButton() {
+  const isFs = await getIsFullscreen().catch(() => false);
   fullscreenButtonEl.classList.toggle('is-fullscreen', Boolean(isFs));
   fullscreenButtonEl.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Enter fullscreen');
 }
 
-function toggleFullscreen() {
+async function toggleFullscreen() {
   if (!isFullscreenSupported()) {
     return;
   }
 
-  if (getIsFullscreen()) {
+  if (isNativeFullscreenSupported()) {
+    const isFs = await bridge.isWindowFullscreen();
+    await bridge.setWindowFullscreen(!isFs);
+    await updateFullscreenButton();
+    return;
+  }
+
+  if (getDomFullscreenElement()) {
     if (document.exitFullscreen) {
-      document.exitFullscreen();
+      await document.exitFullscreen();
     } else if (document.webkitExitFullscreen) {
       document.webkitExitFullscreen();
     }
   } else {
     const elem = document.documentElement;
     if (elem.requestFullscreen) {
-      elem.requestFullscreen();
+      await elem.requestFullscreen();
     } else if (elem.webkitRequestFullscreen) {
       elem.webkitRequestFullscreen();
     }
@@ -3995,14 +4024,31 @@ function hideFullscreenButtonIfUnsupported() {
   }
 }
 
-document.addEventListener('fullscreenchange', updateFullscreenButton);
-document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+function handleFullscreenShortcut(event) {
+  if (event.key !== 'F11' || !isFullscreenSupported()) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  toggleFullscreen().catch(reportError);
+}
+
+document.addEventListener('fullscreenchange', () => {
+  updateFullscreenButton().catch(reportError);
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  updateFullscreenButton().catch(reportError);
+});
+window.addEventListener('keydown', handleFullscreenShortcut, true);
 
 fullscreenButtonEl.addEventListener('click', () => {
-  toggleFullscreen();
+  toggleFullscreen().catch(reportError);
 });
 
 hideFullscreenButtonIfUnsupported();
+updateFullscreenButton().catch(reportError);
 
 settingsPanelEl.addEventListener('click', (event) => {
   event.stopPropagation();
