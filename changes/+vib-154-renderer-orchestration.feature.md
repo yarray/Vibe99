@@ -1,0 +1,1 @@
+Extract layout manager, layout modal, modal stack, fullscreen manager, pane operations, and command palette entries into dedicated modules. Slim renderer.js from ~3100 lines to ~590 lines, making it a pure orchestration layer: module creation, dependency injection, global event binding, and thin coordination functions only.
