@@ -12,6 +12,12 @@
   - `mod.rs` contains `PtyManager` core, `PtySession`, reader/exit threads, and `shell_candidates()` entry point.
   - `shell_resolver.rs` contains shell discovery, command building, working directory resolution, WSL integration, and settings config loading.
   - Pure structural refactoring — no functional logic changes.
+- **Pane state management extraction (VIB-150):**
+  - Extracted pane state management from `renderer.js` into new `pane-state.js` module
+  - New module provides pure logic for pane state, collection operations, and session persistence
+  - Factory function `createPaneState()` accepts dependencies: `defaultCwd`, `defaultTabTitle`, `getAccentPalette`, `onStateChange`
+  - Returned API includes read operations (`getPanes`, `getFocusedPaneId`, `getPaneById`, `getPaneIndex`, `getFocusedIndex`), write operations (`addPane`, `closePane`, `focusPane`, `moveFocus`, `navigateLeft`, `navigateRight`, `reorderPane`), MRU operations (`cycleToRecentPane`, `commitPaneCycle`, `recordPaneVisit`), property modification (`setPaneTitle`, `setPaneCwd`, `setPaneColor`, `clearPaneColor`, `setPaneShellProfile`, `setPaneTerminalTitle`, `togglePaneBreathingMonitor`), and session operations (`buildSessionData`, `restoreSession`)
+  - `pane-state.js` is ~400 lines, under the 600 line requirement, with zero DOM operations
 
 - **Multi-window architecture refactor (VIB-104):**
   - PTY sessions now keyed by `(window_label, pane_id)` compound address (`PaneRef`) instead of `pane_id` alone, preventing cross-window collisions when multiple windows use the same sequential pane IDs.
