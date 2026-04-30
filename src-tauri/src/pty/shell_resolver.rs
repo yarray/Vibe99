@@ -1,6 +1,7 @@
 use portable_pty::CommandBuilder;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use tauri::Manager;
 
 use crate::wsl;
 
