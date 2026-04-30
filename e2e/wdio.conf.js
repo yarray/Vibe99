@@ -135,6 +135,18 @@ export const config = {
     }
   },
 
+  afterTest: async (test, context, { error }) => {
+    if (error && process.env.CI) {
+      const screenshotDir = path.join(__dirname, 'screenshots');
+      if (!fs.existsSync(screenshotDir)) {
+        fs.mkdirSync(screenshotDir, { recursive: true });
+      }
+      const safeName = `${test.parent} ${test.title}`.replace(/[^a-z0-9_.-]/gi, '_');
+      const screenshotPath = path.join(screenshotDir, `${safeName}.png`);
+      await browser.saveScreenshot(screenshotPath);
+    }
+  },
+
   onComplete: () => {
     stopTauriDriver();
     stopXvfb();
