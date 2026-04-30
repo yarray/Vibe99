@@ -10,6 +10,19 @@ import {
 } from './command-palette.js';
 import { createPaneActivityWatcher } from './pane-activity-watcher.js';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
+import {
+  createBridge,
+  getRuntimePlatform,
+  getDefaultFontFamily,
+  basename,
+  splitArgs,
+  formatArgs,
+  LAYOUT_FOCUS_NOTICE_EVENT,
+  readLayoutWindowBindings,
+  writeLayoutWindowBindings,
+  getBoundLayoutWindowLabel,
+  clearLayoutWindowBinding,
+} from './bridge.js';
 import '@xterm/xterm/css/xterm.css';
 
 import * as ShortcutsRegistry from './shortcuts-registry.js';
@@ -20,33 +33,6 @@ import { createActions } from './input/actions.js';
 import { createDispatcher } from './input/dispatcher.js';
 import { formatChord } from './input/keymap.js';
 import { renderHintBar } from './hint-bar.js';
-
-function getRuntimePlatform() {
-  const platform = navigator.platform.toLowerCase();
-  if (platform.includes('win')) {
-    return 'win32';
-  }
-  if (platform.includes('mac')) {
-    return 'darwin';
-  }
-  return 'linux';
-}
-
-function getDefaultFontFamily(platform = getRuntimePlatform()) {
-  if (platform === 'win32' || platform === 'windows') {
-    return 'Consolas, "Cascadia Mono", "Courier New", monospace';
-  }
-  if (platform === 'darwin') {
-    return 'Menlo, Monaco, "SF Mono", monospace';
-  }
-  return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", monospace';
-}
-
-function basename(path) {
-  return path.replace(/\/+$/, '').split('/').pop() || '/';
-}
-
-const LAYOUT_FOCUS_NOTICE_EVENT = 'vibe99:layout-focus-notice';
 
 // OSC 7 format: \x1b]7;file://hostname/path\x07
 // Extracts the path from the OSC 7 sequence and URL-decodes it.
@@ -74,232 +60,10 @@ function extractPathFromOsc7(data) {
   }
 }
 
-function splitArgs(str) {
-  const args = [];
-  let cur = '';
-  let inQuote = false;
-  let quoteChar = '';
-  for (const ch of str) {
-    if (inQuote) {
-      if (ch === quoteChar) { inQuote = false; } else { cur += ch; }
-    } else if (ch === '"' || ch === "'") {
-      inQuote = true;
-      quoteChar = ch;
-    } else if (/\s/.test(ch)) {
-      if (cur) { args.push(cur); cur = ''; }
-    } else {
-      cur += ch;
-    }
-  }
-  if (cur) { args.push(cur); }
-  return args;
-}
+// Layout window label (will be set when layout is loaded)
+let windowLayoutId = null;
 
-// Converts a string array back to a shell-quoted command-line string.
-// This is the inverse of splitArgs(): formatArgs(splitArgs(s)) === s for any s.
-function formatArgs(args) {
-  return args.map((arg) => {
-    // Arguments needing quoting: contain spaces, double quotes, backslashes, or are empty.
-    if (arg === '' || /[\s"]/.test(arg) || /\\/.test(arg)) {
-      // Escape backslashes and double quotes before wrapping in double quotes.
-      const escaped = arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      return `"${escaped}"`;
-    }
-    return arg;
-  }).join(' ');
-}
-
-
-function createUnavailableBridge() {
-  const fail = () => {
-    throw new Error('Tauri bridge is unavailable');
-  };
-
-  const defaultCwd = '/';
-
-  return {
-    platform: getRuntimePlatform(),
-    currentWindowLabel: 'browser',
-    defaultCwd,
-    defaultTabTitle: basename(defaultCwd),
-    createTerminal: fail,
-    writeTerminal: fail,
-    resizeTerminal: fail,
-    destroyTerminal: fail,
-    closeWindow: fail,
-    readClipboardText: () => Promise.reject(new Error('Clipboard bridge is unavailable')),
-    writeClipboardText: fail,
-    getClipboardSnapshot: () => ({ text: '', hasImage: false }),
-    openExternalUrl: fail,
-    showContextMenu: fail,
-    loadSettings: () => Promise.resolve({}),
-    saveSettings: () => Promise.resolve({}),
-    listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
-    addShellProfile: fail,
-    listLayouts: () => Promise.resolve({ layouts: [], defaultLayoutId: '' }),
-    saveLayout: fail,
-    deleteLayout: fail,
-    renameLayout: fail,
-    openLayoutWindow: fail,
-    openLayoutInNewWindow: fail,
-    isWindowFullscreen: undefined,
-    setWindowFullscreen: undefined,
-    setLayoutAsDefault: fail,
-    removeShellProfile: fail,
-    setDefaultShellProfile: fail,
-    detectShellProfiles: () => Promise.resolve([]),
-    onTerminalData: () => () => {},
-    onTerminalExit: () => () => {},
-    onMenuAction: () => () => {},
-    onLayoutFocusNotice: undefined,
-    cwdReady: Promise.resolve(),
-  };
-}
-
-function createTauriBridge(tauri) {
-  const { invoke } = tauri.core;
-  const { getCurrentWindow } = tauri.window;
-  const { WebviewWindow } = tauri.webviewWindow;
-  const { readText: clipboardReadText, writeText: clipboardWriteText } =
-    tauri.clipboardManager;
-  const { openUrl } = tauri.opener;
-
-  function base64Encode(str) {
-    const bytes = new TextEncoder().encode(str);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-  }
-
-  const currentWebview = tauri.webview.getCurrentWebview();
-
-  function onTauriEvent(event, handler) {
-    const unlisten = currentWebview.listen(event, (e) => handler(e.payload));
-    return () => unlisten.then((fn) => fn());
-  }
-
-  let _resolvedCwd = '.';
-  const _cwdReady = invoke('get_cwd')
-    .then((cwd) => { _resolvedCwd = cwd; })
-    .catch(() => {});
-  const currentWindow = getCurrentWindow();
-
-  async function focusWindow(win) {
-    await win.unminimize().catch(() => {});
-    await win.show().catch(() => {});
-    await win.setFocus();
-    await Promise.resolve(tauri.event?.emitTo?.(win.label, LAYOUT_FOCUS_NOTICE_EVENT))
-      .catch(() => {});
-  }
-
-  function getLayoutWindowLabel(layoutId) {
-    const safeLabel = layoutId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return `layout-${safeLabel}`;
-  }
-
-  async function openLayoutWindow(layoutId) {
-    if (layoutId === windowLayoutId) {
-      return focusWindow(currentWindow);
-    }
-
-    const boundLabel = getBoundLayoutWindowLabel(layoutId);
-    if (boundLabel) {
-      const bound = await WebviewWindow.getByLabel(boundLabel);
-      if (bound) {
-        return focusWindow(bound);
-      }
-      clearLayoutWindowBinding(layoutId, boundLabel);
-    }
-
-    const label = getLayoutWindowLabel(layoutId);
-    const existing = layoutId === 'default'
-      ? await WebviewWindow.getByLabel('main')
-      : await WebviewWindow.getByLabel(label);
-    if (existing) {
-      return focusWindow(existing);
-    }
-
-    const url = `index.html?layoutId=${encodeURIComponent(layoutId)}`;
-    const win = new WebviewWindow(label, {
-      url,
-      title: `Vibe99 - ${layoutId}`,
-      width: 1600,
-      height: 920,
-      minWidth: 960,
-      minHeight: 640,
-      center: true,
-    });
-    return win.once('tauri://created', () => {}).then(() => {});
-  }
-
-  return {
-    platform: getRuntimePlatform(),
-    currentWindowLabel: currentWindow.label,
-    get defaultCwd() { return _resolvedCwd; },
-    get defaultTabTitle() { return basename(_resolvedCwd); },
-    createTerminal: (payload) =>
-      invoke('terminal_create', {
-        paneId: payload.paneId,
-        cols: payload.cols,
-        rows: payload.rows,
-        cwd: payload.cwd,
-        shellProfileId: payload.shellProfileId ?? null,
-      }),
-    writeTerminal: (payload) =>
-      invoke('terminal_write', {
-        paneId: payload.paneId,
-        data: base64Encode(payload.data),
-      }),
-    resizeTerminal: (payload) =>
-      invoke('terminal_resize', {
-        paneId: payload.paneId,
-        cols: payload.cols,
-        rows: payload.rows,
-      }),
-    destroyTerminal: (payload) =>
-      invoke('terminal_destroy', { paneId: payload.paneId }),
-    closeWindow: () => getCurrentWindow().close(),
-    readClipboardText: () => clipboardReadText(),
-    writeClipboardText: (text) => clipboardWriteText(text),
-    getClipboardSnapshot: async () => {
-      try {
-        const text = await clipboardReadText();
-        return { text: text ?? '', hasImage: false };
-      } catch {
-        return { text: '', hasImage: false };
-      }
-    },
-    openExternalUrl: (url) => openUrl(url),
-    showContextMenu: () => {},
-    loadSettings: () => invoke('settings_load'),
-    saveSettings: (payload) => invoke('settings_save', { settings: payload }),
-    listShellProfiles: () => invoke('shell_profiles_list'),
-    addShellProfile: (profile) => invoke('shell_profile_add', { profile }),
-    listLayouts: () => invoke('layouts_list'),
-    saveLayout: (layout) => invoke('layout_save', { layout }),
-    deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
-    renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
-    openLayoutWindow: (layoutId) => openLayoutWindow(layoutId),
-    openLayoutInNewWindow: (layoutId) => openLayoutWindow(layoutId),
-    isWindowFullscreen: () => getCurrentWindow().isFullscreen(),
-    setWindowFullscreen: (fullscreen) => getCurrentWindow().setFullscreen(fullscreen),
-    setLayoutAsDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
-    removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
-    setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
-    detectShellProfiles: () => invoke('shell_profiles_detect'),
-    onTerminalData: (handler) => onTauriEvent('vibe99:terminal-data', handler),
-    onTerminalExit: (handler) => onTauriEvent('vibe99:terminal-exit', handler),
-    onMenuAction: (handler) => onTauriEvent('vibe99:menu-action', handler),
-    onLayoutFocusNotice: (handler) => onTauriEvent(LAYOUT_FOCUS_NOTICE_EVENT, handler),
-    cwdReady: _cwdReady,
-  };
-}
-
-const bridge = window.__TAURI__
-  ? createTauriBridge(window.__TAURI__)
-  : window.vibe99 ?? createUnavailableBridge();
+const bridge = createBridge(window.__TAURI__ ?? window.vibe99 ?? null, windowLayoutId);
 
 const windowContext = (() => {
   const params = new URLSearchParams(window.location.search);
@@ -346,48 +110,15 @@ let enterNavSourcePaneId = null; // Track which pane was focused when entering n
 let pendingTabFocus = null;
 let layoutRestoreComplete = false;
 let layouts = [];
-let windowLayoutId = null;
 let defaultLayoutId = '';
 let selectedLayoutId = null;
 let renamingLayoutId = null;
 let layoutFocusNotice = null;
 let layoutFocusNoticeTimer = null;
-const LAYOUT_WINDOW_BINDINGS_KEY = 'vibe99.layoutWindowBindings';
 
 // Auto-refresh polling for Layouts modal
 const LAYOUT_MODAL_POLL_INTERVAL = 3000; // 3 seconds
 let layoutModalPollTimer = null;
-
-function readLayoutWindowBindings() {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(LAYOUT_WINDOW_BINDINGS_KEY) || '{}');
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeLayoutWindowBindings(bindings) {
-  try {
-    window.localStorage.setItem(LAYOUT_WINDOW_BINDINGS_KEY, JSON.stringify(bindings));
-  } catch {
-    // Best effort only. The stable Tauri window label still prevents duplicates
-    // for layout windows created through the normal UI path.
-  }
-}
-
-function getBoundLayoutWindowLabel(layoutId) {
-  const label = readLayoutWindowBindings()[layoutId];
-  return typeof label === 'string' && label ? label : null;
-}
-
-function clearLayoutWindowBinding(layoutId, expectedLabel = null) {
-  if (!layoutId) return;
-  const bindings = readLayoutWindowBindings();
-  if (expectedLabel !== null && bindings[layoutId] !== expectedLabel) return;
-  delete bindings[layoutId];
-  writeLayoutWindowBindings(bindings);
-}
 
 function setWindowLayoutId(layoutId) {
   if (!layoutId || windowLayoutId === layoutId) return;
