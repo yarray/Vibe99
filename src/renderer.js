@@ -15,6 +15,7 @@ import '@xterm/xterm/css/xterm.css';
 import * as ShortcutsRegistry from './shortcuts-registry.js';
 import * as ShortcutsUI from './shortcuts-ui.js';
 import * as ColorsRegistry from './colors-registry.js';
+import { icon, setIcon } from './icons.js';
 import { createActions } from './input/actions.js';
 import { createDispatcher } from './input/dispatcher.js';
 import { formatChord } from './input/keymap.js';
@@ -915,13 +916,13 @@ async function toggleLayoutsDropdown() {
     const confirmBtn = document.createElement('button');
     confirmBtn.type = 'button';
     confirmBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-confirm';
-    confirmBtn.textContent = '✓';
+    setIcon(confirmBtn, 'check', 14);
     confirmBtn.title = 'Confirm (Enter)';
 
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-cancel';
-    cancelBtn.textContent = '✕';
+    setIcon(cancelBtn, 'x', 14);
     cancelBtn.title = 'Cancel (Esc)';
 
     let confirmed = false;
@@ -1129,9 +1130,9 @@ function openShellProfilesModal() {
       <div class="settings-modal-header">
         <div class="settings-modal-title-group">
           <span>Shell Profiles</span>
-          <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">+</button>
+          <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">${icon('plus', 18)}</button>
         </div>
-        <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+        <button type="button" class="settings-modal-close" aria-label="Close">${icon('x', 16)}</button>
       </div>
       <div class="settings-modal-body shell-profiles-modal-body">
         <div class="shell-profiles-sidebar">
@@ -1233,7 +1234,7 @@ function renderModalShellProfiles() {
 
       // Quick actions: set default, clone, delete
       if (profile.id !== defaultShellProfileId) {
-        actions.appendChild(createProfileActionButton('★', 'Set as default', () => {
+        actions.appendChild(createProfileActionButton('star', 'Set as default', () => {
           const apply = (config) => {
             const userIds = new Set((config.profiles ?? []).map((p) => p.id));
             shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
@@ -1250,12 +1251,12 @@ function renderModalShellProfiles() {
         }));
       }
 
-      actions.appendChild(createProfileActionButton('⧉', 'Clone profile', () => {
+      actions.appendChild(createProfileActionButton('copy', 'Clone profile', () => {
         cloneProfile(profile);
       }));
 
       if (!isDetected) {
-        actions.appendChild(createProfileActionButton('✕', 'Delete', () => {
+        actions.appendChild(createProfileActionButton('x', 'Delete', () => {
           if (selectedShellProfileId === profile.id) {
             selectedShellProfileId = null;
             editingShellProfile = null;
@@ -1383,9 +1384,9 @@ function openLayoutsModal() {
           <div class="settings-modal-header">
             <div class="settings-modal-title-group">
               <span>Layouts</span>
-              <button type="button" class="layouts-add-btn" id="modal-layout-add" aria-label="Add Layout">+</button>
+              <button type="button" class="layouts-add-btn" id="modal-layout-add" aria-label="Add Layout">${icon('plus', 18)}</button>
             </div>
-            <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+            <button type="button" class="settings-modal-close" aria-label="Close">${icon('x', 16)}</button>
           </div>
           <div class="settings-modal-body layouts-modal-body">
             <div class="layouts-sidebar">
@@ -1595,7 +1596,7 @@ function renderModalLayouts(overlay) {
         nameEl = document.createElement('div');
         nameEl.className = 'layout-name';
         const nameText = layout.name || layout.id;
-        nameEl.textContent = isDefault ? `★ ${nameText}` : nameText;
+        nameEl.innerHTML = isDefault ? `${icon('star', 14)} ${nameText}` : nameText;
       }
 
       const info = document.createElement('div');
@@ -1610,7 +1611,7 @@ function renderModalLayouts(overlay) {
       const switchBtn = document.createElement('button');
       switchBtn.type = 'button';
       switchBtn.className = 'settings-btn';
-      switchBtn.textContent = '⎆';
+      setIcon(switchBtn, 'external-link', 12);
       switchBtn.title = 'Open in new window';
       switchBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1623,7 +1624,7 @@ function renderModalLayouts(overlay) {
       const renameBtn = document.createElement('button');
       renameBtn.type = 'button';
       renameBtn.className = 'settings-btn';
-      renameBtn.textContent = '✎';
+      setIcon(renameBtn, 'pencil', 12);
       renameBtn.title = 'Rename layout';
       renameBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -1645,7 +1646,7 @@ function renderModalLayouts(overlay) {
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'settings-btn';
-        deleteBtn.textContent = '✕';
+        setIcon(deleteBtn, 'x', 12);
         deleteBtn.title = 'Delete layout';
         deleteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -1694,13 +1695,13 @@ function renderModalLayouts(overlay) {
     const confirmBtn = document.createElement('button');
     confirmBtn.type = 'button';
     confirmBtn.className = 'settings-btn layout-name-btn layout-name-btn-confirm';
-    confirmBtn.textContent = '✓';
+    setIcon(confirmBtn, 'check', 14);
     confirmBtn.title = 'Confirm (Enter)';
 
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'settings-btn layout-name-btn layout-name-btn-cancel';
-    cancelBtn.textContent = '✕';
+    setIcon(cancelBtn, 'x', 14);
     cancelBtn.title = 'Cancel (Esc)';
 
     const doSave = () => {
@@ -1742,7 +1743,7 @@ function renderModalLayouts(overlay) {
     const setDefaultBtn = document.createElement('button');
     setDefaultBtn.type = 'button';
     setDefaultBtn.className = 'settings-btn layout-info-btn';
-    setDefaultBtn.textContent = isDefault ? '✓ Default' : 'Set as Default';
+    setDefaultBtn.innerHTML = isDefault ? `${icon('check', 14)} Default` : 'Set as Default';
     setDefaultBtn.disabled = isDefault;
     setDefaultBtn.title = isDefault ? 'This is the default layout' : 'Set this layout to restore on startup';
     setDefaultBtn.addEventListener('click', () => {
@@ -2120,7 +2121,7 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'tab-close';
-  close.textContent = 'x';
+  setIcon(close, 'x', 14);
   close.setAttribute('aria-label', `Close tab ${pane.id}`);
   close.disabled = panes.length === 1;
 
@@ -3021,7 +3022,7 @@ function showContextMenu(items, x, y, paneId) {
         if (child.isDefault) {
           const check = document.createElement('span');
           check.className = 'context-menu-shortcut';
-          check.textContent = '★';
+          check.innerHTML = icon('star', 12);
           childRow.appendChild(check);
         }
 
@@ -3100,7 +3101,7 @@ async function showTerminalContextMenu(node, event) {
     {
       label: 'Background activity alert',
       action: 'pane-toggle-breathing',
-      shortcut: breathingOn ? '✓' : '',
+      shortcut: breathingOn ? icon('check', 12) : '',
     },
     { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
   ];
@@ -3158,7 +3159,7 @@ function showColorPicker(paneId) {
     <div class="color-picker-dialog">
       <div class="color-picker-header">
         <span>Pane Color</span>
-        <button type="button" class="color-picker-close" aria-label="Close">×</button>
+        <button type="button" class="color-picker-close" aria-label="Close">${icon('x', 16)}</button>
       </div>
       <div class="color-picker-presets">
         ${presetColors.map((color, index) => `
@@ -3988,6 +3989,7 @@ async function updateFullscreenButton() {
   const isFs = await getIsFullscreen().catch(() => false);
   fullscreenButtonEl.classList.toggle('is-fullscreen', Boolean(isFs));
   fullscreenButtonEl.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Enter fullscreen');
+  setIcon(fullscreenButtonEl, isFs ? 'minimize' : 'maximize', 18);
 }
 
 async function toggleFullscreen() {
