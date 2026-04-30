@@ -10,6 +10,8 @@ import {
 } from './command-palette.js';
 import { createPaneActivityWatcher } from './pane-activity-watcher.js';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
+import { createShellProfileManager } from './shell-profiles.js';
+import { createContextMenus } from './context-menus.js';
 import '@xterm/xterm/css/xterm.css';
 
 import * as ShortcutsRegistry from './shortcuts-registry.js';
@@ -300,6 +302,82 @@ function createTauriBridge(tauri) {
 const bridge = window.__TAURI__
   ? createTauriBridge(window.__TAURI__)
   : window.vibe99 ?? createUnavailableBridge();
+
+// State adapters for shell-profiles module
+let shellProfiles = [];
+let defaultShellProfileId = '';
+let editingShellProfile = null; // null or { id?, name, command, args }
+let selectedShellProfileId = null; // ID of currently selected profile for editing
+
+const stateForShellProfiles = {
+  getPanels: () => panes,
+  setPanels: (newPanes) => { panes = newPanes; },
+  getFocusedPaneId: () => focusedPaneId,
+  getPaneNode: (paneId) => paneNodeMap.get(paneId) ?? null,
+  getShellProfiles: () => shellProfiles,
+  setShellProfiles: (profiles) => { shellProfiles = profiles; },
+  getDefaultShellProfileId: () => defaultShellProfileId,
+  setDefaultShellProfileId: (id) => { defaultShellProfileId = id; },
+  getDetectedShellProfiles: () => [], // Internal to module, not exposed
+  setDetectedShellProfiles: () => {}, // Internal to module
+  getEditingShellProfile: () => editingShellProfile,
+  setEditingShellProfile: (profile) => { editingShellProfile = profile; },
+  getSelectedShellProfileId: () => selectedShellProfileId,
+  setSelectedShellProfileId: (id) => { selectedShellProfileId = id; },
+};
+
+// State adapters for context-menus module
+const stateForContextMenus = {
+  getPanels: () => panes,
+  setPanels: (newPanes) => { panes = newPanes; },
+  getPaneIndex: (paneId) => panes.findIndex((pane) => pane.id === paneId),
+  getFocusedPaneId: () => focusedPaneId,
+  setFocusedPaneId: (id) => { focusedPaneId = id; },
+  getPaneNode: (paneId) => paneNodeMap.get(paneId) ?? null,
+  clearPaneCycleState: () => { paneCycleState = null; },
+  recordPaneVisit: (paneId) => {
+    if (!paneId) return;
+    if (paneMruOrder[0] === paneId) return;
+    paneMruOrder = [paneId, ...paneMruOrder.filter((id) => id !== paneId)];
+  },
+  render: () => render(),
+  scheduleSave: () => scheduleWindowLayoutSave(),
+  registerModal: (closeFn) => { modalStack.push(closeFn); },
+  unregisterModal: (closeFn) => {
+    const idx = modalStack.indexOf(closeFn);
+    if (idx !== -1) modalStack.splice(idx, 1);
+  },
+};
+
+// Initialize modules after bridge is ready
+let shellProfileManager = null;
+let contextMenus = null;
+
+function initializeModules() {
+  shellProfileManager = createShellProfileManager({
+    bridge,
+    state: stateForShellProfiles,
+    reportError,
+    scheduleSave: scheduleWindowLayoutSave,
+    initializePaneTerminal,
+    registerModal: (closeFn) => { modalStack.push(closeFn); },
+    unregisterModal: (closeFn) => {
+      const idx = modalStack.indexOf(closeFn);
+      if (idx !== -1) modalStack.splice(idx, 1);
+    },
+  });
+
+  contextMenus = createContextMenus({
+    state: stateForContextMenus,
+    bridge,
+    shellProfileManager,
+    reportError,
+    focusPane,
+    beginRenamePane,
+    closePane,
+    togglePaneBreathingMonitor,
+  });
+}
 
 const windowContext = (() => {
   const params = new URLSearchParams(window.location.search);
@@ -1064,6 +1142,11 @@ function flushWindowLayoutSave() {
 let detectedShellProfiles = [];
 
 function loadShellProfiles() {
+  // Use the shell profile manager if available
+  if (shellProfileManager) {
+    return shellProfileManager.loadShellProfiles();
+  }
+  // Fallback to original implementation
   return Promise.all([
     bridge.listShellProfiles(),
     bridge.detectShellProfiles().catch(() => []),
@@ -1091,6 +1174,11 @@ function createProfileActionButton(label, title, onClick) {
 }
 
 function changePaneShell(paneId, profileId) {
+  // Use the shell profile manager if available
+  if (shellProfileManager) {
+    return shellProfileManager.changePaneShell(paneId, profileId);
+  }
+  // Fallback to original implementation
   const node = paneNodeMap.get(paneId);
   if (!node) return;
 
@@ -1124,6 +1212,11 @@ function changePaneShell(paneId, profileId) {
 // ----------------------------------------------------------------
 
 function openShellProfilesModal() {
+  // Use the shell profile manager if available
+  if (shellProfileManager) {
+    return shellProfileManager.openShellProfilesModal();
+  }
+  // Fallback to original implementation
   loadShellProfiles();
 
   const overlay = document.createElement('div');
@@ -2974,6 +3067,11 @@ function selectAllInTerminal(paneId = focusedPaneId) {
 }
 
 function showContextMenu(items, x, y, paneId) {
+  // Use the context menus module if available
+  if (contextMenus) {
+    return contextMenus.showContextMenu(items, x, y, paneId);
+  }
+  // Fallback to original implementation
   hideContextMenu();
 
   const menu = document.createElement('div');
@@ -3075,6 +3173,11 @@ function showContextMenu(items, x, y, paneId) {
 }
 
 function hideContextMenu() {
+  // Use the context menus module if available
+  if (contextMenus) {
+    return contextMenus.hideContextMenu();
+  }
+  // Fallback to original implementation
   const menu = document.querySelector('.context-menu');
   if (menu) {
     menu.remove();
@@ -3126,7 +3229,53 @@ async function showTerminalContextMenu(node, event) {
   showContextMenu(items, event.clientX, event.clientY, node.paneId);
 }
 
+async function showTerminalContextMenu(node, event) {
+  // Use the context menus module if available
+  if (contextMenus) {
+    return contextMenus.showTerminalContextMenu(node, event);
+  }
+  // Fallback to original implementation
+  const clipboardSnapshot = await getClipboardSnapshot();
+
+  const shellChildren = shellProfiles.map((p) => ({
+    label: p.name || p.id,
+    action: `terminal-change-shell:${p.id}`,
+    isDefault: p.id === defaultShellProfileId,
+  }));
+
+  const pane = panes[getPaneIndex(node.paneId)];
+  const breathingOn = pane && pane.breathingMonitor !== false;
+
+  const items = [
+    { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
+    { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
+    { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
+    { type: 'separator' },
+    { label: 'Change Color...', action: 'terminal-change-color' },
+    {
+      label: 'Background activity alert',
+      action: 'pane-toggle-breathing',
+      shortcut: breathingOn ? icon('check', 12) : '',
+    },
+    { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
+  ];
+
+  if (shellChildren.length > 0) {
+    items.push(
+      { type: 'separator' },
+      { label: 'Change Profile', children: shellChildren },
+    );
+  }
+
+  showContextMenu(items, event.clientX, event.clientY, node.paneId);
+}
+
 function showTabContextMenu(paneId, event) {
+  // Use the context menus module if available
+  if (contextMenus) {
+    return contextMenus.showTabContextMenu(paneId, event);
+  }
+  // Fallback to original implementation
   const paneIndex = getPaneIndex(paneId);
   if (paneIndex === -1) {
     return;
@@ -3150,6 +3299,11 @@ function showTabContextMenu(paneId, event) {
 }
 
 function showColorPicker(paneId) {
+  // Use the context menus module if available
+  if (contextMenus) {
+    return contextMenus.showColorPicker(paneId);
+  }
+  // Fallback to original implementation
   hideContextMenu();
 
   const paneIndex = getPaneIndex(paneId);
@@ -3317,6 +3471,11 @@ picker.querySelector('.color-picker-close').addEventListener('click', () => {
 }
 
 function setPaneColor(paneId, color) {
+  // Use the context menus module if available
+  if (contextMenus) {
+    return contextMenus.setPaneColor(paneId, color);
+  }
+  // Fallback to original implementation
   const paneIndex = getPaneIndex(paneId);
   if (paneIndex === -1) return;
 
@@ -3326,6 +3485,11 @@ function setPaneColor(paneId, color) {
 }
 
 function clearPaneColor(paneId) {
+  // Use the context menus module if available
+  if (contextMenus) {
+    return contextMenus.clearPaneColor(paneId);
+  }
+  // Fallback to original implementation
   const paneIndex = getPaneIndex(paneId);
   if (paneIndex === -1) return;
 
@@ -3478,6 +3642,11 @@ function openNewPaneProfilePicker() {
 }
 
 async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
+  // Use the context menus module if available
+  if (contextMenus) {
+    return contextMenus.pasteImageIntoTerminal(paneId, options);
+  }
+  // Fallback to original implementation
   const node = getPaneNode(paneId);
   if (!node?.sessionReady) {
     return false;
@@ -3493,6 +3662,14 @@ async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
 }
 
 function handleMenuAction(action, paneId) {
+  // Use the context menus module if available for shell-related actions
+  if (contextMenus && action.startsWith('terminal-change-shell:')) {
+    const profileId = action.slice('terminal-change-shell:'.length);
+    if (shellProfileManager) {
+      return shellProfileManager.changePaneShell(paneId, profileId);
+    }
+  }
+
   if (action === 'terminal-copy') {
     copyTerminalSelection(paneId);
     return;
@@ -4197,6 +4374,9 @@ window.addEventListener('resize', () => {
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
+    // Initialize the modules after all dependencies are ready
+    initializeModules();
+
     await bridge.cwdReady;
 
     const savedSettings = await bridge.loadSettings();
