@@ -12,6 +12,14 @@
   - `mod.rs` contains `PtyManager` core, `PtySession`, reader/exit threads, and `shell_candidates()` entry point.
   - `shell_resolver.rs` contains shell discovery, command building, working directory resolution, WSL integration, and settings config loading.
   - Pure structural refactoring — no functional logic changes.
+- **Pane renderer extraction (VIB-151):**
+  - Extracted terminal rendering and DOM management from `renderer.js` into new `pane-renderer.js` module (~612 lines)
+  - Factory function `createPaneRenderer()` accepts dependencies: `bridge`, `paneState`, `settingsManager`, `paneAlert`, `paneActivityWatcher`, `reportError`, `stageEl`, `getMode`, `onPaneClick`, `onTerminalTitleChange`, `onTerminalContextMenu`, `scheduleWindowLayoutSave`, `tabBar`, `getPaneLabel`, `onPaneCwdChanged`
+  - Returned API includes: `ensurePaneNodes`, `renderPanes`, `fitTerminal`, `getNode`, `write`, `copySelection`, `pasteInto`, `selectAll`, `focusTerminal`, `blurTerminal`, `clearTerminal`, `writeln`, `changePaneShell`, `entryNeedsTabRefresh`, `setAlerted`, `rootContains`, `hasSelection`, `isSessionReady`, `setSessionReady`, `getShellChangeTime`, `isShellChanging`, `destroyPane`
+  - `paneNodeMap` ownership moved to `pane-renderer.js`; no longer exposed to external modules
+  - All xterm.js imports (`Terminal`, `FitAddon`, `WebLinksAddon`, `WebglAddon`, `Unicode11Addon`) moved to `pane-renderer.js`
+  - `renderer.js` updated to use `paneRenderer` methods instead of direct `paneNodeMap` access
+
 - **Pane state management extraction (VIB-150):**
   - Extracted pane state management from `renderer.js` into new `pane-state.js` module
   - New module provides pure logic for pane state, collection operations, and session persistence
