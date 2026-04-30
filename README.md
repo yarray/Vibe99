@@ -20,19 +20,12 @@ Vibe99 is a desktop terminal workspace designed for agentic coding. The UI keeps
 
 ## Features
 
-- **Focus-first layout** — one terminal takes the spotlight while background panes stay visible in a compact stack, each showing the last few lines of output.
-- **Custom pane colors** — Okabe-Ito-based accent palette gives each pane a distinct color for instant identification. Pick from presets or choose your own.
-- **Activity alerts** — backgrounded panes with settled output pulse with a breathing mask. Toggle globally or per-pane from the context menu.
-- **Command palette** — jump to any pane (`Ctrl+Shift+O`) or run commands like switching profiles and renaming (`Ctrl+Shift+P`).
-- **Layout management** — save, restore, and switch pane layouts. Open layouts in separate windows. Set a default layout to auto-restore on startup.
-- **Navigation mode** — press `Ctrl+B` for vim-style pane navigation with number-jump, quick close, and rename.
-- **Shell profiles** — per-pane shell selection with auto-detected WSL distributions. Create custom profiles for SSH, Docker, or any shell.
-- **Session restore** — pane layout, working directories (via OSC 7 tracking), shell profiles, and tab titles survive restarts.
-- **Configurable shortcuts** — all keyboard shortcuts are editable in the settings modal.
-- **Font selection** — pick any installed monospace font. Defaults are platform-aware: Consolas (Windows), Menlo (macOS), DejaVu Sans Mono (Linux).
-- **WSL integration** — auto-detects all installed Windows Subsystem for Linux distributions and creates a shell profile for each.
-- **WebGL rendering** — xterm.js with the WebGL addon for crisp box-drawing characters and smooth performance.
-- **Clickable links** — terminal URLs open on click without modifier keys.
+- **Spotlight + stack multi-pane layout** — one terminal gets full width while the rest stack on the side, each showing the last few lines of output. You always know what every agent is doing without juggling windows or tabs.
+- **Activity alerts** — when a backgrounded pane finishes output and goes idle, it pulses with a breathing mask so you can tell at a glance which agent needs attention. Global and per-pane toggles.
+- **Session restore** — pane layout, working directories (tracked via OSC 7), shell profiles, and tab titles all survive app restart. Pick up exactly where you left off.
+- **Layout system** — save a pane arrangement, switch between saved layouts, open layouts in separate windows, and set a default layout that loads on startup.
+- **Navigation mode** — `Ctrl+B` enters a vim-style mode: move with `h`/`l`, jump by number (`1`–`9`), close (`x`), rename (`r`), then `Enter` to focus.
+- **Per-pane shell profiles** — each pane can run a different shell. Create profiles for bash, zsh, SSH, Docker, or any command. WSL distributions on Windows are auto-detected.
 
 ## Installation
 
