@@ -1,0 +1,1 @@
+Fixed E2E smoke test keyboard input case failing on CI by replacing the brittle `browser.pause(1000)` with `waitForTerminalOutput`, which polls until the terminal text appears. This handles slower PTY initialization in webkit2gtk headless environments.
