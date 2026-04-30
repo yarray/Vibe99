@@ -13,7 +13,6 @@ import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
 import {
   createBridge,
   getRuntimePlatform,
-  getDefaultFontFamily,
   basename,
   splitArgs,
   formatArgs,
@@ -33,6 +32,8 @@ import { createActions } from './input/actions.js';
 import { createDispatcher } from './input/dispatcher.js';
 import { formatChord } from './input/keymap.js';
 import { renderHintBar } from './hint-bar.js';
+import { createSettingsManager, getDefaultFontFamily } from './settings.js';
+
 
 // OSC 7 format: \x1b]7;file://hostname/path\x07
 // Extracts the path from the OSC 7 sequence and URL-decodes it.
@@ -164,29 +165,10 @@ const layoutsButtonEl = document.getElementById('tabs-layouts');
 const settingsButtonEl = document.getElementById('tabs-settings');
 const fullscreenButtonEl = document.getElementById('tabs-fullscreen');
 const settingsPanelEl = document.getElementById('settings-panel');
-const fontSizeInputEl = document.getElementById('font-size-input');
-const fontFamilyInputEl = document.getElementById('font-family-input');
-const paneWidthRangeEl = document.getElementById('pane-width-range');
-const paneWidthInputEl = document.getElementById('pane-width-input');
-const paneOpacityRangeEl = document.getElementById('pane-opacity-range');
-const paneOpacityInputEl = document.getElementById('pane-opacity-input');
-const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
-const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
-const breathingAlertToggleEl = document.getElementById('breathing-alert-toggle');
-const breathingAlertDotEl = document.getElementById('breathing-alert-dot');
 const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
 const layoutsSettingsBtn = document.getElementById('layouts-settings-btn');
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
 
-const settings = {
-  fontSize: 13,
-  fontFamily: getDefaultFontFamily(bridge.platform),
-  paneOpacity: 0.8,
-  paneMaskOpacity: 0.75,
-  paneWidth: 720,
-  breathingAlertEnabled: true,
-};
-let pendingSettingsSave = null;
 let pendingLayoutSave = null;
 
 // Called when a pane's cwd changes via OSC 7. Immediately updates the pane
@@ -229,6 +211,26 @@ const paneActivityWatcher = createPaneActivityWatcher({
     const node = paneNodeMap.get(paneId);
     if (node) paneAlert.setAlerted(node.root, false);
   },
+});
+
+const settingsManager = createSettingsManager({
+  bridge,
+  reportError,
+  settingsEls: {
+    fontSizeInput: document.getElementById('font-size-input'),
+    fontFamilyInput: document.getElementById('font-family-input'),
+    paneWidthRange: document.getElementById('pane-width-range'),
+    paneWidthInput: document.getElementById('pane-width-input'),
+    paneOpacityRange: document.getElementById('pane-opacity-range'),
+    paneOpacityInput: document.getElementById('pane-opacity-input'),
+    paneMaskOpacityRange: document.getElementById('pane-mask-alpha-range'),
+    paneMaskOpacityInput: document.getElementById('pane-mask-alpha-input'),
+    breathingToggle: document.getElementById('breathing-alert-toggle'),
+    breathingDot: document.getElementById('breathing-alert-dot'),
+    breathingRow: document.getElementById('breathing-alert-row'),
+  },
+  applyCallback: () => render(true),
+  paneActivityWatcher,
 });
 
 const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
@@ -303,86 +305,15 @@ function getPreviewWidth(stageWidth, count) {
     return 0;
   }
 
-  if (stageWidth >= settings.paneWidth * count) {
-    return settings.paneWidth;
+  if (stageWidth >= settingsManager.settings.paneWidth * count) {
+    return settingsManager.settings.paneWidth;
   }
 
-  return (stageWidth - settings.paneWidth) / (count - 1);
+  return (stageWidth - settingsManager.settings.paneWidth) / (count - 1);
 }
 
 function getPaneLabel(pane) {
   return pane.title ?? pane.terminalTitle ?? '';
-}
-
-function applySettings() {
-  document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
-  document.documentElement.style.setProperty('--app-font-family', settings.fontFamily);
-  document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
-  document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
-  document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
-  fontSizeInputEl.value = String(settings.fontSize);
-  fontFamilyInputEl.value = settings.fontFamily;
-  paneWidthRangeEl.value = String(settings.paneWidth);
-  paneWidthInputEl.value = String(settings.paneWidth);
-  paneOpacityRangeEl.value = settings.paneOpacity.toFixed(2);
-  paneOpacityInputEl.value = settings.paneOpacity.toFixed(2);
-  paneMaskOpacityRangeEl.value = settings.paneMaskOpacity.toFixed(2);
-  paneMaskOpacityInputEl.value = settings.paneMaskOpacity.toFixed(2);
-  breathingAlertToggleEl.checked = settings.breathingAlertEnabled;
-  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
-  paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
-}
-
-function applyPersistedSettings(nextSettings) {
-  if (!nextSettings || typeof nextSettings !== 'object') {
-    return;
-  }
-
-  const uiSettings =
-    nextSettings && typeof nextSettings.ui === 'object' && nextSettings.ui !== null
-      ? nextSettings.ui
-      : nextSettings;
-
-  if (Number.isFinite(uiSettings.fontSize)) {
-    settings.fontSize = uiSettings.fontSize;
-  }
-
-  if (typeof uiSettings.fontFamily === 'string') {
-    settings.fontFamily = uiSettings.fontFamily;
-  }
-
-  if (Number.isFinite(uiSettings.paneOpacity)) {
-    settings.paneOpacity = Math.max(0.55, Math.min(1, uiSettings.paneOpacity));
-  }
-
-  if (Number.isFinite(uiSettings.paneMaskOpacity)) {
-    settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskOpacity));
-  }
-
-  // Migrate legacy paneMaskAlpha → paneMaskOpacity
-  if (Number.isFinite(uiSettings.paneMaskAlpha) && !Number.isFinite(uiSettings.paneMaskOpacity)) {
-    settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskAlpha));
-  }
-
-  // Migrate v3 inverted mask opacity: old value was 1 - overlay opacity.
-  if (nextSettings?.version != null && nextSettings.version < 4) {
-    settings.paneMaskOpacity = 1 - settings.paneMaskOpacity;
-  }
-
-  if (Number.isFinite(uiSettings.paneWidth)) {
-    settings.paneWidth = uiSettings.paneWidth;
-  }
-
-  if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
-    settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
-  }
-
-  // Load keyboard shortcuts
-  if (typeof uiSettings.shortcuts === 'object' && uiSettings.shortcuts !== null) {
-    ShortcutsRegistry.loadShortcutsFromSettings(uiSettings);
-  } else {
-    ShortcutsRegistry.loadShortcutsFromSettings({});
-  }
 }
 
 /**
@@ -735,27 +666,6 @@ function handleLayoutsDropdownOutsideClick(event) {
   }
 }
 
-function buildSettingsPayloadForCurrentWindow() {
-  return {
-    version: 6,
-    ui: {
-      ...settings,
-      shortcuts: ShortcutsRegistry.getShortcutsForSave()
-    },
-  };
-}
-
-function scheduleSettingsSave() {
-  if (pendingSettingsSave !== null) {
-    window.clearTimeout(pendingSettingsSave);
-  }
-
-  pendingSettingsSave = window.setTimeout(() => {
-    pendingSettingsSave = null;
-    bridge.saveSettings(buildSettingsPayloadForCurrentWindow()).catch(reportError);
-  }, 150);
-}
-
 function scheduleWindowLayoutSave(delay = 250) {
   if (!layoutRestoreComplete || !windowLayoutId) return;
 
@@ -767,14 +677,6 @@ function scheduleWindowLayoutSave(delay = 250) {
     pendingLayoutSave = null;
     saveCurrentLayout().catch(reportError);
   }, delay);
-}
-
-function flushSettingsSave() {
-  if (pendingSettingsSave !== null) {
-    window.clearTimeout(pendingSettingsSave);
-    pendingSettingsSave = null;
-  }
-  void bridge.saveSettings(buildSettingsPayloadForCurrentWindow()).catch(reportError);
 }
 
 function flushWindowLayoutSave() {
@@ -1750,8 +1652,8 @@ function getFocusedIndex() {
 }
 
 function getPaneLeft(index, previewWidth, focusedIndex) {
-  if (previewWidth >= settings.paneWidth) {
-    return index * settings.paneWidth;
+  if (previewWidth >= settingsManager.settings.paneWidth) {
+    return index * settingsManager.settings.paneWidth;
   }
 
   const focusedLeft = focusedIndex * previewWidth;
@@ -1764,7 +1666,7 @@ function getPaneLeft(index, previewWidth, focusedIndex) {
     return focusedLeft;
   }
 
-  return focusedLeft + settings.paneWidth + (index - focusedIndex - 1) * previewWidth;
+  return focusedLeft + settingsManager.settings.paneWidth + (index - focusedIndex - 1) * previewWidth;
 }
 
 function getTextColorForBackground(hexColor) {
@@ -1909,8 +1811,8 @@ function createPane(pane) {
     cursorBlink: true,
     disableStdin: false,
     drawBoldTextInBrightColors: false,
-    fontFamily: settings.fontFamily || getDefaultFontFamily(bridge.platform),
-    fontSize: settings.fontSize,
+    fontFamily: settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform),
+    fontSize: settingsManager.settings.fontSize,
     lineHeight: 1.2,
     scrollback: 5000,
     theme: createTerminalTheme(accentColor),
@@ -2057,8 +1959,8 @@ function entryNeedsTabRefresh(paneId) {
 }
 
 function fitTerminal(node, force = false) {
-  node.terminal.options.fontSize = settings.fontSize;
-  node.terminal.options.fontFamily = settings.fontFamily || getDefaultFontFamily(bridge.platform);
+  node.terminal.options.fontSize = settingsManager.settings.fontSize;
+  node.terminal.options.fontFamily = settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform);
   node.fitAddon.fit();
 
   const cols = Math.max(20, node.terminal.cols || 80);
@@ -3135,7 +3037,7 @@ function openCommandList() {
     } else if (commandId === 'shortcuts-settings') {
       closeKeyboardShortcutsModal();
       registerModal(closeKeyboardShortcutsModal);
-      ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+      ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
     } else if (commandId === 'layout-default') {
       bridge.openLayoutWindow('default').catch(reportError);
     } else if (commandId.startsWith('layout-open:')) {
@@ -3410,7 +3312,7 @@ function closeKeyboardShortcutsModal() {
 function openKeymapHelpModal() {
   closeKeyboardShortcutsModal();
   registerModal(closeKeyboardShortcutsModal);
-  ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+  ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
 }
 
 // ---------------------------------------------------------------------------
@@ -3639,7 +3541,7 @@ settingsButtonEl.addEventListener('click', (event) => {
   if (wasHidden) {
     closeSettingsPanel();
   } else {
-    applySettings();
+    settingsManager.applySettings();
     registerModal(closeSettingsPanel);
   }
 });
@@ -3678,7 +3580,7 @@ shellProfilesSettingsBtn.addEventListener('keydown', (event) => {
 keyboardShortcutsSettingsBtn.addEventListener('click', () => {
   closeKeyboardShortcutsModal();
   registerModal(closeKeyboardShortcutsModal);
-  ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+  ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
 });
 
 keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
@@ -3686,7 +3588,7 @@ keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
     event.preventDefault();
     closeKeyboardShortcutsModal();
     registerModal(closeKeyboardShortcutsModal);
-    ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
+    ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
   }
 });
 
@@ -3796,108 +3698,6 @@ settingsPanelEl.addEventListener('click', (event) => {
   event.stopPropagation();
 });
 
-fontSizeInputEl.addEventListener('change', () => {
-  const nextValue = Number(fontSizeInputEl.value);
-  if (!Number.isFinite(nextValue)) {
-    applySettings();
-    return;
-  }
-
-  settings.fontSize = Math.max(10, Math.min(24, Math.round(nextValue)));
-  applySettings();
-  render(true);
-  scheduleSettingsSave();
-});
-
-fontFamilyInputEl.addEventListener('change', () => {
-  settings.fontFamily = fontFamilyInputEl.value.trim() || getDefaultFontFamily(bridge.platform);
-  applySettings();
-  render(true);
-  scheduleSettingsSave();
-});
-
-function updatePaneWidth(nextValue) {
-  const parsedValue = Number(nextValue);
-  if (!Number.isFinite(parsedValue)) {
-    applySettings();
-    return;
-  }
-
-  settings.paneWidth = Math.max(520, Math.min(2000, Math.round(parsedValue / 10) * 10));
-  applySettings();
-  render(true);
-  scheduleSettingsSave();
-}
-
-function updatePaneOpacity(nextValue) {
-  const parsedValue = Number(nextValue);
-  if (!Number.isFinite(parsedValue)) {
-    applySettings();
-    return;
-  }
-
-  settings.paneOpacity = Math.max(0.55, Math.min(1, Number(parsedValue.toFixed(2))));
-  applySettings();
-  scheduleSettingsSave();
-}
-
-function updatePaneMaskOpacity(nextValue) {
-  const parsedValue = Number(nextValue);
-  if (!Number.isFinite(parsedValue)) {
-    applySettings();
-    return;
-  }
-
-  settings.paneMaskOpacity = Math.max(0, Math.min(1, Number(parsedValue.toFixed(2))));
-  applySettings();
-  scheduleSettingsSave();
-}
-
-paneWidthRangeEl.addEventListener('input', () => {
-  updatePaneWidth(paneWidthRangeEl.value);
-});
-
-paneWidthInputEl.addEventListener('change', () => {
-  updatePaneWidth(paneWidthInputEl.value);
-});
-
-paneOpacityRangeEl.addEventListener('input', () => {
-  updatePaneOpacity(paneOpacityRangeEl.value);
-});
-
-paneOpacityInputEl.addEventListener('change', () => {
-  updatePaneOpacity(paneOpacityInputEl.value);
-});
-
-paneMaskOpacityRangeEl.addEventListener('input', () => {
-  updatePaneMaskOpacity(paneMaskOpacityRangeEl.value);
-});
-
-paneMaskOpacityInputEl.addEventListener('change', () => {
-  updatePaneMaskOpacity(paneMaskOpacityInputEl.value);
-});
-
-const breathingAlertRowEl = document.getElementById('breathing-alert-row');
-
-function toggleBreathingAlert() {
-  breathingAlertToggleEl.checked = !breathingAlertToggleEl.checked;
-  settings.breathingAlertEnabled = breathingAlertToggleEl.checked;
-  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
-  paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
-  scheduleSettingsSave();
-}
-
-breathingAlertRowEl.addEventListener('click', () => {
-  toggleBreathingAlert();
-});
-
-breathingAlertToggleEl.addEventListener('change', () => {
-  settings.breathingAlertEnabled = breathingAlertToggleEl.checked;
-  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
-  paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
-  scheduleSettingsSave();
-});
-
 // Close settings panel via click-outside, keeping modal stack in sync
 window.addEventListener('pointerdown', (event) => {
   if (
@@ -3930,8 +3730,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     await bridge.cwdReady;
 
     const savedSettings = await bridge.loadSettings();
-    applyPersistedSettings(savedSettings);
-    applySettings();
+    settingsManager.applyPersistedSettings(savedSettings);
+    settingsManager.applySettings();
     loadShellProfiles();
 
     await refreshLayouts();
@@ -3976,7 +3776,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 window.addEventListener('beforeunload', () => {
   flushWindowLayoutSave();
-  flushSettingsSave();
+  settingsManager.flushSettingsSave();
   clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
   removeTerminalDataListener();
   removeTerminalExitListener();
