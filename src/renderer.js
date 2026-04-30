@@ -2188,6 +2188,7 @@ function createPane(pane) {
   terminal.loadAddon(new Unicode11Addon());
   terminal.unicode.activeVersion = '11';
   terminal.open(terminalHost);
+  terminalHost._xterm = terminal;
   try { terminal.loadAddon(new WebglAddon()); } catch {}
   terminal.attachCustomKeyEventHandler((event) => {
     // Ctrl+Tab is reserved for pane MRU cycling — never let xterm forward

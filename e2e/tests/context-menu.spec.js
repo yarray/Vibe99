@@ -155,15 +155,19 @@ async function dismissContextMenu() {
  * so we use xterm.js's selection API directly.
  */
 async function selectTerminalText(paneIndex = 0) {
-  await browser.execute((idx) => {
+  const selected = await browser.execute((idx) => {
     const hosts = document.querySelectorAll('.terminal-host');
-    if (!hosts[idx]) return;
-    // Try using xterm's built-in selectAll
+    if (!hosts[idx]) return false;
     const term = hosts[idx]._xterm;
     if (term && term.selectAll) {
       term.selectAll();
+      return term.hasSelection?.() ?? Boolean(term.getSelection?.());
     }
+    return false;
   }, paneIndex);
+  if (!selected) {
+    throw new Error(`Unable to select terminal text for pane ${paneIndex}`);
+  }
   await browser.pause(200);
 }
 
