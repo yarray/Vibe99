@@ -78,21 +78,26 @@ npm run tauri:build  # release artifacts
 
 ## Usage
 
-### Basic Operations
+### Keyboard Shortcuts
 
-| Action | How |
-|--------|-----|
-| Add a pane | `Ctrl+N` or click `+` in the toolbar |
-| Switch panes | `Ctrl+Tab` (MRU order), `Ctrl+←/→` (spatial), or `Ctrl+Shift+O` (palette) |
-| Navigate mode | `Ctrl+B` — then use `h`/`l` or arrows, press `Enter` to focus |
-| Copy / Paste | `Ctrl+Shift+C` / `Ctrl+Shift+V` |
-| Rename a tab | Double-click the tab |
-| Reorder tabs | Drag the tab |
-| Settings | Click the gear icon in the toolbar |
+#### Global
 
-### Navigation Mode (`Ctrl+B`)
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+N` | New pane |
+| `Ctrl+Shift+N` | New pane with profile picker |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Cycle panes in MRU order (forward / reverse) |
+| `Ctrl+←` / `Ctrl+→` | Spatial navigation between panes |
+| <code>Ctrl+\`</code> | Cycle to the next pane with an active alert |
+| `Ctrl+B` | Enter navigation mode |
+| `Ctrl+Shift+O` | Tab switcher palette (fuzzy search) |
+| `Ctrl+Shift+P` | Command palette (profile, color, rename, settings) |
+| `Ctrl+Shift+L` | Open layouts dropdown |
+| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste |
 
-After entering navigation mode, number badges appear on tabs:
+#### Navigation Mode (`Ctrl+B`)
+
+Number badges appear on tabs. All single-key shortcuts below are only active in this mode:
 
 | Key | Action |
 |-----|--------|
@@ -103,29 +108,47 @@ After entering navigation mode, number badges appear on tabs:
 | `n` | New pane |
 | `x` | Close pane (with confirmation) |
 | `r` | Rename pane |
-| `Enter` | Focus selected pane and exit |
+| `Enter` | Focus selected pane and exit navigation mode |
 | `Esc` | Cancel |
 
-### Command Palette
+#### Mouse
 
-| Shortcut | Mode |
-|----------|------|
-| `Ctrl+Shift+O` | Tab switcher — fuzzy search and jump to any pane |
-| `Ctrl+Shift+P` | Command list — change profile, change color, rename, open settings |
+| Action | How |
+|--------|-----|
+| Rename a tab | Double-click the tab |
+| Reorder tabs | Drag the tab |
+| Change profile | Right-click the terminal → Change Profile → select |
+| Change pane color | Right-click → Change Color… |
+| Toggle activity alert | Right-click → Background activity alert |
 
 ### Layouts
 
-- **Save**: Click `▦` in the toolbar → "Save Layout As…"
-- **Switch**: Click `▦` → select a saved layout
-- **New window**: In the Layout Manager modal, click `⎆` to open a layout in a separate window
-- **Default layout**: Set a layout as default in the Layout Manager — it loads automatically on startup
+Layouts save the complete state of a window: number of panes, their working directories, shell profiles, tab titles, and colors.
+
+- **Save current layout**: Click `▦` in the toolbar → "Save Layout As…", or `Ctrl+Shift+L` → "Save Layout As…"
+- **Open a layout**: Click `▦` → click a layout to open it in a window (new window if not already open, otherwise focus the existing one)
+- **Manage layouts**: Click `▦` → "Manage Layouts…" to open the Layout Manager modal, where you can create, rename, delete, set as default, and view pane details
+- **Default layout**: In Layout Manager, select a layout → "Set as Default" — it loads automatically on startup
+- **Open in new window**: In Layout Manager, click `⎆` on a layout to open it in a separate window
 
 ### Shell Profiles
 
+Each pane can run a different shell (bash, zsh, SSH, Docker, or any command).
+
+**Managing profiles:**
+
 1. Open **Settings** (gear) → **Shell Profiles**
-2. Create or edit profiles with custom commands (SSH, Docker, etc.)
-3. Right-click a tab → select a profile to switch that pane's shell
-4. On Windows, WSL distributions are auto-detected on first launch
+2. Click `+` to create a new profile, or select an existing one to edit
+3. Each profile has: **Name** (display label), **ID** (unique identifier), **Command** (executable path), **Arguments** (shell args)
+4. Use `★` to set a profile as the default for new panes
+5. Use `⧉` to clone a profile, drag to reorder
+6. Auto-detected profiles (system shells, WSL on Windows) appear in the list but cannot be edited or deleted — clone one to customize it
+
+**Using profiles:**
+
+- Right-click inside a terminal → **Change Profile** → select to switch that pane's shell instantly
+- `Ctrl+Shift+N` opens a profile picker to create a new pane with a specific shell
+- Each pane's profile is saved in session state and restored on restart
 
 ## Project Structure
 
