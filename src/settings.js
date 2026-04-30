@@ -14,24 +14,21 @@ export function createSettingsManager(deps) {
   const {
     bridge,
     reportError,
-    settingsEls,
     applyCallback,
     paneActivityWatcher,
   } = deps;
 
-  const {
-    fontSizeInput,
-    fontFamilyInput,
-    paneWidthRange,
-    paneWidthInput,
-    paneOpacityRange,
-    paneOpacityInput,
-    paneMaskOpacityRange,
-    paneMaskOpacityInput,
-    breathingToggle,
-    breathingDot,
-    breathingRow,
-  } = settingsEls;
+  const fontSizeInput = document.getElementById('font-size-input');
+  const fontFamilyInput = document.getElementById('font-family-input');
+  const paneWidthRange = document.getElementById('pane-width-range');
+  const paneWidthInput = document.getElementById('pane-width-input');
+  const paneOpacityRange = document.getElementById('pane-opacity-range');
+  const paneOpacityInput = document.getElementById('pane-opacity-input');
+  const paneMaskOpacityRange = document.getElementById('pane-mask-alpha-range');
+  const paneMaskOpacityInput = document.getElementById('pane-mask-alpha-input');
+  const breathingToggle = document.getElementById('breathing-alert-toggle');
+  const breathingDot = document.getElementById('breathing-alert-dot');
+  const breathingRow = document.getElementById('breathing-alert-row');
 
   const settings = {
     fontSize: 13,

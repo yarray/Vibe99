@@ -396,6 +396,7 @@ export function createPaneState({ defaultCwd, defaultTabTitle, getAccentPalette,
     // MRU operations
     cycleToRecentPane,
     commitPaneCycle,
+    hasActivePaneCycle: () => paneCycleState !== null,
     recordPaneVisit,
 
     // Property modification operations
