@@ -1,0 +1,241 @@
+/* ============================================================
+   panes.css — Stage, Pane, Terminal host, Status bar
+   ============================================================ */
+
+.stage-wrap {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--stage-padding);
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 100;
+  box-shadow:
+    inset 0 0 0 5px color-mix(in srgb, var(--layout-focus-accent, #ffd166) 94%, transparent),
+    inset 0 0 44px 10px color-mix(in srgb, var(--layout-focus-accent, #ffd166) 34%, transparent);
+  background: transparent;
+}
+
+.pane {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--pane-width);
+  border: 2px solid var(--pane-accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--pane-accent) 10%, #101010);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  opacity: var(--pane-opacity);
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    left 150ms cubic-bezier(0.2, 0.85, 0.32, 1),
+    box-shadow 120ms ease;
+  will-change: left;
+}
+
+/* Overlay mask: solid pane-accent board on top.
+   --pane-bg-mask-opacity directly controls overlay opacity:
+   0 = fully transparent, higher = more opaque mask. */
+.pane::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--pane-accent);
+  opacity: var(--pane-bg-mask-opacity);
+  transition: opacity 80ms ease;
+  z-index: 10;
+}
+
+.pane-shell {
+  height: 100%;
+}
+
+.pane-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.pane-surface {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.pane.is-focused {
+  opacity: 1;
+  box-shadow:
+    0 24px 54px rgba(0, 0, 0, 0.42),
+    0 0 0 1px color-mix(in srgb, var(--pane-accent) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pane.is-focused::after,
+.pane.is-navigation-target::after {
+  opacity: 0;
+  transition: none;
+}
+
+.pane.is-navigation-target {
+  opacity: 1;
+  border-width: 4px;
+  box-shadow:
+    0 24px 54px rgba(0, 0, 0, 0.42),
+    0 0 0 3px color-mix(in srgb, var(--pane-accent) 44%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.terminal-host {
+  width: 100%;
+  height: 100%;
+  padding: 0 6px;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+.terminal-host .xterm-viewport {
+  overflow: hidden !important;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+}
+
+#status-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-hint {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+}
+
+/* Hint bar styles */
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+.hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1;
+}
+
+.hint kbd .mod {
+  font-size: 0.85em;
+  vertical-align: 0.05em;
+  margin-right: 1px;
+}
+
+.hint kbd .mod:last-of-type {
+  margin-right: 3px;
+}
+
+.hint-sep {
+  margin: 0 6px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+/* Navigation mode - entire status bar background color */
+body.is-navigation-mode .status-bar {
+  background: rgba(255, 209, 102, 0.12);
+}
+
+body.is-navigation-mode #status-label {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+body.is-navigation-mode .hint kbd {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+body.is-navigation-mode .hint-sep {
+  color: rgba(255, 209, 102, 0.4);
+}
+
+/* Navigation mode - number badges in tabs */
+body.is-navigation-mode .tab-swatch {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--swatch-text-color, rgba(0, 0, 0, 0.75));
+	line-height: 1;
+}
+
+/* Pending close confirmation */
+.tab-close.pending-close {
+	color: #ff6b57;
+	font-weight: 700;
+	animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.6; }
+}
+
+/* Navigation mode - highlight focused tab */
+body.is-navigation-mode .tab.is-focused .tab-swatch {
+	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
+body.is-dragging-tabs {
+  user-select: none;
+  cursor: grabbing;
+}
