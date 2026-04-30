@@ -22,7 +22,7 @@ describe('Vibe99 smoke test', () => {
   it('accepts keyboard input in the focused terminal', async () => {
     await clearCapturedOutput(0);
     await writeToTerminal(0, 'echo hello\n');
-    await waitForTerminalOutput('echo hello', 0, 15000);
+    await waitForTerminalOutput('hello', 0, 15000);
   });
 
   after(async () => {

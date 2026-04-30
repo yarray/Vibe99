@@ -69,7 +69,7 @@ async function _initBridgeCapture() {
   if (alreadyInitialized) return;
   await browser.execute(() => {
     window.__e2e_captured = {};
-    window.__TAURI__.event.listen('vibe99:terminal-data', (event) => {
+    return window.__TAURI__.event.listen('vibe99:terminal-data', (event) => {
       const { paneId, data } = event.payload;
       if (!window.__e2e_captured[paneId]) window.__e2e_captured[paneId] = '';
       window.__e2e_captured[paneId] += data;
@@ -122,7 +122,7 @@ export async function writeToTerminal(paneIndex, data) {
   if (!paneId) throw new Error(`No pane ID found for index ${paneIndex}`);
   const encoded = _base64Encode(data);
   await browser.execute((pid, enc) => {
-    window.__TAURI__.core.invoke('terminal_write', { paneId: pid, data: enc });
+    return window.__TAURI__.core.invoke('terminal_write', { paneId: pid, data: enc });
   }, paneId, encoded);
 }
 
