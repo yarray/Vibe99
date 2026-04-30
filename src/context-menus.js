@@ -580,5 +580,6 @@ export function createContextMenus({ state, bridge, shellProfileManager, reportE
     clearPaneColor: (paneId) => clearPaneColor(paneId, state),
     pasteImageIntoTerminal: (paneId, options) =>
       pasteImageIntoTerminal(paneId, state, bridge, options),
+    handleMenuAction: boundHandleMenuAction,
   };
 }

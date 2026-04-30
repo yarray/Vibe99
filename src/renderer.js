@@ -1,5 +1,4 @@
 import {
-  openCommandPalette,
   closeCommandPalette,
   isCommandPaletteOpen,
 } from './command-palette.js';
@@ -7,200 +6,32 @@ import { createPaneActivityWatcher } from './pane-activity-watcher.js';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
 import {
   createBridge,
-  getRuntimePlatform,
-  basename,
-  splitArgs,
-  formatArgs,
-  LAYOUT_FOCUS_NOTICE_EVENT,
-  readLayoutWindowBindings,
-  writeLayoutWindowBindings,
-  getBoundLayoutWindowLabel,
   clearLayoutWindowBinding,
 } from './bridge.js';
 import { createPaneRenderer, getTextColorForBackground } from './pane-renderer.js';
 import { createShellProfileManager } from './shell-profiles.js';
 import { createContextMenus } from './context-menus.js';
+import { createLayoutManager } from './layout-manager.js';
+import { createLayoutModal } from './layout-modal.js';
+import { createModalStack } from './modal-stack.js';
+import { createFullscreenManager } from './fullscreen-manager.js';
+import { createPaneOperations } from './pane-operations.js';
+import { createCommandPaletteEntries } from './command-palette-entries.js';
 import '@xterm/xterm/css/xterm.css';
 
 import * as ShortcutsRegistry from './shortcuts-registry.js';
 import * as ShortcutsUI from './shortcuts-ui.js';
 import * as ColorsRegistry from './colors-registry.js';
 import { createPaneState } from './pane-state.js';
-import { icon, setIcon } from './icons.js';
+import { setIcon } from './icons.js';
 import { createActions } from './input/actions.js';
 import { createDispatcher } from './input/dispatcher.js';
-import { formatChord } from './input/keymap.js';
+
 import { renderHintBar } from './hint-bar.js';
 import { createSettingsManager } from './settings.js';
 import { createTabBar } from './tab-bar.js';
 
-
-// Layout window label (will be set when layout is loaded)
-let windowLayoutId = null;
-
-const bridge = createBridge(window.__TAURI__ ?? window.vibe99 ?? null, windowLayoutId);
-
-// State adapters for shell-profiles module
-let shellProfiles = [];
-let defaultShellProfileId = '';
-let editingShellProfile = null; // null or { id?, name, command, args }
-let selectedShellProfileId = null; // ID of currently selected profile for editing
-
-// State adapters for shell-profiles module - updated for phase1-refactor
-const stateForShellProfiles = {
-  getPanels: () => paneState.getPanes(),
-  setPanels: (newPanes) => {
-    // Update paneState with new panes
-    newPanes.forEach(p => {
-      const existing = paneState.getPaneById(p.id);
-      if (existing) {
-        if (p.shellProfileId !== existing.shellProfileId) {
-          paneState.setPaneShellProfile(p.id, p.shellProfileId);
-        }
-      }
-    });
-  },
-  getFocusedPaneId: () => paneState.getFocusedPaneId(),
-  getPaneNode: (paneId) => paneRenderer?.getNode(paneId) ?? null,
-  getShellProfiles: () => shellProfiles,
-  setShellProfiles: (profiles) => { shellProfiles = profiles; },
-  getDefaultShellProfileId: () => defaultShellProfileId,
-  setDefaultShellProfileId: (id) => { defaultShellProfileId = id; },
-  getDetectedShellProfiles: () => [], // Internal to module, not exposed
-  setDetectedShellProfiles: () => {}, // Internal to module
-  getEditingShellProfile: () => editingShellProfile,
-  setEditingShellProfile: (profile) => { editingShellProfile = profile; },
-  getSelectedShellProfileId: () => selectedShellProfileId,
-  setSelectedShellProfileId: (id) => { selectedShellProfileId = id; },
-};
-
-// State adapters for context-menus module - updated for phase1-refactor
-const stateForContextMenus = {
-  getPanels: () => paneState.getPanes(),
-  setPanels: (newPanes) => {
-    // Update paneState with new panes
-    newPanes.forEach(p => {
-      const existing = paneState.getPaneById(p.id);
-      if (existing) {
-        if (p.customColor !== existing.customColor) {
-          if (p.customColor === undefined) {
-            paneState.clearPaneColor(p.id);
-          } else {
-            paneState.setPaneColor(p.id, p.customColor);
-          }
-        }
-      }
-    });
-  },
-  getPaneIndex: (paneId) => paneState.getPaneIndex(paneId),
-  getFocusedPaneId: () => paneState.getFocusedPaneId(),
-  setFocusedPaneId: (id) => paneState.setFocusedPaneId(id),
-  getPaneNode: (paneId) => paneRenderer?.getNode(paneId) ?? null,
-  clearPaneCycleState: () => { paneCycleState = null; },
-  recordPaneVisit: (paneId) => {
-    paneState.recordPaneVisit(paneId);
-  },
-  render: () => render(),
-  scheduleSave: () => scheduleWindowLayoutSave(),
-  registerModal: (closeFn) => { modalStack.push(closeFn); },
-  unregisterModal: (closeFn) => {
-    const idx = modalStack.indexOf(closeFn);
-    if (idx !== -1) modalStack.splice(idx, 1);
-  },
-};
-
-// Initialize modules after bridge is ready
-let shellProfileManager = null;
-let contextMenus = null;
-
-function initializeModules() {
-  shellProfileManager = createShellProfileManager({
-    bridge,
-    state: stateForShellProfiles,
-    reportError,
-    scheduleSave: scheduleWindowLayoutSave,
-    registerModal: (closeFn) => { modalStack.push(closeFn); },
-    unregisterModal: (closeFn) => {
-      const idx = modalStack.indexOf(closeFn);
-      if (idx !== -1) modalStack.splice(idx, 1);
-    },
-  });
-
-  contextMenus = createContextMenus({
-    state: stateForContextMenus,
-    bridge,
-    shellProfileManager,
-    reportError,
-    focusPane,
-    beginRenamePane: (index) => tabBar.beginRenamePane(index),
-    closePane,
-    togglePaneBreathingMonitor,
-  });
-}
-
-const windowContext = (() => {
-  const params = new URLSearchParams(window.location.search);
-  const layoutId = params.get('layoutId');
-  return layoutId ? { kind: 'layout', layoutId } : { kind: 'main' };
-})();
-
-// Pane state management - extracted to pane-state.js
-const paneState = createPaneState({
-  defaultCwd: bridge.defaultCwd,
-  defaultTabTitle: bridge.defaultTabTitle,
-  getAccentPalette: () => ColorsRegistry.ACCENT_PALETTE,
-  onStateChange: () => {}, // Don't auto-render; caller controls when to render
-});
-
-// Compatibility layer - redirect to paneState methods
-const getPanes = () => paneState.getPanes();
-const getFocusedPaneId = () => paneState.getFocusedPaneId();
-const getPaneIndex = (paneId) => paneState.getPaneIndex(paneId);
-const getFocusedIndex = () => paneState.getFocusedIndex();
-const getPaneById = (paneId) => paneState.getPaneById(paneId);
-
-// For state reads, we can use destructuring to make the code cleaner
-// For state writes, we'll use the paneState methods directly
-
-let renamingPaneId = null;
-let dragState = null;
-let currentMode = 'terminal'; // 'terminal' | 'nav'
-let paneRenderer = null;
-let enterNavSourcePaneId = null; // Track which pane was focused when entering nav mode
-let pendingTabFocus = null;
-let layoutRestoreComplete = false;
-let layouts = [];
-let defaultLayoutId = '';
-let selectedLayoutId = null;
-let renamingLayoutId = null;
-let layoutFocusNotice = null;
-let layoutFocusNoticeTimer = null;
-
-// Auto-refresh polling for Layouts modal
-const LAYOUT_MODAL_POLL_INTERVAL = 3000; // 3 seconds
-let layoutModalPollTimer = null;
-
-function setWindowLayoutId(layoutId) {
-  if (!layoutId || windowLayoutId === layoutId) return;
-
-  if (windowLayoutId) {
-    clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
-  }
-
-  windowLayoutId = layoutId;
-  const bindings = readLayoutWindowBindings();
-  bindings[layoutId] = bridge.currentWindowLabel;
-  writeLayoutWindowBindings(bindings);
-}
-
-// Mode management
-function setMode(next) {
-  if (currentMode === next) return;
-  currentMode = next;
-  document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
-  render();
-}
-
+// ---------------------------------------------------------------------------
 const stageEl = document.getElementById('stage');
 const tabsListEl = document.getElementById('tabs-list');
 const statusLabelEl = document.getElementById('status-label');
@@ -215,2355 +46,95 @@ const shellProfilesSettingsBtn = document.getElementById('shell-profiles-setting
 const layoutsSettingsBtn = document.getElementById('layouts-settings-btn');
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
 
-let pendingLayoutSave = null;
+// ---------------------------------------------------------------------------
+let currentMode = 'terminal', paneRenderer = null, enterNavSourcePaneId = null, layoutRestoreComplete = false, layoutFocusNotice = null, layoutFocusNoticeTimer = null;
 
-// Called when a pane's cwd changes via OSC 7. Immediately updates the pane
-// and schedules a debounced settings save.
-function onPaneCwdChanged(paneId, newCwd) {
-  const pane = paneState.getPaneById(paneId);
-  if (!pane) {
-    return;
-  }
-  const existingCwd = pane.cwd;
-  if (existingCwd === newCwd) {
-    return;
-  }
 
-  paneState.setPaneCwd(paneId, newCwd);
+// Shell-profile state (shared with shell-profiles module via adapter)
+let shellProfiles = [], defaultShellProfileId = '', editingShellProfile = null, selectedShellProfileId = null;
 
-  scheduleWindowLayoutSave(5000);
-}
+// Tab-bar mutable state
+const tabBarState = (() => {
+  let r = null, d = null, p = null, c = null;
+  return {
+    get renamingPaneId() { return r; }, set renamingPaneId(v) { r = v; },
+    get dragState() { return d; }, set dragState(v) { d = v; },
+    get pendingTabFocus() { return p; }, set pendingTabFocus(v) { p = v; },
+    get currentMode() { return currentMode; },
+    get pendingClosePaneId() { return c; },
+  };
+})();
 
-// Layout dropdown state
-let layoutsDropdownOpen = false;
-let layoutsDropdownEl = null;
+// ---------------------------------------------------------------------------
+const bridge = createBridge(window.__TAURI__ ?? window.vibe99 ?? null, null);
 
-// Surface "settled output on a backgrounded pane" via a pulsing mask. The
-// watcher just decides *when* a pane should alert; the alert renderer
-// decides *how* it looks. To switch styles (border flash, tab badge, …),
-// swap `createBreathingMaskAlert` for another renderer with the same shape.
+const windowContext = (() => {
+  const params = new URLSearchParams(window.location.search);
+  const layoutId = params.get('layoutId');
+  return layoutId ? { kind: 'layout', layoutId } : { kind: 'main' };
+})();
+
+// ---------------------------------------------------------------------------
+const paneState = createPaneState({
+  defaultCwd: bridge.defaultCwd,
+  defaultTabTitle: bridge.defaultTabTitle,
+  getAccentPalette: () => ColorsRegistry.ACCENT_PALETTE,
+  onStateChange: () => {},
+});
+
+const modalStack = createModalStack();
+
+const layoutManager = createLayoutManager({
+  bridge,
+  paneState,
+  modalStack,
+  reportError,
+  layoutsButtonEl,
+  onManageLayouts: () => layoutModal.openLayoutsModal(),
+});
+
+const layoutModal = createLayoutModal({
+  bridge,
+  paneState,
+  modalStack,
+  reportError,
+  layoutManager,
+});
+
 const paneAlert = createBreathingMaskAlert();
 const paneActivityWatcher = createPaneActivityWatcher({
-  onAlert: (paneId) => {
-    paneRenderer?.setAlerted(paneId, true);
-  },
-  onClear: (paneId) => {
-    paneRenderer?.setAlerted(paneId, false);
-  },
+  onAlert: (paneId) => paneRenderer?.setAlerted(paneId, true),
+  onClear: (paneId) => paneRenderer?.setAlerted(paneId, false),
 });
 
 const settingsManager = createSettingsManager({
   bridge,
   reportError,
-  settingsEls: {
-    fontSizeInput: document.getElementById('font-size-input'),
-    fontFamilyInput: document.getElementById('font-family-input'),
-    paneWidthRange: document.getElementById('pane-width-range'),
-    paneWidthInput: document.getElementById('pane-width-input'),
-    paneOpacityRange: document.getElementById('pane-opacity-range'),
-    paneOpacityInput: document.getElementById('pane-opacity-input'),
-    paneMaskOpacityRange: document.getElementById('pane-mask-alpha-range'),
-    paneMaskOpacityInput: document.getElementById('pane-mask-alpha-input'),
-    breathingToggle: document.getElementById('breathing-alert-toggle'),
-    breathingDot: document.getElementById('breathing-alert-dot'),
-    breathingRow: document.getElementById('breathing-alert-row'),
-  },
   applyCallback: () => render(true),
   paneActivityWatcher,
 });
 
-const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
-  paneRenderer?.write(paneId, data);
-});
-
-bridge.onLayoutFocusNotice?.(() => {
-  if (!windowLayoutId) return;
-  refocusCurrentPaneTerminal();
-  showLayoutFocusNotice(windowLayoutId);
-});
-
-const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
-  const node = paneRenderer?.getNode(paneId);
-  if (!node) {
-    return;
-  }
-
-  // Killed sessions are backend-initiated cleanup — don't auto-close UI panes.
-  if (reason === 'killed') {
-    paneRenderer.setSessionReady(paneId, false);
-    return;
-  }
-
-  // If the terminal was destroyed for a shell change, or the process exited
-  // within a short grace period after a shell change, don't close the pane.
-  const graceMs = 3000;
-  const recentShellChange = paneRenderer.getShellChangeTime(paneId) && (Date.now() - paneRenderer.getShellChangeTime(paneId) < graceMs);
-  if (paneRenderer.isShellChanging(paneId) || recentShellChange) {
-    paneRenderer.setSessionReady(paneId, false);
-    paneRenderer.writeln(paneId, '');
-    paneRenderer.writeln(paneId, `\x1b[38;5;204m[shell exited with code ${exitCode}]\x1b[0m`);
-    return;
-  }
-
-  paneRenderer.setSessionReady(paneId, false);
-  paneRenderer.writeln(paneId, '');
-  paneRenderer.writeln(paneId, `\x1b[38;5;244m[process exited with code ${exitCode}]\x1b[0m`);
-
-  const paneIndex = getPaneIndex(paneId);
-  if (paneIndex === -1) {
-    return;
-  }
-
-  if (paneState.getPanes().length === 1) {
-    void bridge.closeWindow().catch(reportError);
-    return;
-  }
-
-  closePane(paneIndex, { destroyTerminal: false });
-});
-
-const removeMenuActionListener = bridge.onMenuAction(({ action, paneId }) => {
-  try {
-    handleMenuAction(action, paneId);
-  } catch (error) {
-    reportError(error);
-  }
-});
-
-function reportError(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  statusLabelEl.textContent = `Error: ${message}`;
-  statusHintEl.textContent = '';
-  console.error(error);
-}
-
-function getPaneLabel(pane) {
-  return pane.title ?? pane.terminalTitle ?? '';
-}
-
-/**
- * @typedef {Object} PaneStateV2
- * @property {string} paneId
- * @property {string|null} title
- * @property {string} cwd  — shell's real working directory (from OSC 7)
- * @property {string} accent
- * @property {string|undefined} customColor
- * @property {string|null} shellProfileId
- * @property {boolean} breathingMonitor
- * @typedef {Object} SessionStateV2
- * @property {number} version  — always 2
- * @property {PaneStateV2[]} panes
- * @property {number} focusedPaneIndex
- */
-
-/** @returns {SessionStateV2} */
-function buildSessionData() {
-  return paneState.buildSessionData();
-}
-
-function restoreSession(session) {
-  return paneState.restoreSession(session);
-}
-
-function createLayoutFromCurrentWindow(layoutId, name) {
-  const session = buildSessionData();
-  return {
-    id: layoutId,
-    name,
-    panes: session.panes,
-    focusedPaneIndex: session.focusedPaneIndex,
-  };
-}
-
-function createDefaultLayout() {
-  const currentPanes = paneState.getPanes();
-  return {
-    id: 'default',
-    name: 'Default',
-    panes: currentPanes.slice(0, 1).map((p) => ({
-      paneId: p.id,
-      title: p.title,
-      cwd: p.cwd,
-      accent: p.accent,
-      customColor: p.customColor,
-      shellProfileId: p.shellProfileId,
-      breathingMonitor: p.breathingMonitor !== false,
-    })),
-    focusedPaneIndex: 0,
-  };
-}
-
-async function refreshLayouts() {
-  const config = await bridge.listLayouts();
-  layouts = config.layouts ?? [];
-  defaultLayoutId = config.defaultLayoutId ?? '';
-  return config;
-}
-
-async function saveCurrentLayout() {
-  if (!windowLayoutId) {
-    throw new Error('Current window is not bound to a layout');
-  }
-
-  const existing = layouts.find((l) => l.id === windowLayoutId);
-  const layout = createLayoutFromCurrentWindow(
-    windowLayoutId,
-    existing?.name || windowLayoutId,
-  );
-  const config = await bridge.saveLayout(layout);
-  layouts = config.layouts ?? layouts;
-  defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
-  updateLayoutsIndicator();
-}
-
-async function saveLayoutAs(name) {
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    return;
-  }
-  name = name.trim();
-  const layout = createLayoutFromCurrentWindow(name.toLowerCase().replace(/\s+/g, '-'), name);
-  const config = await bridge.saveLayout(layout);
-  layouts = config.layouts ?? [];
-  defaultLayoutId = config.defaultLayoutId ?? '';
-  setWindowLayoutId(layout.id);
-  updateLayoutsIndicator();
-}
-
-async function switchLayout(layoutId) {
-  const layout = layouts.find((l) => l.id === layoutId);
-  if (!layout) return;
-  restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
-  paneRenderer?.ensurePaneNodes();
-  setWindowLayoutId(layoutId);
-  flushWindowLayoutSave();
-  updateLayoutsIndicator();
-}
-
-/**
- * Update the layouts button to reflect this window's bound layout.
- */
-function updateLayoutsIndicator() {
-  if (!layoutsButtonEl) return;
-  const currentLayout = layouts.find((l) => l.id === windowLayoutId);
-  const layoutName = currentLayout ? currentLayout.name : 'No layout';
-  layoutsButtonEl.setAttribute('aria-label', `Layouts (${layoutName})`);
-}
-
-function deleteLayoutById(layoutId) {
-  if (layoutId === windowLayoutId) {
-    reportError(new Error('Cannot delete the layout used by this window'));
-    return Promise.resolve();
-  }
-
-  return bridge.deleteLayout(layoutId)
-    .then(() => bridge.listLayouts())
-    .then((config) => {
-      layouts = config.layouts ?? [];
-      defaultLayoutId = config.defaultLayoutId ?? '';
-      updateLayoutsIndicator();
-    })
-    .catch(reportError);
-}
-
-function renameLayoutById(layoutId, newName) {
-  bridge.renameLayout(layoutId, newName)
-    .then(() => bridge.listLayouts())
-    .then((config) => {
-      layouts = config.layouts ?? [];
-    })
-    .catch(reportError);
-}
-
-async function toggleLayoutsDropdown() {
-  if (layoutsDropdownOpen) {
-    closeLayoutsDropdown();
-    return;
-  }
-
-  // Close other menus
-  closeSettingsPanel();
-  const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
-  if (existingProfilePopup) {
-    existingProfilePopup.remove();
-    document.removeEventListener('click', dismissAddPaneProfilePopup);
-  }
-
-  // Reload layouts to ensure we have the latest list
-  try {
-    await refreshLayouts();
-  } catch (error) {
-    reportError(error);
-  }
-
-  // Create dropdown menu
-  layoutsDropdownEl = document.createElement('div');
-  layoutsDropdownEl.className = 'layouts-dropdown';
-
-  // Add layout items
-  if (layouts.length === 0) {
-    const emptyItem = document.createElement('div');
-    emptyItem.className = 'layouts-dropdown-item';
-    emptyItem.textContent = 'No saved layouts';
-    emptyItem.style.color = 'var(--panel-muted)';
-    layoutsDropdownEl.appendChild(emptyItem);
-  } else {
-    for (const layout of layouts) {
-      const item = document.createElement('div');
-      item.className = 'layouts-dropdown-item';
-      if (layout.id === windowLayoutId) {
-        item.classList.add('is-active');
-      }
-
-      const checkmark = document.createElement('span');
-      checkmark.className = 'layout-item-current';
-      if (layout.id === windowLayoutId) {
-        checkmark.classList.add('is-active');
-      }
-
-      const label = document.createElement('span');
-      label.className = 'layouts-dropdown-label';
-      label.textContent = layout.name || layout.id;
-
-      item.append(label, checkmark);
-      item.addEventListener('click', (event) => {
-        event.stopPropagation();
-        bridge.openLayoutWindow(layout.id).catch(reportError);
-        closeLayoutsDropdown();
-      });
-
-      layoutsDropdownEl.appendChild(item);
-    }
-  }
-
-  // Separator
-  const separator = document.createElement('div');
-  separator.className = 'layouts-dropdown-separator';
-  layoutsDropdownEl.appendChild(separator);
-
-  // "Save Layout As..." action
-  const saveAction = document.createElement('div');
-  saveAction.className = 'layouts-dropdown-action';
-  saveAction.textContent = 'Save Layout As…';
-  saveAction.addEventListener('click', (event) => {
-    event.stopPropagation();
-    if (saveAction.classList.contains('is-editing')) return;
-
-    saveAction.classList.add('is-editing');
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'layouts-dropdown-input';
-    input.placeholder = 'Layout name';
-
-    const confirmBtn = document.createElement('button');
-    confirmBtn.type = 'button';
-    confirmBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-confirm';
-    setIcon(confirmBtn, 'check', 14);
-    confirmBtn.title = 'Confirm (Enter)';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-cancel';
-    setIcon(cancelBtn, 'x', 14);
-    cancelBtn.title = 'Cancel (Esc)';
-
-    let confirmed = false;
-
-    const restore = () => {
-      saveAction.classList.remove('is-editing');
-      saveAction.replaceChildren();
-      saveAction.textContent = 'Save Layout As…';
-    };
-
-    const doConfirm = () => {
-      if (confirmed) return;
-      confirmed = true;
-      const value = input.value.trim();
-      if (value) {
-        saveLayoutAs(value).catch(reportError);
-      }
-      closeLayoutsDropdown();
-    };
-
-    const doCancel = () => {
-      if (confirmed) return;
-      confirmed = true;
-      restore();
-    };
-
-    confirmBtn.addEventListener('click', (e) => { e.stopPropagation(); doConfirm(); });
-    cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); doCancel(); });
-
-    input.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter') { e.preventDefault(); doConfirm(); }
-      if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
-    });
-
-    saveAction.replaceChildren();
-    saveAction.append(input, confirmBtn, cancelBtn);
-    queueMicrotask(() => input.focus());
-  });
-  layoutsDropdownEl.appendChild(saveAction);
-
-  // "Manage Layouts..." action
-  const manageAction = document.createElement('div');
-  manageAction.className = 'layouts-dropdown-action';
-  manageAction.textContent = 'Manage Layouts…';
-  manageAction.addEventListener('click', (event) => {
-    event.stopPropagation();
-    openLayoutsModal();
-    closeLayoutsDropdown();
-  });
-  layoutsDropdownEl.appendChild(manageAction);
-
-  // Position and append
-  layoutsButtonEl.appendChild(layoutsDropdownEl);
-  layoutsDropdownOpen = true;
-  registerModal(closeLayoutsDropdown);
-
-  // Close on outside click
-  requestAnimationFrame(() => {
-    document.addEventListener('click', handleLayoutsDropdownOutsideClick);
-  });
-}
-
-function closeLayoutsDropdown() {
-  if (layoutsDropdownEl) {
-    layoutsDropdownEl.remove();
-    layoutsDropdownEl = null;
-  }
-  layoutsDropdownOpen = false;
-  document.removeEventListener('click', handleLayoutsDropdownOutsideClick);
-  unregisterModal(closeLayoutsDropdown);
-}
-
-function handleLayoutsDropdownOutsideClick(event) {
-  if (!layoutsButtonEl.contains(event.target)) {
-    closeLayoutsDropdown();
-  }
-}
-
-function scheduleWindowLayoutSave(delay = 250) {
-  if (!layoutRestoreComplete || !windowLayoutId) return;
-
-  if (pendingLayoutSave !== null) {
-    window.clearTimeout(pendingLayoutSave);
-  }
-
-  pendingLayoutSave = window.setTimeout(() => {
-    pendingLayoutSave = null;
-    saveCurrentLayout().catch(reportError);
-  }, delay);
-}
-
-function flushWindowLayoutSave() {
-  if (pendingLayoutSave !== null) {
-    window.clearTimeout(pendingLayoutSave);
-    pendingLayoutSave = null;
-  }
-  if (layoutRestoreComplete && windowLayoutId) {
-    void saveCurrentLayout().catch(reportError);
-  }
-}
-
-// ----------------------------------------------------------------
-// Shell profile management
-// ----------------------------------------------------------------
-
-let detectedShellProfiles = [];
-
-function loadShellProfiles() {
-  // Use the shell profile manager if available
-  if (shellProfileManager) {
-    return shellProfileManager.loadShellProfiles();
-  }
-  // Fallback to original implementation
-  return Promise.all([
-    bridge.listShellProfiles(),
-    bridge.detectShellProfiles().catch(() => []),
-  ]).then(([config, detected]) => {
-    detectedShellProfiles = detected;
-    const userProfiles = config.profiles ?? [];
-    const userIds = new Set(userProfiles.map((p) => p.id));
-    // Merge: user profiles first, then detected ones not already present.
-    shellProfiles = [...userProfiles, ...detected.filter((p) => !userIds.has(p.id))];
-    defaultShellProfileId = config.defaultProfile ?? '';
-  }).catch(reportError);
-}
-
-function createProfileActionButton(label, title, onClick) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'settings-btn';
-  btn.textContent = label;
-  btn.title = title;
-  btn.addEventListener('click', (event) => {
-    event.stopPropagation();
-    onClick();
-  });
-  return btn;
-}
-
-function changePaneShell(paneId, profileId) {
-  // Use the shell profile manager if available
-  if (shellProfileManager) {
-    return shellProfileManager.changePaneShell(paneId, profileId);
-  }
-  // Use paneRenderer from phase1-refactor
-  if (paneRenderer) {
-    return paneRenderer.changePaneShell(paneId, profileId);
-  }
-  // This should not happen - paneRenderer should always be available
-  console.error('changePaneShell called but paneRenderer is not available');
-}
-
-// ----------------------------------------------------------------
-// Settings modals for complex settings
-// ----------------------------------------------------------------
-
-function openShellProfilesModal() {
-  // Use the shell profile manager if available
-  if (shellProfileManager) {
-    return shellProfileManager.openShellProfilesModal();
-  }
-  // Fallback to original implementation
-  loadShellProfiles();
-
-  const overlay = document.createElement('div');
-  overlay.className = 'settings-modal-overlay';
-
-  overlay.innerHTML = `
-    <div class="settings-modal shell-profiles-modal">
-      <div class="settings-modal-header">
-        <div class="settings-modal-title-group">
-          <span>Shell Profiles</span>
-          <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">${icon('plus', 18)}</button>
-        </div>
-        <button type="button" class="settings-modal-close" aria-label="Close">${icon('x', 16)}</button>
-      </div>
-      <div class="settings-modal-body shell-profiles-modal-body">
-        <div class="shell-profiles-sidebar">
-          <div class="shell-profile-list" id="modal-shell-profile-list"></div>
-        </div>
-        <div class="shell-profiles-editor-panel" id="modal-shell-profile-editor">
-          <div class="shell-profiles-editor-placeholder">Select a profile or create a new one</div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const closeModal = () => {
-    overlay.remove();
-    editingShellProfile = null;
-    selectedShellProfileId = null;
-    unregisterModal(closeModal);
-  };
-
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal();
-  });
-
-  overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
-
-  // Add profile button
-  overlay.querySelector('#modal-shell-profile-add').addEventListener('click', () => {
-    editingShellProfile = {
-      id: '',
-      name: '',
-      command: '',
-      args: '',
-      isNew: true
-    };
-    selectedShellProfileId = null;
-    renderModalShellProfiles();
-  });
-
-  document.body.appendChild(overlay);
-
-  // Store reference to modal elements for rendering
-  overlay._modalShellProfileList = overlay.querySelector('#modal-shell-profile-list');
-  overlay._modalShellProfileEditor = overlay.querySelector('#modal-shell-profile-editor');
-
-  // Select first profile by default if available
-  if (shellProfiles.length > 0) {
-    const firstProfile = shellProfiles[0];
-    selectedShellProfileId = firstProfile.id;
-    editingShellProfile = {
-      id: firstProfile.id,
-      name: firstProfile.name || '',
-      command: firstProfile.command,
-      args: formatArgs(firstProfile.args ?? []),
-      isNew: false
-    };
-  } else {
-    selectedShellProfileId = null;
-    editingShellProfile = null;
-  }
-
-  renderModalShellProfiles();
-  registerModal(closeModal);
-}
-
-function renderModalShellProfiles() {
-  const overlay = document.querySelector('.settings-modal-overlay');
-  if (!overlay || !overlay._modalShellProfileList) return;
-
-  const listEl = overlay._modalShellProfileList;
-  const editorEl = overlay._modalShellProfileEditor;
-
-  if (!listEl || !editorEl) return;
-
-  listEl.replaceChildren();
-  editorEl.replaceChildren();
-
-  // Render sidebar list
-  if (shellProfiles.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'shell-profile-empty';
-    empty.textContent = 'No profiles configured';
-    listEl.appendChild(empty);
-  } else {
-    const detectedIds = new Set(detectedShellProfiles.map((p) => p.id));
-
-    for (const profile of shellProfiles) {
-      const isDetected = detectedIds.has(profile.id);
-      const item = document.createElement('div');
-      item.className = `shell-profile-item${profile.id === selectedShellProfileId ? ' is-selected' : ''}${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
-      item.dataset.profileId = profile.id;
-      item.draggable = !isDetected;
-
-      const name = document.createElement('div');
-      name.className = 'shell-profile-name';
-      name.textContent = profile.name || profile.id;
-
-      const actions = document.createElement('div');
-      actions.className = 'shell-profile-actions';
-
-      // Quick actions: set default, clone, delete
-      if (profile.id !== defaultShellProfileId) {
-        actions.appendChild(createProfileActionButton('star', 'Set as default', () => {
-          const apply = (config) => {
-            const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-            shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-            defaultShellProfileId = config.defaultProfile ?? '';
-            renderModalShellProfiles();
-          };
-          if (isDetected) {
-            bridge.addShellProfile(profile).then(() => {
-              bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-            }).catch(reportError);
-          } else {
-            bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
-          }
-        }));
-      }
-
-      actions.appendChild(createProfileActionButton('copy', 'Clone profile', () => {
-        cloneProfile(profile);
-      }));
-
-      if (!isDetected) {
-        actions.appendChild(createProfileActionButton('x', 'Delete', () => {
-          if (selectedShellProfileId === profile.id) {
-            selectedShellProfileId = null;
-            editingShellProfile = null;
-          }
-          bridge.removeShellProfile(profile.id).then((config) => {
-            const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-            shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-            defaultShellProfileId = config.defaultProfile ?? '';
-            renderModalShellProfiles();
-          }).catch(reportError);
-        }));
-      }
-
-      item.append(name, actions);
-
-      // Click to select (but not when dragging)
-      let isDragging = false;
-      let dragStartTime = 0;
-
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.shell-profile-actions')) return;
-        if (isDragging) return;
-        selectedShellProfileId = profile.id;
-        editingShellProfile = {
-          id: profile.id,
-          name: profile.name || '',
-          command: profile.command,
-          args: formatArgs(profile.args ?? []),
-          isNew: false
-        };
-        renderModalShellProfiles();
-      });
-
-      // Drag events for reordering
-      if (!isDetected) {
-        item.addEventListener('dragstart', (e) => {
-          dragStartTime = Date.now();
-          isDragging = true;
-          item.classList.add('is-dragging');
-          e.dataTransfer.setData('text/plain', profile.id);
-          e.dataTransfer.effectAllowed = 'move';
-          // Set a drag image if possible
-          if (e.dataTransfer.setDragImage) {
-            e.dataTransfer.setDragImage(item, 0, 0);
-          }
-        });
-
-        item.addEventListener('dragend', (e) => {
-          const dragDuration = Date.now() - dragStartTime;
-          // If drag was very short, treat it as a click
-          if (dragDuration < 200) {
-            isDragging = false;
-          }
-          setTimeout(() => {
-            isDragging = false;
-          }, 100);
-          item.classList.remove('is-dragging');
-          document.querySelectorAll('.shell-profile-item').forEach(el => {
-            el.classList.remove('drag-over');
-          });
-        });
-
-        item.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.dataTransfer.dropEffect = 'move';
-          const dragging = document.querySelector('.shell-profile-item.is-dragging');
-          if (dragging && dragging !== item) {
-            item.classList.add('drag-over');
-          }
-        });
-
-        item.addEventListener('dragleave', (e) => {
-          // Only remove drag-over if we're actually leaving the item
-          if (!item.contains(e.relatedTarget)) {
-            item.classList.remove('drag-over');
-          }
-        });
-
-        item.addEventListener('drop', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          item.classList.remove('drag-over');
-          const draggedId = e.dataTransfer.getData('text/plain');
-          const targetId = profile.id;
-
-          if (draggedId !== targetId) {
-            reorderProfiles(draggedId, targetId);
-          }
-        });
-      }
-
-      listEl.appendChild(item);
-    }
-  }
-
-  // Render editor panel
-  if (editingShellProfile) {
-    editorEl.appendChild(createModalShellProfileEditor());
-  } else {
-    const placeholder = document.createElement('div');
-    placeholder.className = 'shell-profiles-editor-placeholder';
-    placeholder.textContent = 'Select a profile or create a new one';
-    editorEl.appendChild(placeholder);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Layouts modal (Layout Manager) - mirrors Shell Profiles modal pattern
-// ---------------------------------------------------------------------------
-function openLayoutsModal() {
-  // Load existing layouts from bridge
-  bridge.listLayouts()
-    .then((config) => {
-      layouts = config.layouts ?? [];
-      defaultLayoutId = config.defaultLayoutId ?? '';
-    })
-    .catch(reportError)
-    .finally(() => {
-      const overlay = document.createElement('div');
-      overlay.className = 'settings-modal-overlay';
-
-      overlay.innerHTML = `
-        <div class="settings-modal layouts-modal">
-          <div class="settings-modal-header">
-            <div class="settings-modal-title-group">
-              <span>Layouts</span>
-              <button type="button" class="layouts-add-btn" id="modal-layout-add" aria-label="Add Layout">${icon('plus', 18)}</button>
-            </div>
-            <button type="button" class="settings-modal-close" aria-label="Close">${icon('x', 16)}</button>
-          </div>
-          <div class="settings-modal-body layouts-modal-body">
-            <div class="layouts-sidebar">
-              <div class="layout-list" id="modal-layout-list"></div>
-            </div>
-            <div class="layouts-editor-panel" id="modal-layout-editor">
-              <div class="layouts-editor-placeholder">Select a layout or create a new one</div>
-            </div>
-          </div>
-        </div>
-      `;
-
-      const closeModal = () => {
-        // Clear the polling timer when modal closes
-        if (layoutModalPollTimer) {
-          clearInterval(layoutModalPollTimer);
-          layoutModalPollTimer = null;
-        }
-        overlay.remove();
-        selectedLayoutId = null;
-        unregisterModal(closeModal);
-      };
-
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) closeModal();
-      });
-
-      overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
-      registerModal(closeModal);
-
-      // Add Layout button — inserts inline input at top of list
-      overlay.querySelector('#modal-layout-add').addEventListener('click', () => {
-        const listEl = overlay._modalLayoutList;
-        if (!listEl) return;
-
-        // Remove any existing inline input
-        const existing = listEl.querySelector('.layout-item.is-editing');
-        if (existing) existing.remove();
-
-        const item = document.createElement('div');
-        item.className = 'layout-item is-editing';
-
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'layout-name-input';
-        input.placeholder = 'Layout name';
-
-        const cleanup = () => {
-          item.remove();
-        };
-
-        const confirm = () => {
-          const trimmed = input.value.trim();
-          cleanup();
-          if (!trimmed) return;
-          const layout = createLayoutFromCurrentWindow(trimmed.toLowerCase().replace(/\s+/g, '-'), trimmed);
-          bridge.saveLayout(layout)
-            .then(() => bridge.listLayouts())
-            .then((config) => {
-              layouts = config.layouts ?? [];
-              defaultLayoutId = config.defaultLayoutId ?? '';
-              setWindowLayoutId(layout.id);
-              updateLayoutsIndicator();
-              renderModalLayouts(overlay);
-            })
-            .catch(reportError);
-        };
-
-        input.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter') {
-            confirm();
-          }
-          if (event.key === 'Escape') {
-            cleanup();
-          }
-        });
-
-        input.addEventListener('blur', confirm);
-
-        item.appendChild(input);
-        listEl.insertBefore(item, listEl.firstChild);
-
-        queueMicrotask(() => {
-          input.focus();
-        });
-      });
-
-      document.body.appendChild(overlay);
-
-      // Store references for rendering
-      overlay._modalLayoutList = overlay.querySelector('#modal-layout-list');
-      overlay._modalLayoutEditor = overlay.querySelector('#modal-layout-editor');
-
-      // initial render
-      renderModalLayouts(overlay);
-
-      // Start polling for layout updates
-      layoutModalPollTimer = setInterval(async () => {
-        try {
-          const config = await bridge.listLayouts();
-          const newLayouts = config.layouts ?? [];
-          const newDefaultLayoutId = config.defaultLayoutId ?? '';
-
-          // Check if layouts have changed (compare IDs and names)
-          const layoutsChanged =
-            newLayouts.length !== layouts.length ||
-            newDefaultLayoutId !== defaultLayoutId ||
-            newLayouts.some((newLayout) => {
-              const existing = layouts.find((l) => l.id === newLayout.id);
-              if (!existing) return true;
-              // Check if name or panes have changed
-              return existing.name !== newLayout.name ||
-                     JSON.stringify(existing.panes) !== JSON.stringify(newLayout.panes);
-            }) ||
-            layouts.some((existing) => !newLayouts.find((l) => l.id === existing.id));
-
-          if (layoutsChanged) {
-            layouts = newLayouts;
-            defaultLayoutId = newDefaultLayoutId;
-            updateLayoutsIndicator();
-            renderModalLayouts(overlay);
-          }
-        } catch (err) {
-          // Silently ignore polling errors to avoid disrupting the UI
-          console.error('Layout modal poll error:', err);
-        }
-      }, LAYOUT_MODAL_POLL_INTERVAL);
-    });
-}
-
-function renderModalLayouts(overlay) {
-  const listEl = overlay?._modalLayoutList ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-list');
-  const editorEl = overlay?._modalLayoutEditor ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-editor');
-  if (!listEl || !editorEl) return;
-
-  listEl.replaceChildren();
-  editorEl.replaceChildren();
-
-  // Left column: layout list
-  if (layouts.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'layout-empty';
-    empty.textContent = 'No layouts saved';
-    listEl.appendChild(empty);
-  } else {
-    for (const layout of layouts) {
-      const isActive = layout.id === windowLayoutId;
-      const isDefault = layout.id === defaultLayoutId;
-      const isSelected = layout.id === selectedLayoutId;
-      const item = document.createElement('div');
-      item.className = `layout-item${isActive ? ' is-active' : ''}${isDefault ? ' is-default' : ''}${isSelected ? ' is-selected' : ''}`;
-      item.dataset.layoutId = layout.id;
-
-      let nameEl;
-      if (renamingLayoutId === layout.id) {
-        nameEl = document.createElement('input');
-        nameEl.type = 'text';
-        nameEl.className = 'layout-name layout-name-input';
-        nameEl.value = layout.name || layout.id;
-        nameEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-        });
-        nameEl.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-        });
-        nameEl.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter') {
-            const newName = nameEl.value.trim();
-            renamingLayoutId = null;
-            if (newName) {
-              bridge.renameLayout(layout.id, newName)
-                .then(() => bridge.listLayouts())
-                .then((config) => {
-                  layouts = config.layouts ?? [];
-                  defaultLayoutId = config.defaultLayoutId ?? '';
-                  updateLayoutsIndicator();
-                  renderModalLayouts(overlay);
-                })
-                .catch(reportError);
-            } else {
-              renderModalLayouts(overlay);
-            }
-          }
-          if (event.key === 'Escape') {
-            renamingLayoutId = null;
-            renderModalLayouts(overlay);
-          }
-        });
-        nameEl.addEventListener('blur', () => {
-          const newName = nameEl.value.trim();
-          renamingLayoutId = null;
-          if (newName) {
-            bridge.renameLayout(layout.id, newName)
-              .then(() => bridge.listLayouts())
-              .then((config) => {
-                layouts = config.layouts ?? [];
-                defaultLayoutId = config.defaultLayoutId ?? '';
-                updateLayoutsIndicator();
-                renderModalLayouts(overlay);
-              })
-              .catch(reportError);
-          } else {
-            renderModalLayouts(overlay);
-          }
-        });
-      } else {
-        nameEl = document.createElement('div');
-        nameEl.className = 'layout-name';
-        const nameText = layout.name || layout.id;
-        nameEl.innerHTML = isDefault ? `${icon('star', 14)} ${nameText}` : nameText;
-      }
-
-      const info = document.createElement('div');
-      info.className = 'layout-pane-count';
-      const panesCount = (layout.panes?.length) ?? 0;
-      info.textContent = `${panesCount} pane${panesCount === 1 ? '' : 's'}`;
-
-      const actions = document.createElement('div');
-      actions.className = 'layout-actions';
-
-      // "Open in New Window" button (fallback to switchLayout until Sub-4 is complete)
-      const switchBtn = document.createElement('button');
-      switchBtn.type = 'button';
-      switchBtn.className = 'settings-btn';
-      setIcon(switchBtn, 'external-link', 12);
-      switchBtn.title = 'Open in new window';
-      switchBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        bridge.openLayoutWindow(layout.id).catch(reportError);
-        overlay?.remove();
-      });
-      actions.appendChild(switchBtn);
-
-      // Rename button
-      const renameBtn = document.createElement('button');
-      renameBtn.type = 'button';
-      renameBtn.className = 'settings-btn';
-      setIcon(renameBtn, 'pencil', 12);
-      renameBtn.title = 'Rename layout';
-      renameBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        renamingLayoutId = layout.id;
-        renderModalLayouts(overlay);
-        // Focus the input after re-render
-        queueMicrotask(() => {
-          const input = listEl.querySelector(`.layout-item[data-layout-id="${layout.id}"] .layout-name-input`);
-          if (input) {
-            input.focus();
-            input.select();
-          }
-        });
-      });
-      actions.appendChild(renameBtn);
-
-      // Delete button (not allowed for default)
-      if (layout.id !== 'default' && layout.id !== windowLayoutId) {
-        const deleteBtn = document.createElement('button');
-        deleteBtn.type = 'button';
-        deleteBtn.className = 'settings-btn';
-        setIcon(deleteBtn, 'x', 12);
-        deleteBtn.title = 'Delete layout';
-        deleteBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (selectedLayoutId === layout.id) selectedLayoutId = null;
-          deleteLayoutById(layout.id)
-            .then(() => renderModalLayouts(overlay))
-            .catch(reportError);
-        });
-        actions.appendChild(deleteBtn);
-      }
-
-      // Active layout indicator (small yellow dot, matching dropdown style)
-      const checkmark = document.createElement('span');
-      checkmark.className = 'layout-item-current';
-      if (isActive) checkmark.classList.add('is-active');
-
-      item.append(nameEl, info, actions, checkmark);
-
-      // Click selects layout (without triggering actions)
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.layout-actions')) return;
-        selectedLayoutId = layout.id;
-        renderModalLayouts(overlay);
-      });
-
-      listEl.appendChild(item);
-    }
-  }
-
-  // Right column: editor/info panel
-  const selected = layouts.find((l) => l.id === selectedLayoutId) || null;
-  if (selected) {
-    const info = document.createElement('div');
-    info.className = 'layout-info';
-
-    // Name row: input + confirm + cancel
-    const nameRow = document.createElement('div');
-    nameRow.className = 'layout-name-row';
-
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.className = 'layout-name-input';
-    nameInput.value = selected.name || '';
-    const originalName = selected.name || '';
-
-    const confirmBtn = document.createElement('button');
-    confirmBtn.type = 'button';
-    confirmBtn.className = 'settings-btn layout-name-btn layout-name-btn-confirm';
-    setIcon(confirmBtn, 'check', 14);
-    confirmBtn.title = 'Confirm (Enter)';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'settings-btn layout-name-btn layout-name-btn-cancel';
-    setIcon(cancelBtn, 'x', 14);
-    cancelBtn.title = 'Cancel (Esc)';
-
-    const doSave = () => {
-      const newName = nameInput.value.trim();
-      if (!newName) return;
-      bridge.renameLayout(selected.id, newName)
-        .then(() => bridge.listLayouts())
-        .then((config) => {
-          layouts = config.layouts ?? [];
-          defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
-          updateLayoutsIndicator();
-          renderModalLayouts(overlay);
-        })
-        .catch(reportError);
-    };
-
-    const doCancel = () => {
-      nameInput.value = originalName;
-    };
-
-    confirmBtn.addEventListener('click', doSave);
-    cancelBtn.addEventListener('click', doCancel);
-    nameInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); doSave(); }
-      if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
-    });
-
-    nameRow.appendChild(nameInput);
-    nameRow.appendChild(confirmBtn);
-    nameRow.appendChild(cancelBtn);
-    info.appendChild(nameRow);
-
-    // Set as Default row
-    const actionsRow = document.createElement('div');
-    actionsRow.className = 'layout-info-actions';
-
-    // "Set as Default" button — uses dedicated backend command for proper validation
-    const isDefault = selected.id === defaultLayoutId;
-    const setDefaultBtn = document.createElement('button');
-    setDefaultBtn.type = 'button';
-    setDefaultBtn.className = 'settings-btn layout-info-btn';
-    setDefaultBtn.innerHTML = isDefault ? `${icon('check', 14)} Default` : 'Set as Default';
-    setDefaultBtn.disabled = isDefault;
-    setDefaultBtn.title = isDefault ? 'This is the default layout' : 'Set this layout to restore on startup';
-    setDefaultBtn.addEventListener('click', () => {
-      bridge.setLayoutAsDefault(selected.id)
-        .then((config) => {
-          defaultLayoutId = config.defaultLayoutId ?? selected.id;
-          renderModalLayouts(overlay);
-        })
-        .catch(reportError);
-    });
-    actionsRow.appendChild(setDefaultBtn);
-
-    // Open in New Window button
-    const openInNewWindowBtn = document.createElement('button');
-    openInNewWindowBtn.type = 'button';
-    openInNewWindowBtn.className = 'settings-btn layout-info-btn';
-    openInNewWindowBtn.textContent = 'Open in New Window';
-    openInNewWindowBtn.addEventListener('click', async () => {
-      await bridge.openLayoutInNewWindow(selected.id).catch(reportError);
-      overlay?.remove();
-    });
-    actionsRow.appendChild(openInNewWindowBtn);
-    info.appendChild(actionsRow);
-
-    // Pane count and details
-    const panesCount = selected.panes?.length ?? 0;
-    const paneCountLabel = document.createElement('div');
-    paneCountLabel.className = 'layout-pane-count-label';
-    paneCountLabel.textContent = `Panes (${panesCount})`;
-    info.appendChild(paneCountLabel);
-
-    // Pane details list
-    const panesList = document.createElement('div');
-    panesList.className = 'layout-panes-list';
-    for (const pane of selected.panes ?? []) {
-      const paneItem = document.createElement('div');
-      paneItem.className = 'layout-pane-item';
-
-      const paneTitle = document.createElement('div');
-      paneTitle.className = 'layout-pane-title';
-      paneTitle.textContent = pane.title || 'Untitled';
-      paneItem.appendChild(paneTitle);
-
-      const paneDetails = document.createElement('div');
-      paneDetails.className = 'layout-pane-details';
-
-      const paneCwd = document.createElement('span');
-      paneCwd.className = 'layout-pane-cwd';
-      // Shorten home directory path
-      const shortCwd = pane.cwd?.replace(/^\/home\/[^\/]+/, '~') ?? pane.cwd ?? 'unknown';
-      paneCwd.textContent = shortCwd;
-      paneDetails.appendChild(paneCwd);
-
-      if (pane.shellProfileId) {
-        const profile = shellProfiles.find((p) => p.id === pane.shellProfileId);
-        if (profile) {
-          const paneProfile = document.createElement('span');
-          paneProfile.className = 'layout-pane-profile';
-          paneProfile.textContent = `(${profile.name || profile.id})`;
-          paneDetails.appendChild(paneProfile);
-        }
-      }
-
-      paneItem.appendChild(paneDetails);
-      panesList.appendChild(paneItem);
-    }
-    info.appendChild(panesList);
-
-    editorEl.appendChild(info);
-  } else {
-    const placeholder = document.createElement('div');
-    placeholder.className = 'layouts-editor-placeholder';
-    placeholder.textContent = 'Select a layout or create a new one';
-    editorEl.appendChild(placeholder);
-  }
-}
-
-function cloneProfile(profile) {
-  const clonedProfile = {
-    id: `${profile.id}-copy-${Date.now()}`,
-    name: `${profile.name || profile.id} (副本)`,
-    command: profile.command,
-    args: profile.args ? [...profile.args] : [],
-  };
-
-  bridge.addShellProfile(clonedProfile).then((config) => {
-    const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-    shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-    defaultShellProfileId = config.defaultProfile ?? '';
-
-    // Enter edit mode with the cloned profile (same as New Profile but with content filled in)
-    selectedShellProfileId = clonedProfile.id;
-    editingShellProfile = {
-      id: clonedProfile.id,
-      name: clonedProfile.name,
-      command: clonedProfile.command,
-      args: formatArgs(clonedProfile.args ?? []),
-      isNew: true // Treat as new so user can edit the ID
-    };
-    renderModalShellProfiles();
-  }).catch(reportError);
-}
-
-function reorderProfiles(draggedId, targetId) {
-  const draggedIndex = shellProfiles.findIndex(p => p.id === draggedId);
-  const targetIndex = shellProfiles.findIndex(p => p.id === targetId);
-
-  if (draggedIndex === -1 || targetIndex === -1) return;
-
-  // Remove dragged profile and insert at target position
-  const [draggedProfile] = shellProfiles.splice(draggedIndex, 1);
-  shellProfiles.splice(targetIndex, 0, draggedProfile);
-
-  // Save the new order (add all profiles to persist order)
-  const userProfiles = shellProfiles.filter(p => !detectedShellProfiles.some(dp => dp.id === p.id));
-  const savePromises = userProfiles.map(p => bridge.addShellProfile(p));
-
-  Promise.all(savePromises).then(() => {
-    renderModalShellProfiles();
-  }).catch(reportError);
-}
-
-function createModalShellProfileEditor() {
-  const editor = document.createElement('div');
-  editor.className = 'shell-profile-editor';
-
-  const fields = [
-    { key: 'name', label: 'Name (optional)', placeholder: 'e.g. Zsh' },
-    { key: 'id', label: 'ID', placeholder: 'e.g. zsh' },
-    { key: 'command', label: 'Command', placeholder: '/bin/zsh' },
-    { key: 'args', label: 'Arguments', placeholder: '-il' },
-  ];
-
-  const inputs = {};
-  for (const field of fields) {
-    const label = document.createElement('label');
-    label.textContent = field.label;
-    label.setAttribute('for', `modal-shell-edit-${field.key}`);
-
-    const input = document.createElement('input');
-    input.id = `modal-shell-edit-${field.key}`;
-    input.type = 'text';
-    input.value = editingShellProfile[field.key] ?? '';
-    input.placeholder = field.placeholder;
-    input.dataset.field = field.key;
-    inputs[field.key] = input;
-
-    if (field.key === 'name' && editingShellProfile.isNew) {
-      input.addEventListener('input', () => {
-        const idInput = inputs.id;
-        if (!idInput.value && input.value.trim()) {
-          idInput.value = input.value.trim().toLowerCase().replace(/\s+/g, '-');
-        }
-      });
-    }
-
-    editor.append(label, input);
-  }
-
-  const actions = document.createElement('div');
-  actions.className = 'shell-profile-editor-actions';
-
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'settings-btn shell-profile-editor-btn';
-  cancel.textContent = 'Cancel';
-  cancel.addEventListener('click', () => {
-    editingShellProfile = null;
-    selectedShellProfileId = null;
-    renderModalShellProfiles();
-  });
-
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'settings-btn shell-profile-editor-btn is-primary';
-  save.textContent = 'Save';
-  save.addEventListener('click', () => {
-    const profile = {
-      id: inputs.id.value.trim(),
-      name: inputs.name.value.trim(),
-      command: inputs.command.value.trim(),
-      args: splitArgs(inputs.args.value.trim()),
-    };
-
-    if (!profile.id || !profile.command) {
-      reportError(new Error('ID and Command are required'));
-      return;
-    }
-
-    bridge.addShellProfile(profile).then((config) => {
-      const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-      shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
-      defaultShellProfileId = config.defaultProfile ?? '';
-
-      // Select the newly created/saved profile
-      selectedShellProfileId = profile.id;
-      editingShellProfile = {
-        id: profile.id,
-        name: profile.name,
-        command: profile.command,
-        args: formatArgs(profile.args),
-        isNew: false
-      };
-      renderModalShellProfiles();
-    }).catch(reportError);
-  });
-
-  actions.append(cancel, save);
-  editor.appendChild(actions);
-
-  queueMicrotask(() => {
-    const firstInput = editor.querySelector('input');
-    if (firstInput) {
-      firstInput.focus();
-      firstInput.select();
-    }
-  });
-
-  return editor;
-}
-
-// MRU management is now handled by paneState
-function focusPane(paneId, options = {}) {
-  const { focusTerminal = true } = options;
-  paneState.focusPane(paneId);
-  setMode('terminal');
-  render();
-  paneRenderer?.setAlerted(paneId, false);
-  if (focusTerminal) {
-    paneRenderer?.focusTerminal(paneId);
-  }
-}
-
-function refocusCurrentPaneTerminal() {
-  const paneId = paneState.getFocusedPaneId();
-  if (!paneId) return;
-  setMode('terminal');
-  paneRenderer?.focusTerminal(paneId);
-}
-
-function getLayoutDisplayName(layoutId) {
-  if (!layoutId) return 'Layout';
-  const layout = layouts.find((item) => item.id === layoutId);
-  return layout?.name || (layoutId === 'default' ? 'Default' : layoutId);
-}
-
-function getFocusedPaneAccent() {
-  const pane = paneState.getPanes()[getFocusedIndex()];
-  return pane?.customColor || pane?.accent || '#ffd166';
-}
-
-function showLayoutFocusNotice(layoutId) {
-  const layoutName = getLayoutDisplayName(layoutId);
-  layoutFocusNotice = { layoutId };
-  document.body.style.setProperty('--layout-focus-accent', getFocusedPaneAccent());
-  document.body.dataset.layoutFocusName = layoutName;
-  document.body.classList.remove('is-layout-focus-notice');
-  void document.body.offsetWidth;
-  document.body.classList.add('is-layout-focus-notice');
-  updateStatus();
-
-  window.clearTimeout(layoutFocusNoticeTimer);
-  layoutFocusNoticeTimer = window.setTimeout(() => {
-    layoutFocusNotice = null;
-    delete document.body.dataset.layoutFocusName;
-    document.body.classList.remove('is-layout-focus-notice');
-    updateStatus();
-  }, 1400);
-}
-
-function addPane(shellProfileId = null) {
-  const newPaneId = paneState.addPane(shellProfileId);
-  currentMode = 'terminal';
-  document.body.classList.remove('is-navigation-mode');
-  render(true);
-  return newPaneId;
-}
-
-function closePane(index, options = {}) {
-  const { destroyTerminal = true } = options;
-  const currentPanes = paneState.getPanes();
-
-  if (currentPanes.length === 1) {
-    return;
-  }
-
-  const closingPane = currentPanes[index];
-  if (!closingPane) {
-    return;
-  }
-
-  if (closingPane.id === renamingPaneId) {
-    renamingPaneId = null;
-  }
-
-  if (closingPane.id === dragState?.paneId) {
-    // End the drag operation by clearing the drag state
-    dragState = null;
-    document.body.classList.remove('is-dragging-tabs');
-  }
-
-  if (closingPane.id === pendingTabFocus?.paneId) {
-    // Clear pending tab focus
-    window.clearTimeout(pendingTabFocus.timerId);
-    pendingTabFocus = null;
-  }
-
-  if (destroyTerminal) {
-    paneRenderer?.destroyPane(closingPane.id);
-  }
-
-  const wasFocused = closingPane.id === paneState.getFocusedPaneId();
-  paneState.closePane(index);
-
-  render(true);
-
-  // After closing a pane, if the focused pane was closed, focus the new pane's terminal
-  if (wasFocused) {
-    const newFocusedPaneId = paneState.getFocusedPaneId();
-    if (newFocusedPaneId) {
-      requestAnimationFrame(() => {
-        setMode('terminal');
-        paneRenderer?.focusTerminal(newFocusedPaneId);
-      });
-    }
-  }
-}
-
-function render(refit = false) {
-  tabBar.renderTabs();
-  paneRenderer?.renderPanes(refit);
-  updateStatus();
-  if (layoutRestoreComplete) {
-    scheduleWindowLayoutSave();
-  }
-}
-
-function moveFocus(delta) {
-  const currentPanes = paneState.getPanes();
-  if (currentPanes.length === 0) {
-    return;
-  }
-
-  paneState.moveFocus(delta);
-  render();
-}
-
-function navigateLeft() {
-  const currentPanes = paneState.getPanes();
-  if (currentPanes.length === 0) {
-    return;
-  }
-
-  const focusedIndex = paneState.getFocusedIndex();
-  const nextIndex = focusedIndex - 1;
-
-  if (nextIndex >= 0) {
-    focusPane(currentPanes[nextIndex].id);
-  }
-}
-
-function navigateRight() {
-  const currentPanes = paneState.getPanes();
-  if (currentPanes.length === 0) {
-    return;
-  }
-
-  const focusedIndex = paneState.getFocusedIndex();
-  const nextIndex = focusedIndex + 1;
-
-  if (nextIndex < currentPanes.length) {
-    focusPane(currentPanes[nextIndex].id);
-  }
-}
-
-// Cycle to the previously-visited pane (similar to browser Ctrl+Tab).
-// First press steps from current to MRU[1]; subsequent presses while the
-// modifier is held step further back through the snapshot. Reverse cycles
-// (Shift+Ctrl+`) walk the snapshot the other way. The cycle commits when
-// the modifier is released (see commitPaneCycle).
-function cycleToRecentPane({ reverse = false } = {}) {
-  const currentPanes = paneState.getPanes();
-  if (currentPanes.length < 2) {
-    return;
-  }
-
-  const targetId = paneState.cycleToRecentPane({ reverse });
-  if (!targetId) {
-    return;
-  }
-
-  setMode('terminal');
-  render();
-
-  paneRenderer?.focusTerminal(targetId);
-}
-
-// Promote the cycle's final pane to the front of the MRU stack.
-// Called when the cycling modifier is released.
-function commitPaneCycle() {
-  paneState.commitPaneCycle();
-}
-
-// Cycle focus through panes that have a breathing (activity) alert.
-// Jumps to the first lit pane on first press, then cycles forward.
-// Focusing a pane automatically clears its alert via paneActivityWatcher.
-function cycleToNextLitPane() {
-  const currentPanes = paneState.getPanes();
-  const litIds = currentPanes
-    .map((p) => p.id)
-    .filter((id) => paneRenderer?.getNode(id)?.root.classList.contains('has-pending-activity'));
-  if (litIds.length === 0) {
-    return;
-  }
-  const focusedIndex = litIds.indexOf(paneState.getFocusedPaneId());
-  const nextIndex = focusedIndex >= 0 ? (focusedIndex + 1) % litIds.length : 0;
-  focusPane(litIds[nextIndex]);
-}
-
-function isEditableTarget() {
-  return (
-    document.activeElement?.tagName === 'INPUT' ||
-    document.activeElement?.classList?.contains('xterm-helper-textarea')
-  );
-}
-
-async function getClipboardSnapshot() {
-  try {
-    return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
-  } catch {
-    return { text: '', hasImage: false };
-  }
-}
-
-function showContextMenu(items, x, y, paneId) {
-  // Use the context menus module if available
-  if (contextMenus) {
-    return contextMenus.showContextMenu(items, x, y, paneId);
-  }
-  // Fallback to original implementation
-  hideContextMenu();
-
-  const menu = document.createElement('div');
-  menu.className = 'context-menu';
-  menu.setAttribute('role', 'menu');
-
-  for (const item of items) {
-    if (item.type === 'separator') {
-      const sep = document.createElement('div');
-      sep.className = 'context-menu-separator';
-      menu.appendChild(sep);
-      continue;
-    }
-
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'context-menu-item';
-    row.setAttribute('role', 'menuitem');
-    row.disabled = item.disabled || false;
-
-    const label = document.createElement('span');
-    label.className = 'context-menu-label';
-    label.textContent = item.label;
-    row.appendChild(label);
-
-    if (item.shortcut) {
-      const shortcut = document.createElement('span');
-      shortcut.className = 'context-menu-shortcut';
-      shortcut.textContent = item.shortcut;
-      row.appendChild(shortcut);
-    }
-
-    row.addEventListener('click', (e) => {
-      e.stopPropagation();
-      hideContextMenu();
-      handleMenuAction(item.action, paneId);
-    });
-
-    if (item.children?.length) {
-      row.classList.add('context-menu-parent');
-      const submenu = document.createElement('div');
-      submenu.className = 'context-menu-submenu';
-      submenu.setAttribute('role', 'menu');
-      for (const child of item.children) {
-        const childRow = document.createElement('button');
-        childRow.type = 'button';
-        childRow.className = 'context-menu-item';
-        childRow.setAttribute('role', 'menuitem');
-        childRow.disabled = child.disabled || false;
-
-        const childLabel = document.createElement('span');
-        childLabel.className = 'context-menu-label';
-        childLabel.textContent = child.label;
-        childRow.appendChild(childLabel);
-
-        if (child.isDefault) {
-          const check = document.createElement('span');
-          check.className = 'context-menu-shortcut';
-          check.innerHTML = icon('star', 12);
-          childRow.appendChild(check);
-        }
-
-        childRow.addEventListener('click', (e) => {
-          e.stopPropagation();
-          hideContextMenu();
-          handleMenuAction(child.action, paneId);
-        });
-
-        submenu.appendChild(childRow);
-      }
-      row.appendChild(submenu);
-    }
-
-    menu.appendChild(row);
-  }
-
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-  document.body.appendChild(menu);
-
-  requestAnimationFrame(() => {
-    const rect = menu.getBoundingClientRect();
-    const winW = window.innerWidth;
-    const winH = window.innerHeight;
-
-    if (rect.right > winW) {
-      menu.style.left = `${Math.max(0, x - rect.width)}px`;
-    }
-    if (rect.bottom > winH) {
-      menu.style.top = `${Math.max(0, y - rect.height)}px`;
-    }
-  });
-
-  queueMicrotask(() => {
-    document.addEventListener('pointerdown', dismissContextMenuOnOutside);
-    window.addEventListener('blur', hideContextMenu);
-    registerModal(hideContextMenu);
-  });
-}
-
-function hideContextMenu() {
-  // Use the context menus module if available
-  if (contextMenus) {
-    return contextMenus.hideContextMenu();
-  }
-  // Fallback to original implementation
-  const menu = document.querySelector('.context-menu');
-  if (menu) {
-    menu.remove();
-  }
-  document.removeEventListener('pointerdown', dismissContextMenuOnOutside);
-  window.removeEventListener('blur', hideContextMenu);
-  unregisterModal(hideContextMenu);
-}
-
-function dismissContextMenuOnOutside(event) {
-  if (!event.target.closest('.context-menu')) {
-    hideContextMenu();
-  }
-}
-
-async function showTerminalContextMenu(node, event) {
-  const clipboardSnapshot = await getClipboardSnapshot();
-
-  const shellChildren = shellProfiles.map((p) => ({
-    label: p.name || p.id,
-    action: `terminal-change-shell:${p.id}`,
-    isDefault: p.id === defaultShellProfileId,
-  }));
-
-  const pane = paneState.getPaneById(node.paneId);
-  const breathingOn = pane && pane.breathingMonitor !== false;
-
-  const items = [
-    { label: 'Copy', action: 'terminal-copy', disabled: !paneRenderer?.hasSelection(node.paneId), shortcut: '⇧⌘C' },
-    { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
-    { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
-    { type: 'separator' },
-    { label: 'Change Color...', action: 'terminal-change-color' },
-    {
-      label: 'Background activity alert',
-      action: 'pane-toggle-breathing',
-      shortcut: breathingOn ? icon('check', 12) : '',
-    },
-    { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
-  ];
-
-  if (shellChildren.length > 0) {
-    items.push(
-      { type: 'separator' },
-      { label: 'Change Profile', children: shellChildren },
-    );
-  }
-
-  showContextMenu(items, event.clientX, event.clientY, node.paneId);
-}
-
-async function showTerminalContextMenu(node, event) {
-  // Use the context menus module if available
-  if (contextMenus) {
-    return contextMenus.showTerminalContextMenu(node, event);
-  }
-  // Fallback to original implementation
-  const clipboardSnapshot = await getClipboardSnapshot();
-
-  const shellChildren = shellProfiles.map((p) => ({
-    label: p.name || p.id,
-    action: `terminal-change-shell:${p.id}`,
-    isDefault: p.id === defaultShellProfileId,
-  }));
-
-  const pane = panes[getPaneIndex(node.paneId)];
-  const breathingOn = pane && pane.breathingMonitor !== false;
-
-  const items = [
-    { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
-    { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
-    { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
-    { type: 'separator' },
-    { label: 'Change Color...', action: 'terminal-change-color' },
-    {
-      label: 'Background activity alert',
-      action: 'pane-toggle-breathing',
-      shortcut: breathingOn ? icon('check', 12) : '',
-    },
-    { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
-  ];
-
-  if (shellChildren.length > 0) {
-    items.push(
-      { type: 'separator' },
-      { label: 'Change Profile', children: shellChildren },
-    );
-  }
-
-  showContextMenu(items, event.clientX, event.clientY, node.paneId);
-}
-
-function showTabContextMenu(paneId, event) {
-  // Use the context menus module if available
-  if (contextMenus) {
-    return contextMenus.showTabContextMenu(paneId, event);
-  }
-  // Fallback to original implementation
-  const paneIndex = getPaneIndex(paneId);
-  if (paneIndex === -1) {
-    return;
-  }
-
-  focusPane(paneId, { focusTerminal: false });
-
-  const pane = paneState.getPanes()[paneIndex];
-  const hasCustomColor = pane && pane.customColor !== undefined;
-
-  const items = [
-    { label: 'Change Color...', action: 'tab-change-color' },
-    { type: 'separator' },
-    { label: 'Rename Tab', action: 'tab-rename' },
-    { label: 'Close Tab', action: 'tab-close', disabled: paneState.getPanes().length <= 1 },
-  ];
-  showContextMenu(items, event.clientX, event.clientY, paneId);
-}
-
-function showColorPicker(paneId) {
-  // Use the context menus module if available
-  if (contextMenus) {
-    return contextMenus.showColorPicker(paneId);
-  }
-  // Fallback to original implementation
-  hideContextMenu();
-
-  const paneIndex = paneState.getPaneIndex(paneId);
-  if (paneIndex === -1) return;
-
-  const currentPanes = paneState.getPanes();
-  const pane = currentPanes[paneIndex];
-  const currentColor = pane.customColor || pane.accent;
-  const presetColors = ColorsRegistry.PRESET_PANE_COLORS;
-
-  // Find the index of the currently selected color for initial keyboard focus
-  let focusedIndex = presetColors.indexOf(currentColor);
-  if (focusedIndex === -1) focusedIndex = 0;
-
-  const picker = document.createElement('div');
-  picker.className = 'color-picker-overlay';
-  picker.innerHTML = `
-    <div class="color-picker-dialog">
-      <div class="color-picker-header">
-        <span>Pane Color</span>
-        <button type="button" class="color-picker-close" aria-label="Close">${icon('x', 16)}</button>
-      </div>
-      <div class="color-picker-presets">
-        ${presetColors.map((color, index) => `
-          <button type="button" class="color-preset${color === currentColor ? ' is-selected' : ''}${index === focusedIndex ? ' is-focused' : ''}"
-                  style="--color: ${color}" data-color="${color}" data-index="${index}" tabindex="-1" aria-label="Select ${color}"></button>
-        `).join('')}
-      </div>
-      <div class="color-picker-custom">
-        <label>Custom:</label>
-        <input type="color" class="color-picker-input" value="${currentColor}" />
-      </div>
-      <div class="color-picker-footer">
-        <button type="button" class="color-picker-clear">Clear Color</button>
-      </div>
-    </div>
-  `;
-
-  // Keyboard navigation for preset colors
-  // Grid layout: 8 columns, so up/down moves by 8, left/right moves by 1
-  const GRID_COLUMNS = 8;
-
-  const handleKeydown = (e) => {
-    const presetButtons = picker.querySelectorAll('.color-preset');
-    const totalColors = presetColors.length;
-
-    switch (e.key) {
-      case 'ArrowLeft':
-        e.preventDefault();
-        presetButtons[focusedIndex].classList.remove('is-focused');
-        // Move left one column, wrap to previous row if needed
-        focusedIndex = (focusedIndex - 1 + totalColors) % totalColors;
-        presetButtons[focusedIndex].classList.add('is-focused');
-        break;
-
-      case 'ArrowRight':
-        e.preventDefault();
-        presetButtons[focusedIndex].classList.remove('is-focused');
-        // Move right one column, wrap to next row if needed
-        focusedIndex = (focusedIndex + 1) % totalColors;
-        presetButtons[focusedIndex].classList.add('is-focused');
-        break;
-
-      case 'ArrowUp':
-        e.preventDefault();
-        presetButtons[focusedIndex].classList.remove('is-focused');
-        // Move up one row (8 columns)
-        focusedIndex = (focusedIndex - GRID_COLUMNS + totalColors) % totalColors;
-        presetButtons[focusedIndex].classList.add('is-focused');
-        break;
-
-      case 'ArrowDown':
-        e.preventDefault();
-        presetButtons[focusedIndex].classList.remove('is-focused');
-        // Move down one row (8 columns)
-        focusedIndex = (focusedIndex + GRID_COLUMNS) % totalColors;
-        presetButtons[focusedIndex].classList.add('is-focused');
-        break;
-
-      case 'Enter':
-      case ' ':
-        e.preventDefault();
-        // Select the focused color
-        const selectedColor = presetButtons[focusedIndex].dataset.color;
-        setPaneColor(paneId, selectedColor);
-        picker.removeEventListener('keydown', handleKeydown);
-        picker.remove();
-        // Return focus to the pane
-        focusPane(paneId);
-        break;
-
-      case 'Escape':
-        e.preventDefault();
-        picker.removeEventListener('keydown', handleKeydown);
-        picker.remove();
-        // Return focus to the pane
-        focusPane(paneId);
-        break;
-    }
-  };
-
-  picker.addEventListener('click', (e) => {
-    if (e.target === picker) {
-      picker.removeEventListener('keydown', handleKeydown);
-      picker.remove();
-      unregisterModal(closeColorPicker);
-    }
-  });
-
-picker.querySelector('.color-picker-close').addEventListener('click', () => {
-    picker.removeEventListener('keydown', handleKeydown);
-    closeColorPicker();
-  });
-
-  picker.querySelectorAll('.color-preset').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const color = btn.dataset.color;
-      setPaneColor(paneId, color);
-      picker.removeEventListener('keydown', handleKeydown);
-      closeColorPicker();
-      // Return focus to the pane
-      focusPane(paneId);
-    });
-
-    // Update focused index on mouse hover for consistency
-    btn.addEventListener('mouseenter', () => {
-      const presetButtons = picker.querySelectorAll('.color-preset');
-      presetButtons[focusedIndex].classList.remove('is-focused');
-      focusedIndex = parseInt(btn.dataset.index, 10);
-      btn.classList.add('is-focused');
-    });
-  });
-
-  const colorInput = picker.querySelector('.color-picker-input');
-  colorInput.addEventListener('input', () => {
-    setPaneColor(paneId, colorInput.value);
-  });
-
-  // When custom color input is focused, remove keyboard focus from presets
-  colorInput.addEventListener('focus', () => {
-    const presetButtons = picker.querySelectorAll('.color-preset');
-    presetButtons[focusedIndex].classList.remove('is-focused');
-  });
-
-  picker.querySelector('.color-picker-clear').addEventListener('click', () => {
-    clearPaneColor(paneId);
-    picker.removeEventListener('keydown', handleKeydown);
-    closeColorPicker();
-  });
-
-  document.body.appendChild(picker);
-
-  // Attach keyboard listener to the picker for capturing arrow keys
-  picker.addEventListener('keydown', handleKeydown);
-
-  // Focus the picker overlay to enable keyboard capture
-  picker.setAttribute('tabindex', '-1');
-  picker.focus();
-
-  function closeColorPicker() {
-    picker.remove();
-    unregisterModal(closeColorPicker);
-  }
-
-  registerModal(closeColorPicker);
-}
-
-function setPaneColor(paneId, color) {
-  // Use the context menus module if available
-  if (contextMenus) {
-    return contextMenus.setPaneColor(paneId, color);
-  }
-  // Use paneState from phase1-refactor
-  paneState.setPaneColor(paneId, color);
-  scheduleWindowLayoutSave();
-  render();
-}
-
-function clearPaneColor(paneId) {
-  // Use the context menus module if available
-  if (contextMenus) {
-    return contextMenus.clearPaneColor(paneId);
-  }
-  // Use paneState from phase1-refactor
-  paneState.clearPaneColor(paneId);
-  scheduleWindowLayoutSave();
-  render();
-}
-
-function togglePaneBreathingMonitor(paneId) {
-  const next = paneState.togglePaneBreathingMonitor(paneId);
-  paneActivityWatcher.setPaneEnabled(paneId, next);
-  scheduleWindowLayoutSave();
-}
-
-// VIB-16: open the command palette over the current panes. Build a
-// feature-agnostic item list and let the palette module do the rest.
-function openTabSwitcher() {
-  hideContextMenu();
-  if (renamingPaneId !== null) {
-    tabBar.cancelRenamePane();
-  }
-  if (!settingsPanelEl.classList.contains('is-hidden')) {
-    closeSettingsPanel();
-  }
-
-  const items = paneState.getPanes().map((pane) => ({
-    id: pane.id,
-    label: getPaneLabel(pane) || pane.id,
-    accent: pane.customColor || pane.accent,
-  }));
-
-  openCommandPalette(items, focusPane, {
-    placeholder: 'Switch tab by title…',
-    emptyText: 'No matching tabs',
-  });
-}
-
-function openCommandList() {
-  hideContextMenu();
-  if (renamingPaneId !== null) {
-    tabBar.cancelRenamePane();
-  }
-  if (!settingsPanelEl.classList.contains('is-hidden')) {
-    closeSettingsPanel();
-  }
-
-  const items = [
-    { id: 'new-pane-with-profile', label: 'New Panel with Profile' },
-    { id: 'change-profile',  label: 'Change profile' },
-    { id: 'change-color',    label: 'Change color' },
-    { id: 'rename-pane',     label: 'Rename pane' },
-    { id: 'profile-settings',  label: 'Profile settings' },
-    { id: 'shortcuts-settings', label: 'Shortcuts settings' },
-    { id: 'layout-default',  label: 'Layout: Open Default' },
-    ...layouts
-      .filter((l) => l.id !== 'default')
-      .map((l) => ({ id: `layout-open:${l.id}`, label: `Layout: Open ${l.name}` })),
-    { id: 'layout-manage',   label: 'Layout: Manage Layouts' },
-  ];
-
-  openCommandPalette(items, (commandId) => {
-    if (commandId === 'new-pane-with-profile') {
-      openNewPaneProfilePicker();
-    } else if (commandId === 'change-profile') {
-      openProfileSwitcher();
-    } else if (commandId === 'change-color') {
-      showColorPicker(paneState.getFocusedPaneId());
-    } else if (commandId === 'rename-pane') {
-      const index = getPaneIndex(paneState.getFocusedPaneId());
-      if (index !== -1) tabBar.beginRenamePane(index);
-    } else if (commandId === 'profile-settings') {
-      openShellProfilesModal();
-    } else if (commandId === 'shortcuts-settings') {
-      closeKeyboardShortcutsModal();
-      registerModal(closeKeyboardShortcutsModal);
-      ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
-    } else if (commandId === 'layout-default') {
-      bridge.openLayoutWindow('default').catch(reportError);
-    } else if (commandId.startsWith('layout-open:')) {
-      const layoutId = commandId.slice('layout-open:'.length);
-      bridge.openLayoutWindow(layoutId).catch(reportError);
-    } else if (commandId === 'layout-manage') {
-      openLayoutsModal();
-    }
-  }, {
-    placeholder: 'Type a command…',
-    emptyText: 'No matching commands',
-  });
-}
-
-function openProfileSwitcher() {
-  if (shellProfiles.length === 0) {
-    loadShellProfiles();
-    return;
-  }
-
-  const items = shellProfiles.map((p) => ({
-    id: p.id,
-    label: p.name || p.id,
-  }));
-
-  openCommandPalette(items, (profileId) => {
-    paneRenderer?.changePaneShell(paneState.getFocusedPaneId(), profileId);
-    focusPane(paneState.getFocusedPaneId());
-  }, {
-    placeholder: 'Select a profile…',
-    emptyText: 'No matching profiles',
-  });
-}
-
-function openNewPaneProfilePicker() {
-  hideContextMenu();
-  if (renamingPaneId !== null) {
-    tabBar.cancelRenamePane();
-  }
-  if (!settingsPanelEl.classList.contains('is-hidden')) {
-    closeSettingsPanel();
-  }
-
-  const doOpen = (profiles) => {
-    if (profiles.length === 0) {
-      statusLabelEl.textContent = 'No profiles available';
-      statusHintEl.textContent = '';
-      return;
-    }
-
-    const items = profiles.map((p) => ({
-      id: p.id,
-      label: p.name || p.id,
-    }));
-
-    openCommandPalette(items, (profileId) => {
-      addPane(profileId);
-      focusPane(paneState.getFocusedPaneId());
-    }, {
-      placeholder: 'Select a profile for new pane…',
-      emptyText: 'No matching profiles',
-    });
-  };
-
-  if (shellProfiles.length === 0) {
-    loadShellProfiles().then(() => doOpen(shellProfiles));
-  } else {
-    doOpen(shellProfiles);
-  }
-}
-
-async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
-  // Use the context menus module if available
-  if (contextMenus) {
-    return contextMenus.pasteImageIntoTerminal(paneId, options);
-  }
-  // Fallback to original implementation
-  const node = getPaneNode(paneId);
-  if (!node?.sessionReady) {
-    return false;
-  }
-
-  const clipboardSnapshot = options.clipboardSnapshot ?? (await getClipboardSnapshot());
-  if (!clipboardSnapshot.hasImage) {
-    return false;
-  }
-
-  bridge.writeTerminal({ paneId: node.paneId, data: '\u0016' });
-  return true;
-}
-
-function handleMenuAction(action, paneId) {
-  // Use the context menus module if available for shell-related actions
-  if (contextMenus && action.startsWith('terminal-change-shell:')) {
-    const profileId = action.slice('terminal-change-shell:'.length);
-    if (shellProfileManager) {
-      return shellProfileManager.changePaneShell(paneId, profileId);
-    }
-  }
-
-  if (action === 'terminal-copy') {
-    paneRenderer?.copySelection(paneId);
-    return;
-  }
-
-  if (action === 'terminal-paste') {
-    void paneRenderer?.pasteInto(paneId);
-    return;
-  }
-
-  if (action === 'terminal-paste-image') {
-    pasteImageIntoTerminal(paneId);
-    return;
-  }
-
-  if (action === 'terminal-select-all') {
-    paneRenderer?.selectAll(paneId);
-    return;
-  }
-
-  if (action === 'terminal-change-color') {
-    showColorPicker(paneId);
-    return;
-  }
-
-  if (action === 'tab-rename') {
-    const paneIndex = getPaneIndex(paneId);
-    if (paneIndex !== -1) {
-      tabBar.beginRenamePane(paneIndex);
-    }
-    return;
-  }
-
-  if (action === 'tab-close') {
-    const paneIndex = getPaneIndex(paneId);
-    if (paneIndex !== -1) {
-      closePane(paneIndex);
-    }
-    return;
-  }
-
-  if (action === 'tab-change-color') {
-    showColorPicker(paneId);
-    return;
-  }
-
-  if (action.startsWith('tab-set-color:')) {
-    const color = action.slice('tab-set-color:'.length);
-    setPaneColor(paneId, color);
-    return;
-  }
-
-  if (action === 'tab-clear-color') {
-    clearPaneColor(paneId);
-    return;
-  }
-
-  if (action === 'pane-toggle-breathing') {
-    togglePaneBreathingMonitor(paneId);
-    return;
-  }
-
-  if (action.startsWith('terminal-change-shell:')) {
-    const profileId = action.slice('terminal-change-shell:'.length);
-    paneRenderer?.changePaneShell(paneId, profileId);
-  }
-}
-
-function blurFocusedTerminal() {
-  const paneId = paneState.getFocusedPaneId();
-  if (paneId) {
-    paneRenderer?.blurTerminal(paneId);
-  }
-}
-
-function enterNavigationMode() {
-  const currentPanes = paneState.getPanes();
-  if (currentPanes.length === 0) {
-    return;
-  }
-
-  // Save the source pane ID so we can return to it on cancel
-  enterNavSourcePaneId = paneState.getFocusedPaneId();
-  setMode('nav');
-  blurFocusedTerminal();
-  render();
-}
-
-function cancelNavigationMode() {
-  // Return focus to the pane that was focused when entering nav mode
-  if (enterNavSourcePaneId) {
-    focusPane(enterNavSourcePaneId, { focusTerminal: true });
-    enterNavSourcePaneId = null;
-  } else {
-    setMode('terminal');
-    render();
-  }
-}
-
-function updateStatus() {
-  if (layoutFocusNotice) {
-    statusLabelEl.textContent = 'Layout focused';
-    statusLabelEl.classList.remove('is-navigation-mode');
-    statusHintEl.textContent = getLayoutDisplayName(layoutFocusNotice.layoutId);
-    return;
-  }
-
-  const currentPanes = paneState.getPanes();
-  const focusedPane = currentPanes[paneState.getFocusedIndex()];
-  const focusedPaneLabel = getPaneLabel(focusedPane) || focusedPane.id;
-
-  // Use the hint bar system
-  const keymap = ShortcutsRegistry.getActiveKeymap();
-  const { modeLabel, hintsHtml } = renderHintBar(
-    keymap,
-    currentMode,
-    focusedPaneLabel,
-    bridge.platform
-  );
-
-  statusLabelEl.textContent = modeLabel;
-  statusLabelEl.classList.toggle('is-navigation-mode', currentMode === 'nav');
-  statusHintEl.innerHTML = hintsHtml;
-}
-
-// ---------------------------------------------------------------------------
-// VIB-33: Navigation mode enhancement functions
-// ---------------------------------------------------------------------------
-
-function focusPaneAt(index) {
-  const currentPanes = paneState.getPanes();
-  if (currentPanes.length === 0 || index < 0 || index >= currentPanes.length) return;
-  paneState.focusPane(currentPanes[index].id);
-  // Stay in nav mode, just update which pane is focused
-  render();
-}
-
-function getPaneCount() {
-  return paneState.getPanes().length;
-}
-
-function getPaneIdAt(index) {
-  const currentPanes = paneState.getPanes();
-  if (currentPanes.length === 0 || index < 0 || index >= currentPanes.length) return null;
-  return currentPanes[index].id;
-}
-
-// Two-step close confirmation state
-let pendingClosePaneId = null;
-
-// Tab bar module - handles tab rendering, drag-and-drop, and renaming
-const tabBarState = {
-  get renamingPaneId() { return renamingPaneId; },
-  set renamingPaneId(value) { renamingPaneId = value; },
-  get dragState() { return dragState; },
-  set dragState(value) { dragState = value; },
-  get pendingTabFocus() { return pendingTabFocus; },
-  set pendingTabFocus(value) { pendingTabFocus = value; },
-  get currentMode() { return currentMode; },
-  get pendingClosePaneId() { return pendingClosePaneId; },
-};
+// paneOps is created after tabBar and paneRenderer, but closures capture the binding.
+let paneOps = null;
 
 const tabBar = createTabBar({
   paneState,
   state: tabBarState,
-  getPaneLabel,
+  getPaneLabel: (...args) => paneOps?.getPaneLabel(...args),
   getTextColorForBackground,
-  onTabClick: focusPane,
-  onTabContext: (paneId, event) => {
-    showTabContextMenu(paneId, event);
-  },
+  onTabClick: (...args) => paneOps?.focusPane(...args),
+  onTabContext: (paneId, event) => contextMenus?.showTabContextMenu(paneId, event),
   onTabDrag: (fromIndex, toIndex) => {
-    // Use paneState.reorderPane to reorder the panes
     const panes = paneState.getPanes();
     const pane = panes[fromIndex];
     paneState.reorderPane(pane.id, toIndex);
     render();
   },
   onRename: (paneId, title) => {
-    // Use paneState.setPaneTitle to set the title
     paneState.setPaneTitle(paneId, title);
-    focusPane(paneId, { focusTerminal: true });
+    paneOps?.focusPane(paneId, { focusTerminal: true });
   },
-  onCloseTab: (index) => {
-    closePane(index);
-  },
+  onCloseTab: (...args) => paneOps?.closePane(...args),
   reportError,
   tabsListEl,
   setIcon,
@@ -2578,97 +149,281 @@ paneRenderer = createPaneRenderer({
   reportError,
   stageEl,
   getMode: () => currentMode,
-  onPaneClick: (paneId, options) => focusPane(paneId, options),
-  onTerminalTitleChange: (paneId, title) => {
-    paneState.setPaneTerminalTitle(paneId, title);
-  },
+  onPaneClick: (...args) => paneOps?.focusPane(...args),
+  onTerminalTitleChange: (paneId, title) => paneState.setPaneTerminalTitle(paneId, title),
   onTerminalContextMenu: (node, event) => {
-    void showTerminalContextMenu(node, event);
+    void contextMenus?.showTerminalContextMenu(node, event);
   },
-  scheduleWindowLayoutSave,
+  scheduleWindowLayoutSave: () => layoutManager.scheduleWindowLayoutSave(),
   tabBar,
-  getPaneLabel,
-  onPaneCwdChanged,
+  getPaneLabel: (...args) => paneOps?.getPaneLabel(...args),
+  onPaneCwdChanged: (paneId, newCwd) => {
+    const pane = paneState.getPaneById(paneId);
+    if (!pane || pane.cwd === newCwd) return;
+    paneState.setPaneCwd(paneId, newCwd);
+    layoutManager.scheduleWindowLayoutSave(5000);
+  },
 });
 
-function requestClosePane(paneId) {
-  if (pendingClosePaneId === paneId) {
-    // Second press - confirmed
-    const index = paneState.getPaneIndex(paneId);
-    if (index !== -1) {
-      pendingClosePaneId = null;
-      closePane(index);
+// Modules that need paneRenderer / tabBar (closures capture the variable binding)
+let shellProfileManager = null;
+let contextMenus = null;
 
-      // Exit nav mode and return focus to the now-focused pane after close
-      const currentPanes = paneState.getPanes();
-      if (currentMode === 'nav' && currentPanes.length > 0) {
-        focusPane(paneState.getFocusedPaneId(), { focusTerminal: true });
-      }
-    }
-  } else {
-    // First press - show pending state
-    pendingClosePaneId = paneId;
-    render();
+shellProfileManager = createShellProfileManager({
+  bridge,
+  state: {
+    getPanels: () => paneState.getPanes(),
+    setPanels: (newPanes) => {
+      newPanes.forEach((p) => {
+        const existing = paneState.getPaneById(p.id);
+        if (existing && p.shellProfileId !== existing.shellProfileId) {
+          paneState.setPaneShellProfile(p.id, p.shellProfileId);
+        }
+      });
+    },
+    getFocusedPaneId: () => paneState.getFocusedPaneId(),
+    getPaneNode: (paneId) => paneRenderer?.getNode(paneId) ?? null,
+    getShellProfiles: () => shellProfiles,
+    setShellProfiles: (profiles) => { shellProfiles = profiles; },
+    getDefaultShellProfileId: () => defaultShellProfileId,
+    setDefaultShellProfileId: (id) => { defaultShellProfileId = id; },
+    getDetectedShellProfiles: () => [],
+    setDetectedShellProfiles: () => {},
+    getEditingShellProfile: () => editingShellProfile,
+    setEditingShellProfile: (profile) => { editingShellProfile = profile; },
+    getSelectedShellProfileId: () => selectedShellProfileId,
+    setSelectedShellProfileId: (id) => { selectedShellProfileId = id; },
+  },
+  reportError,
+  scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
+  initializePaneTerminal: (node) => paneRenderer?.initializePaneTerminal(node),
+  registerModal: (closeFn) => modalStack.register(closeFn),
+  unregisterModal: (closeFn) => modalStack.unregister(closeFn),
+});
+
+contextMenus = createContextMenus({
+  state: {
+    getPanels: () => paneState.getPanes(),
+    setPanels: (newPanes) => {
+      newPanes.forEach((p) => {
+        const existing = paneState.getPaneById(p.id);
+        if (existing && p.customColor !== existing.customColor) {
+          if (p.customColor === undefined) {
+            paneState.clearPaneColor(p.id);
+          } else {
+            paneState.setPaneColor(p.id, p.customColor);
+          }
+        }
+      });
+    },
+    getPaneIndex: (paneId) => paneState.getPaneIndex(paneId),
+    getFocusedPaneId: () => paneState.getFocusedPaneId(),
+    setFocusedPaneId: (id) => paneState.setFocusedPaneId(id),
+    getPaneNode: (paneId) => paneRenderer?.getNode(paneId) ?? null,
+    clearPaneCycleState: () => {},
+    recordPaneVisit: (paneId) => paneState.recordPaneVisit(paneId),
+    render: () => render(),
+    scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
+    registerModal: (closeFn) => modalStack.register(closeFn),
+    unregisterModal: (closeFn) => modalStack.unregister(closeFn),
+  },
+  bridge,
+  shellProfileManager,
+  reportError,
+  focusPane: (...args) => paneOps?.focusPane(...args),
+  beginRenamePane: (index) => tabBar.beginRenamePane(index),
+  closePane: (...args) => paneOps?.closePane(...args),
+  togglePaneBreathingMonitor: (paneId) => {
+    const next = paneOps?.togglePaneBreathingMonitor(paneId);
+    paneActivityWatcher.setPaneEnabled(paneId, next);
+  },
+});
+
+paneOps = createPaneOperations({
+  paneState,
+  paneRenderer,
+  tabBar,
+  layoutManager,
+  render,
+  setMode,
+  getCurrentMode: () => currentMode,
+  state: tabBarState,
+});
+
+const commandPaletteEntries = createCommandPaletteEntries({
+  paneState,
+  paneRenderer,
+  tabBar,
+  layoutManager,
+  layoutModal,
+  shellProfileManager,
+  contextMenus,
+  bridge,
+  settingsManager,
+  modalStack,
+  focusPane: (...args) => paneOps?.focusPane(...args),
+  addPane: (...args) => paneOps?.addPane(...args),
+  closeSettingsPanel,
+  closeKeyboardShortcutsModal,
+  openKeymapHelpModal,
+  settingsPanelEl,
+  statusLabelEl,
+  statusHintEl,
+  getCurrentMode: () => currentMode,
+  setMode,
+});
+
+const fullscreenManager = createFullscreenManager({
+  bridge,
+  fullscreenButtonEl,
+  reportError,
+});
+
+// ---------------------------------------------------------------------------
+const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
+  paneRenderer?.write(paneId, data);
+});
+
+bridge.onLayoutFocusNotice?.(() => {
+  if (!layoutManager.getWindowLayoutId()) return;
+  paneOps?.refocusCurrentPaneTerminal();
+  showLayoutFocusNotice(layoutManager.getWindowLayoutId());
+});
+
+const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
+  const handled = paneOps?.handleTerminalExit({ paneId, exitCode, reason });
+  if (handled === false) {
+    void bridge.closeWindow().catch(reportError);
+  }
+});
+
+const removeMenuActionListener = bridge.onMenuAction(({ action, paneId }) => {
+  try {
+    contextMenus?.handleMenuAction(action, paneId);
+  } catch (error) {
+    reportError(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+function reportError(error) {
+  statusLabelEl.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+  statusHintEl.textContent = '';
+  console.error(error);
+}
+
+// ---------------------------------------------------------------------------
+function setMode(next) {
+  if (currentMode === next) return;
+  currentMode = next;
+  document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
+  render();
+}
+
+function enterNavigationMode() {
+  if (paneState.getPanes().length === 0) return;
+  enterNavSourcePaneId = paneState.getFocusedPaneId();
+  setMode('nav'); paneOps?.blurFocusedTerminal(); render();
+}
+
+function cancelNavigationMode() {
+  if (enterNavSourcePaneId) { paneOps?.focusPane(enterNavSourcePaneId, { focusTerminal: true }); enterNavSourcePaneId = null; }
+  else { setMode('terminal'); render(); }
+}
+
+// ---------------------------------------------------------------------------
+function render(refit = false) {
+  tabBar.renderTabs();
+  paneRenderer?.renderPanes(refit);
+  updateStatus();
+  if (layoutRestoreComplete) {
+    layoutManager.scheduleWindowLayoutSave();
   }
 }
 
-function startInlineRename(paneId) {
-  const index = paneState.getPaneIndex(paneId);
-  if (index !== -1) {
-    // Exit nav mode before starting rename
-    if (currentMode === 'nav') {
-      setMode('terminal');
-    }
-    tabBar.beginRenamePane(index);
+function updateStatus() {
+  if (layoutFocusNotice) {
+    statusLabelEl.textContent = 'Layout focused';
+    statusLabelEl.classList.remove('is-navigation-mode');
+    statusHintEl.textContent = layoutManager.getLayoutDisplayName(layoutFocusNotice.layoutId);
+    return;
   }
+
+  const currentPanes = paneState.getPanes();
+  const focusedPane = currentPanes[paneState.getFocusedIndex()];
+  const focusedPaneLabel = paneOps?.getPaneLabel(focusedPane) || focusedPane.id;
+
+  const keymap = ShortcutsRegistry.getActiveKeymap();
+  const { modeLabel, hintsHtml } = renderHintBar(
+    keymap,
+    currentMode,
+    focusedPaneLabel,
+    bridge.platform
+  );
+
+  statusLabelEl.textContent = modeLabel;
+  statusLabelEl.classList.toggle('is-navigation-mode', currentMode === 'nav');
+  statusHintEl.innerHTML = hintsHtml;
 }
 
+function showLayoutFocusNotice(layoutId) {
+  layoutFocusNotice = { layoutId };
+  document.body.style.setProperty('--layout-focus-accent', paneOps?.getFocusedPaneAccent());
+  document.body.dataset.layoutFocusName = layoutManager.getLayoutDisplayName(layoutId);
+  document.body.classList.remove('is-layout-focus-notice');
+  void document.body.offsetWidth;
+  document.body.classList.add('is-layout-focus-notice');
+  updateStatus();
+  window.clearTimeout(layoutFocusNoticeTimer);
+  layoutFocusNoticeTimer = window.setTimeout(() => {
+    layoutFocusNotice = null;
+    delete document.body.dataset.layoutFocusName;
+    document.body.classList.remove('is-layout-focus-notice');
+    updateStatus();
+  }, 1400);
+}
+
+// ---------------------------------------------------------------------------
+function closeSettingsPanel() {
+  settingsPanelEl.classList.add('is-hidden');
+  modalStack.unregister(closeSettingsPanel);
+}
 function closeKeyboardShortcutsModal() {
-  const overlay = document.querySelector('.settings-modal-overlay');
-  if (overlay) overlay.remove();
-  unregisterModal(closeKeyboardShortcutsModal);
+  document.querySelector('.settings-modal-overlay')?.remove();
+  modalStack.unregister(closeKeyboardShortcutsModal);
 }
-
 function openKeymapHelpModal() {
   closeKeyboardShortcutsModal();
-  registerModal(closeKeyboardShortcutsModal);
+  modalStack.register(closeKeyboardShortcutsModal);
   ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
 }
 
 // ---------------------------------------------------------------------------
-// Wire renderer-level callbacks into pure action handlers
-// ---------------------------------------------------------------------------
-
-// Wire renderer-level callbacks into pure action handlers, then route every
-// global keydown through the declarative keymap dispatcher. The keydown switch
-// that used to live here is now `KEYMAP` in `input/keymap.js` plus a few flag
-// columns (`mode`, `skipInInput`, `stopPropagation`) interpreted by the
-// dispatcher.
 const keyboardActions = createActions({
-  addPane,
+  addPane: (...args) => paneOps?.addPane(...args),
   enterNavigationMode,
-  cycleToRecentPane,
-  cycleToNextLitPane,
-  navigateLeft,
-  navigateRight,
+  cycleToRecentPane: (...args) => paneOps?.cycleToRecentPane(...args),
+  cycleToNextLitPane: (...args) => paneOps?.cycleToNextLitPane(...args),
+  navigateLeft: (...args) => paneOps?.navigateLeft(...args),
+  navigateRight: (...args) => paneOps?.navigateRight(...args),
   copyTerminalSelection: () => paneRenderer?.copySelection(paneState.getFocusedPaneId()),
   pasteIntoTerminal: () => paneRenderer?.pasteInto(paneState.getFocusedPaneId()),
-  moveFocus,
-  focusPane,
+  moveFocus: (...args) => paneOps?.moveFocus(...args),
+  focusPane: (...args) => paneOps?.focusPane(...args),
   cancelNavigationMode,
   getFocusedPaneId: () => paneState.getFocusedPaneId(),
   isCommandPaletteOpen,
   closeCommandPalette,
-  openTabSwitcher,
-  openCommandList,
-  openNewPaneProfilePicker,
-  focusPaneAt,
-  getPaneCount,
-  getPaneIdAt,
-  requestClosePane,
-  startInlineRename,
+  openTabSwitcher: () => commandPaletteEntries.openTabSwitcher(),
+  openCommandList: () => commandPaletteEntries.openCommandList(),
+  openNewPaneProfilePicker: () => commandPaletteEntries.openNewPaneProfilePicker(),
+  focusPaneAt: (...args) => paneOps?.focusPaneAt(...args),
+  getPaneCount: () => paneOps?.getPaneCount(),
+  getPaneIdAt: (...args) => paneOps?.getPaneIdAt(...args),
+  requestClosePane: (...args) => paneOps?.requestClosePane(...args),
+  startInlineRename: (...args) => paneOps?.startInlineRename(...args),
   openKeymapHelpModal,
-  openLayoutsModal,
+  openLayoutsModal: () => layoutModal.openLayoutsModal(),
 });
 
 const dispatchKeydown = createDispatcher({
@@ -2681,345 +436,69 @@ const dispatchKeydown = createDispatcher({
 
 window.addEventListener('keydown', dispatchKeydown, true);
 
-// Commit the pane cycle when the cycling modifier is released. Without this,
-// a user who presses Ctrl+` and then switches to a different pane via mouse
-// would not see their MRU updated to reflect the new active pane.
 window.addEventListener('keyup', (event) => {
-  if (paneCycleState && (event.key === 'Control' || event.key === 'Meta')) {
-    commitPaneCycle();
+  if (paneState.hasActivePaneCycle() && (event.key === 'Control' || event.key === 'Meta')) {
+    paneState.commitPaneCycle();
   }
 });
 
-// If the window loses focus mid-cycle (alt-tab away), the keyup event for
-// the cycling modifier may never fire. Commit the cycle defensively so the
-// MRU stays consistent with what the user sees.
 window.addEventListener('blur', () => {
-  if (paneCycleState) {
-    commitPaneCycle();
-  }
+  if (paneState.hasActivePaneCycle()) paneState.commitPaneCycle();
 });
 
 // ---------------------------------------------------------------------------
-// Modal stack — ESC closes the topmost modal/panel
-// ---------------------------------------------------------------------------
-const modalStack = [];
-
-function registerModal(closeFn) {
-  modalStack.push(closeFn);
-}
-
-function unregisterModal(closeFn) {
-  const idx = modalStack.indexOf(closeFn);
-  if (idx !== -1) modalStack.splice(idx, 1);
-}
-
-function closeTopModal() {
-  const closeFn = modalStack[modalStack.length - 1];
-  if (closeFn) closeFn();
-  const focusedPaneId = paneState.getFocusedPaneId();
-  if (focusedPaneId && modalStack.length === 0) {
-    focusPane(focusedPaneId, { focusTerminal: true });
-  }
-}
-
-function closeSettingsPanel() {
-  settingsPanelEl.classList.add('is-hidden');
-  editingShellProfile = null;
-  unregisterModal(closeSettingsPanel);
-}
-
 addPaneButtonEl.addEventListener('click', () => {
-  try {
-    addPane();
-  } catch (error) {
-    reportError(error);
-  }
+  try { paneOps?.addPane(); } catch (error) { reportError(error); }
 });
-
-function showAddPaneProfilePopup() {
-  // Ensure profiles are loaded
-  if (shellProfiles.length === 0) {
-    loadShellProfiles().then(() => {
-      renderAddPaneProfilePopup(shellProfiles);
-    });
-    return;
-  }
-  renderAddPaneProfilePopup(shellProfiles);
-}
-
-function closeAddPaneProfilePopup() {
-  const popup = document.querySelector('.add-pane-profile-popup');
-  if (popup) {
-    popup.remove();
-  }
-  document.removeEventListener('click', dismissAddPaneProfilePopup);
-  unregisterModal(closeAddPaneProfilePopup);
-}
-
-function renderAddPaneProfilePopup(profiles) {
-  // Remove any existing popup
-  const existing = document.querySelector('.add-pane-profile-popup');
-  if (existing) {
-    closeAddPaneProfilePopup();
-    return;
-  }
-
-  // Close other menus
-  closeSettingsPanel();
-  closeLayoutsDropdown();
-
-  const popup = document.createElement('div');
-  popup.className = 'add-pane-profile-popup';
-
-  if (profiles.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'add-pane-profile-empty';
-    empty.textContent = 'No profiles available';
-    popup.appendChild(empty);
-  } else {
-    for (const profile of profiles) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'add-pane-profile-item';
-
-      const name = document.createElement('span');
-      name.className = 'profile-name';
-      name.textContent = profile.name || profile.id;
-      item.appendChild(name);
-
-      if (profile.id === defaultShellProfileId) {
-        const mark = document.createElement('span');
-        mark.className = 'profile-default-mark';
-        mark.textContent = 'default';
-        item.appendChild(mark);
-      }
-
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeAddPaneProfilePopup();
-        try {
-          addPane(profile.id);
-        } catch (error) {
-          reportError(error);
-        }
-      });
-
-      popup.appendChild(item);
-    }
-  }
-
-  // Position popup aligned with the tabs panel bottom (same as Settings)
-  const rect = addProfileButtonEl.getBoundingClientRect();
-  const tabsPanelRect = document.querySelector('.tabs-panel').getBoundingClientRect();
-  popup.style.left = `${rect.left}px`;
-  popup.style.top = `${tabsPanelRect.bottom + 1}px`;
-  document.body.appendChild(popup);
-
-  // Adjust if popup overflows the right edge of the viewport
-  requestAnimationFrame(() => {
-    const popupRect = popup.getBoundingClientRect();
-    if (popupRect.right > window.innerWidth - 8) {
-      const overflow = popupRect.right - (window.innerWidth - 8);
-      popup.style.left = `${Math.max(8, parseFloat(popup.style.left) - overflow)}px`;
-    }
-    document.addEventListener('click', dismissAddPaneProfilePopup);
-    registerModal(closeAddPaneProfilePopup);
-  });
-}
-
-function dismissAddPaneProfilePopup(event) {
-  const popup = document.querySelector('.add-pane-profile-popup');
-  if (popup && !popup.contains(event.target) && event.target !== addProfileButtonEl) {
-    closeAddPaneProfilePopup();
-  }
-}
 
 addProfileButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
-  try {
-    openNewPaneProfilePicker();
-  } catch (error) {
-    reportError(error);
-  }
+  try { commandPaletteEntries.openNewPaneProfilePicker(); } catch (error) { reportError(error); }
 });
 
 layoutsButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
-  toggleLayoutsDropdown();
+  layoutManager.toggleLayoutsDropdown();
 });
 
 settingsButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
-
-  // Close other menus
   const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
-  if (existingProfilePopup) {
-    closeAddPaneProfilePopup();
-  }
-  closeLayoutsDropdown();
+  if (existingProfilePopup) existingProfilePopup.remove();
+  layoutManager.closeLayoutsDropdown();
 
   const wasHidden = settingsPanelEl.classList.toggle('is-hidden');
   if (wasHidden) {
     closeSettingsPanel();
   } else {
     settingsManager.applySettings();
-    registerModal(closeSettingsPanel);
+    modalStack.register(closeSettingsPanel);
   }
 });
 
-// Shell profiles modal button (clickable row)
-// Layouts modal button (clickable row)
-if (layoutsSettingsBtn) {
-  layoutsSettingsBtn.addEventListener('click', () => {
-    openLayoutsModal();
-  });
-
-  layoutsSettingsBtn.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      openLayoutsModal();
-    }
-  });
-}
-
-shellProfilesSettingsBtn.addEventListener('click', () => {
-  openShellProfilesModal();
+layoutsSettingsBtn?.addEventListener('click', () => layoutModal.openLayoutsModal());
+layoutsSettingsBtn?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); layoutModal.openLayoutsModal(); }
 });
 
-shellProfilesSettingsBtn.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    openShellProfilesModal();
-  }
+shellProfilesSettingsBtn.addEventListener('click', () => shellProfileManager?.openShellProfilesModal());
+shellProfilesSettingsBtn.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); shellProfileManager?.openShellProfilesModal(); }
 });
 
-// ----------------------------------------------------------------
-// Keyboard shortcuts modal
-// ----------------------------------------------------------------
-
-// Keyboard shortcuts modal button (clickable row)
-keyboardShortcutsSettingsBtn.addEventListener('click', () => {
+function openShortcutsModal() {
   closeKeyboardShortcutsModal();
-  registerModal(closeKeyboardShortcutsModal);
+  modalStack.register(closeKeyboardShortcutsModal);
   ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
-});
-
+}
+keyboardShortcutsSettingsBtn.addEventListener('click', openShortcutsModal);
 keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    closeKeyboardShortcutsModal();
-    registerModal(closeKeyboardShortcutsModal);
-    ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
-  }
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openShortcutsModal(); }
 });
 
-// Fullscreen toggle
-function isNativeFullscreenSupported() {
-  return (
-    typeof bridge.isWindowFullscreen === 'function' &&
-    typeof bridge.setWindowFullscreen === 'function'
-  );
-}
+settingsPanelEl.addEventListener('click', (event) => event.stopPropagation());
 
-function isDomFullscreenSupported() {
-  return (
-    document.documentElement.requestFullscreen ||
-    document.documentElement.webkitRequestFullscreen ||
-    false
-  );
-}
-
-function isFullscreenSupported() {
-  return isNativeFullscreenSupported() || isDomFullscreenSupported();
-}
-
-function getDomFullscreenElement() {
-  return (
-    document.fullscreenElement ||
-    document.webkitFullscreenElement ||
-    null
-  );
-}
-
-async function getIsFullscreen() {
-  if (isNativeFullscreenSupported()) {
-    return bridge.isWindowFullscreen();
-  }
-  return Boolean(getDomFullscreenElement());
-}
-
-async function updateFullscreenButton() {
-  const isFs = await getIsFullscreen().catch(() => false);
-  fullscreenButtonEl.classList.toggle('is-fullscreen', Boolean(isFs));
-  fullscreenButtonEl.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Enter fullscreen');
-  setIcon(fullscreenButtonEl, isFs ? 'minimize' : 'maximize', 18);
-}
-
-async function toggleFullscreen() {
-  if (!isFullscreenSupported()) {
-    return;
-  }
-
-  if (isNativeFullscreenSupported()) {
-    const isFs = await bridge.isWindowFullscreen();
-    await bridge.setWindowFullscreen(!isFs);
-    await updateFullscreenButton();
-    return;
-  }
-
-  if (getDomFullscreenElement()) {
-    if (document.exitFullscreen) {
-      await document.exitFullscreen();
-    } else if (document.webkitExitFullscreen) {
-      document.webkitExitFullscreen();
-    }
-  } else {
-    const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-      await elem.requestFullscreen();
-    } else if (elem.webkitRequestFullscreen) {
-      elem.webkitRequestFullscreen();
-    }
-  }
-}
-
-function hideFullscreenButtonIfUnsupported() {
-  if (!isFullscreenSupported()) {
-    fullscreenButtonEl.classList.add('is-hidden');
-  }
-}
-
-function handleFullscreenShortcut(event) {
-  if (event.key !== 'F11' || !isFullscreenSupported()) {
-    return;
-  }
-
-  event.preventDefault();
-  event.stopPropagation();
-  event.stopImmediatePropagation();
-  toggleFullscreen().catch(reportError);
-}
-
-document.addEventListener('fullscreenchange', () => {
-  updateFullscreenButton().catch(reportError);
-});
-document.addEventListener('webkitfullscreenchange', () => {
-  updateFullscreenButton().catch(reportError);
-});
-window.addEventListener('keydown', handleFullscreenShortcut, true);
-
-fullscreenButtonEl.addEventListener('click', () => {
-  toggleFullscreen().catch(reportError);
-});
-
-hideFullscreenButtonIfUnsupported();
-updateFullscreenButton().catch(reportError);
-
-settingsPanelEl.addEventListener('click', (event) => {
-  event.stopPropagation();
-});
-
-// Close settings panel via click-outside, keeping modal stack in sync
+// ---------------------------------------------------------------------------
 window.addEventListener('pointerdown', (event) => {
   if (
     !settingsPanelEl.classList.contains('is-hidden') &&
@@ -3030,67 +509,65 @@ window.addEventListener('pointerdown', (event) => {
   }
 });
 
-// Global ESC: close the topmost modal/panel registered in the stack
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     event.preventDefault();
-    closeTopModal();
+    modalStack.closeTop();
+    const focusedPaneId = paneState.getFocusedPaneId();
+    if (focusedPaneId && modalStack.isEmpty()) {
+      paneOps?.focusPane(focusedPaneId, { focusTerminal: true });
+    }
   }
-});
+}, true);
 
 window.addEventListener('resize', () => {
-  try {
-    render(true);
-  } catch (error) {
-    reportError(error);
-  }
+  try { render(true); } catch (error) { reportError(error); }
 });
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
-    // Initialize the modules after all dependencies are ready
-    initializeModules();
-
     await bridge.cwdReady;
 
     const savedSettings = await bridge.loadSettings();
     settingsManager.applyPersistedSettings(savedSettings);
     settingsManager.applySettings();
-    loadShellProfiles();
+    shellProfileManager?.loadShellProfiles();
 
-    await refreshLayouts();
+    await layoutManager.refreshLayouts();
+    let layouts = layoutManager.getLayouts();
+    let defaultLayoutId = layoutManager.getDefaultLayoutId();
 
     let defaultLayout = layouts.find((l) => l.id === defaultLayoutId)
       || layouts.find((l) => l.id === 'default');
 
     if (!defaultLayout) {
-      defaultLayout = createDefaultLayout();
+      defaultLayout = layoutManager.createDefaultLayout();
       const saved = await bridge.saveLayout(defaultLayout);
-      layouts = saved.layouts ?? [defaultLayout];
-      defaultLayoutId = saved.defaultLayoutId ?? defaultLayoutId;
+      layoutManager._setLayouts(saved.layouts ?? [defaultLayout]);
+      layoutManager._setDefaultLayoutId(saved.defaultLayoutId ?? defaultLayoutId);
     }
 
     if (defaultLayoutId !== defaultLayout.id) {
       const config = await bridge.setLayoutAsDefault(defaultLayout.id);
-      layouts = config.layouts ?? layouts;
-      defaultLayoutId = config.defaultLayoutId ?? defaultLayout.id;
+      layoutManager._setLayouts(config.layouts ?? layouts);
+      layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? defaultLayout.id);
     }
 
     const targetLayoutId = windowContext.kind === 'layout'
       ? windowContext.layoutId
-      : defaultLayoutId;
-    const targetLayout = layouts.find((l) => l.id === targetLayoutId);
+      : layoutManager.getDefaultLayoutId();
+    const targetLayout = layoutManager.getLayouts().find((l) => l.id === targetLayoutId);
     if (!targetLayout) {
       throw new Error(`Layout not found: ${targetLayoutId}`);
     }
 
-    setWindowLayoutId(targetLayout.id);
-    restoreSession({ panes: targetLayout.panes, focusedPaneIndex: targetLayout.focusedPaneIndex });
+    layoutManager.setWindowLayoutId(targetLayout.id);
+    paneState.restoreSession({ panes: targetLayout.panes, focusedPaneIndex: targetLayout.focusedPaneIndex });
     paneRenderer?.ensurePaneNodes();
 
-    updateLayoutsIndicator();
+    layoutManager.updateLayoutsIndicator();
     render(true);
-    layoutRestoreComplete = true;
+    layoutManager.setLayoutRestoreComplete(true);
   } catch (error) {
     reportError(error);
     const msg = error instanceof Error ? error.message : String(error);
@@ -3099,9 +576,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 window.addEventListener('beforeunload', () => {
-  flushWindowLayoutSave();
+  layoutManager.flushWindowLayoutSave();
   settingsManager.flushSettingsSave();
-  clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
+  clearLayoutWindowBinding(layoutManager.getWindowLayoutId(), bridge.currentWindowLabel);
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();

@@ -6,22 +6,17 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { getDefaultFontFamily } from './settings.js';
 
-// OSC 7 format: \x1b]7;file://hostname/path\x07
-// Extracts the path from the OSC 7 sequence and URL-decodes it.
 function extractPathFromOsc7(data) {
   const prefix = 'file://';
   if (!data.startsWith(prefix)) {
     return null;
   }
   const afterPrefix = data.slice(prefix.length);
-  // Skip hostname part until the next slash
   const slashIndex = afterPrefix.indexOf('/');
   if (slashIndex === -1) {
     return null;
   }
   let encodedPath = afterPrefix.slice(slashIndex);
-  // Windows OSC 7 paths look like /C:/Users/... — strip the leading slash
-  // so the result is a valid Windows path (C:/Users/...).
   if (/^\/[A-Za-z]:\//.test(encodedPath)) {
     encodedPath = encodedPath.slice(1);
   }
@@ -184,18 +179,12 @@ export function createPaneRenderer({
     const webLinksAddon = new WebLinksAddon(handleTerminalLinkActivation);
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(webLinksAddon);
-    // Unicode 11 width tables align xterm.js's wcwidth with what modern CLI
-    // apps (Node.js / Ink-based UIs like Claude Code) assume, so CJK
-    // characters reliably consume two cells instead of drifting between one
-    // and two when an app redraws after IME input.
     terminal.loadAddon(new Unicode11Addon());
     terminal.unicode.activeVersion = '11';
     terminal.open(terminalHost);
     terminalHost._xterm = terminal;
     try { terminal.loadAddon(new WebglAddon()); } catch {}
     terminal.attachCustomKeyEventHandler((event) => {
-      // Ctrl+Tab is reserved for pane MRU cycling — never let xterm forward
-      // the literal Tab keystroke to the PTY.
       if (
         event.type === 'keydown' &&
         event.ctrlKey &&
@@ -205,10 +194,6 @@ export function createPaneRenderer({
       ) {
         return false;
       }
-      // Ctrl+Shift+C/V are reserved for copy/paste — handled by the
-      // window-level shortcut handler. Returning false here prevents xterm
-      // from consuming the event so it can bubble up and preventDefault()
-      // runs before the WebView intercepts it for DevTools/Carets.
       if (
         event.type === 'keydown' &&
         event.ctrlKey &&
@@ -219,10 +204,6 @@ export function createPaneRenderer({
       ) {
         return false;
       }
-      // Ctrl+ArrowLeft/Right are reserved for spatial pane navigation (VIB-71).
-      // In WSL+zsh these send CSI sequences that xterm would forward to the PTY
-      // as literal characters (e.g. 5D). Returning false stops xterm from
-      // consuming the event so it reaches the window-level dispatcher.
       if (
         event.type === 'keydown' &&
         event.ctrlKey &&
@@ -300,9 +281,6 @@ export function createPaneRenderer({
       return true;
     });
 
-    // OSC 7 handler for cwd tracking. Shells that support OSC 7 emit the
-    // current working directory in the format \x1b]7;file://hostname/path\x07.
-    // This allows us to track directory changes and persist them for session restore.
     terminal.parser.registerOscHandler(7, (data) => {
       const newCwd = extractPathFromOsc7(data);
       if (newCwd) {
@@ -334,8 +312,6 @@ export function createPaneRenderer({
         cols,
         rows,
       });
-      // SIGWINCH on the PTY usually triggers a screen redraw — those bytes
-      // would otherwise look like background activity and trip the alert.
       paneActivityWatcher.noteResize(node.paneId);
     }
 
@@ -504,15 +480,12 @@ export function createPaneRenderer({
     paneState.setPaneShellProfile(paneId, profileId);
     scheduleWindowLayoutSave();
 
-    // Suppress the exit handler — the old PTY is about to be replaced.
-    // spawn() on the backend already destroys any previous session.
     node._shellChanging = true;
     node._shellChangeTime = Date.now();
     node.sessionReady = false;
     node.terminal.clear();
     initializePaneTerminal(node).finally(() => {
       node._shellChanging = false;
-      // Revert profile on failure so the session doesn't persist a broken profile.
       if (!node.sessionReady) {
         paneState.setPaneShellProfile(paneId, prevProfileId);
         scheduleWindowLayoutSave();
@@ -607,6 +580,7 @@ export function createPaneRenderer({
       if (!node) return false;
       return node._shellChanging;
     },
+    initializePaneTerminal: (node) => initializePaneTerminal(node),
     destroyPane,
   };
 }
