@@ -1,0 +1,1 @@
+Extracted settings management from `renderer.js` into a new `src/settings.js` module. `createSettingsManager` factory handles settings object, DOM application, persistence, debounced save, and all input event listeners. Reduces `renderer.js` complexity and centralizes settings logic.
