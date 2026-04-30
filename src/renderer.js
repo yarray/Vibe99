@@ -34,6 +34,7 @@ import { createDispatcher } from './input/dispatcher.js';
 import { formatChord } from './input/keymap.js';
 import { renderHintBar } from './hint-bar.js';
 import { createSettingsManager, getDefaultFontFamily } from './settings.js';
+import { createTabBar } from './tab-bar.js';
 
 
 // OSC 7 format: \x1b]7;file://hostname/path\x07
@@ -92,7 +93,6 @@ const getPaneById = (paneId) => paneState.getPaneById(paneId);
 // For state writes, we'll use the paneState methods directly
 
 let renamingPaneId = null;
-let isRenderingTabs = false; // Guard against re-entrant renderTabs calls
 let dragState = null;
 let currentMode = 'terminal'; // 'terminal' | 'nav'
 let enterNavSourcePaneId = null; // Track which pane was focused when entering nav mode
@@ -1596,106 +1596,6 @@ function getTextColorForBackground(hexColor) {
   return luminance > 0.5 ? '#000' : '#fff';
 }
 
-function createTab(pane, index, focusedIndex, dragMeta) {
-  const tab = document.createElement('div');
-  tab.className = `tab${index === focusedIndex ? ' is-focused' : ''}`;
-  if (dragMeta?.isDragging) {
-    tab.classList.add('is-dragging');
-    tab.style.transform = `translateX(${dragMeta.offsetX}px)`;
-  }
-  if (dragMeta?.insertBefore) {
-    tab.classList.add('insert-before');
-  }
-  const accentColor = pane.customColor || pane.accent;
-  tab.style.setProperty('--pane-accent', accentColor);
-  tab.style.setProperty('--tab-text-color', getTextColorForBackground(accentColor));
-  tab.dataset.paneId = pane.id;
-  tab.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
-    void showTabContextMenu(pane.id, event);
-  });
-
-  const tabMain = document.createElement('button');
-  tabMain.type = 'button';
-  tabMain.className = 'tab-main';
-  tabMain.setAttribute('aria-pressed', String(index === focusedIndex));
-  tabMain.addEventListener('pointerdown', (event) => {
-    beginTabDrag(index, event);
-  });
-  tabMain.addEventListener('dblclick', (event) => {
-    event.preventDefault();
-    beginRenamePane(index);
-  });
-
-  const swatch = document.createElement('span');
-  swatch.className = 'tab-swatch';
-
-  // Show number badge in navigation mode
-  if (currentMode === 'nav') {
-    swatch.textContent = String(index + 1);
-    // Apply text color based on accent color brightness
-    swatch.style.setProperty('--swatch-text-color', 'var(--tab-text-color)');
-  }
-
-  let label;
-  if (renamingPaneId === pane.id) {
-    label = document.createElement('input');
-    label.className = 'tab-input';
-    label.type = 'text';
-    label.value = getPaneLabel(pane);
-    label.setAttribute('aria-label', `Rename tab ${pane.id}`);
-    label.addEventListener('click', (event) => {
-      event.stopPropagation();
-    });
-    label.addEventListener('mousedown', (event) => {
-      event.stopPropagation();
-    });
-    label.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        commitRenamePane(pane.id, label.value);
-      }
-
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        cancelRenamePane();
-      }
-    });
-    label.addEventListener('blur', () => {
-      commitRenamePane(pane.id, label.value);
-    });
-    queueMicrotask(() => {
-      label.focus();
-      label.select();
-    });
-  } else {
-    label = document.createElement('span');
-    label.className = 'tab-label';
-    label.textContent = getPaneLabel(pane);
-  }
-
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'tab-close';
-  setIcon(close, 'x', 14);
-  close.setAttribute('aria-label', `Close tab ${pane.id}`);
-  close.disabled = paneState.getPanes().length === 1;
-
-  // Show pending close state
-  if (pendingClosePaneId === pane.id) {
-    close.classList.add('pending-close');
-    close.textContent = '?';
-  }
-
-  close.addEventListener('click', (event) => {
-    event.stopPropagation();
-    closePane(index);
-  });
-
-  tabMain.append(swatch, label);
-  tab.append(tabMain, close);
-  return tab;
-}
-
 function createPane(pane) {
   const paneEl = document.createElement('article');
   paneEl.className = 'pane';
@@ -1826,7 +1726,7 @@ function createPane(pane) {
     }
     paneState.setPaneTerminalTitle(pane.id, trimmedTitle);
     if (entryNeedsTabRefresh(pane.id)) {
-      renderTabs();
+      tabBar.renderTabs();
     }
   });
 
@@ -2029,11 +1929,15 @@ function closePane(index, options = {}) {
   }
 
   if (closingPane.id === dragState?.paneId) {
-    endTabDrag();
+    // End the drag operation by clearing the drag state
+    dragState = null;
+    document.body.classList.remove('is-dragging-tabs');
   }
 
   if (closingPane.id === pendingTabFocus?.paneId) {
-    clearPendingTabFocus();
+    // Clear pending tab focus
+    window.clearTimeout(pendingTabFocus.timerId);
+    pendingTabFocus = null;
   }
 
   if (destroyTerminal) {
@@ -2058,190 +1962,6 @@ function closePane(index, options = {}) {
       });
     }
   }
-}
-
-function beginRenamePane(index) {
-  const currentPanes = paneState.getPanes();
-  const pane = currentPanes[index];
-  if (!pane) {
-    return;
-  }
-
-  clearPendingTabFocus();
-  renamingPaneId = pane.id;
-  try {
-    render();
-  } catch (error) {
-    renamingPaneId = null;
-    reportError(error);
-  }
-}
-
-function cancelRenamePane() {
-  renamingPaneId = null;
-  try {
-    render();
-  } catch (error) {
-    reportError(error);
-  }
-}
-
-function commitRenamePane(paneId, nextTitle) {
-  const trimmedTitle = nextTitle.trim();
-  renamingPaneId = null;
-
-  paneState.setPaneTitle(paneId, trimmedTitle);
-
-  // Return focus to the renamed pane's terminal
-  focusPane(paneId, { focusTerminal: true });
-}
-
-function clearPendingTabFocus() {
-  if (!pendingTabFocus) {
-    return;
-  }
-
-  window.clearTimeout(pendingTabFocus.timerId);
-  pendingTabFocus = null;
-}
-
-function scheduleTabFocus(paneId) {
-  clearPendingTabFocus();
-  pendingTabFocus = {
-    paneId,
-    timerId: window.setTimeout(() => {
-      pendingTabFocus = null;
-      focusPane(paneId);
-    }, 180),
-  };
-}
-
-function activateTabPointerUp(paneId) {
-  if (pendingTabFocus?.paneId === paneId) {
-    clearPendingTabFocus();
-    const paneIndex = paneState.getPaneIndex(paneId);
-    if (paneIndex !== -1) {
-      beginRenamePane(paneIndex);
-    }
-    return;
-  }
-
-  scheduleTabFocus(paneId);
-}
-
-function beginTabDrag(index, event) {
-  if (event.button !== 0 || renamingPaneId !== null) {
-    return;
-  }
-
-  const currentPanes = paneState.getPanes();
-  const pane = currentPanes[index];
-  if (!pane) {
-    return;
-  }
-
-  event.preventDefault();
-  dragState = {
-    paneId: pane.id,
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    currentX: event.clientX,
-    dropIndex: index,
-    hasMoved: false,
-  };
-
-  document.body.classList.add('is-dragging-tabs');
-  window.addEventListener('pointermove', handleTabPointerMove);
-  window.addEventListener('pointerup', handleTabPointerUp);
-  window.addEventListener('pointercancel', handleTabPointerUp);
-}
-
-function handleTabPointerMove(event) {
-  if (!dragState || event.pointerId !== dragState.pointerId) {
-    return;
-  }
-
-  dragState.currentX = event.clientX;
-  const offsetX = dragState.currentX - dragState.startX;
-  const hasMoved = Math.abs(offsetX) > 4;
-
-  if (!hasMoved && !dragState.hasMoved) {
-    return;
-  }
-
-  dragState.hasMoved = true;
-  dragState.dropIndex = getTabDropIndex(event.clientX);
-  renderTabs();
-}
-
-function handleTabPointerUp(event) {
-  if (!dragState || event.pointerId !== dragState.pointerId) {
-    return;
-  }
-
-  const { paneId, dropIndex, hasMoved } = dragState;
-  endTabDrag();
-
-  if (!hasMoved) {
-    activateTabPointerUp(paneId);
-    return;
-  }
-
-  paneState.reorderPane(paneId, dropIndex);
-  render();
-}
-
-function endTabDrag() {
-  dragState = null;
-  document.body.classList.remove('is-dragging-tabs');
-  window.removeEventListener('pointermove', handleTabPointerMove);
-  window.removeEventListener('pointerup', handleTabPointerUp);
-  window.removeEventListener('pointercancel', handleTabPointerUp);
-}
-
-function getTabDropIndex(clientX) {
-  const tabElements = [...tabsListEl.querySelectorAll('.tab')].filter(
-    (tab) => tab.dataset.paneId !== dragState?.paneId
-  );
-
-  let slot = 0;
-  for (const tab of tabElements) {
-    const rect = tab.getBoundingClientRect();
-    if (clientX < rect.left + rect.width / 2) {
-      return slot;
-    }
-    slot += 1;
-  }
-
-  return slot;
-}
-
-function renderTabs() {
-  if (isRenderingTabs) {
-    return;
-  }
-  isRenderingTabs = true;
-  const currentPanes = paneState.getPanes();
-  const focusedIndex = getFocusedIndex();
-  const draggedPaneId = dragState?.paneId ?? null;
-  let slot = 0;
-
-  tabsListEl.replaceChildren(
-    ...currentPanes.map((pane, index) => {
-      const isDragging = pane.id === draggedPaneId && dragState?.hasMoved;
-      const insertBefore = !isDragging && dragState?.hasMoved && dragState.dropIndex === slot;
-      const dragMeta = {
-        isDragging,
-        insertBefore,
-        offsetX: isDragging ? dragState.currentX - dragState.startX : 0,
-      };
-      if (!isDragging) {
-        slot += 1;
-      }
-      return createTab(pane, index, focusedIndex, dragMeta);
-    })
-  );
-  isRenderingTabs = false;
 }
 
 function renderPanes(refit = false) {
@@ -2279,7 +1999,7 @@ function renderPanes(refit = false) {
 }
 
 function render(refit = false) {
-  renderTabs();
+  tabBar.renderTabs();
   renderPanes(refit);
   updateStatus();
   if (layoutRestoreComplete) {
@@ -2815,7 +2535,7 @@ function togglePaneBreathingMonitor(paneId) {
 function openTabSwitcher() {
   hideContextMenu();
   if (renamingPaneId !== null) {
-    cancelRenamePane();
+    tabBar.cancelRenamePane();
   }
   if (!settingsPanelEl.classList.contains('is-hidden')) {
     closeSettingsPanel();
@@ -2836,7 +2556,7 @@ function openTabSwitcher() {
 function openCommandList() {
   hideContextMenu();
   if (renamingPaneId !== null) {
-    cancelRenamePane();
+    tabBar.cancelRenamePane();
   }
   if (!settingsPanelEl.classList.contains('is-hidden')) {
     closeSettingsPanel();
@@ -2865,7 +2585,7 @@ function openCommandList() {
       showColorPicker(focusedPaneId);
     } else if (commandId === 'rename-pane') {
       const index = getPaneIndex(focusedPaneId);
-      if (index !== -1) beginRenamePane(index);
+      if (index !== -1) tabBar.beginRenamePane(index);
     } else if (commandId === 'profile-settings') {
       openShellProfilesModal();
     } else if (commandId === 'shortcuts-settings') {
@@ -2909,7 +2629,7 @@ function openProfileSwitcher() {
 function openNewPaneProfilePicker() {
   hideContextMenu();
   if (renamingPaneId !== null) {
-    cancelRenamePane();
+    tabBar.cancelRenamePane();
   }
   if (!settingsPanelEl.classList.contains('is-hidden')) {
     closeSettingsPanel();
@@ -2987,7 +2707,7 @@ function handleMenuAction(action, paneId) {
   if (action === 'tab-rename') {
     const paneIndex = getPaneIndex(paneId);
     if (paneIndex !== -1) {
-      beginRenamePane(paneIndex);
+      tabBar.beginRenamePane(paneIndex);
     }
     return;
   }
@@ -3109,6 +2829,47 @@ function getPaneIdAt(index) {
 // Two-step close confirmation state
 let pendingClosePaneId = null;
 
+// Tab bar module - handles tab rendering, drag-and-drop, and renaming
+const tabBarState = {
+  get renamingPaneId() { return renamingPaneId; },
+  set renamingPaneId(value) { renamingPaneId = value; },
+  get dragState() { return dragState; },
+  set dragState(value) { dragState = value; },
+  get pendingTabFocus() { return pendingTabFocus; },
+  set pendingTabFocus(value) { pendingTabFocus = value; },
+  get currentMode() { return currentMode; },
+  get pendingClosePaneId() { return pendingClosePaneId; },
+};
+
+const tabBar = createTabBar({
+  paneState,
+  state: tabBarState,
+  getPaneLabel,
+  getTextForBg,
+  onTabClick: focusPane,
+  onTabContext: (paneId, event) => {
+    showTabContextMenu(paneId, event);
+  },
+  onTabDrag: (fromIndex, toIndex) => {
+    // Use paneState.reorderPane to reorder the panes
+    const panes = paneState.getPanes();
+    const pane = panes[fromIndex];
+    paneState.reorderPane(pane.id, toIndex);
+    render();
+  },
+  onRename: (paneId, title) => {
+    // Use paneState.setPaneTitle to set the title
+    paneState.setPaneTitle(paneId, title);
+    focusPane(paneId, { focusTerminal: true });
+  },
+  onCloseTab: (index) => {
+    closePane(index);
+  },
+  reportError,
+  tabsListEl,
+  setIcon,
+});
+
 function requestClosePane(paneId) {
   if (pendingClosePaneId === paneId) {
     // Second press - confirmed
@@ -3137,7 +2898,7 @@ function startInlineRename(paneId) {
     if (currentMode === 'nav') {
       setMode('terminal');
     }
-    beginRenamePane(index);
+    tabBar.beginRenamePane(index);
   }
 }
 
