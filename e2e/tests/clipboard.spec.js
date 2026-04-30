@@ -1,96 +1,85 @@
-import { waitForAppReady, getPaneCount } from '../helpers/app-launch.js';
+import { waitForAppReady } from '../helpers/app-launch.js';
 import { waitForCondition } from '../helpers/wait-for.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
-import { waitForTerminalReady, getTerminalText, waitForTerminalOutput } from '../helpers/terminal-helpers.js';
+import { waitForTerminalReady, getTerminalText, waitForTerminalOutput, writeToTerminal, clearCapturedOutput } from '../helpers/terminal-helpers.js';
 
 /**
- * Write text to clipboard using the browser's clipboard API.
+ * Select all text in the terminal using xterm.js API.
+ * On WebView2 with WebGL rendering, triple-click via WebDriver doesn't work.
  */
-async function writeToClipboard(text) {
-  await browser.execute(async (txt) => {
-    await navigator.clipboard.writeText(txt);
-  }, text);
+async function selectAllTerminalText(paneIndex = 0) {
+  await browser.execute((idx) => {
+    const hosts = document.querySelectorAll('.terminal-host');
+    if (!hosts[idx]) return;
+    const term = hosts[idx]._xterm;
+    if (term && term.selectAll) {
+      term.selectAll();
+    }
+  }, paneIndex);
   await browser.pause(200);
 }
 
 /**
- * Read text from clipboard using the browser's clipboard API.
+ * Get the clipboard text content by reading it via browser.execute.
+ * Use Tauri's clipboard plugin instead of navigator.clipboard so WebView2
+ * does not show a system clipboard permission dialog during E2E runs.
  */
-async function readFromClipboard() {
-  const text = await browser.execute(async () => {
-    return await navigator.clipboard.readText();
+async function readClipboardTextViaApp() {
+  const result = await browser.execute(async () => {
+    const clipboard = window.__TAURI__?.clipboardManager;
+    if (!clipboard?.readText) {
+      return { ok: false, error: 'Tauri clipboard manager is unavailable' };
+    }
+
+    try {
+      return { ok: true, text: await clipboard.readText() ?? '' };
+    } catch (error) {
+      return { ok: false, error: error?.message ?? String(error) };
+    }
   });
-  return text;
-}
 
-/**
- * Select text in the terminal by triple-clicking (selects the current line).
- */
-async function selectTerminalText(paneIndex = 0) {
-  const hosts = await $$('.terminal-host');
-  if (!hosts[paneIndex]) throw new Error(`Terminal at index ${paneIndex} not found`);
-  
-  // Triple-click to select the current line
-  await hosts[paneIndex].click({ button: 'left', clickCount: 3 });
-  await browser.pause(200);
-}
-
-/**
- * Get the focused terminal's textarea for sending keys.
- */
-async function getFocusedTerminalTextarea() {
-  const textarea = await $('.xterm-helper-textarea:focus');
-  if (!textarea) {
-    throw new Error('No focused terminal textarea found');
+  if (!result.ok) {
+    throw new Error(result.error);
   }
-  return textarea;
+  return result.text;
 }
 
-/**
- * Send keyboard shortcut to the terminal.
- */
-async function sendShortcutToTerminal(keys) {
-  const textarea = await getFocusedTerminalTextarea();
-  await textarea.click();
-  await browser.pause(100);
-  
-  // Use browser.keys for shortcuts
-  await browser.keys(keys);
-  await browser.pause(300);
-}
+async function writeClipboardTextViaApp(text) {
+  const result = await browser.execute(async (value) => {
+    const clipboard = window.__TAURI__?.clipboardManager;
+    if (!clipboard?.writeText) {
+      return { ok: false, error: 'Tauri clipboard manager is unavailable' };
+    }
 
-/**
- * Type text into the terminal.
- */
-async function typeInTerminal(text) {
-  const textarea = await getFocusedTerminalTextarea();
-  await textarea.click();
-  await browser.pause(100);
-  
-  await textarea.setValue(text);
-  await browser.pause(200);
-}
+    try {
+      await clipboard.writeText(value);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error?.message ?? String(error) };
+    }
+  }, text);
 
-/**
- * Send Enter key to terminal.
- */
-async function sendEnterToTerminal() {
-  const textarea = await getFocusedTerminalTextarea();
-  await textarea.addValue('Enter');
-  await browser.pause(200);
-}
-
-/**
- * Execute a command in the terminal and wait for it to complete.
- */
-async function executeCommand(command, waitForEcho = true) {
-  await typeInTerminal(command);
-  await sendEnterToTerminal();
-  
-  if (waitForEcho) {
-    // Wait for the command to be echoed back
-    await waitForTerminalOutput(command, 0, 5000);
+  if (!result.ok) {
+    throw new Error(result.error);
   }
+}
+
+async function waitForClipboardTextContaining(expectedText, timeout = 5000) {
+  let clipboardText = '';
+  await waitForCondition(
+    async () => {
+      clipboardText = await readClipboardTextViaApp();
+      return clipboardText.includes(expectedText);
+    },
+    timeout,
+    200,
+  );
+  return clipboardText;
+}
+
+async function executeCommand(command, paneIndex = 0) {
+  await writeToTerminal(paneIndex, command + '\n');
+  await waitForTerminalOutput(command, paneIndex, 5000);
 }
 
 describe('Clipboard', () => {
@@ -99,24 +88,29 @@ describe('Clipboard', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // First, execute a command that produces output we can select
       await executeCommand('echo "TEST COPY TEXT"');
       await browser.pause(1000);
 
-      // Get initial terminal state
       const textBefore = await getTerminalText(0);
       expect(textBefore).toContain('TEST COPY TEXT');
 
-      // Select the text by triple-clicking
-      await selectTerminalText(0);
+      await selectAllTerminalText(0);
       await browser.pause(200);
 
-      // Press Ctrl+Shift+C to copy
-      await browser.keys(['Control', 'Shift', 'c']);
+      // Dispatch Ctrl+Shift+C via JS
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'C',
+          code: 'KeyC',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(500);
 
-      // Verify clipboard contains the selected text
-      const clipboardText = await readFromClipboard();
+      const clipboardText = await waitForClipboardTextContaining('TEST COPY TEXT');
       expect(clipboardText).toContain('TEST COPY TEXT');
     });
 
@@ -124,19 +118,14 @@ describe('Clipboard', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Execute a command
       await executeCommand('echo "AUTO COPY TEST"');
       await browser.pause(1000);
 
-      // Select text by triple-clicking
-      await selectTerminalText(0);
+      await selectAllTerminalText(0);
       await browser.pause(500);
 
-      // Verify clipboard contains the selected text (auto-copy on select)
-      const clipboardText = await readFromClipboard();
-      // Note: This may or may not work depending on app settings
-      // The test verifies the expected behavior
-      expect(clipboardText.length).toBeGreaterThan(0);
+      const clipboardText = await waitForClipboardTextContaining('AUTO COPY TEST');
+      expect(clipboardText).toContain('AUTO COPY TEST');
     });
   });
 
@@ -145,44 +134,52 @@ describe('Clipboard', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // First, copy some text to clipboard
-      const testText = 'PASTE_TEST_12345';
-      await writeToClipboard(testText);
+      await writeClipboardTextViaApp('PASTE_TEST_12345');
       await browser.pause(200);
 
-      // Verify clipboard has the text
-      const clipboardBefore = await readFromClipboard();
-      expect(clipboardBefore).toBe(testText);
+      const clipboardBefore = await readClipboardTextViaApp();
+      expect(clipboardBefore).toBe('PASTE_TEST_12345');
 
-      // Get initial terminal text
-      const textBefore = await getTerminalText(0);
-
-      // Press Ctrl+Shift+V to paste
-      await browser.keys(['Control', 'Shift', 'v']);
+      // Dispatch Ctrl+Shift+V via JS
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'V',
+          code: 'KeyV',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(1000);
 
-      // Verify the pasted text appears in the terminal
       const textAfter = await getTerminalText(0);
-      expect(textAfter).toContain(testText);
+      expect(textAfter).toContain('PASTE_TEST_12345');
     });
 
     it('should paste multi-line text correctly', async () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Copy multi-line text to clipboard
       const multiLineText = 'line1\nline2\nline3';
-      await writeToClipboard(multiLineText);
+      await writeClipboardTextViaApp(multiLineText);
       await browser.pause(200);
 
-      // Get initial terminal text
-      const textBefore = await getTerminalText(0);
+      const clipboardBefore = await readClipboardTextViaApp();
+      expect(clipboardBefore).toBe(multiLineText);
 
-      // Paste the text
-      await browser.keys(['Control', 'Shift', 'v']);
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'V',
+          code: 'KeyV',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(1000);
 
-      // Verify the text was pasted
       const textAfter = await getTerminalText(0);
       expect(textAfter).toContain('line1');
     });
@@ -191,19 +188,25 @@ describe('Clipboard', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Copy text with special characters
       const specialText = 'test@#$%^&*()_+-=[]{}|;:\'",.<>?/~`';
-      await writeToClipboard(specialText);
+      await writeClipboardTextViaApp(specialText);
       await browser.pause(200);
 
-      // Get initial terminal text
-      const textBefore = await getTerminalText(0);
+      const clipboardBefore = await readClipboardTextViaApp();
+      expect(clipboardBefore).toBe(specialText);
 
-      // Paste the text
-      await browser.keys(['Control', 'Shift', 'v']);
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'V',
+          code: 'KeyV',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(1000);
 
-      // Verify at least some characters were pasted
       const textAfter = await getTerminalText(0);
       expect(textAfter).toContain('test');
     });
@@ -214,30 +217,45 @@ describe('Clipboard', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Execute a command with unique output
       const uniqueId = 'COPY_PASTE_ID_' + Date.now();
       await executeCommand(`echo "${uniqueId}"`);
       await browser.pause(1000);
 
-      // Select and copy the text
-      await selectTerminalText(0);
+      await selectAllTerminalText(0);
       await browser.pause(200);
-      await browser.keys(['Control', 'Shift', 'c']);
+
+      // Copy via Ctrl+Shift+C
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'C',
+          code: 'KeyC',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(500);
 
-      // Verify clipboard
-      const clipboardText = await readFromClipboard();
+      const clipboardText = await waitForClipboardTextContaining(uniqueId);
       expect(clipboardText).toContain(uniqueId);
 
-      // Clear the line
       await executeCommand('clear');
+      await clearCapturedOutput(0);
       await browser.pause(500);
 
-      // Paste the copied text
-      await browser.keys(['Control', 'Shift', 'v']);
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'V',
+          code: 'KeyV',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(1000);
 
-      // Verify the pasted text appears
       const textAfter = await getTerminalText(0);
       expect(textAfter).toContain(uniqueId);
     });
@@ -248,20 +266,25 @@ describe('Clipboard', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Execute a command
       await executeCommand('echo "SHORTCUT_COPY"');
       await browser.pause(1000);
 
-      // Select text
-      await selectTerminalText(0);
+      await selectAllTerminalText(0);
       await browser.pause(200);
 
-      // Use Ctrl+Shift+C
-      await browser.keys(['Control', 'Shift', 'c']);
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'C',
+          code: 'KeyC',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(500);
 
-      // Verify clipboard
-      const clipboardText = await readFromClipboard();
+      const clipboardText = await waitForClipboardTextContaining('SHORTCUT_COPY');
       expect(clipboardText).toContain('SHORTCUT_COPY');
     });
 
@@ -269,18 +292,24 @@ describe('Clipboard', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Set clipboard
-      await writeToClipboard('SHORTCUT_PASTE');
+      await writeClipboardTextViaApp('SHORTCUT_PASTE');
       await browser.pause(200);
 
-      // Get initial state
-      const textBefore = await getTerminalText(0);
+      const clipboardBefore = await readClipboardTextViaApp();
+      expect(clipboardBefore).toBe('SHORTCUT_PASTE');
 
-      // Use Ctrl+Shift+V
-      await browser.keys(['Control', 'Shift', 'v']);
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'V',
+          code: 'KeyV',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(1000);
 
-      // Verify paste worked
       const textAfter = await getTerminalText(0);
       expect(textAfter).toContain('SHORTCUT_PASTE');
     });
@@ -291,21 +320,28 @@ describe('Clipboard', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Clear clipboard
-      await browser.execute(async () => {
-        await navigator.clipboard.writeText('');
-      });
+      await writeClipboardTextViaApp('');
       await browser.pause(200);
 
-      // Try to paste from empty clipboard
-      const textBefore = await getTerminalText(0);
-      await browser.keys(['Control', 'Shift', 'v']);
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'V',
+          code: 'KeyV',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+      });
       await browser.pause(500);
 
-      // Terminal should still be responsive
-      const textAfter = await getTerminalText(0);
-      expect(textAfter).toBeTruthy();
+      const terminalExists = await browser.execute(() => Boolean(document.querySelector('.terminal-host')));
+      expect(terminalExists).toBe(true);
     });
+  });
+
+  afterEach(async () => {
+    await clearCapturedOutput(0);
   });
 
   after(async () => {

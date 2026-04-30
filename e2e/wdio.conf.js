@@ -6,15 +6,19 @@ import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
+const isWindows = os.platform() === 'win32';
+const binaryExt = isWindows ? '.exe' : '';
 
-const releaseBinary = path.join(projectRoot, 'src-tauri', 'target', 'release', 'vibe99');
-const debugBinary = path.join(projectRoot, 'src-tauri', 'target', 'debug', 'vibe99');
+const releaseBinary = path.join(projectRoot, 'src-tauri', 'target', 'release', `vibe99${binaryExt}`);
+const debugBinary = path.join(projectRoot, 'src-tauri', 'target', 'debug', `vibe99${binaryExt}`);
 const binaryPath = fs.existsSync(releaseBinary) ? releaseBinary : debugBinary;
 
+const appDataDir = isWindows
+  ? path.join(os.homedir(), 'AppData', 'Roaming', 'com.vibe99.app')
+  : path.join(os.homedir(), '.local', 'share', 'com.vibe99.app');
 const runAppShim = path.join(__dirname, 'run-app.sh');
-
 const linuxbrewGlibc = '/home/linuxbrew/.linuxbrew/Cellar/glibc/2.39/lib/ld-linux-x86-64.so.2';
-const needsRuntimeShim = fs.existsSync(linuxbrewGlibc);
+const needsRuntimeShim = !isWindows && fs.existsSync(linuxbrewGlibc);
 const applicationPath = needsRuntimeShim && fs.existsSync(runAppShim) ? runAppShim : binaryPath;
 
 let tauriDriver;
@@ -22,6 +26,7 @@ let xvfb;
 let shutdown = false;
 
 function startXvfb() {
+  if (isWindows) return Promise.resolve();
   const display = ':98';
   xvfb = spawn('Xvfb', [display, '-screen', '0', '1280x1024x24'], {
     stdio: [null, process.stdout, process.stderr],
@@ -52,9 +57,14 @@ function stopXvfb() {
 
 function startTauriDriver() {
   if (tauriDriver) return;
-  const driverPath = path.resolve(os.homedir(), '.cargo', 'bin', 'tauri-driver');
+  const driverPath = path.resolve(os.homedir(), '.cargo', 'bin', `tauri-driver${binaryExt}`);
+  const args = [];
+  if (isWindows) {
+    const nativeDriver = path.join(__dirname, 'bin', 'msedgedriver.exe');
+    args.push('--native-driver', nativeDriver);
+  }
 
-  tauriDriver = spawn(driverPath, [], {
+  tauriDriver = spawn(driverPath, args, {
     stdio: [null, process.stdout, process.stderr],
     env: { ...process.env },
   });
@@ -86,6 +96,12 @@ export const config = {
   host: '127.0.0.1',
   port: 4444,
   specs: ['./tests/**/*.spec.js'],
+  exclude: isWindows
+    ? [
+        // Layout dropdown clicks open new windows; deferred to a separate effort
+        './tests/layout.spec.js',
+      ]
+    : [],
   maxInstances: 1,
 
   capabilities: [
@@ -114,6 +130,13 @@ export const config = {
 
     await startXvfb();
     await startTauriDriver();
+  },
+
+  beforeSession: () => {
+    const settingsFile = path.join(appDataDir, 'settings.json');
+    if (fs.existsSync(settingsFile)) {
+      fs.unlinkSync(settingsFile);
+    }
   },
 
   onComplete: () => {

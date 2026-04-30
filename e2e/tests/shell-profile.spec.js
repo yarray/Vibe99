@@ -2,6 +2,7 @@ import { waitForAppReady } from '../helpers/app-launch.js';
 import { openSettingsPanel, closeSettingsPanel, resetSettings } from '../helpers/settings-helpers.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import { waitForElement, waitForCondition } from '../helpers/wait-for.js';
+import { dispatchContextMenu, jsClick } from '../helpers/webview2-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -113,15 +114,25 @@ async function getProfileItemName(item) {
   return nameEl ? await nameEl.getText() : '';
 }
 
-/** Click an action button (★, ⧉, ✕) on a profile item by label. */
+/** Click an action button (★, ⧉, ✕) on a profile item by label or title. */
 async function clickProfileAction(profileId, label) {
   const item = await findProfileItem(profileId);
   if (!item) throw new Error(`Profile item not found: ${profileId}`);
   const buttons = await item.$$('.shell-profile-actions .settings-btn');
   for (const btn of buttons) {
     const text = await btn.getText();
-    if (text.trim() === label) {
-      await btn.click();
+    const title = await btn.getAttribute('title');
+    if (text.trim() === label || (title && title.includes(label)) ||
+        (label === '★' && title && title.includes('default'))) {
+      try {
+        await btn.click();
+      } catch (e) {
+        if (e.message && e.message.includes('click intercepted')) {
+          await browser.execute((el) => el.click(), btn);
+        } else {
+          throw e;
+        }
+      }
       await browser.pause(300);
       return;
     }
@@ -158,7 +169,11 @@ describe('Shell Profile', () => {
   });
 
   afterEach(async () => {
-    // Close any open modals
+    // Close any open modals robustly - dismiss overlays that may intercept clicks
+    for (let i = 0; i < 5; i++) {
+      await browser.keys('Escape');
+      await browser.pause(100);
+    }
     try {
       const overlay = await $('.settings-modal-overlay');
       if (overlay && (await overlay.isExisting())) {
@@ -206,9 +221,13 @@ describe('Shell Profile', () => {
     it('closes the modal when clicking the overlay backdrop', async () => {
       await openShellProfilesModal();
 
-      const overlay = await $('.settings-modal-overlay');
-      await overlay.click();
-      await browser.pause(200);
+      // The app checks e.target === overlay on click.
+      // Use browser.execute to dispatch click directly on the overlay element.
+      await browser.execute(() => {
+        const overlay = document.querySelector('.settings-modal-overlay');
+        if (overlay) overlay.click();
+      });
+      await browser.pause(300);
 
       const modal = await $('.settings-modal-overlay .shell-profiles-modal');
       expect(await modal.isExisting()).toBe(false);
@@ -343,6 +362,13 @@ describe('Shell Profile', () => {
       await openShellProfilesModal();
       await clickAddProfileBtn();
       await fillProfileEditor({
+        id: 'existing-default',
+        name: 'ExistingDefault',
+        command: '/bin/sh',
+      });
+
+      await clickAddProfileBtn();
+      await fillProfileEditor({
         id: 'default-candidate',
         name: 'DefaultCandidate',
         command: '/bin/bash',
@@ -350,14 +376,14 @@ describe('Shell Profile', () => {
 
       let item = await findProfileItem('default-candidate');
       let cls = await item.getAttribute('class');
-      expect(cls).not.toContain('is-default');
+      expect(cls.includes('is-default')).toBe(false);
 
       await clickProfileAction('default-candidate', '★');
       await browser.pause(300);
 
       item = await findProfileItem('default-candidate');
       cls = await item.getAttribute('class');
-      expect(cls).toContain('is-default');
+      expect(cls.includes('is-default')).toBe(true);
     });
 
     it('auto-detects system shells when modal opens', async () => {
@@ -423,7 +449,7 @@ describe('Shell Profile', () => {
 
       const terminalHost = await $('.terminal-host');
       if (!terminalHost) throw new Error('Terminal host not found');
-      await terminalHost.click({ button: 'right' });
+      await dispatchContextMenu(terminalHost);
       await browser.pause(300);
 
       const menu = await $('.context-menu');
@@ -463,7 +489,7 @@ describe('Shell Profile', () => {
       await browser.pause(200);
 
       const terminalHost = await $('.terminal-host');
-      await terminalHost.click({ button: 'right' });
+      await dispatchContextMenu(terminalHost);
       await browser.pause(300);
 
       const menuItems = await $$('.context-menu-item');

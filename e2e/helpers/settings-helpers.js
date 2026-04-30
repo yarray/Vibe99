@@ -1,16 +1,38 @@
 import { waitForCondition } from './wait-for.js';
 
 export async function openSettingsPanel() {
+  // Dismiss any overlays that might intercept the click
+  for (let i = 0; i < 3; i++) {
+    const overlay = await $('.settings-modal-overlay');
+    if (overlay && (await overlay.isExisting())) {
+      await browser.keys('Escape');
+      await browser.pause(100);
+    } else {
+      break;
+    }
+  }
+
   const btn = await $('#tabs-settings');
   if (!btn) throw new Error('Settings button not found');
-  await btn.click();
+
+  // On WebView2, a modal overlay may intercept WebDriver clicks.
+  // Fall back to JS click if the normal click fails.
+  try {
+    await btn.click();
+  } catch (e) {
+    if (e.message && e.message.includes('click intercepted')) {
+      await browser.execute((el) => el.click(), btn);
+    } else {
+      throw e;
+    }
+  }
   await browser.pause(300);
 }
 
 export async function closeSettingsPanel() {
   const panel = await $('#settings-panel');
   if (!panel) return;
-  const cls = await panel.getProperty('className');
+  const cls = await panel.getAttribute('class');
   if (!cls.includes('is-hidden')) {
     await browser.keys('Escape');
     await browser.pause(200);

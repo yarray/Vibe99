@@ -1,6 +1,10 @@
+import os from 'os';
 import { waitForAppReady, getPaneCount, getTabCount } from '../helpers/app-launch.js';
 import { waitForCondition } from '../helpers/wait-for.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
+import { dispatchContextMenu, jsClick, nativeDoubleClick } from '../helpers/webview2-helpers.js';
+
+const isWindows = os.platform() === 'win32';
 
 /**
  * Get the label text of a tab by index.
@@ -11,6 +15,26 @@ async function getTabLabel(index) {
   const label = await tabs[index].$('.tab-label');
   if (!label) return '';
   return await label.getText();
+}
+
+/**
+ * Dispatch a double-click event on the tab at the given index via JS.
+ * Uses browser.execute with index-based DOM lookup to avoid stale element references.
+ */
+async function doubleClickTab(index) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const tabs = await $$('#tabs-list .tab');
+    const tabMain = await tabs[index]?.$('.tab-main');
+    if (!tabMain) throw new Error(`.tab-main not found on tab ${index}`);
+    await nativeDoubleClick(tabMain);
+    await browser.pause(300);
+    // Check if rename input appeared
+    const hasInput = await browser.execute((idx) => {
+      const tabs = document.querySelectorAll('#tabs-list .tab');
+      return tabs[idx]?.querySelector('.tab-input') != null;
+    }, index);
+    if (hasInput) return;
+  }
 }
 
 /**
@@ -26,6 +50,32 @@ async function waitForRenameInput(tabIndex, timeout = 5000) {
     timeout,
     200,
   );
+}
+
+async function sendRenameInputKey(tabIndex, value, key) {
+  const sent = await browser.execute((idx, nextValue, nextKey) => {
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const input = tabs[idx]?.querySelector('.tab-input');
+    if (!input) return false;
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (nativeSetter) {
+      nativeSetter.call(input, nextValue);
+    } else {
+      input.value = nextValue;
+    }
+
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      key: nextKey,
+      bubbles: true,
+      cancelable: true,
+    }));
+    return true;
+  }, tabIndex, value, key);
+
+  if (!sent) throw new Error(`Rename input not found on tab ${tabIndex}`);
+  await browser.pause(300);
 }
 
 /**
@@ -50,7 +100,15 @@ async function closePaneByIndex(index) {
   if (!tabs[index]) throw new Error(`Tab at index ${index} not found`);
   const closeBtn = await tabs[index].$('.tab-close');
   if (!closeBtn) throw new Error(`Close button not found on tab ${index}`);
-  await closeBtn.click();
+  try {
+    await closeBtn.click();
+  } catch (e) {
+    if (e.message && e.message.includes('click intercepted')) {
+      await jsClick(closeBtn);
+    } else {
+      throw e;
+    }
+  }
   await browser.pause(500);
 }
 
@@ -76,9 +134,17 @@ async function rightClickTab(index) {
   if (!tabs[index]) throw new Error(`Tab at index ${index} not found`);
   const tabMain = await tabs[index].$('.tab-main');
   if (!tabMain) throw new Error(`.tab-main not found on tab ${index}`);
-  await tabMain.click({ button: 'right' });
-  await browser.pause(300);
-  await waitForContextMenu(3000);
+  // Retry context menu dispatch in case first attempt doesn't register
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await dispatchContextMenu(tabMain);
+    try {
+      await waitForContextMenu(2000);
+      return;
+    } catch {
+      // Retry
+    }
+  }
+  throw new Error(`Context menu did not appear for tab ${index}`);
 }
 
 /**
@@ -106,18 +172,32 @@ async function dismissContextMenu() {
   await browser.pause(200);
 }
 
+/**
+ * Ensure the app has exactly 3 panes.
+ */
+async function ensureThreePanes() {
+  let count = await getTabCount();
+  while (count < 3) {
+    await browser.keys(['Control', 'n']);
+    await browser.pause(500);
+    count = await getTabCount();
+  }
+  while (count > 3) {
+    await closePaneByIndex(count - 1);
+    count = await getTabCount();
+  }
+}
+
 describe('Tab management', () => {
   describe('Tab rename — double-click', () => {
     it('double-click tab enters rename mode and confirms on Enter', async () => {
-      await waitForAppReady();
+      await waitForAppReady(1);
+      await ensureThreePanes();
 
       const originalLabel = await getTabLabel(0);
       expect(originalLabel).not.toBe('');
 
-      const tabs = await $$('#tabs-list .tab');
-      const tabMain = await tabs[0].$('.tab-main');
-      await tabMain.doubleClick();
-      await browser.pause(200);
+      await doubleClickTab(0);
 
       // An input should appear
       await waitForRenameInput(0);
@@ -126,10 +206,7 @@ describe('Tab management', () => {
       const input = await tabsAfterDblClick[0].$('.tab-input');
       expect(input).toExist();
 
-      await input.clearValue();
-      await input.setValue('My Test Tab');
-      await browser.keys('Enter');
-      await browser.pause(300);
+      await sendRenameInputKey(0, 'My Test Tab', 'Enter');
 
       // After confirming, the label should reflect the new name
       const newLabel = await getTabLabel(0);
@@ -137,23 +214,16 @@ describe('Tab management', () => {
     });
 
     it('rename — Escape cancels and restores original title', async () => {
-      await waitForAppReady();
+      await waitForAppReady(1);
+      await ensureThreePanes();
 
       const originalLabel = await getTabLabel(0);
 
-      const tabs = await $$('#tabs-list .tab');
-      const tabMain = await tabs[0].$('.tab-main');
-      await tabMain.doubleClick();
-      await browser.pause(200);
+      await doubleClickTab(0);
 
       await waitForRenameInput(0);
 
-      const tabsEditing = await $$('#tabs-list .tab');
-      const input = await tabsEditing[0].$('.tab-input');
-      await input.clearValue();
-      await input.setValue('Should Not Persist');
-      await browser.keys('Escape');
-      await browser.pause(300);
+      await sendRenameInputKey(0, 'Should Not Persist', 'Escape');
 
       // Label should be restored to the original
       const restoredLabel = await getTabLabel(0);
@@ -161,12 +231,15 @@ describe('Tab management', () => {
     });
 
     it('rename — empty value restores terminal title (cwd basename)', async () => {
-      await waitForAppReady();
+      // PowerShell on Windows does not emit OSC 7, so the default title
+      // behavior differs. On Windows, clearing the title restores the
+      // process name (e.g. "powershell") rather than the cwd basename.
+      if (isWindows) return;
 
-      const tabs = await $$('#tabs-list .tab');
-      const tabMain = await tabs[0].$('.tab-main');
-      await tabMain.doubleClick();
-      await browser.pause(200);
+      await waitForAppReady();
+      await ensureThreePanes();
+
+      await doubleClickTab(0);
 
       await waitForRenameInput(0);
 
@@ -186,8 +259,9 @@ describe('Tab management', () => {
   });
 
   describe('Tab close button', () => {
-    it('clicking × closes the corresponding pane', async () => {
-      await waitForAppReady();
+    it('clicking x closes the corresponding pane', async () => {
+      await waitForAppReady(1);
+      await ensureThreePanes();
 
       const countBefore = await getTabCount();
       expect(countBefore).toBeGreaterThan(1);
@@ -200,13 +274,20 @@ describe('Tab management', () => {
     });
 
     it('close button is disabled when only one tab remains', async () => {
-      await waitForAppReady();
+      await waitForAppReady(1);
+      await ensureThreePanes();
 
       // Close all panes except the last one
       let count = await getTabCount();
       while (count > 1) {
         await closePaneByIndex(count - 1);
-        await waitForTabCount(count - 1);
+        try {
+          await waitForTabCount(count - 1, 5000);
+        } catch {
+          // Retry closing if tab count didn't decrease
+          await closePaneByIndex(count - 1);
+          await waitForTabCount(count - 1, 5000);
+        }
         count -= 1;
       }
 
@@ -221,7 +302,8 @@ describe('Tab management', () => {
 
   describe('Tab context menu', () => {
     it('right-click shows context menu with Change Color, Rename Tab, Close Tab', async () => {
-      await waitForAppReady();
+      await waitForAppReady(1);
+      await ensureThreePanes();
 
       await rightClickTab(0);
       await waitForContextMenu();
@@ -230,15 +312,21 @@ describe('Tab management', () => {
       expect(menu).toExist();
 
       const items = await menu.$$('.context-menu-item');
-      const labels = await Promise.all(items.map((item) => item.getText()));
+      const labels = [];
+      for (const item of items) {
+        labels.push(await item.getText());
+      }
 
       expect(labels.some((l) => l.includes('Change Color'))).toBe(true);
       expect(labels.some((l) => l.includes('Rename Tab'))).toBe(true);
       expect(labels.some((l) => l.includes('Close Tab'))).toBe(true);
+
+      await dismissContextMenu();
     });
 
     it('context menu — "Rename Tab" triggers rename mode', async () => {
-      await waitForAppReady();
+      await waitForAppReady(1);
+      await ensureThreePanes();
 
       await rightClickTab(0);
       await waitForContextMenu();
@@ -259,13 +347,14 @@ describe('Tab management', () => {
     });
 
     it('context menu — "Close Tab" closes the pane', async () => {
-      await waitForAppReady();
+      await waitForAppReady(1);
+      await ensureThreePanes();
 
       // Ensure we have more than one tab
       const countBefore = await getTabCount();
       if (countBefore <= 1) {
         // Add a pane first via keyboard shortcut
-        await browser.keys('Control+n');
+        await browser.keys(['Control', 'n']);
         await browser.pause(500);
       }
 
@@ -282,6 +371,10 @@ describe('Tab management', () => {
       const countAfterClose = await getTabCount();
       expect(countAfterClose).toBe(countAfterAdd - 1);
     });
+  });
+
+  afterEach(async () => {
+    await cleanupApp();
   });
 
   after(async () => {

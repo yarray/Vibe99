@@ -368,6 +368,11 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
     let pane_width = get_number(ui, "paneWidth", DEFAULT_PANE_WIDTH as f64);
     let pane_width = ((pane_width / 10.0).round() * 10.0).clamp(520.0, 2000.0) as u32;
 
+    let breathing_alert_enabled = ui
+        .get("breathingAlertEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
     let font_family = ui
         .get("fontFamily")
         .and_then(|v| v.as_str())
@@ -380,6 +385,7 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         "paneOpacity": pane_opacity,
         "paneMaskOpacity": pane_mask_opacity,
         "paneWidth": pane_width,
+        "breathingAlertEnabled": breathing_alert_enabled,
     });
 
     if !font_family.is_empty() {
@@ -481,6 +487,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "paneOpacity": DEFAULT_PANE_OPACITY,
                     "paneMaskOpacity": 0.25,
                     "paneWidth": DEFAULT_PANE_WIDTH,
+                    "breathingAlertEnabled": true,
                 },
                 "shell": {
                     "profiles": [],

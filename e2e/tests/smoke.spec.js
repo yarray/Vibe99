@@ -1,5 +1,5 @@
 import { waitForAppReady, getPaneCount, getTabCount } from '../helpers/app-launch.js';
-import { waitForTerminalReady, typeInTerminal } from '../helpers/terminal-helpers.js';
+import { waitForTerminalReady, getTerminalText, writeToTerminal, clearCapturedOutput } from '../helpers/terminal-helpers.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 
 describe('Vibe99 smoke test', () => {
@@ -20,20 +20,12 @@ describe('Vibe99 smoke test', () => {
   });
 
   it('accepts keyboard input in the focused terminal', async () => {
-    const textarea = await $('.xterm-helper-textarea');
-    expect(textarea).toExist();
-    await textarea.click();
-    await typeInTerminal('echo hello');
-    await browser.pause(500);
+    await clearCapturedOutput(0);
+    await writeToTerminal(0, 'echo hello\n');
+    await browser.pause(1000);
 
-    const rows = await $$('.xterm-rows > div');
-    const visible = [];
-    for (const row of rows) {
-      const text = await row.getText();
-      if (text.trim()) visible.push(text.trim());
-    }
-    const hasEcho = visible.some((t) => t.includes('echo hello'));
-    expect(hasEcho).toBe(true);
+    const text = await getTerminalText(0);
+    expect(text.includes('echo hello')).toBe(true);
   });
 
   after(async () => {

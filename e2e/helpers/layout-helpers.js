@@ -1,14 +1,74 @@
+import os from 'os';
 import { waitForElement, waitForCondition } from './wait-for.js';
+import { setInputValue, jsClick } from './webview2-helpers.js';
+
+const isWindows = os.platform() === 'win32';
 
 // ------------------------------------------------------------------
 // Layout dropdown helpers
 // ------------------------------------------------------------------
 
 export async function openLayoutsDropdown() {
+  // Dismiss any overlays first
+  for (let i = 0; i < 5; i++) {
+    const overlay = await $('.settings-modal-overlay');
+    if (overlay && (await overlay.isExisting())) {
+      await browser.keys('Escape');
+      await browser.pause(100);
+    } else {
+      break;
+    }
+  }
+
+  // Close settings panel if open
+  const settingsPanel = await $('#settings-panel');
+  if (settingsPanel) {
+    const cls = await settingsPanel.getAttribute('class');
+    if (cls && !cls.includes('is-hidden')) {
+      await browser.keys('Escape');
+      await browser.pause(300);
+    }
+  }
+
+  // Try clicking the layouts button multiple ways
   const btn = await $('#tabs-layouts');
   if (!btn) throw new Error('Layouts button not found');
-  await btn.click();
-  await browser.pause(300);
+
+  // Method 1: Direct WebDriver click
+  try {
+    await btn.click();
+  } catch (e) {
+    // Method 2: JS click
+    await browser.execute(() => document.getElementById('tabs-layouts')?.click());
+  }
+  await browser.pause(500);
+
+  // Wait for dropdown to appear
+  await waitForCondition(
+    async () => {
+      const dropdown = await $('.layouts-dropdown');
+      return dropdown && (await dropdown.isExisting());
+    },
+    8000,
+    300,
+  ).catch(() => {
+    // Fallback: try one more time
+  });
+
+  // If still not found, try once more with a longer pause
+  const dropdown = await $('.layouts-dropdown');
+  if (!dropdown || !(await dropdown.isExisting())) {
+    await browser.execute(() => document.getElementById('tabs-layouts')?.click());
+    await browser.pause(500);
+    await waitForCondition(
+      async () => {
+        const dd = await $('.layouts-dropdown');
+        return dd && (await dd.isExisting());
+      },
+      5000,
+      200,
+    );
+  }
 }
 
 export async function closeLayoutsDropdown() {
@@ -67,9 +127,8 @@ export async function clickDropdownLayout(layoutName) {
 export async function getActiveDropdownLayout() {
   const items = await getDropdownItems();
   for (const item of items) {
-    const isActive = await item.getProperty('classList').then(
-      (cls) => cls.contains('is-active'),
-    );
+    const cls = await item.getAttribute('class');
+    const isActive = cls && cls.includes('is-active');
     if (isActive) {
       const label = await item.$('.layouts-dropdown-label');
       return label ? await label.getText() : null;
@@ -80,6 +139,15 @@ export async function getActiveDropdownLayout() {
 
 export async function saveLayoutAs(name) {
   await openLayoutsDropdown();
+
+  // Wait for dropdown content to render
+  await browser.pause(300);
+
+  const dropdown = await $('.layouts-dropdown');
+  if (!dropdown || !(await dropdown.isExisting())) {
+    throw new Error('Layouts dropdown did not open');
+  }
+
   const actions = await getDropdownActions();
   let saveAction = null;
   for (const action of actions) {
@@ -90,17 +158,34 @@ export async function saveLayoutAs(name) {
     }
   }
   if (!saveAction) throw new Error('Save Layout As action not found');
-  await saveAction.click();
+
+  try {
+    await saveAction.click();
+  } catch (e) {
+    if (e.message && e.message.includes('click intercepted')) {
+      await jsClick(saveAction);
+    } else {
+      throw e;
+    }
+  }
   await browser.pause(200);
 
   const input = await saveAction.$('input');
   if (!input) throw new Error('Save Layout As input not found');
-  await input.setValue(name);
+  await setInputValue(input, name);
   await browser.pause(100);
 
   const confirmBtn = await saveAction.$('.layouts-dropdown-btn-confirm');
   if (!confirmBtn) throw new Error('Save Layout As confirm button not found');
-  await confirmBtn.click();
+  try {
+    await confirmBtn.click();
+  } catch (e) {
+    if (e.message && e.message.includes('click intercepted')) {
+      await jsClick(confirmBtn);
+    } else {
+      throw e;
+    }
+  }
   await browser.pause(500);
 }
 
@@ -118,7 +203,16 @@ export async function openLayoutsModal() {
 export async function openLayoutsModalFromSettings() {
   const settingsBtn = await $('#tabs-settings');
   if (!settingsBtn) throw new Error('Settings button not found');
-  await settingsBtn.click();
+  // On WebView2, overlays may intercept clicks
+  try {
+    await settingsBtn.click();
+  } catch (e) {
+    if (e.message && e.message.includes('click intercepted')) {
+      await jsClick(settingsBtn);
+    } else {
+      throw e;
+    }
+  }
   await browser.pause(300);
 
   const layoutsBtn = await $('#layouts-settings-btn');
@@ -181,9 +275,9 @@ export async function addLayoutInModal(name) {
 
   const input = await editingItem.$('input');
   if (!input) throw new Error('Layout name input not found');
-  await input.setValue(name);
+  await setInputValue(input, name);
   await browser.pause(100);
-  await input.addValue('\n');
+  await browser.keys('Enter');
   await browser.pause(500);
 }
 
@@ -204,9 +298,9 @@ export async function renameLayoutInModal(layoutName, newName) {
 
           const input = await item.$('input');
           if (!input) throw new Error('Rename input not found');
-          await input.setValue(newName);
+          await setInputValue(input, newName);
           await browser.pause(100);
-          await input.addValue('\n');
+          await browser.keys('Enter');
           await browser.pause(500);
           return;
         }
@@ -301,12 +395,20 @@ export async function setEditorLayoutName(name) {
   const input = await editor.$('.layout-name-input');
   if (!input) throw new Error('Layout name input not found in editor');
 
-  await input.setValue(name);
+  await setInputValue(input, name);
   await browser.pause(100);
 
   const confirmBtn = await editor.$('.layout-name-btn-confirm');
   if (confirmBtn) {
-    await confirmBtn.click();
+    try {
+      await confirmBtn.click();
+    } catch (e) {
+      if (e.message && e.message.includes('click intercepted')) {
+        await jsClick(confirmBtn);
+      } else {
+        throw e;
+      }
+    }
     await browser.pause(500);
   }
 }

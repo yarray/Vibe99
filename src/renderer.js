@@ -581,6 +581,7 @@ function getPaneLabel(pane) {
 
 function applySettings() {
   document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
+  document.documentElement.style.setProperty('--app-font-family', settings.fontFamily);
   document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
   document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
   document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
@@ -2437,6 +2438,9 @@ function focusPane(paneId, options = {}) {
   recordPaneVisit(paneId);
   render();
   const node = paneNodeMap.get(paneId);
+  if (node) {
+    paneAlert.setAlerted(node.root, false);
+  }
   if (node && focusTerminal) {
     requestAnimationFrame(() => {
       node.terminal.focus();
@@ -2487,6 +2491,8 @@ function showLayoutFocusNotice(layoutId) {
 function addPane(shellProfileId = null) {
   const newPane = createPaneData(shellProfileId);
   paneCycleState = null;
+  currentMode = 'terminal';
+  document.body.classList.remove('is-navigation-mode');
   panes = [...panes, newPane];
   focusedPaneId = newPane.id;
   recordPaneVisit(newPane.id);

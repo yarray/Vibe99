@@ -1,4 +1,8 @@
+import os from 'os';
 import { waitForCondition } from './wait-for.js';
+import { nativeDoubleClick } from './webview2-helpers.js';
+
+const isWindows = os.platform() === 'win32';
 
 /**
  * Session helpers for testing session persistence across app restarts.
@@ -18,39 +22,41 @@ import { waitForCondition } from './wait-for.js';
  * Uses the Tauri bridge to call layout_save with the current session data.
  */
 export async function saveCurrentSessionAsDefault() {
-  await browser.execute(() => {
+  await browser.execute(async () => {
     const tauri = window.__TAURI__;
     if (!tauri) return;
 
-    const stage = document.querySelector('#stage');
-    if (!stage) return;
+    // Get the actual default cwd from the bridge
+    let defaultCwd = '/';
+    try {
+      defaultCwd = await tauri.core.invoke('get_cwd');
+    } catch {
+      // Fallback
+    }
 
-    const paneEls = Array.from(document.querySelectorAll('.pane'));
-    const focusedEl = document.querySelector('.pane.is-focused');
+    // Read pane info from tabs (which have data-pane-id) rather than pane elements
+    const tabs = Array.from(document.querySelectorAll('#tabs-list .tab'));
+    const focusedTab = document.querySelector('#tabs-list .tab.is-focused');
 
-    const panes = paneEls.map((el, index) => {
-      const paneId = el.dataset.paneId || `p${index + 1}`;
-      const tab = document.querySelector(`#tabs-list .tab[data-pane-id="${paneId}"]`);
-      const accent = el.style.getPropertyValue('--pane-accent').trim();
+    const panes = tabs.map((tab, index) => {
+      const paneId = tab.dataset.paneId || `p${index + 1}`;
+      const label = tab.querySelector('.tab-label');
+      const accent = tab.style.getPropertyValue('--pane-accent').trim();
 
       let title = null;
-      if (tab) {
-        const label = tab.querySelector('.tab-label');
-        if (label && label.textContent.trim()) {
-          title = label.textContent.trim();
-        }
+      if (label && label.textContent.trim()) {
+        title = label.textContent.trim();
       }
 
       return {
         paneId,
         title,
-        cwd: '/',
+        cwd: defaultCwd,
         accent: accent || '#9b5de5',
-        customColor: accent || undefined,
       };
     });
 
-    const focusedIndex = paneEls.indexOf(focusedEl);
+    const focusedIndex = tabs.indexOf(focusedTab);
 
     const layout = {
       id: 'default',
@@ -78,8 +84,9 @@ export async function reloadApp() {
 /**
  * Wait for the app to be fully ready after a reload.
  * Checks for #stage, panes, and tabs to all be present.
+ * @param {number} minPaneCount Minimum number of panes to wait for (default 3)
  */
-export async function waitForAppReadyAfterReload() {
+export async function waitForAppReadyAfterReload(minPaneCount = 3) {
   await waitForCondition(
     async () => {
       const stage = await $('#stage');
@@ -92,7 +99,7 @@ export async function waitForAppReadyAfterReload() {
   await waitForCondition(
     async () => {
       const panes = await $$('.pane');
-      return panes.length >= 1;
+      return panes.length >= minPaneCount;
     },
     15000,
     500,
@@ -101,7 +108,7 @@ export async function waitForAppReadyAfterReload() {
   await waitForCondition(
     async () => {
       const tabs = await $$('#tabs-list .tab');
-      return tabs.length >= 1;
+      return tabs.length >= minPaneCount;
     },
     10000,
     500,
@@ -132,12 +139,13 @@ export async function getTabLabelAt(index) {
 }
 
 export async function getPaneColorAt(index) {
-  const panes = await $$('.pane');
-  if (!panes[index]) return null;
   return await browser.execute((idx) => {
-    const panes = document.querySelectorAll('.pane');
-    if (!panes[idx]) return null;
-    return panes[idx].style.getPropertyValue('--pane-accent').trim();
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    if (!tabs[idx]) return null;
+    const tabColor = tabs[idx].style.getPropertyValue('--pane-accent').trim();
+    const pane = document.querySelectorAll('.pane')[idx];
+    const paneColor = pane?.style?.getPropertyValue('--pane-accent')?.trim();
+    return tabColor || paneColor || null;
   }, index);
 }
 
@@ -182,8 +190,7 @@ export async function clickTabAt(index) {
 export async function doubleClickTabAt(index) {
   const tabs = await $$('#tabs-list .tab .tab-main');
   if (!tabs[index]) return;
-  await tabs[index].doubleClick();
-  await browser.pause(200);
+  await nativeDoubleClick(tabs[index]);
 }
 
 /**
@@ -227,35 +234,48 @@ export async function resetSettingsToEmpty() {
  * This bypasses the UI color picker.
  */
 export async function setPaneColorViaBridge(paneIndex, color) {
-  await browser.execute((idx, clr) => {
+  await browser.execute(async (idx, clr) => {
     const tauri = window.__TAURI__;
     if (!tauri) return;
 
-    const panes = Array.from(document.querySelectorAll('.pane'));
-    const focusedEl = document.querySelector('.pane.is-focused');
+    // Get the actual default cwd from the bridge
+    let defaultCwd = '/';
+    try {
+      defaultCwd = await tauri.core.invoke('get_cwd');
+    } catch {
+      // Fallback
+    }
 
-    const layoutPanes = panes.map((el, i) => {
-      const paneId = el.dataset.paneId || `p${i + 1}`;
-      const accent = el.style.getPropertyValue('--pane-accent').trim();
-      const tab = document.querySelector(`#tabs-list .tab[data-pane-id="${paneId}"]`);
+    // Read pane info from tabs (which have data-pane-id)
+    const tabs = Array.from(document.querySelectorAll('#tabs-list .tab'));
+    const focusedTab = document.querySelector('#tabs-list .tab.is-focused');
+
+    const paneEls = Array.from(document.querySelectorAll('.pane'));
+    const layoutPanes = tabs.map((tab, i) => {
+      const paneId = tab.dataset.paneId || `p${i + 1}`;
+      const accent = tab.style.getPropertyValue('--pane-accent').trim();
+      const label = tab.querySelector('.tab-label');
       let title = null;
-      if (tab) {
-        const label = tab.querySelector('.tab-label');
-        if (label && label.textContent.trim()) {
-          title = label.textContent.trim();
-        }
+      if (label && label.textContent.trim()) {
+        title = label.textContent.trim();
       }
 
-      return {
+      const entry = {
         paneId,
         title,
-        cwd: '/',
-        accent: accent || '#9b5de5',
-        customColor: i === idx ? clr : (accent || undefined),
+        cwd: defaultCwd,
+        accent: i === idx ? clr : (accent || '#9b5de5'),
       };
+      if (i === idx) entry.customColor = clr;
+      return entry;
     });
 
-    const focusedIndex = panes.indexOf(focusedEl);
+    const targetTab = tabs[idx];
+    const targetPane = paneEls[idx];
+    if (targetTab) targetTab.style.setProperty('--pane-accent', clr);
+    if (targetPane) targetPane.style.setProperty('--pane-accent', clr);
+
+    const focusedIndex = tabs.indexOf(focusedTab);
 
     return tauri.core.invoke('layout_save', {
       layout: {

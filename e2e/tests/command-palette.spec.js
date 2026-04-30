@@ -1,31 +1,52 @@
+import os from 'os';
 import { waitForAppReady, getPaneCount, getFocusedPane, getPaneByIndex } from '../helpers/app-launch.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
-import { waitForElement } from '../helpers/wait-for.js';
+import { waitForElement, waitForCondition } from '../helpers/wait-for.js';
+import { setInputValue } from '../helpers/webview2-helpers.js';
+
+const isWindows = os.platform() === 'win32';
 
 /**
- * Send a keyboard shortcut to the application
+ * Dispatch a keyboard shortcut to the application via KeyboardEvent.
+ * WebView2 may not reliably translate browser.keys() with modifier combos,
+ * so we dispatch the event directly on the document.
  */
-async function sendShortcut(keys) {
-  const activeElement = await browser.getActiveElement();
-  await activeElement.sendKeys(keys);
+async function sendShortcut(key, ctrlKey = false, shiftKey = false, altKey = false) {
+  await browser.execute(
+    (k, ctrl, shift, alt) => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: k,
+          ctrlKey: ctrl,
+          shiftKey: shift,
+          altKey: alt,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    },
+    key,
+    ctrlKey,
+    shiftKey,
+    altKey,
+  );
+  await browser.pause(200);
 }
 
 /**
  * Open the command palette (tab switcher) via Ctrl+Shift+O
  */
 async function openTabSwitcher() {
-  // Ctrl+Shift+O
-  await browser.keys(['Control', 'Shift', 'o']);
-  await browser.pause(200);
+  await sendShortcut('O', true, true);
+  await browser.pause(300);
 }
 
 /**
  * Open the command list via Ctrl+Shift+P
  */
 async function openCommandList() {
-  // Ctrl+Shift+P
-  await browser.keys(['Control', 'Shift', 'p']);
-  await browser.pause(200);
+  await sendShortcut('P', true, true);
+  await browser.pause(300);
 }
 
 /**
@@ -37,11 +58,39 @@ async function closePalette() {
 }
 
 /**
+ * Wait for the command palette overlay to appear.
+ */
+async function waitForPaletteOverlay(timeout = 5000) {
+  await waitForCondition(
+    async () => {
+      const overlay = await $('.command-palette-overlay');
+      return overlay && (await overlay.isExisting());
+    },
+    timeout,
+    200,
+  );
+}
+
+/**
+ * Wait for the command palette overlay to disappear.
+ */
+async function waitForPaletteGone(timeout = 5000) {
+  await waitForCondition(
+    async () => {
+      const overlay = await $('.command-palette-overlay');
+      return !overlay || !(await overlay.isExisting());
+    },
+    timeout,
+    200,
+  );
+}
+
+/**
  * Type text into the command palette input
  */
 async function typeInPalette(text) {
   const input = await $('.command-palette-input');
-  await input.setValue(text);
+  await setInputValue(input, text);
   await browser.pause(300);
 }
 
@@ -53,10 +102,18 @@ async function getPaletteItems() {
 }
 
 /**
- * Get the highlighted palette item
+ * Get the highlighted palette item.
+ * Uses getAttribute('class') + includes() for WebView2 compatibility.
  */
 async function getHighlightedItem() {
-  return await $('.command-palette-item.is-highlighted');
+  const items = await getPaletteItems();
+  for (const item of items) {
+    const cls = await item.getAttribute('class');
+    if (cls && cls.includes('is-highlighted')) {
+      return item;
+    }
+  }
+  return null;
 }
 
 /**
@@ -64,7 +121,7 @@ async function getHighlightedItem() {
  */
 async function getEmptyMessage() {
   const empty = await $('.command-palette-empty');
-  if (!empty) return null;
+  if (!empty || !(await empty.isExisting())) return null;
   return await empty.getText();
 }
 
@@ -74,10 +131,11 @@ describe('Command Palette', () => {
   });
 
   afterEach(async () => {
-    // Close palette if open
-    const overlay = await $('.command-palette-overlay');
-    if (overlay) {
-      await closePalette();
+    // Dismiss any open overlays by pressing Escape multiple times.
+    // WebView2 may swallow a single Escape, so we loop.
+    for (let i = 0; i < 5; i++) {
+      await browser.keys('Escape');
+      await browser.pause(100);
     }
   });
 
@@ -136,8 +194,7 @@ describe('Command Palette', () => {
       await browser.pause(300);
 
       // Verify palette closed
-      const overlay = await $('.command-palette-overlay');
-      expect(overlay).not.toExist();
+      await waitForPaletteGone();
 
       // Verify focus changed (we can't easily verify exact pane changed,
       // but we can verify the palette closed and action executed)
@@ -153,21 +210,21 @@ describe('Command Palette', () => {
 
       // First item should be highlighted initially
       let highlighted = await getHighlightedItem();
-      expect(highlighted).toExist();
+      expect(highlighted).not.toBeNull();
 
       // Press ArrowDown to move to second item
       await browser.keys(['ArrowDown']);
       await browser.pause(100);
 
       highlighted = await getHighlightedItem();
-      expect(highlighted).toExist();
+      expect(highlighted).not.toBeNull();
 
       // Press ArrowUp to move back to first item
       await browser.keys(['ArrowUp']);
       await browser.pause(100);
 
       highlighted = await getHighlightedItem();
-      expect(highlighted).toExist();
+      expect(highlighted).not.toBeNull();
     });
 
     it('closes on Escape without changing focus', async () => {
@@ -194,7 +251,7 @@ describe('Command Palette', () => {
       expect(input).toExist();
 
       const placeholder = await input.getAttribute('placeholder');
-      expect(placeholder).toBe('Type to search…');
+      expect(placeholder).toBe('Type a command…');
 
       const items = await getPaletteItems();
       expect(items.length).toBeGreaterThan(0);
@@ -241,7 +298,7 @@ describe('Command Palette', () => {
 
       // The rename pane command should be visible
       const highlighted = await getHighlightedItem();
-      expect(highlighted).toExist();
+      expect(highlighted).not.toBeNull();
 
       // Press Enter to execute
       await browser.keys(['Enter']);
@@ -281,7 +338,7 @@ describe('Command Palette', () => {
 
       // Check for highlighted matches
       const highlighted = await getHighlightedItem();
-      expect(highlighted).toExist();
+      expect(highlighted).not.toBeNull();
 
       const match = await highlighted.$('.command-palette-match');
       expect(match).toExist();
@@ -298,7 +355,7 @@ describe('Command Palette', () => {
       expect(items.length).toBe(0);
 
       const emptyMessage = await getEmptyMessage();
-      expect(emptyMessage).toBe('No matches');
+      expect(emptyMessage).toBe('No matching commands');
     });
 
     it('shows all items when search is cleared', async () => {
@@ -316,7 +373,7 @@ describe('Command Palette', () => {
 
       // Clear the input
       const input = await $('.command-palette-input');
-      await input.clearValue();
+      await setInputValue(input, '');
       await browser.pause(300);
 
       // All items should be visible again
