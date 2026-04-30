@@ -38,7 +38,7 @@ function wrapMergedKeys(keys) {
  * Format: [action1, action2, mergedDisplayKeys, mergedDescription]
  */
 const MERGE_GROUPS = [
-  ['navigateLeft', 'navigateRight', '⌃←→', 'change pane'],
+  ['navigateLeft', 'navigateRight', '⌃←→', 'switch pane'],
   ['cycleRecent', 'cycleRecentReverse', '⌃Tab', 'recent'],
 ];
 
