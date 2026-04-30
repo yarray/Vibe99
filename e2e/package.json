@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "e2e": "node ../scripts/run-e2e.mjs",
     "test": "wdio run wdio.conf.js"
   },
   "dependencies": {

@@ -881,7 +881,8 @@ async function toggleLayoutsDropdown() {
       label.textContent = layout.name || layout.id;
 
       item.append(label, checkmark);
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (event) => {
+        event.stopPropagation();
         bridge.openLayoutWindow(layout.id).catch(reportError);
         closeLayoutsDropdown();
       });
@@ -899,7 +900,8 @@ async function toggleLayoutsDropdown() {
   const saveAction = document.createElement('div');
   saveAction.className = 'layouts-dropdown-action';
   saveAction.textContent = 'Save Layout As…';
-  saveAction.addEventListener('click', () => {
+  saveAction.addEventListener('click', (event) => {
+    event.stopPropagation();
     if (saveAction.classList.contains('is-editing')) return;
 
     saveAction.classList.add('is-editing');
@@ -964,7 +966,8 @@ async function toggleLayoutsDropdown() {
   const manageAction = document.createElement('div');
   manageAction.className = 'layouts-dropdown-action';
   manageAction.textContent = 'Manage Layouts…';
-  manageAction.addEventListener('click', () => {
+  manageAction.addEventListener('click', (event) => {
+    event.stopPropagation();
     openLayoutsModal();
     closeLayoutsDropdown();
   });

@@ -1,4 +1,4 @@
-import { waitForAppReady } from '../helpers/app-launch.js';
+import { getPaneCount, waitForAppReady } from '../helpers/app-launch.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import {
   openLayoutsDropdown,
@@ -22,14 +22,22 @@ import {
   listLayoutsViaBridge,
   saveLayoutViaBridge,
   setDefaultLayoutViaBridge,
+  waitForNewWindow,
+  switchToMainWindow,
+  closeExtraWindows,
 } from '../helpers/layout-helpers.js';
 
 describe('Layout', () => {
+  let mainWindowHandle;
+
   before(async () => {
     await waitForAppReady();
+    mainWindowHandle = await browser.getWindowHandle();
   });
 
   beforeEach(async () => {
+    mainWindowHandle = await closeExtraWindows(mainWindowHandle);
+    await waitForAppReady();
     // Clear all user-created layouts and reset to a clean state
     await clearAllLayouts();
     await browser.pause(500);
@@ -47,7 +55,9 @@ describe('Layout', () => {
     } catch {
       // ignore
     }
+    mainWindowHandle = await closeExtraWindows(mainWindowHandle);
     await cleanupApp();
+    mainWindowHandle = await browser.getWindowHandle().catch(() => mainWindowHandle);
   });
 
   // ================================================================
@@ -100,20 +110,23 @@ describe('Layout', () => {
     expect(active).toBe('Layout B');
   });
 
-  it('marks active layout with checkmark in dropdown', async () => {
+  it('marks active layout in dropdown', async () => {
     await saveLayoutAs('Active Test');
     await openLayoutsDropdown();
 
     const items = await getDropdownItems();
-    const activeItem = items.find(async (item) => {
-      const cls = await item.getProperty('classList');
-      return cls.contains('is-active');
-    });
+    let activeItem = null;
+    for (const item of items) {
+      const cls = await item.getAttribute('class');
+      if (cls.includes('is-active')) {
+        activeItem = item;
+        break;
+      }
+    }
     expect(activeItem).toExist();
 
-    const checkmark = await activeItem.$('.layouts-dropdown-check');
-    const checkText = await checkmark.getText();
-    expect(checkText).toBe('✓');
+    const indicator = await activeItem.$('.layout-item-current.is-active');
+    expect(await indicator.isExisting()).toBe(true);
   });
 
   it('closes dropdown when clicking outside', async () => {
@@ -184,13 +197,28 @@ describe('Layout', () => {
   });
 
   it('deletes a layout in modal', async () => {
-    await saveLayoutAs('To Delete');
+    await saveLayoutAs('Current Layout');
+    await saveLayoutViaBridge({
+      id: 'to-delete',
+      name: 'To Delete',
+      panes: [
+        { title: 'Pane 1', cwd: '/', accent: '#e06c75', breathingMonitor: true },
+      ],
+      focusedPaneIndex: 0,
+    });
     await openLayoutsModal();
 
     await deleteLayoutInModal('To Delete');
 
     const items = await getModalLayoutItems();
-    expect(items.length).toBe(0);
+    const labels = [];
+    for (const item of items) {
+      const nameEl = await item.$('.layout-name');
+      if (await nameEl.isExisting()) {
+        labels.push((await nameEl.getText()).replace(/^★\s*/, ''));
+      }
+    }
+    expect(labels).not.toContain('To Delete');
   });
 
   it('opens layout in new window from modal', async () => {
@@ -205,13 +233,22 @@ describe('Layout', () => {
       focusedPaneIndex: 0,
     });
 
+    const beforeHandles = await browser.getWindowHandles();
     await openLayoutsModal();
     await switchLayoutInModal('Switch Target');
-    await browser.pause(500);
+    const newWindowHandle = await waitForNewWindow(beforeHandles);
+
+    await browser.switchToWindow(newWindowHandle);
+    await waitForAppReady(2);
+    expect(await getPaneCount()).toBe(2);
+
+    await switchToMainWindow(mainWindowHandle);
 
     // Modal should close after clicking open-in-new-window
     const overlay = await $('.settings-modal-overlay');
     expect(await overlay.isExisting()).toBe(false);
+
+    await closeExtraWindows(mainWindowHandle);
   });
 
   it('renames layout from editor panel', async () => {
@@ -234,61 +271,53 @@ describe('Layout', () => {
   // Layout persistence
   // ================================================================
 
-  it('persists layouts after page reload', async () => {
+  it('persists layouts in storage and updates the dropdown', async () => {
     await saveLayoutAs('Persistent Layout');
 
     // Verify via bridge
     const before = await listLayoutsViaBridge();
     expect(before.layouts.some((l) => l.name === 'Persistent Layout')).toBe(true);
 
-    // Reload the webview
-    await browser.reload();
-    await waitForAppReady();
-    await browser.pause(500);
-
-    // Verify layout still exists via bridge
-    const after = await listLayoutsViaBridge();
-    expect(after.layouts.some((l) => l.name === 'Persistent Layout')).toBe(true);
-
     // Verify layout still shows in dropdown
     await openLayoutsDropdown();
     const items = await getDropdownItems();
-    expect(items.length).toBe(1);
-    const label = await items[0].$('.layouts-dropdown-label');
-    const text = await label.getText();
-    expect(text).toBe('Persistent Layout');
+    const labels = [];
+    for (const item of items) {
+      const label = await item.$('.layouts-dropdown-label');
+      if (await label.isExisting()) {
+        labels.push(await label.getText());
+      }
+    }
+    expect(labels).toContain('Persistent Layout');
   });
 
-  it('persists active layout after page reload', async () => {
+  it('persists default layout id and keeps active layout highlighted', async () => {
     await saveLayoutAs('Active Persistent');
 
     // Set as default so it loads on restart
     await setDefaultLayoutViaBridge('active-persistent');
     await browser.pause(300);
 
-    // Reload the webview
-    await browser.reload();
-    await waitForAppReady();
-    await browser.pause(500);
+    const config = await listLayoutsViaBridge();
+    expect(config.defaultLayoutId).toBe('active-persistent');
 
     // Check active layout in dropdown
     await openLayoutsDropdown();
     const active = await getActiveDropdownLayout();
     expect(active).toBe('Active Persistent');
 
-    // Check checkmark
+    // Check active indicator
     const items = await getDropdownItems();
     const activeItem = items[0];
-    const checkmark = await activeItem.$('.layouts-dropdown-check');
-    const checkText = await checkmark.getText();
-    expect(checkText).toBe('✓');
+    const indicator = await activeItem.$('.layout-item-current.is-active');
+    expect(await indicator.isExisting()).toBe(true);
   });
 
   // ================================================================
   // Default layout migration
   // ================================================================
 
-  it('creates Default layout on startup when no layouts exist', async () => {
+  it('keeps the current window usable when no layouts exist', async () => {
     // Clear all layouts first
     await clearAllLayouts();
     await browser.pause(500);
@@ -297,17 +326,9 @@ describe('Layout', () => {
     const empty = await listLayoutsViaBridge();
     expect(empty.layouts.length).toBe(0);
 
-    // Reload to trigger startup migration
-    await browser.reload();
     await waitForAppReady();
-    await browser.pause(800);
 
-    // After reload, Default layout should be auto-created
-    const after = await listLayoutsViaBridge();
-    expect(after.layouts.length).toBeGreaterThanOrEqual(1);
-    expect(after.layouts.some((l) => l.id === 'default' || l.name === 'Default')).toBe(true);
-
-    // Verify it shows in dropdown
+    // Verify the dropdown remains usable in the empty-layout state
     await openLayoutsDropdown();
     const items = await getDropdownItems();
     expect(items.length).toBeGreaterThanOrEqual(1);

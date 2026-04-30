@@ -453,3 +453,51 @@ export async function setDefaultLayoutViaBridge(layoutId) {
     return await window.__TAURI__.core.invoke('layout_set_default', { layoutId: id });
   }, layoutId);
 }
+
+// ------------------------------------------------------------------
+// Window helpers
+// ------------------------------------------------------------------
+
+export async function waitForNewWindow(previousHandles, timeout = 10000) {
+  const previous = new Set(previousHandles);
+  return await waitForCondition(
+    async () => {
+      const handles = await browser.getWindowHandles();
+      return handles.find((handle) => !previous.has(handle)) || null;
+    },
+    timeout,
+    250,
+  );
+}
+
+export async function switchToMainWindow(mainHandle) {
+  const handles = await browser.getWindowHandles();
+  const target = handles.includes(mainHandle) ? mainHandle : handles[0];
+  if (!target) return null;
+  await browser.switchToWindow(target);
+  await browser.pause(200);
+  return target;
+}
+
+export async function closeExtraWindows(mainHandle) {
+  const handles = await browser.getWindowHandles();
+  const targetMain = handles.includes(mainHandle) ? mainHandle : handles[0];
+
+  for (const handle of handles) {
+    if (handle === targetMain) continue;
+    try {
+      await browser.switchToWindow(handle);
+      await browser.closeWindow();
+      await browser.pause(300);
+    } catch {
+      // Window may have already been closed by the app.
+    }
+  }
+
+  if (targetMain) {
+    await browser.switchToWindow(targetMain);
+    await browser.pause(200);
+  }
+
+  return targetMain;
+}

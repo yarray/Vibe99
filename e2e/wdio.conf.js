@@ -96,12 +96,7 @@ export const config = {
   host: '127.0.0.1',
   port: 4444,
   specs: ['./tests/**/*.spec.js'],
-  exclude: isWindows
-    ? [
-        // Layout dropdown clicks open new windows; deferred to a separate effort
-        './tests/layout.spec.js',
-      ]
-    : [],
+  exclude: [],
   maxInstances: 1,
 
   capabilities: [
@@ -118,6 +113,7 @@ export const config = {
   mochaOpts: {
     ui: 'bdd',
     timeout: 60000,
+    grep: process.env.E2E_GREP || undefined,
   },
 
   onPrepare: async () => {
