@@ -1,8 +1,3 @@
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
-import { WebglAddon } from '@xterm/addon-webgl';
-import { Unicode11Addon } from '@xterm/addon-unicode11';
 import {
   openCommandPalette,
   closeCommandPalette,
@@ -10,7 +5,6 @@ import {
 } from './command-palette.js';
 import { createPaneActivityWatcher } from './pane-activity-watcher.js';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
-import '@xterm/xterm/css/xterm.css';
 
 import * as ShortcutsRegistry from './shortcuts-registry.js';
 import * as ShortcutsUI from './shortcuts-ui.js';
@@ -20,6 +14,7 @@ import { createActions } from './input/actions.js';
 import { createDispatcher } from './input/dispatcher.js';
 import { formatChord } from './input/keymap.js';
 import { renderHintBar } from './hint-bar.js';
+import { createPaneRenderer, getDefaultFontFamily } from './pane-renderer.js';
 
 function getRuntimePlatform() {
   const platform = navigator.platform.toLowerCase();
@@ -32,47 +27,11 @@ function getRuntimePlatform() {
   return 'linux';
 }
 
-function getDefaultFontFamily(platform = getRuntimePlatform()) {
-  if (platform === 'win32' || platform === 'windows') {
-    return 'Consolas, "Cascadia Mono", "Courier New", monospace';
-  }
-  if (platform === 'darwin') {
-    return 'Menlo, Monaco, "SF Mono", monospace';
-  }
-  return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", monospace';
-}
-
 function basename(path) {
   return path.replace(/\/+$/, '').split('/').pop() || '/';
 }
 
 const LAYOUT_FOCUS_NOTICE_EVENT = 'vibe99:layout-focus-notice';
-
-// OSC 7 format: \x1b]7;file://hostname/path\x07
-// Extracts the path from the OSC 7 sequence and URL-decodes it.
-function extractPathFromOsc7(data) {
-  const prefix = 'file://';
-  if (!data.startsWith(prefix)) {
-    return null;
-  }
-  const afterPrefix = data.slice(prefix.length);
-  // Skip hostname part until the next slash
-  const slashIndex = afterPrefix.indexOf('/');
-  if (slashIndex === -1) {
-    return null;
-  }
-  let encodedPath = afterPrefix.slice(slashIndex);
-  // Windows OSC 7 paths look like /C:/Users/... — strip the leading slash
-  // so the result is a valid Windows path (C:/Users/...).
-  if (/^\/[A-Za-z]:\//.test(encodedPath)) {
-    encodedPath = encodedPath.slice(1);
-  }
-  try {
-    return decodeURIComponent(encodedPath);
-  } catch {
-    return null;
-  }
-}
 
 function splitArgs(str) {
   const args = [];
@@ -421,8 +380,6 @@ let paneMruOrder = panes.map((pane) => pane.id);
 // `null` means no cycle is in progress.
 let paneCycleState = null;
 
-const paneNodeMap = new Map();
-
 const stageEl = document.getElementById('stage');
 const tabsListEl = document.getElementById('tabs-list');
 const statusLabelEl = document.getElementById('status-label');
@@ -458,23 +415,6 @@ const settings = {
 let pendingSettingsSave = null;
 let pendingLayoutSave = null;
 
-// Called when a pane's cwd changes via OSC 7. Immediately updates the pane
-// and schedules a debounced settings save.
-function onPaneCwdChanged(paneId, newCwd) {
-  const paneIndex = panes.findIndex((p) => p.id === paneId);
-  if (paneIndex === -1) {
-    return;
-  }
-  const existingCwd = panes[paneIndex].cwd;
-  if (existingCwd === newCwd) {
-    return;
-  }
-
-  panes[paneIndex] = { ...panes[paneIndex], cwd: newCwd };
-
-  scheduleWindowLayoutSave(5000);
-}
-
 let shellProfiles = [];
 let defaultShellProfileId = '';
 let editingShellProfile = null; // null or { id?, name, command, args }
@@ -489,21 +429,67 @@ let layoutsDropdownEl = null;
 // decides *how* it looks. To switch styles (border flash, tab badge, …),
 // swap `createBreathingMaskAlert` for another renderer with the same shape.
 const paneAlert = createBreathingMaskAlert();
+
+// ---------------------------------------------------------------------------
+// Pane Renderer
+// ---------------------------------------------------------------------------
+// paneActivityWatcher callbacks reference paneRenderer, so we declare
+// paneRenderer first and assign it after creation.
+let paneRenderer;
+
 const paneActivityWatcher = createPaneActivityWatcher({
   onAlert: (paneId) => {
-    const node = paneNodeMap.get(paneId);
+    const node = paneRenderer.getNode(paneId);
     if (node) paneAlert.setAlerted(node.root, true);
   },
   onClear: (paneId) => {
-    const node = paneNodeMap.get(paneId);
+    const node = paneRenderer.getNode(paneId);
     if (node) paneAlert.setAlerted(node.root, false);
   },
 });
 
+paneRenderer = createPaneRenderer({
+  bridge,
+  state: {
+    getPanes: () => panes,
+    getFocusedPaneId: () => focusedPaneId,
+    getFocusedIndex: () => getFocusedIndex(),
+    getPaneById: (paneId) => panes.find((p) => p.id === paneId) ?? null,
+    setPaneShellProfile: (paneId, profileId) => {
+      const idx = panes.findIndex((p) => p.id === paneId);
+      if (idx === -1) return false;
+      panes[idx] = { ...panes[idx], shellProfileId: profileId };
+      return true;
+    },
+    setPaneCwd: (paneId, cwd) => {
+      const idx = panes.findIndex((p) => p.id === paneId);
+      if (idx === -1) return false;
+      panes[idx] = { ...panes[idx], cwd };
+      return true;
+    },
+    setPaneTerminalTitle: (paneId, title) => {
+      const idx = panes.findIndex((p) => p.id === paneId);
+      if (idx === -1) return false;
+      panes[idx] = { ...panes[idx], terminalTitle: title };
+      return true;
+    },
+  },
+  settings: () => settings,
+  getMode: () => currentMode,
+  paneAlert,
+  paneActivityWatcher,
+  onTerminalTitleChange: (paneId, title) => {
+    const pane = panes.find((p) => p.id === paneId);
+    if (pane && pane.title === null) {
+      renderTabs();
+    }
+  },
+  scheduleLayoutSave: (delay) => scheduleWindowLayoutSave(delay),
+  reportError,
+});
+
 const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
-  const node = paneNodeMap.get(paneId);
-  if (!node) return;
-  node.terminal.write(data);
+  paneRenderer.writeTerminal(paneId, data);
   paneActivityWatcher.noteData(paneId);
 });
 
@@ -514,7 +500,7 @@ bridge.onLayoutFocusNotice?.(() => {
 });
 
 const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
-  const node = paneNodeMap.get(paneId);
+  const node = paneRenderer.getNode(paneId);
   if (!node) {
     return;
   }
@@ -566,18 +552,6 @@ function reportError(error) {
   statusLabelEl.textContent = `Error: ${message}`;
   statusHintEl.textContent = '';
   console.error(error);
-}
-
-function getPreviewWidth(stageWidth, count) {
-  if (count <= 1) {
-    return 0;
-  }
-
-  if (stageWidth >= settings.paneWidth * count) {
-    return settings.paneWidth;
-  }
-
-  return (stageWidth - settings.paneWidth) / (count - 1);
 }
 
 function getPaneLabel(pane) {
@@ -794,7 +768,7 @@ async function switchLayout(layoutId) {
   const layout = layouts.find((l) => l.id === layoutId);
   if (!layout) return;
   restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
-  ensurePaneNodes();
+  paneRenderer.ensurePaneNodes(stageEl);
   setWindowLayoutId(layoutId);
   flushWindowLayoutSave();
   updateLayoutsIndicator();
@@ -1088,35 +1062,6 @@ function createProfileActionButton(label, title, onClick) {
     onClick();
   });
   return btn;
-}
-
-function changePaneShell(paneId, profileId) {
-  const node = paneNodeMap.get(paneId);
-  if (!node) return;
-
-  const previousProfileId = panes.find((p) => p.id === paneId)?.shellProfileId ?? null;
-
-  panes = panes.map((p) =>
-    p.id === paneId ? { ...p, shellProfileId: profileId } : p
-  );
-  scheduleWindowLayoutSave();
-
-  // Suppress the exit handler — the old PTY is about to be replaced.
-  // spawn() on the backend already destroys any previous session.
-  node._shellChanging = true;
-  node._shellChangeTime = Date.now();
-  node.sessionReady = false;
-  node.terminal.clear();
-  initializePaneTerminal(node).finally(() => {
-    node._shellChanging = false;
-    // Revert profile on failure so the session doesn't persist a broken profile.
-    if (!node.sessionReady) {
-      panes = panes.map((p) =>
-        p.id === paneId ? { ...p, shellProfileId: previousProfileId } : p
-      );
-      scheduleWindowLayoutSave();
-    }
-  });
 }
 
 // ----------------------------------------------------------------
@@ -1969,46 +1914,6 @@ function createModalShellProfileEditor() {
   return editor;
 }
 
-function createTerminalTheme(accent) {
-  return {
-    background: '#11111100',
-    foreground: '#d9d4c7',
-    cursor: accent,
-    cursorAccent: '#111111',
-    selectionBackground: `${accent}44`,
-    black: '#111111',
-    red: '#ff6b57',
-    green: '#98c379',
-    yellow: '#e5c07b',
-    blue: '#61afef',
-    magenta: '#c678dd',
-    cyan: '#56b6c2',
-    white: '#d9d4c7',
-    brightBlack: '#5a6374',
-    brightRed: '#ff8578',
-    brightGreen: '#b0d98b',
-    brightYellow: '#f0d58a',
-    brightBlue: '#7eb7ff',
-    brightMagenta: '#d9a5e8',
-    brightCyan: '#7fd8e6',
-    brightWhite: '#ffffff',
-  };
-}
-
-function isLinkOpenModifierPressed(event) {
-  return event.ctrlKey || (bridge.platform === 'darwin' && event.metaKey);
-}
-
-function handleTerminalLinkActivation(event, uri) {
-  if (!isLinkOpenModifierPressed(event)) {
-    return;
-  }
-
-  event.preventDefault();
-  event.stopPropagation();
-  void bridge.openExternalUrl(uri).catch(reportError);
-}
-
 function getFocusedIndex() {
   const focusedIndex = panes.findIndex((pane) => pane.id === focusedPaneId);
   if (focusedIndex !== -1) {
@@ -2017,24 +1922,6 @@ function getFocusedIndex() {
 
   focusedPaneId = panes[0]?.id ?? null;
   return panes.length > 0 ? 0 : -1;
-}
-
-function getPaneLeft(index, previewWidth, focusedIndex) {
-  if (previewWidth >= settings.paneWidth) {
-    return index * settings.paneWidth;
-  }
-
-  const focusedLeft = focusedIndex * previewWidth;
-
-  if (index < focusedIndex) {
-    return index * previewWidth;
-  }
-
-  if (index === focusedIndex) {
-    return focusedLeft;
-  }
-
-  return focusedLeft + settings.paneWidth + (index - focusedIndex - 1) * previewWidth;
 }
 
 function getTextColorForBackground(hexColor) {
@@ -2145,257 +2032,6 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   return tab;
 }
 
-function createPane(pane) {
-  const paneEl = document.createElement('article');
-  paneEl.className = 'pane';
-  const accentColor = pane.customColor || pane.accent;
-  paneEl.style.setProperty('--pane-accent', accentColor);
-  paneEl.addEventListener('click', () => {
-    focusPane(pane.id);
-  });
-
-  const shell = document.createElement('div');
-  shell.className = 'pane-shell';
-
-  const body = document.createElement('div');
-  body.className = 'pane-body';
-
-  const surface = document.createElement('div');
-  surface.className = 'pane-surface';
-
-  const terminalHost = document.createElement('div');
-  terminalHost.className = 'terminal-host';
-  surface.append(terminalHost);
-  body.append(surface);
-  paneAlert.attach(paneEl, body);
-  shell.append(body);
-  paneEl.append(shell);
-
-  const terminal = new Terminal({
-    allowProposedApi: true,
-    allowTransparency: true,
-    convertEol: false,
-    customGlyphs: true,
-    cursorBlink: true,
-    disableStdin: false,
-    drawBoldTextInBrightColors: false,
-    fontFamily: settings.fontFamily || getDefaultFontFamily(bridge.platform),
-    fontSize: settings.fontSize,
-    lineHeight: 1.2,
-    scrollback: 5000,
-    theme: createTerminalTheme(accentColor),
-  });
-  const fitAddon = new FitAddon();
-  const webLinksAddon = new WebLinksAddon(handleTerminalLinkActivation);
-  terminal.loadAddon(fitAddon);
-  terminal.loadAddon(webLinksAddon);
-  // Unicode 11 width tables align xterm.js's wcwidth with what modern CLI
-  // apps (Node.js / Ink-based UIs like Claude Code) assume, so CJK
-  // characters reliably consume two cells instead of drifting between one
-  // and two when an app redraws after IME input.
-  terminal.loadAddon(new Unicode11Addon());
-  terminal.unicode.activeVersion = '11';
-  terminal.open(terminalHost);
-  terminalHost._xterm = terminal;
-  try { terminal.loadAddon(new WebglAddon()); } catch {}
-  terminal.attachCustomKeyEventHandler((event) => {
-    // Ctrl+Tab is reserved for pane MRU cycling — never let xterm forward
-    // the literal Tab keystroke to the PTY.
-    if (
-      event.type === 'keydown' &&
-      event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      event.code === 'Tab'
-    ) {
-      return false;
-    }
-    // Ctrl+Shift+C/V are reserved for copy/paste — handled by the
-    // window-level shortcut handler. Returning false here prevents xterm
-    // from consuming the event so it can bubble up and preventDefault()
-    // runs before the WebView intercepts it for DevTools/Carets.
-    if (
-      event.type === 'keydown' &&
-      event.ctrlKey &&
-      event.shiftKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      (event.key === 'C' || event.key === 'c' || event.key === 'V' || event.key === 'v')
-    ) {
-      return false;
-    }
-    // Ctrl+ArrowLeft/Right are reserved for spatial pane navigation (VIB-71).
-    // In WSL+zsh these send CSI sequences that xterm would forward to the PTY
-    // as literal characters (e.g. 5D). Returning false stops xterm from
-    // consuming the event so it reaches the window-level dispatcher.
-    if (
-      event.type === 'keydown' &&
-      event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      (event.code === 'ArrowLeft' || event.code === 'ArrowRight')
-    ) {
-      return false;
-    }
-    if (!isWindowsCtrlVPasteHotkey(event)) {
-      return true;
-    }
-    return false;
-  });
-
-  const node = {
-    paneId: pane.id,
-    cwd: pane.cwd,
-    root: paneEl,
-    terminalHost,
-    terminal,
-    fitAddon,
-    sessionReady: false,
-    sizeKey: '',
-    needsFit: true,
-    accent: pane.accent,
-  };
-
-  terminalHost.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
-    focusPane(node.paneId, { focusTerminal: false });
-    void showTerminalContextMenu(node, event);
-  });
-
-  terminal.onData((data) => {
-    if (node.sessionReady) {
-      bridge.writeTerminal({ paneId: node.paneId, data });
-    }
-  });
-
-  terminal.onTitleChange((nextTitle) => {
-    const trimmedTitle = nextTitle.trim();
-    if (!trimmedTitle) {
-      return;
-    }
-    panes = panes.map((entry) =>
-      entry.id === pane.id ? { ...entry, terminalTitle: trimmedTitle } : entry
-    );
-    if (entryNeedsTabRefresh(pane.id)) {
-      renderTabs();
-    }
-  });
-
-  terminal.onSelectionChange(() => {
-    const selection = terminal.getSelection();
-    if (selection) {
-      bridge.writeClipboardText(selection);
-    }
-  });
-
-  terminal.parser.registerOscHandler(52, (data) => {
-    const semicolon = data.indexOf(';');
-    if (semicolon === -1) {
-      return true;
-    }
-    const base64Text = data.slice(semicolon + 1);
-    if (!base64Text || base64Text === '?') {
-      return true;
-    }
-    try {
-      const bytes = atob(base64Text);
-      const text = new TextDecoder().decode(
-        Uint8Array.from(bytes, (c) => c.charCodeAt(0))
-      );
-      bridge.writeClipboardText(text);
-    } catch {}
-    return true;
-  });
-
-  // OSC 7 handler for cwd tracking. Shells that support OSC 7 emit the
-  // current working directory in the format \x1b]7;file://hostname/path\x07.
-  // This allows us to track directory changes and persist them for session restore.
-  terminal.parser.registerOscHandler(7, (data) => {
-    const newCwd = extractPathFromOsc7(data);
-    if (newCwd) {
-      onPaneCwdChanged(pane.id, newCwd);
-    }
-    return true;
-  });
-
-  return node;
-}
-
-function entryNeedsTabRefresh(paneId) {
-  const pane = panes.find((entry) => entry.id === paneId);
-  return Boolean(pane && pane.title === null);
-}
-
-function fitTerminal(node, force = false) {
-  node.terminal.options.fontSize = settings.fontSize;
-  node.terminal.options.fontFamily = settings.fontFamily || getDefaultFontFamily(bridge.platform);
-  node.fitAddon.fit();
-
-  const cols = Math.max(20, node.terminal.cols || 80);
-  const rows = Math.max(8, node.terminal.rows || 24);
-  const nextSizeKey = `${cols}x${rows}`;
-
-  if (node.sessionReady && (force || nextSizeKey !== node.sizeKey)) {
-    bridge.resizeTerminal({
-      paneId: node.paneId,
-      cols,
-      rows,
-    });
-    // SIGWINCH on the PTY usually triggers a screen redraw — those bytes
-    // would otherwise look like background activity and trip the alert.
-    paneActivityWatcher.noteResize(node.paneId);
-  }
-
-  node.sizeKey = nextSizeKey;
-  node.needsFit = false;
-}
-
-async function initializePaneTerminal(node) {
-  fitTerminal(node, true);
-  const pane = panes.find((p) => p.id === node.paneId);
-  const profileId = pane?.shellProfileId ?? null;
-  try {
-    await bridge.createTerminal({
-      paneId: node.paneId,
-      cols: node.terminal.cols,
-      rows: node.terminal.rows,
-      cwd: node.cwd,
-      shellProfileId: profileId,
-    });
-    node.sessionReady = true;
-    fitTerminal(node, true);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    node.terminal.writeln(`\x1b[38;5;204mFailed to start shell${profileId ? ` "${profileId}"` : ''}: ${message}\x1b[0m`);
-  }
-}
-
-function ensurePaneNodes() {
-  const activeIds = new Set(panes.map((pane) => pane.id));
-
-  for (const [paneId, node] of paneNodeMap.entries()) {
-    if (!activeIds.has(paneId)) {
-      paneActivityWatcher.forget(paneId);
-      bridge.destroyTerminal({ paneId });
-      node.terminal.dispose();
-      node.root.remove();
-      paneNodeMap.delete(paneId);
-    }
-  }
-
-  for (const pane of panes) {
-    if (!paneNodeMap.has(pane.id)) {
-      const node = createPane(pane);
-      paneNodeMap.set(pane.id, node);
-      stageEl.append(node.root);
-      paneActivityWatcher.setPaneEnabled(pane.id, pane.breathingMonitor !== false);
-      requestAnimationFrame(() => {
-        initializePaneTerminal(node);
-      });
-    }
-  }
-}
-
 function createPaneData(shellProfileId = null) {
   const usedAccents = new Set(panes.map((p) => (p.customColor || p.accent).toLowerCase()));
   const accent = ColorsRegistry.ACCENT_PALETTE.find((c) => !usedAccents.has(c.toLowerCase()))
@@ -2446,25 +2082,19 @@ function focusPane(paneId, options = {}) {
   setMode('terminal');
   recordPaneVisit(paneId);
   render();
-  const node = paneNodeMap.get(paneId);
+  const node = paneRenderer.getNode(paneId);
   if (node) {
     paneAlert.setAlerted(node.root, false);
   }
-  if (node && focusTerminal) {
-    requestAnimationFrame(() => {
-      node.terminal.focus();
-    });
+  if (focusTerminal) {
+    paneRenderer.focusTerminal(paneId);
   }
 }
 
 function refocusCurrentPaneTerminal() {
-  const node = paneNodeMap.get(focusedPaneId);
-  if (!node) return;
   paneCycleState = null;
   setMode('terminal');
-  requestAnimationFrame(() => {
-    node.terminal.focus();
-  });
+  paneRenderer.focusTerminal(focusedPaneId);
 }
 
 function getLayoutDisplayName(layoutId) {
@@ -2552,11 +2182,8 @@ function closePane(index, options = {}) {
   // After closing a pane, if the focused pane was closed, focus the new pane's terminal
   if (wasFocused && focusedPaneId) {
     requestAnimationFrame(() => {
-      const node = paneNodeMap.get(focusedPaneId);
-      if (node) {
-        setMode('terminal');
-        node.terminal.focus();
-      }
+      setMode('terminal');
+      paneRenderer.focusTerminal(focusedPaneId);
     });
   }
 }
@@ -2748,42 +2375,9 @@ function renderTabs() {
   isRenderingTabs = false;
 }
 
-function renderPanes(refit = false) {
-  const stageWidth = stageEl.clientWidth;
-  const stageHeight = stageEl.clientHeight;
-  const previewWidth = getPreviewWidth(stageWidth, panes.length);
-  const focusedIndex = getFocusedIndex();
-
-  ensurePaneNodes();
-  paneActivityWatcher.setFocus(focusedPaneId);
-
-  panes.forEach((pane, index) => {
-    const node = paneNodeMap.get(pane.id);
-    const left = getPaneLeft(index, previewWidth, focusedIndex);
-    const isFocused = index === focusedIndex;
-    const accentColor = pane.customColor || pane.accent;
-
-    node.root.classList.toggle('is-focused', isFocused);
-    node.root.classList.toggle('is-navigation-target', isFocused && currentMode === 'nav');
-    node.root.style.setProperty('--pane-accent', accentColor);
-    node.root.style.left = `${left}px`;
-    node.root.style.zIndex = String(index + 1);
-    node.root.style.height = `${stageHeight}px`;
-
-    if (node.accent !== accentColor) {
-      node.terminal.options.theme = createTerminalTheme(accentColor);
-      node.accent = accentColor;
-    }
-
-    if (refit || node.needsFit) {
-      fitTerminal(node, true);
-    }
-  });
-}
-
 function render(refit = false) {
   renderTabs();
-  renderPanes(refit);
+  paneRenderer.renderPanes(refit, stageEl);
   updateStatus();
   if (layoutRestoreComplete) {
     scheduleWindowLayoutSave();
@@ -2862,12 +2456,7 @@ function cycleToRecentPane({ reverse = false } = {}) {
   setMode('terminal');
   render();
 
-  const node = paneNodeMap.get(targetId);
-  if (node) {
-    requestAnimationFrame(() => {
-      node.terminal.focus();
-    });
-  }
+  paneRenderer.focusTerminal(targetId);
 }
 
 // Promote the cycle's final pane to the front of the MRU stack.
@@ -2886,7 +2475,7 @@ function commitPaneCycle() {
 function cycleToNextLitPane() {
   const litIds = panes
     .map((p) => p.id)
-    .filter((id) => paneNodeMap.get(id)?.root.classList.contains('has-pending-activity'));
+    .filter((id) => paneRenderer.getNode(id)?.root.classList.contains('has-pending-activity'));
   if (litIds.length === 0) {
     return;
   }
@@ -2906,71 +2495,12 @@ function getPaneIndex(paneId) {
   return panes.findIndex((pane) => pane.id === paneId);
 }
 
-function getPaneNode(paneId) {
-  return paneNodeMap.get(paneId) ?? null;
-}
-
 async function getClipboardSnapshot() {
   try {
     return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
   } catch {
     return { text: '', hasImage: false };
   }
-}
-
-function isWindowsCtrlVPasteHotkey(event) {
-  return (
-    bridge.platform === 'win32' &&
-    event.ctrlKey &&
-    !event.metaKey &&
-    !event.altKey &&
-    !event.shiftKey &&
-    event.key.toLowerCase() === 'v'
-  );
-}
-
-function copyTerminalSelection(paneId = focusedPaneId) {
-  const node = getPaneNode(paneId);
-  if (!node) {
-    return false;
-  }
-
-  const selection = node.terminal.getSelection();
-  if (!selection) {
-    return false;
-  }
-
-  bridge.writeClipboardText(selection);
-  return true;
-}
-
-async function pasteIntoTerminal(paneId = focusedPaneId, options = {}) {
-  const node = getPaneNode(paneId);
-  if (!node?.sessionReady) {
-    return false;
-  }
-
-  const text = options.clipboardSnapshot?.text ?? (await bridge.readClipboardText());
-  if (!text) {
-    return false;
-  }
-
-  if (bridge.platform === 'win32') {
-    node.terminal.paste(text);
-  } else {
-    bridge.writeTerminal({ paneId: node.paneId, data: text });
-  }
-  return true;
-}
-
-function selectAllInTerminal(paneId = focusedPaneId) {
-  const node = getPaneNode(paneId);
-  if (!node) {
-    return false;
-  }
-
-  node.terminal.selectAll();
-  return true;
 }
 
 function showContextMenu(items, x, y, paneId) {
@@ -3432,7 +2962,7 @@ function openProfileSwitcher() {
   }));
 
   openCommandPalette(items, (profileId) => {
-    changePaneShell(focusedPaneId, profileId);
+    paneRenderer.changePaneShell(focusedPaneId, profileId);
     focusPane(focusedPaneId);
   }, {
     placeholder: 'Select a profile…',
@@ -3478,7 +3008,7 @@ function openNewPaneProfilePicker() {
 }
 
 async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
-  const node = getPaneNode(paneId);
+  const node = paneRenderer.getNode(paneId);
   if (!node?.sessionReady) {
     return false;
   }
@@ -3494,12 +3024,12 @@ async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
 
 function handleMenuAction(action, paneId) {
   if (action === 'terminal-copy') {
-    copyTerminalSelection(paneId);
+    paneRenderer.copySelection(paneId);
     return;
   }
 
   if (action === 'terminal-paste') {
-    void pasteIntoTerminal(paneId);
+    void paneRenderer.pasteInto(paneId);
     return;
   }
 
@@ -3509,7 +3039,7 @@ function handleMenuAction(action, paneId) {
   }
 
   if (action === 'terminal-select-all') {
-    selectAllInTerminal(paneId);
+    paneRenderer.selectAll(paneId);
     return;
   }
 
@@ -3557,15 +3087,12 @@ function handleMenuAction(action, paneId) {
 
   if (action.startsWith('terminal-change-shell:')) {
     const profileId = action.slice('terminal-change-shell:'.length);
-    changePaneShell(paneId, profileId);
+    paneRenderer.changePaneShell(paneId, profileId);
   }
 }
 
 function blurFocusedTerminal() {
-  const node = paneNodeMap.get(focusedPaneId);
-  if (node) {
-    node.terminal.blur();
-  }
+  paneRenderer.blurTerminal(focusedPaneId);
 }
 
 function enterNavigationMode() {
@@ -3699,8 +3226,8 @@ const keyboardActions = createActions({
   cycleToNextLitPane,
   navigateLeft,
   navigateRight,
-  copyTerminalSelection,
-  pasteIntoTerminal,
+  copyTerminalSelection: paneRenderer.copySelection,
+  pasteIntoTerminal: paneRenderer.pasteInto,
   moveFocus,
   focusPane,
   cancelNavigationMode,
@@ -4195,6 +3722,31 @@ window.addEventListener('resize', () => {
   }
 });
 
+// Delegated pane click handler (replaces per-pane click listener in createPane)
+stageEl.addEventListener('click', (event) => {
+  const paneEl = event.target.closest('.pane');
+  if (paneEl?.dataset.paneId) {
+    focusPane(paneEl.dataset.paneId);
+  }
+});
+
+// Delegated terminal contextmenu handler (replaces per-terminal listener in createPane)
+stageEl.addEventListener('contextmenu', (event) => {
+  const terminalHost = event.target.closest('.terminal-host');
+  if (terminalHost) {
+    const paneEl = terminalHost.closest('.pane');
+    if (paneEl?.dataset.paneId) {
+      event.preventDefault();
+      const paneId = paneEl.dataset.paneId;
+      focusPane(paneId, { focusTerminal: false });
+      const node = paneRenderer.getNode(paneId);
+      if (node) {
+        void showTerminalContextMenu(node, event);
+      }
+    }
+  }
+});
+
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     await bridge.cwdReady;
@@ -4232,7 +3784,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     setWindowLayoutId(targetLayout.id);
     restoreSession({ panes: targetLayout.panes, focusedPaneIndex: targetLayout.focusedPaneIndex });
-    ensurePaneNodes();
+    paneRenderer.ensurePaneNodes(stageEl);
 
     updateLayoutsIndicator();
     render(true);
