@@ -6,8 +6,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::wsl;
-
 mod shell_resolver;
 pub use shell_resolver::*;
 
