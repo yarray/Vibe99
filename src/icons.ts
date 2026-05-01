@@ -1,11 +1,31 @@
 /**
  * Inline Lucide-style SVG icons (offline, no CDN dependency).
  *
- * All icons use a 24×24 viewBox with stroke="currentColor",
+ * All icons use a 24x24 viewBox with stroke="currentColor",
  * so they inherit the parent element's color and scale cleanly.
  */
 
-const ICONS = {
+/** Well-known icon names available in the built-in icon set. */
+export type IconName =
+  | 'plus'
+  | 'columns'
+  | 'layout-grid'
+  | 'maximize'
+  | 'minimize'
+  | 'settings'
+  | 'x'
+  | 'pencil'
+  | 'star'
+  | 'copy'
+  | 'check'
+  | 'external-link';
+
+/** Map of icon names to their SVG markup strings. */
+export interface IconMap {
+  readonly [key: string]: string;
+}
+
+const ICONS: IconMap = {
   plus: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>`,
 
   columns: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></svg>`,
@@ -33,12 +53,9 @@ const ICONS = {
 
 /**
  * Return an SVG string for the given icon name, optionally resized.
- * @param {string} name
- * @param {number} [size=16]
- * @returns {string}
  */
-export function icon(name, size = 16) {
-  const svg = ICONS[name];
+export function icon(name: string, size: number = 16): string {
+  const svg: string | undefined = ICONS[name];
   if (!svg) {
     console.warn(`Icon "${name}" not found`);
     return '';
@@ -50,10 +67,7 @@ export function icon(name, size = 16) {
 
 /**
  * Replace an element's innerHTML with the requested icon.
- * @param {HTMLElement} el
- * @param {string} name
- * @param {number} [size=16]
  */
-export function setIcon(el, name, size = 16) {
+export function setIcon(el: HTMLElement, name: string, size: number = 16): void {
   el.innerHTML = icon(name, size);
 }

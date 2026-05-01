@@ -1,5 +1,61 @@
 // Pane operations — coordinates paneState, paneRenderer, tabBar, and layoutManager.
 
+import type { Pane, PaneState } from './pane-state';
+import type { PaneRenderer } from './pane-renderer';
+import type { TabBar, TabBarLocalState } from './tab-bar';
+import type { Bridge, ClipboardSnapshot } from './bridge';
+
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+/** Minimal subset of the layout-manager API used by pane-operations. */
+export interface LayoutManagerHandle {
+  scheduleWindowLayoutSave: (delay?: number) => void;
+}
+
+/** Dependencies injected into `createPaneOperations`. */
+export interface PaneOperationsDeps {
+  paneState: PaneState;
+  paneRenderer: PaneRenderer;
+  tabBar: TabBar;
+  layoutManager: LayoutManagerHandle;
+  render: (refit?: boolean) => void;
+  setMode: (mode: string) => void;
+  getCurrentMode: () => string;
+  state: TabBarLocalState;
+}
+
+/** The full public API surface returned by `createPaneOperations`. */
+export interface PaneOperations {
+  focusPane: (paneId: string, options?: { focusTerminal?: boolean }) => void;
+  refocusCurrentPaneTerminal: () => void;
+  blurFocusedTerminal: () => void;
+  addPane: (shellProfileId?: string | null) => string;
+  closePane: (index: number, options?: { destroyTerminal?: boolean }) => void;
+  moveFocus: (delta: number) => void;
+  navigateLeft: () => void;
+  navigateRight: () => void;
+  cycleToRecentPane: (options?: { reverse?: boolean }) => void;
+  commitPaneCycle: () => void;
+  cycleToNextLitPane: () => void;
+  focusPaneAt: (index: number) => void;
+  getPaneCount: () => number;
+  getPaneIdAt: (index: number) => string | null;
+  requestClosePane: (paneId: string) => void;
+  startInlineRename: (paneId: string) => void;
+  togglePaneBreathingMonitor: (paneId: string) => boolean;
+  getFocusedPaneAccent: () => string;
+  isEditableTarget: () => boolean;
+  getClipboardSnapshot: (bridge: Bridge) => Promise<ClipboardSnapshot>;
+  getPaneLabel: (pane: Pane) => string;
+  handleTerminalExit: (event: { paneId: string; exitCode: number; reason: string }) => boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
 export function createPaneOperations({
   paneState,
   paneRenderer,
@@ -9,8 +65,8 @@ export function createPaneOperations({
   setMode,
   getCurrentMode,
   state,
-}) {
-  function focusPane(paneId, options = {}) {
+}: PaneOperationsDeps): PaneOperations {
+  function focusPane(paneId: string, options: { focusTerminal?: boolean } = {}): void {
     const { focusTerminal = true } = options;
     paneState.focusPane(paneId);
     setMode('terminal');
@@ -21,19 +77,19 @@ export function createPaneOperations({
     }
   }
 
-  function refocusCurrentPaneTerminal() {
+  function refocusCurrentPaneTerminal(): void {
     const paneId = paneState.getFocusedPaneId();
     if (!paneId) return;
     setMode('terminal');
     paneRenderer?.focusTerminal(paneId);
   }
 
-  function blurFocusedTerminal() {
+  function blurFocusedTerminal(): void {
     const paneId = paneState.getFocusedPaneId();
     if (paneId) paneRenderer?.blurTerminal(paneId);
   }
 
-  function addPane(shellProfileId = null) {
+  function addPane(shellProfileId: string | null = null): string {
     const newPaneId = paneState.addPane(shellProfileId);
     setMode('terminal');
     document.body.classList.remove('is-navigation-mode');
@@ -41,7 +97,7 @@ export function createPaneOperations({
     return newPaneId;
   }
 
-  function closePane(index, options = {}) {
+  function closePane(index: number, options: { destroyTerminal?: boolean } = {}): void {
     const { destroyTerminal = true } = options;
     const currentPanes = paneState.getPanes();
     if (currentPanes.length === 1) return;
@@ -78,14 +134,14 @@ export function createPaneOperations({
     }
   }
 
-  function moveFocus(delta) {
+  function moveFocus(delta: number): void {
     const currentPanes = paneState.getPanes();
     if (currentPanes.length === 0) return;
     paneState.moveFocus(delta);
     render();
   }
 
-  function navigateLeft() {
+  function navigateLeft(): void {
     const currentPanes = paneState.getPanes();
     if (currentPanes.length === 0) return;
     const focusedIndex = paneState.getFocusedIndex();
@@ -95,7 +151,7 @@ export function createPaneOperations({
     }
   }
 
-  function navigateRight() {
+  function navigateRight(): void {
     const currentPanes = paneState.getPanes();
     if (currentPanes.length === 0) return;
     const focusedIndex = paneState.getFocusedIndex();
@@ -105,7 +161,7 @@ export function createPaneOperations({
     }
   }
 
-  function cycleToRecentPane({ reverse = false } = {}) {
+  function cycleToRecentPane({ reverse = false }: { reverse?: boolean } = {}): void {
     const currentPanes = paneState.getPanes();
     if (currentPanes.length < 2) return;
     const targetId = paneState.cycleToRecentPane({ reverse });
@@ -115,39 +171,40 @@ export function createPaneOperations({
     paneRenderer?.focusTerminal(targetId);
   }
 
-  function commitPaneCycle() {
+  function commitPaneCycle(): void {
     paneState.commitPaneCycle();
   }
 
-  function cycleToNextLitPane() {
+  function cycleToNextLitPane(): void {
     const currentPanes = paneState.getPanes();
     const litIds = currentPanes
       .map((p) => p.id)
       .filter((id) => paneRenderer?.getNode(id)?.root.classList.contains('has-pending-activity'));
     if (litIds.length === 0) return;
-    const focusedIndex = litIds.indexOf(paneState.getFocusedPaneId());
+    const focusedId = paneState.getFocusedPaneId();
+    const focusedIndex = focusedId !== null ? litIds.indexOf(focusedId) : -1;
     const nextIndex = focusedIndex >= 0 ? (focusedIndex + 1) % litIds.length : 0;
     focusPane(litIds[nextIndex]);
   }
 
-  function focusPaneAt(index) {
+  function focusPaneAt(index: number): void {
     const currentPanes = paneState.getPanes();
     if (currentPanes.length === 0 || index < 0 || index >= currentPanes.length) return;
     paneState.focusPane(currentPanes[index].id);
     render();
   }
 
-  function getPaneCount() {
+  function getPaneCount(): number {
     return paneState.getPanes().length;
   }
 
-  function getPaneIdAt(index) {
+  function getPaneIdAt(index: number): string | null {
     const currentPanes = paneState.getPanes();
     if (currentPanes.length === 0 || index < 0 || index >= currentPanes.length) return null;
     return currentPanes[index].id;
   }
 
-  function requestClosePane(paneId) {
+  function requestClosePane(paneId: string): void {
     if (state.pendingClosePaneId === paneId) {
       const index = paneState.getPaneIndex(paneId);
       if (index !== -1) {
@@ -155,7 +212,8 @@ export function createPaneOperations({
         closePane(index);
         const currentPanes = paneState.getPanes();
         if (getCurrentMode() === 'nav' && currentPanes.length > 0) {
-          focusPane(paneState.getFocusedPaneId(), { focusTerminal: true });
+          const focusedId = paneState.getFocusedPaneId();
+          if (focusedId) focusPane(focusedId, { focusTerminal: true });
         }
       }
     } else {
@@ -164,7 +222,7 @@ export function createPaneOperations({
     }
   }
 
-  function startInlineRename(paneId) {
+  function startInlineRename(paneId: string): void {
     const index = paneState.getPaneIndex(paneId);
     if (index !== -1) {
       if (getCurrentMode() === 'nav') setMode('terminal');
@@ -172,25 +230,26 @@ export function createPaneOperations({
     }
   }
 
-  function togglePaneBreathingMonitor(paneId) {
+  function togglePaneBreathingMonitor(paneId: string): boolean {
     const next = paneState.togglePaneBreathingMonitor(paneId);
     layoutManager.scheduleWindowLayoutSave();
     return next;
   }
 
-  function getFocusedPaneAccent() {
+  function getFocusedPaneAccent(): string {
     const pane = paneState.getPanes()[paneState.getFocusedIndex()];
     return pane?.customColor || pane?.accent || '#ffd166';
   }
 
-  function isEditableTarget() {
+  function isEditableTarget(): boolean {
+    const active = document.activeElement;
     return (
-      document.activeElement?.tagName === 'INPUT' ||
-      document.activeElement?.classList?.contains('xterm-helper-textarea')
+      active?.tagName === 'INPUT' ||
+      active?.classList.contains('xterm-helper-textarea') === true
     );
   }
 
-  async function getClipboardSnapshot(bridge) {
+  async function getClipboardSnapshot(bridge: Bridge): Promise<ClipboardSnapshot> {
     try {
       return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
     } catch {
@@ -198,11 +257,11 @@ export function createPaneOperations({
     }
   }
 
-  function getPaneLabel(pane) {
+  function getPaneLabel(pane: Pane): string {
     return pane.title ?? pane.terminalTitle ?? '';
   }
 
-  function handleTerminalExit({ paneId, exitCode, reason }) {
+  function handleTerminalExit({ paneId, exitCode, reason }: { paneId: string; exitCode: number; reason: string }): boolean {
     const node = paneRenderer?.getNode(paneId);
     if (!node) return false;
 
@@ -212,7 +271,7 @@ export function createPaneOperations({
     }
 
     const graceMs = 3000;
-    const recentShellChange = paneRenderer.getShellChangeTime(paneId) && (Date.now() - paneRenderer.getShellChangeTime(paneId) < graceMs);
+    const recentShellChange = paneRenderer.getShellChangeTime(paneId) && (Date.now() - paneRenderer.getShellChangeTime(paneId)! < graceMs);
     if (paneRenderer.isShellChanging(paneId) || recentShellChange) {
       paneRenderer.setSessionReady(paneId, false);
       paneRenderer.writeln(paneId, '');
