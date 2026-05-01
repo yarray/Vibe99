@@ -34,7 +34,7 @@ export function createTabBar({
   paneState,
   state,
   getPaneLabel,
-  getTextForBg,
+  getTextColorForBackground,
   onTabClick,
   onTabContext,
   onTabDrag,
@@ -266,7 +266,7 @@ export function createTabBar({
     }
     const accentColor = pane.customColor || pane.accent;
     tab.style.setProperty('--pane-accent', accentColor);
-    tab.style.setProperty('--tab-text-color', getTextForBg(accentColor));
+    tab.style.setProperty('--tab-text-color', getTextColorForBackground(accentColor));
     tab.dataset.paneId = pane.id;
     tab.addEventListener('contextmenu', (event) => {
       event.preventDefault();
