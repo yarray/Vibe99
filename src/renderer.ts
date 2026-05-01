@@ -1,74 +1,89 @@
 import {
   closeCommandPalette,
   isCommandPaletteOpen,
-} from './command-palette.js';
-import { createPaneActivityWatcher } from './pane-activity-watcher.js';
-import { createBreathingMaskAlert } from './pane-alert-breathing-mask.js';
+} from './command-palette';
+import { createPaneActivityWatcher } from './pane-activity-watcher';
+import { createBreathingMaskAlert } from './pane-alert-breathing-mask';
 import {
   createBridge,
   clearLayoutWindowBinding,
-} from './bridge.js';
-import { createPaneRenderer, getTextColorForBackground } from './pane-renderer.js';
-import { createShellProfileManager } from './shell-profiles.js';
-import { createContextMenus } from './context-menus.js';
-import { createLayoutManager } from './layout-manager.js';
-import { createLayoutModal } from './layout-modal.js';
-import { createModalStack } from './modal-stack.js';
-import { createFullscreenManager } from './fullscreen-manager.js';
-import { createPaneOperations } from './pane-operations.js';
-import { createCommandPaletteEntries } from './command-palette-entries.js';
+} from './bridge';
+import { createPaneRenderer, getTextColorForBackground } from './pane-renderer';
+import type { PaneRenderer } from './pane-renderer';
+import { createShellProfileManager } from './shell-profiles';
+import { createContextMenus } from './context-menus';
+import { createLayoutManager } from './layout-manager';
+import { createLayoutModal } from './layout-modal';
+import { createModalStack } from './modal-stack';
+import { createFullscreenManager } from './fullscreen-manager';
+import { createPaneOperations } from './pane-operations';
+import { createCommandPaletteEntries } from './command-palette-entries';
 import '@xterm/xterm/css/xterm.css';
 
-import * as ShortcutsRegistry from './shortcuts-registry.js';
-import * as ShortcutsUI from './shortcuts-ui.js';
-import * as ColorsRegistry from './colors-registry.js';
-import { createPaneState } from './pane-state.js';
-import { setIcon } from './icons.js';
-import { createActions } from './input/actions.js';
-import { createDispatcher } from './input/dispatcher.js';
+import * as ShortcutsRegistry from './shortcuts-registry';
+import * as ShortcutsUI from './shortcuts-ui';
+import * as ColorsRegistry from './colors-registry';
+import { createPaneState } from './pane-state';
+import { setIcon } from './icons';
+import { createActions } from './input/actions';
+import { createDispatcher } from './input/dispatcher';
 
-import { renderHintBar } from './hint-bar.js';
-import { createSettingsManager } from './settings.js';
-import { createTabBar } from './tab-bar.js';
-
-// ---------------------------------------------------------------------------
-const stageEl = document.getElementById('stage');
-const tabsListEl = document.getElementById('tabs-list');
-const statusLabelEl = document.getElementById('status-label');
-const statusHintEl = document.getElementById('status-hint');
-const addPaneButtonEl = document.getElementById('tabs-add');
-const addProfileButtonEl = document.getElementById('tabs-add-profile');
-const layoutsButtonEl = document.getElementById('tabs-layouts');
-const settingsButtonEl = document.getElementById('tabs-settings');
-const fullscreenButtonEl = document.getElementById('tabs-fullscreen');
-const settingsPanelEl = document.getElementById('settings-panel');
-const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
-const layoutsSettingsBtn = document.getElementById('layouts-settings-btn');
-const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
+import { renderHintBar } from './hint-bar';
+import { createSettingsManager } from './settings';
+import { createTabBar } from './tab-bar';
+import type { TabBarLocalState } from './tab-bar';
+import type { PaneNode } from './pane-renderer';
+import type { ShellProfile, EditingShellProfile } from './shell-profiles';
 
 // ---------------------------------------------------------------------------
-let currentMode = 'terminal', paneRenderer = null, enterNavSourcePaneId = null, layoutRestoreComplete = false, layoutFocusNotice = null, layoutFocusNoticeTimer = null;
+const stageEl = document.getElementById('stage')!;
+const tabsListEl = document.getElementById('tabs-list')!;
+const statusLabelEl = document.getElementById('status-label')!;
+const statusHintEl = document.getElementById('status-hint')!;
+const addPaneButtonEl = document.getElementById('tabs-add')!;
+const addProfileButtonEl = document.getElementById('tabs-add-profile')!;
+const layoutsButtonEl = document.getElementById('tabs-layouts')!;
+const settingsButtonEl = document.getElementById('tabs-settings')!;
+const fullscreenButtonEl = document.getElementById('tabs-fullscreen')!;
+const settingsPanelEl = document.getElementById('settings-panel')!;
+const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn')!;
+const layoutsSettingsBtn = document.getElementById('layouts-settings-btn')!;
+const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn')!;
+
+// ---------------------------------------------------------------------------
+let currentMode: string = 'terminal';
+let paneRenderer: PaneRenderer | null = null;
+let enterNavSourcePaneId: string | null = null;
+let layoutRestoreComplete = false;
+let layoutFocusNotice: { layoutId: string } | null = null;
+let layoutFocusNoticeTimer: number | null = null;
 
 
 // Shell-profile state (shared with shell-profiles module via adapter)
-let shellProfiles = [], defaultShellProfileId = '', editingShellProfile = null, selectedShellProfileId = null;
+let shellProfiles: ShellProfile[] = [];
+let defaultShellProfileId = '';
+let editingShellProfile: EditingShellProfile | null = null;
+let selectedShellProfileId: string | null = null;
 
 // Tab-bar mutable state
-const tabBarState = (() => {
-  let r = null, d = null, p = null, c = null;
+const tabBarState: TabBarLocalState = (() => {
+  let r: string | null = null;
+  let d: TabBarLocalState['dragState'] = null;
+  let p: TabBarLocalState['pendingTabFocus'] = null;
+  let c: string | null = null;
   return {
-    get renamingPaneId() { return r; }, set renamingPaneId(v) { r = v; },
-    get dragState() { return d; }, set dragState(v) { d = v; },
-    get pendingTabFocus() { return p; }, set pendingTabFocus(v) { p = v; },
+    get renamingPaneId() { return r; }, set renamingPaneId(v: string | null) { r = v; },
+    get dragState() { return d; }, set dragState(v: TabBarLocalState['dragState']) { d = v; },
+    get pendingTabFocus() { return p; }, set pendingTabFocus(v: TabBarLocalState['pendingTabFocus']) { p = v; },
     get currentMode() { return currentMode; },
-    get pendingClosePaneId() { return c; },
+    get pendingClosePaneId() { return c; }, set pendingClosePaneId(v: string | null) { c = v; },
   };
 })();
 
 // ---------------------------------------------------------------------------
-const bridge = createBridge(window.__TAURI__ ?? window.vibe99 ?? null, null);
+const bridge = createBridge((window as any).__TAURI__ ?? (window as any).vibe99 ?? null, null);
 
-const windowContext = (() => {
+const windowContext: { kind: 'layout'; layoutId: string } | { kind: 'main' } = (() => {
   const params = new URLSearchParams(window.location.search);
   const layoutId = params.get('layoutId');
   return layoutId ? { kind: 'layout', layoutId } : { kind: 'main' };
@@ -78,7 +93,7 @@ const windowContext = (() => {
 const paneState = createPaneState({
   defaultCwd: bridge.defaultCwd,
   defaultTabTitle: bridge.defaultTabTitle,
-  getAccentPalette: () => ColorsRegistry.ACCENT_PALETTE,
+  getAccentPalette: () => [...ColorsRegistry.ACCENT_PALETTE],
   onStateChange: () => {},
 });
 
@@ -115,12 +130,12 @@ const settingsManager = createSettingsManager({
 });
 
 // paneOps is created after tabBar and paneRenderer, but closures capture the binding.
-let paneOps = null;
+let paneOps: ReturnType<typeof createPaneOperations> | null = null;
 
 const tabBar = createTabBar({
   paneState,
   state: tabBarState,
-  getPaneLabel: (...args) => paneOps?.getPaneLabel(...args),
+  getPaneLabel: (pane) => paneOps?.getPaneLabel(pane) ?? '',
   getTextColorForBackground,
   onTabClick: (...args) => paneOps?.focusPane(...args),
   onTabContext: (paneId, event) => contextMenus?.showTabContextMenu(paneId, event),
@@ -156,7 +171,7 @@ paneRenderer = createPaneRenderer({
   },
   scheduleWindowLayoutSave: () => layoutManager.scheduleWindowLayoutSave(),
   tabBar,
-  getPaneLabel: (...args) => paneOps?.getPaneLabel(...args),
+  getPaneLabel: (pane) => paneOps?.getPaneLabel(pane) ?? '',
   onPaneCwdChanged: (paneId, newCwd) => {
     const pane = paneState.getPaneById(paneId);
     if (!pane || pane.cwd === newCwd) return;
@@ -166,11 +181,11 @@ paneRenderer = createPaneRenderer({
 });
 
 // Modules that need paneRenderer / tabBar (closures capture the variable binding)
-let shellProfileManager = null;
-let contextMenus = null;
+let shellProfileManager: ReturnType<typeof createShellProfileManager> | null = null;
+let contextMenus: ReturnType<typeof createContextMenus> | null = null;
 
 shellProfileManager = createShellProfileManager({
-  bridge,
+  bridge: bridge as any,
   state: {
     getPanels: () => paneState.getPanes(),
     setPanels: (newPanes) => {
@@ -196,7 +211,7 @@ shellProfileManager = createShellProfileManager({
   },
   reportError,
   scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
-  initializePaneTerminal: (node) => paneRenderer?.initializePaneTerminal(node),
+  initializePaneTerminal: (node: PaneNode) => paneRenderer?.initializePaneTerminal(node),
   registerModal: (closeFn) => modalStack.register(closeFn),
   unregisterModal: (closeFn) => modalStack.unregister(closeFn),
 });
@@ -218,7 +233,7 @@ contextMenus = createContextMenus({
     },
     getPaneIndex: (paneId) => paneState.getPaneIndex(paneId),
     getFocusedPaneId: () => paneState.getFocusedPaneId(),
-    setFocusedPaneId: (id) => paneState.setFocusedPaneId(id),
+    setFocusedPaneId: (id) => paneState.focusPane(id),
     getPaneNode: (paneId) => paneRenderer?.getNode(paneId) ?? null,
     clearPaneCycleState: () => {},
     recordPaneVisit: (paneId) => paneState.recordPaneVisit(paneId),
@@ -234,7 +249,7 @@ contextMenus = createContextMenus({
   beginRenamePane: (index) => tabBar.beginRenamePane(index),
   closePane: (...args) => paneOps?.closePane(...args),
   togglePaneBreathingMonitor: (paneId) => {
-    const next = paneOps?.togglePaneBreathingMonitor(paneId);
+    const next = paneOps?.togglePaneBreathingMonitor(paneId) ?? false;
     paneActivityWatcher.setPaneEnabled(paneId, next);
   },
 });
@@ -257,12 +272,12 @@ const commandPaletteEntries = createCommandPaletteEntries({
   layoutManager,
   layoutModal,
   shellProfileManager,
-  contextMenus,
+  contextMenus: contextMenus as any,
   bridge,
   settingsManager,
   modalStack,
-  focusPane: (...args) => paneOps?.focusPane(...args),
-  addPane: (...args) => paneOps?.addPane(...args),
+  focusPane: (id: string | null) => { if (id) paneOps?.focusPane(id); },
+  addPane: (profileId?: string | null) => paneOps?.addPane(profileId),
   closeSettingsPanel,
   closeKeyboardShortcutsModal,
   openKeymapHelpModal,
@@ -287,7 +302,7 @@ const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
 bridge.onLayoutFocusNotice?.(() => {
   if (!layoutManager.getWindowLayoutId()) return;
   paneOps?.refocusCurrentPaneTerminal();
-  showLayoutFocusNotice(layoutManager.getWindowLayoutId());
+  showLayoutFocusNotice(layoutManager.getWindowLayoutId()!);
 });
 
 const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
@@ -299,40 +314,40 @@ const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, re
 
 const removeMenuActionListener = bridge.onMenuAction(({ action, paneId }) => {
   try {
-    contextMenus?.handleMenuAction(action, paneId);
+    contextMenus?.handleMenuAction(action, paneId ?? '');
   } catch (error) {
     reportError(error);
   }
 });
 
 // ---------------------------------------------------------------------------
-function reportError(error) {
+function reportError(error: unknown): void {
   statusLabelEl.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
   statusHintEl.textContent = '';
   console.error(error);
 }
 
 // ---------------------------------------------------------------------------
-function setMode(next) {
+function setMode(next: string): void {
   if (currentMode === next) return;
   currentMode = next;
   document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
   render();
 }
 
-function enterNavigationMode() {
+function enterNavigationMode(): void {
   if (paneState.getPanes().length === 0) return;
   enterNavSourcePaneId = paneState.getFocusedPaneId();
   setMode('nav'); paneOps?.blurFocusedTerminal(); render();
 }
 
-function cancelNavigationMode() {
+function cancelNavigationMode(): void {
   if (enterNavSourcePaneId) { paneOps?.focusPane(enterNavSourcePaneId, { focusTerminal: true }); enterNavSourcePaneId = null; }
   else { setMode('terminal'); render(); }
 }
 
 // ---------------------------------------------------------------------------
-function render(refit = false) {
+function render(refit = false): void {
   tabBar.renderTabs();
   paneRenderer?.renderPanes(refit);
   updateStatus();
@@ -341,7 +356,7 @@ function render(refit = false) {
   }
 }
 
-function updateStatus() {
+function updateStatus(): void {
   if (layoutFocusNotice) {
     statusLabelEl.textContent = 'Layout focused';
     statusLabelEl.classList.remove('is-navigation-mode');
@@ -351,7 +366,7 @@ function updateStatus() {
 
   const currentPanes = paneState.getPanes();
   const focusedPane = currentPanes[paneState.getFocusedIndex()];
-  const focusedPaneLabel = paneOps?.getPaneLabel(focusedPane) || focusedPane.id;
+  const focusedPaneLabel = focusedPane ? (paneOps?.getPaneLabel(focusedPane) || focusedPane.id) : '';
 
   const keymap = ShortcutsRegistry.getActiveKeymap();
   const { modeLabel, hintsHtml } = renderHintBar(
@@ -366,15 +381,15 @@ function updateStatus() {
   statusHintEl.innerHTML = hintsHtml;
 }
 
-function showLayoutFocusNotice(layoutId) {
+function showLayoutFocusNotice(layoutId: string): void {
   layoutFocusNotice = { layoutId };
-  document.body.style.setProperty('--layout-focus-accent', paneOps?.getFocusedPaneAccent());
+  document.body.style.setProperty('--layout-focus-accent', paneOps?.getFocusedPaneAccent() ?? null);
   document.body.dataset.layoutFocusName = layoutManager.getLayoutDisplayName(layoutId);
   document.body.classList.remove('is-layout-focus-notice');
   void document.body.offsetWidth;
   document.body.classList.add('is-layout-focus-notice');
   updateStatus();
-  window.clearTimeout(layoutFocusNoticeTimer);
+  window.clearTimeout(layoutFocusNoticeTimer ?? undefined);
   layoutFocusNoticeTimer = window.setTimeout(() => {
     layoutFocusNotice = null;
     delete document.body.dataset.layoutFocusName;
@@ -384,15 +399,15 @@ function showLayoutFocusNotice(layoutId) {
 }
 
 // ---------------------------------------------------------------------------
-function closeSettingsPanel() {
+function closeSettingsPanel(): void {
   settingsPanelEl.classList.add('is-hidden');
   modalStack.unregister(closeSettingsPanel);
 }
-function closeKeyboardShortcutsModal() {
+function closeKeyboardShortcutsModal(): void {
   document.querySelector('.settings-modal-overlay')?.remove();
   modalStack.unregister(closeKeyboardShortcutsModal);
 }
-function openKeymapHelpModal() {
+function openKeymapHelpModal(): void {
   closeKeyboardShortcutsModal();
   modalStack.register(closeKeyboardShortcutsModal);
   ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
@@ -406,21 +421,21 @@ const keyboardActions = createActions({
   cycleToNextLitPane: (...args) => paneOps?.cycleToNextLitPane(...args),
   navigateLeft: (...args) => paneOps?.navigateLeft(...args),
   navigateRight: (...args) => paneOps?.navigateRight(...args),
-  copyTerminalSelection: () => paneRenderer?.copySelection(paneState.getFocusedPaneId()),
-  pasteIntoTerminal: () => paneRenderer?.pasteInto(paneState.getFocusedPaneId()),
+  copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); return id ? paneRenderer?.copySelection(id) : false; },
+  pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) await paneRenderer?.pasteInto(id); },
   moveFocus: (...args) => paneOps?.moveFocus(...args),
   focusPane: (...args) => paneOps?.focusPane(...args),
   cancelNavigationMode,
-  getFocusedPaneId: () => paneState.getFocusedPaneId(),
+  getFocusedPaneId: () => paneState.getFocusedPaneId() ?? '',
   isCommandPaletteOpen,
   closeCommandPalette,
   openTabSwitcher: () => commandPaletteEntries.openTabSwitcher(),
   openCommandList: () => commandPaletteEntries.openCommandList(),
   openNewPaneProfilePicker: () => commandPaletteEntries.openNewPaneProfilePicker(),
   focusPaneAt: (...args) => paneOps?.focusPaneAt(...args),
-  getPaneCount: () => paneOps?.getPaneCount(),
-  getPaneIdAt: (...args) => paneOps?.getPaneIdAt(...args),
-  requestClosePane: (...args) => paneOps?.requestClosePane(...args),
+  getPaneCount: () => paneOps?.getPaneCount() ?? 0,
+  getPaneIdAt: (index: number) => paneOps?.getPaneIdAt(index) ?? undefined,
+  requestClosePane: (paneId: string) => paneOps?.requestClosePane(paneId),
   startInlineRename: (...args) => paneOps?.startInlineRename(...args),
   openKeymapHelpModal,
   openLayoutsModal: () => layoutModal.openLayoutsModal(),
@@ -486,7 +501,7 @@ shellProfilesSettingsBtn.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); shellProfileManager?.openShellProfilesModal(); }
 });
 
-function openShortcutsModal() {
+function openShortcutsModal(): void {
   closeKeyboardShortcutsModal();
   modalStack.register(closeKeyboardShortcutsModal);
   ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
@@ -502,8 +517,8 @@ settingsPanelEl.addEventListener('click', (event) => event.stopPropagation());
 window.addEventListener('pointerdown', (event) => {
   if (
     !settingsPanelEl.classList.contains('is-hidden') &&
-    !settingsPanelEl.contains(event.target) &&
-    !settingsButtonEl.contains(event.target)
+    !settingsPanelEl.contains(event.target as Node) &&
+    !settingsButtonEl.contains(event.target as Node)
   ) {
     closeSettingsPanel();
   }
@@ -562,7 +577,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     layoutManager.setWindowLayoutId(targetLayout.id);
-    paneState.restoreSession({ panes: targetLayout.panes, focusedPaneIndex: targetLayout.focusedPaneIndex });
+    paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
     paneRenderer?.ensurePaneNodes();
 
     layoutManager.updateLayoutsIndicator();
@@ -578,7 +593,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 window.addEventListener('beforeunload', () => {
   layoutManager.flushWindowLayoutSave();
   settingsManager.flushSettingsSave();
-  clearLayoutWindowBinding(layoutManager.getWindowLayoutId(), bridge.currentWindowLabel);
+  clearLayoutWindowBinding(layoutManager.getWindowLayoutId() ?? undefined, bridge.currentWindowLabel);
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();

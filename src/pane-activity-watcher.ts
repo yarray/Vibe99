@@ -46,30 +46,72 @@ const DEFAULT_SETTLE_MS = 1500;
 // output that just happened to coincide with a window resize.
 const DEFAULT_RESIZE_SETTLE_MS = 1500;
 
-/**
- * @typedef {object} PaneActivityWatcherOptions
- * @property {number} [settleMs]                — quiet period before alerting (ms).
- * @property {number} [resizeSettleMs]          — silence required to end the post-resize quiet window (ms).
- * @property {boolean} [globalEnabled]          — initial value for the global kill switch.
- * @property {(paneId: string) => void} [onAlert]
- * @property {(paneId: string) => void} [onClear]
- */
+/** Options bag for createPaneActivityWatcher. */
+export interface PaneActivityWatcherOptions {
+  /** Quiet period before alerting (ms). Default: 1500. */
+  settleMs?: number;
+  /** Silence required to end the post-resize quiet window (ms). Default: 1500. */
+  resizeSettleMs?: number;
+  /** Initial value for the global kill switch. Default: true. */
+  globalEnabled?: boolean;
+  /** Called once per "quiet period after burst" for a pane. */
+  onAlert?: (paneId: string) => void;
+  /** Called when the alerted state ends for a pane. */
+  onClear?: (paneId: string) => void;
+}
 
-/**
- * @param {PaneActivityWatcherOptions} [options]
- */
-export function createPaneActivityWatcher(options = {}) {
-  const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
-  const resizeSettleMs = options.resizeSettleMs ?? DEFAULT_RESIZE_SETTLE_MS;
+/** Per-pane tracking state inside the watcher. */
+interface PaneState {
+  hasBeenFocused: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+  alerted: boolean;
+  paneEnabled: boolean;
+  resizeSettleTimer: ReturnType<typeof setTimeout> | null;
+}
+
+/** The public API returned by createPaneActivityWatcher. */
+export interface PaneActivityWatcher {
+  /** Update which pane is currently focused (or null if none). */
+  setFocus: (paneId: string | null) => void;
+  /** Record a chunk of output for `paneId`. */
+  noteData: (paneId: string) => void;
+  /**
+   * Mark a pane as having just been resized. Opens a quiet window that
+   * stays open as long as redraw chunks keep arriving (each chunk
+   * extends it) and closes once the pane has been silent for
+   * `resizeSettleMs`. Any in-flight content burst is dropped — its
+   * buffer position has been overwritten by the redraw, and we'd rather
+   * lose a beat than fire a false alert when the burst ends inside the
+   * redraw stream.
+   */
+  noteResize: (paneId: string) => void;
+  /** Drop all state for `paneId` (clears any pending timer or alert). */
+  forget: (paneId: string) => void;
+  /**
+   * Toggle activity monitoring for a single pane. When turned off the
+   * pane stops generating new alerts and any existing alert is cleared.
+   */
+  setPaneEnabled: (paneId: string, enabled: boolean) => void;
+  /**
+   * Global kill switch. When turned off all panes stop generating new
+   * alerts and any existing alert is cleared. Per-pane enabled flags are
+   * preserved so re-enabling globally restores their previous behavior.
+   */
+  setGlobalEnabled: (enabled: boolean) => void;
+}
+
+export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = {}): PaneActivityWatcher {
+  const settleMs: number = options.settleMs ?? DEFAULT_SETTLE_MS;
+  const resizeSettleMs: number = options.resizeSettleMs ?? DEFAULT_RESIZE_SETTLE_MS;
   const onAlert = options.onAlert;
   const onClear = options.onClear;
 
-  // paneId -> { hasBeenFocused, timer, alerted, paneEnabled, resizeSettleTimer }
-  const states = new Map();
-  let focusedPaneId = null;
-  let globalEnabled = options.globalEnabled ?? true;
+  // paneId -> PaneState
+  const states = new Map<string, PaneState>();
+  let focusedPaneId: string | null = null;
+  let globalEnabled: boolean = options.globalEnabled ?? true;
 
-  function ensure(paneId) {
+  function ensure(paneId: string): PaneState {
     let s = states.get(paneId);
     if (!s) {
       s = {
@@ -84,7 +126,7 @@ export function createPaneActivityWatcher(options = {}) {
     return s;
   }
 
-  function clearState(paneId, s) {
+  function clearState(paneId: string, s: PaneState): void {
     if (s.timer !== null) {
       clearTimeout(s.timer);
       s.timer = null;
@@ -99,14 +141,14 @@ export function createPaneActivityWatcher(options = {}) {
     }
   }
 
-  function isActive(paneId, s) {
+  function isActive(_paneId: string, s: PaneState): boolean {
     return globalEnabled && s.paneEnabled;
   }
 
   // (Re)start the post-resize silence countdown. Called both from `noteResize`
   // (to open the window) and from `noteData` while the window is open (to
   // extend it for the duration of the redraw burst).
-  function armResizeSettle(s) {
+  function armResizeSettle(s: PaneState): void {
     if (s.resizeSettleTimer !== null) clearTimeout(s.resizeSettleTimer);
     s.resizeSettleTimer = setTimeout(() => {
       s.resizeSettleTimer = null;
@@ -115,7 +157,7 @@ export function createPaneActivityWatcher(options = {}) {
 
   return {
     /** Update which pane is currently focused (or null if none). */
-    setFocus(paneId) {
+    setFocus(paneId: string | null): void {
       focusedPaneId = paneId;
       if (paneId == null) return;
       const s = ensure(paneId);
@@ -124,7 +166,7 @@ export function createPaneActivityWatcher(options = {}) {
     },
 
     /** Record a chunk of output for `paneId`. */
-    noteData(paneId) {
+    noteData(paneId: string): void {
       const s = ensure(paneId);
       if (!isActive(paneId, s)) return;
       if (!s.hasBeenFocused) return;
@@ -154,16 +196,7 @@ export function createPaneActivityWatcher(options = {}) {
       }, settleMs);
     },
 
-    /**
-     * Mark a pane as having just been resized. Opens a quiet window that
-     * stays open as long as redraw chunks keep arriving (each chunk
-     * extends it) and closes once the pane has been silent for
-     * `resizeSettleMs`. Any in-flight content burst is dropped — its
-     * buffer position has been overwritten by the redraw, and we'd rather
-     * lose a beat than fire a false alert when the burst ends inside the
-     * redraw stream.
-     */
-    noteResize(paneId) {
+    noteResize(paneId: string): void {
       const s = ensure(paneId);
       if (s.timer !== null) {
         clearTimeout(s.timer);
@@ -173,18 +206,14 @@ export function createPaneActivityWatcher(options = {}) {
     },
 
     /** Drop all state for `paneId` (clears any pending timer or alert). */
-    forget(paneId) {
+    forget(paneId: string): void {
       const s = states.get(paneId);
       if (!s) return;
       clearState(paneId, s);
       states.delete(paneId);
     },
 
-    /**
-     * Toggle activity monitoring for a single pane. When turned off the
-     * pane stops generating new alerts and any existing alert is cleared.
-     */
-    setPaneEnabled(paneId, enabled) {
+    setPaneEnabled(paneId: string, enabled: boolean): void {
       const s = ensure(paneId);
       const next = !!enabled;
       if (s.paneEnabled === next) return;
@@ -192,12 +221,7 @@ export function createPaneActivityWatcher(options = {}) {
       if (!next) clearState(paneId, s);
     },
 
-    /**
-     * Global kill switch. When turned off all panes stop generating new
-     * alerts and any existing alert is cleared. Per-pane enabled flags are
-     * preserved so re-enabling globally restores their previous behavior.
-     */
-    setGlobalEnabled(enabled) {
+    setGlobalEnabled(enabled: boolean): void {
       const next = !!enabled;
       if (globalEnabled === next) return;
       globalEnabled = next;

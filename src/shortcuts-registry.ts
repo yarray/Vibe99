@@ -2,7 +2,7 @@
  * Keyboard Shortcuts Registry
  *
  * Compatibility wrapper for the legacy `shortcuts-ui.js` consumer. The single
- * source of truth for shortcuts now lives in `input/keymap.js` — this module
+ * source of truth for shortcuts now lives in `input/keymap.ts` — this module
  * tracks user overrides on top of that table and exposes an `id`-keyed map in
  * the legacy `{ key, modifiers, action }` shape so the existing settings UI
  * keeps working unchanged.
@@ -11,41 +11,92 @@
  * picked up without rebinding event listeners.
  */
 
-import { KEYMAP, parseChord, formatChord } from './input/keymap.js';
+import { KEYMAP, parseChord, formatChord, KeymapEntry, ParsedChord } from './input/keymap';
+
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+export interface LegacyShortcut {
+  key: string;
+  modifiers: string[];
+  action: string;
+  platform: string;
+  mode?: string;
+}
+
+export interface ShortcutOverride {
+  key: string;
+  modifiers: string[];
+}
+
+export interface ShortcutsRegistry {
+  DEFAULT_SHORTCUTS: Record<string, LegacyShortcut>;
+  getActiveKeymap(): KeymapEntry[];
+  getKeyboardShortcuts(): Record<string, LegacyShortcut>;
+  updateKeyboardShortcut(id: string, shortcut: ShortcutOverride): void;
+  parseShortcutEvent(event: KeyboardEvent): ShortcutOverride;
+  formatShortcut(shortcut: ShortcutOverride, platform?: string): string;
+  shortcutsConflict(s1: ShortcutOverride, s2: ShortcutOverride): boolean;
+  findConflict(newShortcut: ShortcutOverride, excludeId?: string | null): string | null;
+  resetShortcutsToDefaults(): void;
+  loadShortcutsFromSettings(settings: Record<string, unknown>): void;
+  getShortcutsForSave(): Record<string, ShortcutOverride>;
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+interface CustomizableRow extends KeymapEntry {
+  id: string;
+}
 
 // Customizable rows are those with an `id` field. Non-customizable rows
 // (palette, cycle-recent, digit ranges like 1..9) live in the keymap but are
 // not exposed through this legacy API.
-function customizableRows() {
-  return KEYMAP.filter((row) => typeof row.id === 'string' && !row.chord.includes('..'));
+function customizableRows(): CustomizableRow[] {
+  return KEYMAP.filter(
+    (row): row is CustomizableRow =>
+      typeof row.id === 'string' && !row.chord.includes('..')
+  );
 }
 
-function chordToLegacy(chord) {
+interface LegacyChordParts {
+  key: string;
+  modifiers: string[];
+}
+
+function chordToLegacy(chord: string): LegacyChordParts {
   const [first] = parseChord(chord);
-  const modifiers = [];
+  const modifiers: string[] = [];
   if (first.ctrl)  modifiers.push('ctrl');
   if (first.shift) modifiers.push('shift');
   if (first.alt)   modifiers.push('alt');
   return { key: normalizeLegacyKey(first.key), modifiers };
 }
 
-function legacyToChord({ key, modifiers }) {
-  const tokens = [];
-  if (modifiers.includes('ctrl'))  tokens.push('Ctrl');
-  if (modifiers.includes('shift')) tokens.push('Shift');
-  if (modifiers.includes('alt'))   tokens.push('Alt');
-  tokens.push(key);
+function legacyToChord(parts: LegacyChordParts): string {
+  const tokens: string[] = [];
+  if (parts.modifiers.includes('ctrl'))  tokens.push('Ctrl');
+  if (parts.modifiers.includes('shift')) tokens.push('Shift');
+  if (parts.modifiers.includes('alt'))   tokens.push('Alt');
+  tokens.push(parts.key);
   return tokens.join('+');
 }
 
-function normalizeLegacyKey(key) {
+function normalizeLegacyKey(key: string): string {
   // Legacy storage keeps single letters lowercase (e.g. 'b'); other keys
   // (ArrowLeft, Enter, Tab) are preserved verbatim.
   return typeof key === 'string' && key.length === 1 ? key.toLowerCase() : key;
 }
 
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+
 // Default legacy-shape map derived from KEYMAP defaults.
-const DEFAULTS_BY_ID = {};
+const DEFAULTS_BY_ID: Record<string, LegacyShortcut> = {};
 for (const row of customizableRows()) {
   DEFAULTS_BY_ID[row.id] = {
     ...chordToLegacy(row.chord),
@@ -58,11 +109,15 @@ for (const row of customizableRows()) {
  * Public for tests / external introspection — same shape as the old constant
  * even though it's now derived from the keymap table.
  */
-export const DEFAULT_SHORTCUTS = { ...DEFAULTS_BY_ID };
+export const DEFAULT_SHORTCUTS: Record<string, LegacyShortcut> = { ...DEFAULTS_BY_ID };
 
-let overrides = {}; // id -> { key, modifiers }
+// ---------------------------------------------------------------------------
+// Overrides & active keymap
+// ---------------------------------------------------------------------------
 
-function legacyShortcut(row) {
+let overrides: Record<string, ShortcutOverride> = {}; // id -> { key, modifiers }
+
+function legacyShortcut(row: CustomizableRow): LegacyShortcut {
   const override = overrides[row.id];
   const base = chordToLegacy(row.chord);
   return {
@@ -78,10 +133,10 @@ function legacyShortcut(row) {
  * The active keymap, with user overrides applied. Re-computed whenever
  * overrides change so the dispatcher's parsed-chord cache invalidates.
  */
-let activeKeymap = computeActiveKeymap();
+let activeKeymap: KeymapEntry[] = computeActiveKeymap();
 
-function computeActiveKeymap() {
-  const result = KEYMAP.map((row) => {
+function computeActiveKeymap(): KeymapEntry[] {
+  const result: KeymapEntry[] = KEYMAP.map((row) => {
     if (!row.id) return row;
     const override = overrides[row.id];
     if (!override) {
@@ -106,7 +161,7 @@ function computeActiveKeymap() {
   return result;
 }
 
-function refreshActiveKeymap() {
+function refreshActiveKeymap(): void {
   activeKeymap = computeActiveKeymap();
 }
 
@@ -114,7 +169,7 @@ function refreshActiveKeymap() {
  * Returns the active keymap (defaults + overrides). Used by the dispatcher.
  * Returns a new array reference whenever overrides change.
  */
-export function getActiveKeymap() {
+export function getActiveKeymap(): KeymapEntry[] {
   return activeKeymap;
 }
 
@@ -122,15 +177,15 @@ export function getActiveKeymap() {
 // Legacy public API consumed by `shortcuts-ui.js`
 // ---------------------------------------------------------------------------
 
-export function getKeyboardShortcuts() {
-  const out = {};
+export function getKeyboardShortcuts(): Record<string, LegacyShortcut> {
+  const out: Record<string, LegacyShortcut> = {};
   for (const row of customizableRows()) {
     out[row.id] = legacyShortcut(row);
   }
   return out;
 }
 
-export function updateKeyboardShortcut(id, shortcut) {
+export function updateKeyboardShortcut(id: string, shortcut: ShortcutOverride): void {
   if (!DEFAULTS_BY_ID[id]) return;
   overrides[id] = {
     key: shortcut.key,
@@ -139,8 +194,8 @@ export function updateKeyboardShortcut(id, shortcut) {
   refreshActiveKeymap();
 }
 
-export function parseShortcutEvent(event) {
-  const modifiers = [];
+export function parseShortcutEvent(event: KeyboardEvent): ShortcutOverride {
+  const modifiers: string[] = [];
   if (event.ctrlKey) modifiers.push('ctrl');
   if (event.metaKey && !event.ctrlKey) modifiers.push('ctrl'); // Cmd ≡ Ctrl
   if (event.shiftKey) modifiers.push('shift');
@@ -148,16 +203,16 @@ export function parseShortcutEvent(event) {
   return { key: event.key, modifiers };
 }
 
-export function formatShortcut(shortcut, platform = 'linux') {
+export function formatShortcut(shortcut: ShortcutOverride, platform: string = 'linux'): string {
   return formatChord(legacyToChord(shortcut), platform);
 }
 
-export function shortcutsConflict(s1, s2) {
+export function shortcutsConflict(s1: ShortcutOverride, s2: ShortcutOverride): boolean {
   return normalizeLegacyKey(s1.key) === normalizeLegacyKey(s2.key) &&
     JSON.stringify([...s1.modifiers].sort()) === JSON.stringify([...s2.modifiers].sort());
 }
 
-export function findConflict(newShortcut, excludeId = null) {
+export function findConflict(newShortcut: ShortcutOverride, excludeId: string | null = null): string | null {
   const all = getKeyboardShortcuts();
   for (const [id, shortcut] of Object.entries(all)) {
     if (id !== excludeId && shortcutsConflict(newShortcut, shortcut)) {
@@ -167,29 +222,31 @@ export function findConflict(newShortcut, excludeId = null) {
   return null;
 }
 
-export function resetShortcutsToDefaults() {
+export function resetShortcutsToDefaults(): void {
   overrides = {};
   refreshActiveKeymap();
 }
 
-export function loadShortcutsFromSettings(settings) {
+export function loadShortcutsFromSettings(settings: Record<string, unknown>): void {
   overrides = {};
   if (settings && typeof settings.shortcuts === 'object' && settings.shortcuts !== null) {
-    for (const [id, shortcut] of Object.entries(settings.shortcuts)) {
-      if (DEFAULTS_BY_ID[id] && shortcut && Array.isArray(shortcut.modifiers)) {
+    const shortcutsMap = settings.shortcuts as Record<string, unknown>;
+    for (const [id, shortcut] of Object.entries(shortcutsMap)) {
+      if (DEFAULTS_BY_ID[id] && shortcut && Array.isArray((shortcut as ShortcutOverride).modifiers)) {
+        const sc = shortcut as ShortcutOverride;
         // Skip entries that match the current default — old saved defaults
         // should not block keymap updates.
         const defaultLegacy = DEFAULTS_BY_ID[id];
         if (
-          normalizeLegacyKey(shortcut.key) === normalizeLegacyKey(defaultLegacy.key) &&
-          JSON.stringify([...shortcut.modifiers].sort()) ===
+          normalizeLegacyKey(sc.key) === normalizeLegacyKey(defaultLegacy.key) &&
+          JSON.stringify([...sc.modifiers].sort()) ===
             JSON.stringify([...defaultLegacy.modifiers].sort())
         ) {
           continue;
         }
         overrides[id] = {
-          key: shortcut.key,
-          modifiers: [...shortcut.modifiers],
+          key: sc.key,
+          modifiers: [...sc.modifiers],
         };
       }
     }
@@ -197,8 +254,8 @@ export function loadShortcutsFromSettings(settings) {
   refreshActiveKeymap();
 }
 
-export function getShortcutsForSave() {
-  const out = {};
+export function getShortcutsForSave(): Record<string, ShortcutOverride> {
+  const out: Record<string, ShortcutOverride> = {};
   for (const [id, override] of Object.entries(overrides)) {
     out[id] = {
       key: override.key,

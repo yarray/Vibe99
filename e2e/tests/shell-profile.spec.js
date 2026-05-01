@@ -312,7 +312,7 @@ describe('Shell Profile', () => {
       let item = await findProfileItem('delete-me');
       expect(item).not.toBeNull();
 
-      await clickProfileAction('delete-me', '✕');
+      await clickProfileAction('delete-me', 'Delete');
 
       item = await findProfileItem('delete-me');
       expect(item).toBeNull();
@@ -328,7 +328,7 @@ describe('Shell Profile', () => {
         args: '-l',
       });
 
-      await clickProfileAction('clone-src', '⧉');
+      await clickProfileAction('clone-src', 'Clone');
       await browser.pause(300);
 
       const items = await getProfileItems();
@@ -378,7 +378,7 @@ describe('Shell Profile', () => {
       let cls = await item.getAttribute('class');
       expect(cls.includes('is-default')).toBe(false);
 
-      await clickProfileAction('default-candidate', '★');
+      await clickProfileAction('default-candidate', 'Set as default');
       await browser.pause(300);
 
       item = await findProfileItem('default-candidate');

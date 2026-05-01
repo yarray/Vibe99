@@ -8,11 +8,95 @@
 // Dependencies injected at creation time to keep the module testable
 // and decoupled from the renderer.
 
-import { icon } from './icons.js';
+import { icon } from './icons';
+import type { PaneNode } from './pane-renderer';
 
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+/** A shell profile as used within this module. */
+export interface ShellProfile {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+}
+
+/** Shape of the profile being edited in the modal. */
+export interface EditingShellProfile {
+  id: string;
+  name: string;
+  command: string;
+  args: string;
+  isNew: boolean;
+}
+
+/** Result shape returned by bridge shell profile operations. */
+export interface ShellProfileConfigResult {
+  profiles: ShellProfile[];
+  defaultProfile: string;
+}
+
+/** Shared mutable state accessed by the shell profile manager. */
+export interface ShellProfileState {
+  getPanels: () => ShellProfilePanel[];
+  setPanels: (panels: ShellProfilePanel[]) => void;
+  getFocusedPaneId: () => string | null;
+  getPaneNode: (paneId: string) => PaneNode | null;
+  getShellProfiles: () => ShellProfile[];
+  setShellProfiles: (profiles: ShellProfile[]) => void;
+  getDefaultShellProfileId: () => string;
+  setDefaultShellProfileId: (id: string) => void;
+  getDetectedShellProfiles: () => ShellProfile[];
+  setDetectedShellProfiles: (profiles: ShellProfile[]) => void;
+  getEditingShellProfile: () => EditingShellProfile | null;
+  setEditingShellProfile: (profile: EditingShellProfile | null) => void;
+  getSelectedShellProfileId: () => string | null;
+  setSelectedShellProfileId: (id: string | null) => void;
+}
+
+/** Minimal panel/pane shape needed by shell-profiles. */
+export interface ShellProfilePanel {
+  id: string;
+  shellProfileId: string | null;
+}
+
+/** Bridge surface consumed by the shell profile manager. */
+export interface ShellProfileBridge {
+  listShellProfiles: () => Promise<ShellProfileConfigResult>;
+  detectShellProfiles: () => Promise<ShellProfile[]>;
+  addShellProfile: (profile: ShellProfile) => Promise<ShellProfileConfigResult>;
+  removeShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
+  setDefaultShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
+}
+
+/** Dependencies injected into createShellProfileManager. */
+export interface ShellProfileManagerDeps {
+  bridge: ShellProfileBridge;
+  state: ShellProfileState;
+  reportError: (error: unknown) => void;
+  scheduleSave: () => void;
+  initializePaneTerminal: (node: PaneNode) => Promise<void>;
+  registerModal: (closeFn: () => void) => void;
+  unregisterModal: (closeFn: () => void) => void;
+}
+
+/** Public API surface returned by createShellProfileManager. */
+export interface ShellProfileManager {
+  loadShellProfiles: () => Promise<void>;
+  openShellProfilesModal: () => void;
+  changePaneShell: (paneId: string, profileId: string) => void;
+  getShellProfiles: () => ShellProfile[];
+  getDefaultShellProfileId: () => string;
+}
+
+// ---------------------------------------------------------------------------
 // Utility functions for shell argument parsing
-function splitArgs(str) {
-  const args = [];
+// ---------------------------------------------------------------------------
+
+function splitArgs(str: string): string[] {
+  const args: string[] = [];
   let cur = '';
   let inQuote = false;
   let quoteChar = '';
@@ -32,7 +116,7 @@ function splitArgs(str) {
   return args;
 }
 
-function formatArgs(args) {
+function formatArgs(args: string[]): string {
   return args.map((arg) => {
     // Arguments needing quoting: contain spaces, double quotes, backslashes, or are empty.
     if (arg === '' || /[\s"]/.test(arg) || /\\/.test(arg)) {
@@ -44,32 +128,12 @@ function formatArgs(args) {
   }).join(' ');
 }
 
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
 /**
  * Create a shell profile manager.
- *
- * @param {object} deps - Dependencies
- * @param {object} deps.bridge - Tauri bridge for shell profile operations
- * @param {object} deps.state - Shared state object
- * @param {Function} deps.state.getPanels - Get current panes array
- * @param {Function} deps.state.setPanels - Update panes array
- * @param {Function} deps.state.getFocusedPaneId - Get focused pane ID
- * @param {Function} deps.state.getPaneNode - Get pane node by ID
- * @param {Function} deps.state.getShellProfiles - Get shell profiles array
- * @param {Function} deps.state.setShellProfiles - Set shell profiles array
- * @param {Function} deps.state.getDefaultShellProfileId - Get default shell profile ID
- * @param {Function} deps.state.setDefaultShellProfileId - Set default shell profile ID
- * @param {Function} deps.state.getDetectedShellProfiles - Get detected shell profiles array
- * @param {Function} deps.state.setDetectedShellProfiles - Set detected shell profiles array
- * @param {Function} deps.state.getEditingShellProfile - Get editing shell profile
- * @param {Function} deps.state.setEditingShellProfile - Set editing shell profile
- * @param {Function} deps.state.getSelectedShellProfileId - Get selected shell profile ID
- * @param {Function} deps.state.setSelectedShellProfileId - Set selected shell profile ID
- * @param {Function} deps.reportError - Error reporting function
- * @param {Function} deps.scheduleSave - Schedule a settings save
- * @param {Function} deps.initializePaneTerminal - Initialize a pane's terminal
- * @param {Function} deps.registerModal - Register modal close handler
- * @param {Function} deps.unregisterModal - Unregister modal close handler
- * @returns {object} Shell profile manager API
  */
 export function createShellProfileManager({
   bridge,
@@ -79,18 +143,18 @@ export function createShellProfileManager({
   initializePaneTerminal,
   registerModal,
   unregisterModal,
-}) {
+}: ShellProfileManagerDeps): ShellProfileManager {
   // Internal state references
-  let detectedShellProfiles = [];
+  let detectedShellProfiles: ShellProfile[] = [];
 
   // ----------------------------------------------------------------
   // Shell profile loading
   // ----------------------------------------------------------------
 
-  function loadShellProfiles() {
+  function loadShellProfiles(): Promise<void> {
     return Promise.all([
       bridge.listShellProfiles(),
-      bridge.detectShellProfiles().catch(() => []),
+      bridge.detectShellProfiles().catch((): ShellProfile[] => []),
     ]).then(([config, detected]) => {
       detectedShellProfiles = detected;
       const userProfiles = config.profiles ?? [];
@@ -98,10 +162,10 @@ export function createShellProfileManager({
       // Merge: user profiles first, then detected ones not already present.
       state.setShellProfiles([...userProfiles, ...detected.filter((p) => !userIds.has(p.id))]);
       state.setDefaultShellProfileId(config.defaultProfile ?? '');
-    }).catch(reportError);
+    }).catch(reportError) as Promise<void>;
   }
 
-  function createProfileActionButton(label, title, onClick) {
+  function createProfileActionButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'settings-btn';
@@ -118,7 +182,7 @@ export function createShellProfileManager({
   // Shell switching for panes
   // ----------------------------------------------------------------
 
-  function changePaneShell(paneId, profileId) {
+  function changePaneShell(paneId: string, profileId: string): void {
     const node = state.getPaneNode(paneId);
     if (!node) return;
 
@@ -153,10 +217,16 @@ export function createShellProfileManager({
   // Shell profiles modal
   // ----------------------------------------------------------------
 
-  function openShellProfilesModal() {
+  /** Augmented overlay element that carries modal DOM references. */
+  interface ShellProfilesModalOverlay extends HTMLDivElement {
+    _modalShellProfileList: HTMLDivElement;
+    _modalShellProfileEditor: HTMLDivElement;
+  }
+
+  function openShellProfilesModal(): void {
     loadShellProfiles();
 
-    const overlay = document.createElement('div');
+    const overlay = document.createElement('div') as ShellProfilesModalOverlay;
     overlay.className = 'settings-modal-overlay';
 
     overlay.innerHTML = `
@@ -190,10 +260,10 @@ export function createShellProfileManager({
       if (e.target === overlay) closeModal();
     });
 
-    overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+    overlay.querySelector('.settings-modal-close')!.addEventListener('click', closeModal);
 
     // Add profile button
-    overlay.querySelector('#modal-shell-profile-add').addEventListener('click', () => {
+    overlay.querySelector('#modal-shell-profile-add')!.addEventListener('click', () => {
       state.setEditingShellProfile({
         id: '',
         name: '',
@@ -208,8 +278,8 @@ export function createShellProfileManager({
     document.body.appendChild(overlay);
 
     // Store reference to modal elements for rendering
-    overlay._modalShellProfileList = overlay.querySelector('#modal-shell-profile-list');
-    overlay._modalShellProfileEditor = overlay.querySelector('#modal-shell-profile-editor');
+    overlay._modalShellProfileList = overlay.querySelector('#modal-shell-profile-list') as HTMLDivElement;
+    overlay._modalShellProfileEditor = overlay.querySelector('#modal-shell-profile-editor') as HTMLDivElement;
 
     // Select first profile by default if available
     const shellProfiles = state.getShellProfiles();
@@ -232,8 +302,15 @@ export function createShellProfileManager({
     registerModal(closeModal);
   }
 
-  function renderModalShellProfiles() {
-    const overlay = document.querySelector('.settings-modal-overlay');
+  function applyConfigRefresh(config: ShellProfileConfigResult): void {
+    const userIds = new Set((config.profiles ?? []).map((p) => p.id));
+    state.setShellProfiles([...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))]);
+    state.setDefaultShellProfileId(config.defaultProfile ?? '');
+    renderModalShellProfiles();
+  }
+
+  function renderModalShellProfiles(): void {
+    const overlay = document.querySelector('.settings-modal-overlay') as ShellProfilesModalOverlay | null;
     if (!overlay || !overlay._modalShellProfileList) return;
 
     const listEl = overlay._modalShellProfileList;
@@ -274,18 +351,12 @@ export function createShellProfileManager({
         // Quick actions: set default, clone, delete
         if (profile.id !== defaultShellProfileId) {
           actions.appendChild(createProfileActionButton('star', 'Set as default', () => {
-            const apply = (config) => {
-              const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-              state.setShellProfiles([...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))]);
-              state.setDefaultShellProfileId(config.defaultProfile ?? '');
-              renderModalShellProfiles();
-            };
             if (isDetected) {
               bridge.addShellProfile(profile).then(() => {
-                bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
+                bridge.setDefaultShellProfile(profile.id).then(applyConfigRefresh).catch(reportError);
               }).catch(reportError);
             } else {
-              bridge.setDefaultShellProfile(profile.id).then(apply).catch(reportError);
+              bridge.setDefaultShellProfile(profile.id).then(applyConfigRefresh).catch(reportError);
             }
           }));
         }
@@ -300,12 +371,7 @@ export function createShellProfileManager({
               state.setSelectedShellProfileId(null);
               state.setEditingShellProfile(null);
             }
-            bridge.removeShellProfile(profile.id).then((config) => {
-              const userIds = new Set((config.profiles ?? []).map((p) => p.id));
-              state.setShellProfiles([...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))]);
-              state.setDefaultShellProfileId(config.defaultProfile ?? '');
-              renderModalShellProfiles();
-            }).catch(reportError);
+            bridge.removeShellProfile(profile.id).then(applyConfigRefresh).catch(reportError);
           }));
         }
 
@@ -316,7 +382,7 @@ export function createShellProfileManager({
         let dragStartTime = 0;
 
         item.addEventListener('click', (e) => {
-          if (e.target.closest('.shell-profile-actions')) return;
+          if ((e.target as HTMLElement).closest('.shell-profile-actions')) return;
           if (isDragging) return;
           state.setSelectedShellProfileId(profile.id);
           state.setEditingShellProfile({
@@ -331,7 +397,8 @@ export function createShellProfileManager({
 
         // Drag events for reordering
         if (!isDetected) {
-          item.addEventListener('dragstart', (e) => {
+          item.addEventListener('dragstart', (e: DragEvent) => {
+            if (!e.dataTransfer) return;
             dragStartTime = Date.now();
             isDragging = true;
             item.classList.add('is-dragging');
@@ -343,7 +410,7 @@ export function createShellProfileManager({
             }
           });
 
-          item.addEventListener('dragend', (e) => {
+          item.addEventListener('dragend', () => {
             const dragDuration = Date.now() - dragStartTime;
             // If drag was very short, treat it as a click
             if (dragDuration < 200) {
@@ -358,10 +425,10 @@ export function createShellProfileManager({
             });
           });
 
-          item.addEventListener('dragover', (e) => {
+          item.addEventListener('dragover', (e: DragEvent) => {
             e.preventDefault();
             e.stopPropagation();
-            e.dataTransfer.dropEffect = 'move';
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
             const dragging = document.querySelector('.shell-profile-item.is-dragging');
             if (dragging && dragging !== item) {
               item.classList.add('drag-over');
@@ -370,16 +437,16 @@ export function createShellProfileManager({
 
           item.addEventListener('dragleave', (e) => {
             // Only remove drag-over if we're actually leaving the item
-            if (!item.contains(e.relatedTarget)) {
+            if (!item.contains(e.relatedTarget as Node)) {
               item.classList.remove('drag-over');
             }
           });
 
-          item.addEventListener('drop', (e) => {
+          item.addEventListener('drop', (e: DragEvent) => {
             e.preventDefault();
             e.stopPropagation();
             item.classList.remove('drag-over');
-            const draggedId = e.dataTransfer.getData('text/plain');
+            const draggedId = e.dataTransfer?.getData('text/plain') ?? '';
             const targetId = profile.id;
 
             if (draggedId !== targetId) {
@@ -404,19 +471,25 @@ export function createShellProfileManager({
     }
   }
 
-  function createModalShellProfileEditor() {
+  interface EditorField {
+    key: 'name' | 'id' | 'command' | 'args';
+    label: string;
+    placeholder: string;
+  }
+
+  function createModalShellProfileEditor(): HTMLDivElement {
     const editor = document.createElement('div');
     editor.className = 'shell-profile-editor';
 
-    const editingShellProfile = state.getEditingShellProfile();
-    const fields = [
+    const editingShellProfile = state.getEditingShellProfile()!;
+    const fields: EditorField[] = [
       { key: 'name', label: 'Name (optional)', placeholder: 'e.g. Zsh' },
       { key: 'id', label: 'ID', placeholder: 'e.g. zsh' },
       { key: 'command', label: 'Command', placeholder: '/bin/zsh' },
       { key: 'args', label: 'Arguments', placeholder: '-il' },
     ];
 
-    const inputs = {};
+    const inputs: Record<string, HTMLInputElement> = {};
     for (const field of fields) {
       const label = document.createElement('label');
       label.textContent = field.label;
@@ -460,7 +533,7 @@ export function createShellProfileManager({
     save.className = 'settings-btn shell-profile-editor-btn is-primary';
     save.textContent = 'Save';
     save.addEventListener('click', () => {
-      const profile = {
+      const profile: ShellProfile = {
         id: inputs.id.value.trim(),
         name: inputs.name.value.trim(),
         command: inputs.command.value.trim(),
@@ -504,8 +577,8 @@ export function createShellProfileManager({
     return editor;
   }
 
-  function cloneProfile(profile) {
-    const clonedProfile = {
+  function cloneProfile(profile: ShellProfile): void {
+    const clonedProfile: ShellProfile = {
       id: `${profile.id}-copy-${Date.now()}`,
       name: `${profile.name || profile.id} (副本)`,
       command: profile.command,
@@ -530,7 +603,7 @@ export function createShellProfileManager({
     }).catch(reportError);
   }
 
-  function reorderProfiles(draggedId, targetId) {
+  function reorderProfiles(draggedId: string, targetId: string): void {
     const shellProfiles = state.getShellProfiles();
     const draggedIndex = shellProfiles.findIndex(p => p.id === draggedId);
     const targetIndex = shellProfiles.findIndex(p => p.id === targetId);
