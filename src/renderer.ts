@@ -107,6 +107,7 @@ const layoutManager = createLayoutManager({
   layoutsButtonEl,
   onManageLayouts: () => layoutModal.openLayoutsModal(),
 });
+(window as any).layoutManager = layoutManager;
 
 const layoutModal = createLayoutModal({
   bridge,

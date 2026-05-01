@@ -421,6 +421,12 @@ export async function clearAllLayouts() {
   return await browser.execute(async () => {
     if (!window.__TAURI__) return;
     const core = window.__TAURI__.core;
+    // Cancel any pending frontend layout save and reset layout binding
+    if (window.layoutManager) {
+      window.layoutManager.flushWindowLayoutSave();
+      window.layoutManager.setWindowLayoutId(null);
+      window.layoutManager.updateLayoutsIndicator();
+    }
     const config = await core.invoke('layouts_list');
     const layouts = config.layouts ?? [];
     for (const layout of layouts) {
