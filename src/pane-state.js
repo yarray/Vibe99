@@ -18,14 +18,30 @@
  * @returns {Object} Pane state manager interface
  */
 export function createPaneState({ defaultCwd, defaultTabTitle, getAccentPalette, onStateChange }) {
-  // Initial panes - single pane with default values
+  const palette = getAccentPalette();
   const initialPanes = [
     {
       id: 'p1',
       title: null,
       terminalTitle: defaultTabTitle,
       cwd: defaultCwd,
-      accent: getAccentPalette()[2],
+      accent: palette[0],
+      shellProfileId: null,
+    },
+    {
+      id: 'p2',
+      title: null,
+      terminalTitle: defaultTabTitle,
+      cwd: defaultCwd,
+      accent: palette[1],
+      shellProfileId: null,
+    },
+    {
+      id: 'p3',
+      title: null,
+      terminalTitle: defaultTabTitle,
+      cwd: defaultCwd,
+      accent: palette[2],
       shellProfileId: null,
     },
   ];
