@@ -8,15 +8,112 @@
 // Dependencies injected at creation time to keep the module testable
 // and decoupled from the renderer.
 
-import { icon } from './icons.js';
-import * as ColorsRegistry from './colors-registry.js';
+import { icon } from './icons';
+import * as ColorsRegistry from './colors-registry';
+import type { PaneNode } from './pane-renderer';
+import type { Pane } from './pane-state';
+import type { Bridge, ClipboardSnapshot } from './bridge';
+import type { ShellProfile } from './shell-profiles';
 
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+/** Adapter interface for the shared state consumed by context menus. */
+export interface ContextMenuState {
+  getPaneIndex: (paneId: string) => number;
+  getFocusedPaneId: () => string | null;
+  getPanels: () => Pane[];
+  setPanels: (panes: Pane[]) => void;
+  setFocusedPaneId: (id: string) => void;
+  recordPaneVisit: (paneId: string) => void;
+  getPaneNode: (paneId: string) => PaneNode | null;
+  render: () => void;
+  registerModal: (closeFn: () => void) => void;
+  unregisterModal: (closeFn: () => void) => void;
+  clearPaneCycleState: () => void;
+  scheduleSave: () => void;
+}
+
+/** A child item inside a parent menu item. */
+export interface MenuChildItem {
+  label: string;
+  action: string;
+  disabled?: boolean;
+  isDefault?: boolean;
+}
+
+/** A visual separator between menu items. */
+export interface MenuSeparatorItem {
+  type: 'separator';
+}
+
+/** A menu item that has a label and optionally triggers an action or contains children. */
+export interface MenuEntryItem {
+  label: string;
+  action?: string;
+  disabled?: boolean;
+  shortcut?: string;
+  children?: MenuChildItem[];
+}
+
+/** Union of all possible menu item shapes. */
+export type MenuItem = MenuEntryItem | MenuSeparatorItem;
+
+/** Type guard: checks whether a MenuItem is a separator. */
+function isMenuSeparator(item: MenuItem): item is MenuSeparatorItem {
+  return 'type' in item && item.type === 'separator';
+}
+
+/** Shape of the shell-profile manager surface used by context menus. */
+export interface ShellProfileManagerLike {
+  getShellProfiles: () => ShellProfile[];
+  getDefaultShellProfileId: () => string;
+  changePaneShell: (paneId: string, profileId: string) => void;
+}
+
+/** Dependencies injected into `createContextMenus`. */
+export interface ContextMenusDeps {
+  state: ContextMenuState;
+  bridge: Bridge;
+  shellProfileManager: ShellProfileManagerLike;
+  reportError: (error: unknown) => void;
+  focusPane: (paneId: string) => void;
+  beginRenamePane: (paneIndex: number) => void;
+  closePane: (paneIndex: number) => void;
+  togglePaneBreathingMonitor: (paneId: string) => void;
+}
+
+/** Public API surface returned by `createContextMenus`. */
+export interface ContextMenus {
+  showContextMenu: (items: MenuItem[], x: number, y: number, paneId: string) => void;
+  hideContextMenu: () => void;
+  showTerminalContextMenu: (node: PaneNode, event: MouseEvent) => void;
+  showTabContextMenu: (paneId: string, event: MouseEvent) => void;
+  showColorPicker: (paneId: string) => void;
+  setPaneColor: (paneId: string, color: string) => void;
+  clearPaneColor: (paneId: string) => void;
+  pasteImageIntoTerminal: (paneId: string, options?: PasteImageOptions) => void;
+  handleMenuAction: (action: string, paneId: string) => void;
+}
+
+/** Options for paste-image operations. */
+export interface PasteImageOptions {
+  clipboardSnapshot?: ClipboardSnapshot;
+}
+
+// ---------------------------------------------------------------------------
 // Internal state
-let _hideContextMenuFn = null;
-let _dismissContextMenuOnOutsideFn = null;
+// ---------------------------------------------------------------------------
 
+let _hideContextMenuFn: (() => void) | null = null;
+let _dismissContextMenuOnOutsideFn: ((event: PointerEvent) => void) | null = null;
+
+// ---------------------------------------------------------------------------
 // Utility functions for clipboard and terminal operations
-async function getClipboardSnapshot(bridge) {
+// ---------------------------------------------------------------------------
+
+async function getClipboardSnapshot(bridge: Bridge): Promise<ClipboardSnapshot> {
   try {
     return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
   } catch {
@@ -24,7 +121,11 @@ async function getClipboardSnapshot(bridge) {
   }
 }
 
-function copyTerminalSelection(paneId, state, bridge) {
+function copyTerminalSelection(
+  paneId: string,
+  state: ContextMenuState,
+  bridge: Bridge,
+): boolean {
   const node = state.getPaneNode(paneId);
   if (!node) {
     return false;
@@ -39,7 +140,12 @@ function copyTerminalSelection(paneId, state, bridge) {
   return true;
 }
 
-async function pasteIntoTerminal(paneId, state, bridge, options = {}) {
+async function pasteIntoTerminal(
+  paneId: string,
+  state: ContextMenuState,
+  bridge: Bridge,
+  options: { clipboardSnapshot?: ClipboardSnapshot } = {},
+): Promise<boolean> {
   const node = state.getPaneNode(paneId);
   if (!node?.sessionReady) {
     return false;
@@ -58,7 +164,7 @@ async function pasteIntoTerminal(paneId, state, bridge, options = {}) {
   return true;
 }
 
-function selectAllInTerminal(paneId, state) {
+function selectAllInTerminal(paneId: string, state: ContextMenuState): boolean {
   const node = state.getPaneNode(paneId);
   if (!node) {
     return false;
@@ -68,7 +174,12 @@ function selectAllInTerminal(paneId, state) {
   return true;
 }
 
-async function pasteImageIntoTerminal(paneId, state, bridge, options = {}) {
+async function pasteImageIntoTerminal(
+  paneId: string,
+  state: ContextMenuState,
+  bridge: Bridge,
+  options: PasteImageOptions = {},
+): Promise<boolean> {
   const node = state.getPaneNode(paneId);
   if (!node?.sessionReady) {
     return false;
@@ -79,15 +190,17 @@ async function pasteImageIntoTerminal(paneId, state, bridge, options = {}) {
     return false;
   }
 
-  bridge.writeTerminal({ paneId: node.paneId, data: '\u0016' });
+  bridge.writeTerminal({ paneId: node.paneId, data: '' });
   return true;
 }
 
-// ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // Context menu
-// ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
-function hideContextMenu(state) {
+type HandleMenuActionFn = (action: string, paneId: string) => void;
+
+function hideContextMenu(state: ContextMenuState): void {
   const menu = document.querySelector('.context-menu');
   if (menu) {
     menu.remove();
@@ -95,17 +208,28 @@ function hideContextMenu(state) {
   if (_dismissContextMenuOnOutsideFn) {
     document.removeEventListener('pointerdown', _dismissContextMenuOnOutsideFn);
   }
-  window.removeEventListener('blur', _hideContextMenuFn);
-  state.unregisterModal(_hideContextMenuFn);
+  if (_hideContextMenuFn) {
+    window.removeEventListener('blur', _hideContextMenuFn);
+    state.unregisterModal(_hideContextMenuFn);
+  }
 }
 
-function dismissContextMenuOnOutside(event) {
+function dismissContextMenuOnOutside(event: PointerEvent): void {
+  if (!(event.target instanceof Element)) return;
   if (!event.target.closest('.context-menu')) {
     if (_hideContextMenuFn) _hideContextMenuFn();
   }
 }
 
-function showContextMenu(items, x, y, paneId, state, bridge, handleMenuAction) {
+function showContextMenu(
+  items: MenuItem[],
+  x: number,
+  y: number,
+  paneId: string,
+  state: ContextMenuState,
+  bridge: Bridge,
+  handleMenuAction: HandleMenuActionFn,
+): void {
   hideContextMenu(state);
 
   const menu = document.createElement('div');
@@ -113,7 +237,7 @@ function showContextMenu(items, x, y, paneId, state, bridge, handleMenuAction) {
   menu.setAttribute('role', 'menu');
 
   for (const item of items) {
-    if (item.type === 'separator') {
+    if (isMenuSeparator(item)) {
       const sep = document.createElement('div');
       sep.className = 'context-menu-separator';
       menu.appendChild(sep);
@@ -138,11 +262,13 @@ function showContextMenu(items, x, y, paneId, state, bridge, handleMenuAction) {
       row.appendChild(shortcut);
     }
 
-    row.addEventListener('click', (e) => {
-      e.stopPropagation();
-      hideContextMenu(state);
-      handleMenuAction(item.action, paneId);
-    });
+    if (item.action) {
+      row.addEventListener('click', (e: MouseEvent) => {
+        e.stopPropagation();
+        hideContextMenu(state);
+        handleMenuAction(item.action!, paneId);
+      });
+    }
 
     if (item.children?.length) {
       row.classList.add('context-menu-parent');
@@ -168,7 +294,7 @@ function showContextMenu(items, x, y, paneId, state, bridge, handleMenuAction) {
           childRow.appendChild(check);
         }
 
-        childRow.addEventListener('click', (e) => {
+        childRow.addEventListener('click', (e: MouseEvent) => {
           e.stopPropagation();
           hideContextMenu(state);
           handleMenuAction(child.action, paneId);
@@ -208,47 +334,61 @@ function showContextMenu(items, x, y, paneId, state, bridge, handleMenuAction) {
   });
 }
 
-async function showTerminalContextMenu(node, event, state, bridge, shellProfileManager) {
-  const clipboardSnapshot = await getClipboardSnapshot(bridge);
+function showTerminalContextMenu(
+  node: PaneNode,
+  event: MouseEvent,
+  state: ContextMenuState,
+  bridge: Bridge,
+  shellProfileManager: ShellProfileManagerLike,
+  handleMenuAction: HandleMenuActionFn,
+): void {
+  getClipboardSnapshot(bridge).then((clipboardSnapshot) => {
 
-  const shellProfiles = shellProfileManager.getShellProfiles();
-  const defaultShellProfileId = shellProfileManager.getDefaultShellProfileId();
+    const shellProfiles = shellProfileManager.getShellProfiles();
+    const defaultShellProfileId = shellProfileManager.getDefaultShellProfileId();
 
-  const shellChildren = shellProfiles.map((p) => ({
-    label: p.name || p.id,
-    action: `terminal-change-shell:${p.id}`,
-    isDefault: p.id === defaultShellProfileId,
-  }));
+    const shellChildren: MenuChildItem[] = shellProfiles.map((p) => ({
+      label: p.name || p.id,
+      action: `terminal-change-shell:${p.id}`,
+      isDefault: p.id === defaultShellProfileId,
+    }));
 
-  const panes = state.getPanels();
-  const pane = panes[state.getPaneIndex(node.paneId)];
-  const breathingOn = pane && pane.breathingMonitor !== false;
+    const panes = state.getPanels();
+    const pane = panes[state.getPaneIndex(node.paneId)];
+    const breathingOn = pane && pane.breathingMonitor !== false;
 
-  const items = [
-    { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
-    { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
-    { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
-    { type: 'separator' },
-    { label: 'Change Color...', action: 'terminal-change-color' },
-    {
-      label: 'Background activity alert',
-      action: 'pane-toggle-breathing',
-      shortcut: breathingOn ? icon('check', 12) : '',
-    },
-    { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
-  ];
-
-  if (shellChildren.length > 0) {
-    items.push(
+    const items: MenuItem[] = [
+      { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
+      { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
+      { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
       { type: 'separator' },
-      { label: 'Change Profile', children: shellChildren },
-    );
-  }
+      { label: 'Change Color...', action: 'terminal-change-color' },
+      {
+        label: 'Background activity alert',
+        action: 'pane-toggle-breathing',
+        shortcut: breathingOn ? icon('check', 12) : '',
+      },
+      { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
+    ];
 
-  showContextMenu(items, event.clientX, event.clientY, node.paneId, state, bridge, handleMenuAction);
+    if (shellChildren.length > 0) {
+      items.push(
+        { type: 'separator' },
+        { label: 'Change Profile', children: shellChildren },
+      );
+    }
+
+    showContextMenu(items, event.clientX, event.clientY, node.paneId, state, bridge, handleMenuAction);
+  });
 }
 
-function showTabContextMenu(paneId, event, state, bridge) {
+function showTabContextMenu(
+  paneId: string,
+  event: MouseEvent,
+  state: ContextMenuState,
+  bridge: Bridge,
+  handleMenuAction: HandleMenuActionFn,
+): void {
   const paneIndex = state.getPaneIndex(paneId);
   if (paneIndex === -1) {
     return;
@@ -263,7 +403,7 @@ function showTabContextMenu(paneId, event, state, bridge) {
   const pane = panes[paneIndex];
   const hasCustomColor = pane && pane.customColor !== undefined;
 
-  const items = [
+  const items: MenuItem[] = [
     { label: 'Change Color...', action: 'tab-change-color' },
     { type: 'separator' },
     { label: 'Rename Tab', action: 'tab-rename' },
@@ -272,11 +412,17 @@ function showTabContextMenu(paneId, event, state, bridge) {
   showContextMenu(items, event.clientX, event.clientY, paneId, state, bridge, handleMenuAction);
 }
 
-// ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // Color picker
-// ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
-function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
+function showColorPicker(
+  paneId: string,
+  state: ContextMenuState,
+  bridge: Bridge,
+  focusPane: (paneId: string) => void,
+  handleMenuAction: HandleMenuActionFn,
+): void {
   hideContextMenu(state);
 
   const paneIndex = state.getPaneIndex(paneId);
@@ -288,7 +434,7 @@ function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
   const presetColors = ColorsRegistry.PRESET_PANE_COLORS;
 
   // Find the index of the currently selected color for initial keyboard focus
-  let focusedIndex = presetColors.indexOf(currentColor);
+  let focusedIndex: number = presetColors.indexOf(currentColor);
   if (focusedIndex === -1) focusedIndex = 0;
 
   const picker = document.createElement('div');
@@ -319,8 +465,8 @@ function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
   // Grid layout: 8 columns, so up/down moves by 8, left/right moves by 1
   const GRID_COLUMNS = 8;
 
-  const handleKeydown = (e) => {
-    const presetButtons = picker.querySelectorAll('.color-preset');
+  const handleKeydown = (e: KeyboardEvent): void => {
+    const presetButtons = picker.querySelectorAll<HTMLButtonElement>('.color-preset');
     const totalColors = presetColors.length;
 
     switch (e.key) {
@@ -361,7 +507,7 @@ function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
         e.preventDefault();
         // Select the focused color
         const selectedColor = presetButtons[focusedIndex].dataset.color;
-        setPaneColor(paneId, selectedColor, state);
+        setPaneColor(paneId, selectedColor!, state);
         picker.removeEventListener('keydown', handleKeydown);
         picker.remove();
         // Return focus to the pane
@@ -378,7 +524,7 @@ function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
     }
   };
 
-  picker.addEventListener('click', (e) => {
+  picker.addEventListener('click', (e: MouseEvent) => {
     if (e.target === picker) {
       picker.removeEventListener('keydown', handleKeydown);
       picker.remove();
@@ -386,15 +532,15 @@ function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
     }
   });
 
-  picker.querySelector('.color-picker-close').addEventListener('click', () => {
+  picker.querySelector('.color-picker-close')!.addEventListener('click', () => {
     picker.removeEventListener('keydown', handleKeydown);
     closeColorPicker();
   });
 
-  picker.querySelectorAll('.color-preset').forEach(btn => {
+  picker.querySelectorAll<HTMLButtonElement>('.color-preset').forEach(btn => {
     btn.addEventListener('click', () => {
       const color = btn.dataset.color;
-      setPaneColor(paneId, color, state);
+      setPaneColor(paneId, color!, state);
       picker.removeEventListener('keydown', handleKeydown);
       closeColorPicker();
       // Return focus to the pane
@@ -403,25 +549,25 @@ function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
 
     // Update focused index on mouse hover for consistency
     btn.addEventListener('mouseenter', () => {
-      const presetButtons = picker.querySelectorAll('.color-preset');
+      const presetButtons = picker.querySelectorAll<HTMLButtonElement>('.color-preset');
       presetButtons[focusedIndex].classList.remove('is-focused');
-      focusedIndex = parseInt(btn.dataset.index, 10);
+      focusedIndex = parseInt(btn.dataset.index!, 10);
       btn.classList.add('is-focused');
     });
   });
 
-  const colorInput = picker.querySelector('.color-picker-input');
+  const colorInput = picker.querySelector<HTMLInputElement>('.color-picker-input')!;
   colorInput.addEventListener('input', () => {
     setPaneColor(paneId, colorInput.value, state);
   });
 
   // When custom color input is focused, remove keyboard focus from presets
   colorInput.addEventListener('focus', () => {
-    const presetButtons = picker.querySelectorAll('.color-preset');
+    const presetButtons = picker.querySelectorAll<HTMLButtonElement>('.color-preset');
     presetButtons[focusedIndex].classList.remove('is-focused');
   });
 
-  picker.querySelector('.color-picker-clear').addEventListener('click', () => {
+  picker.querySelector('.color-picker-clear')!.addEventListener('click', () => {
     clearPaneColor(paneId, state);
     picker.removeEventListener('keydown', handleKeydown);
     closeColorPicker();
@@ -436,7 +582,7 @@ function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
   picker.setAttribute('tabindex', '-1');
   picker.focus();
 
-  function closeColorPicker() {
+  function closeColorPicker(): void {
     picker.remove();
     state.unregisterModal(closeColorPicker);
   }
@@ -444,7 +590,7 @@ function showColorPicker(paneId, state, bridge, focusPane, handleMenuAction) {
   state.registerModal(closeColorPicker);
 }
 
-function setPaneColor(paneId, color, state) {
+function setPaneColor(paneId: string, color: string, state: ContextMenuState): void {
   const paneIndex = state.getPaneIndex(paneId);
   if (paneIndex === -1) return;
 
@@ -456,7 +602,7 @@ function setPaneColor(paneId, color, state) {
   state.render();
 }
 
-function clearPaneColor(paneId, state) {
+function clearPaneColor(paneId: string, state: ContextMenuState): void {
   const paneIndex = state.getPaneIndex(paneId);
   if (paneIndex === -1) return;
 
@@ -468,11 +614,26 @@ function clearPaneColor(paneId, state) {
   state.render();
 }
 
-// ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // Menu action handler
-// ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
-function handleMenuAction(action, paneId, deps) {
+interface HandleMenuActionDeps {
+  state: ContextMenuState;
+  bridge: Bridge;
+  shellProfileManager: ShellProfileManagerLike;
+  reportError: (error: unknown) => void;
+  focusPane: (paneId: string) => void;
+  beginRenamePane: (paneIndex: number) => void;
+  closePane: (paneIndex: number) => void;
+  togglePaneBreathingMonitor: (paneId: string) => void;
+}
+
+function handleMenuAction(
+  action: string,
+  paneId: string,
+  deps: HandleMenuActionDeps,
+): void {
   const { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
 
   if (action === 'terminal-copy') {
@@ -543,43 +704,46 @@ function handleMenuAction(action, paneId, deps) {
   }
 }
 
-// ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // Factory function
-// ----------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
 /**
  * Create a context menu manager.
  *
- * @param {object} deps - Dependencies
- * @param {object} deps.state - Shared state object
- * @param {object} deps.bridge - Tauri bridge
- * @param {object} deps.shellProfileManager - Shell profile manager
- * @param {Function} deps.reportError - Error reporting function
- * @param {Function} deps.focusPane - Focus a pane
- * @param {Function} deps.beginRenamePane - Begin renaming a pane
- * @param {Function} deps.closePane - Close a pane
- * @param {Function} deps.togglePaneBreathingMonitor - Toggle breathing monitor for a pane
- * @returns {object} Context menu manager API
+ * @param deps - Dependencies
+ * @param deps.state - Shared state object
+ * @param deps.bridge - Tauri bridge
+ * @param deps.shellProfileManager - Shell profile manager
+ * @param deps.reportError - Error reporting function
+ * @param deps.focusPane - Focus a pane
+ * @param deps.beginRenamePane - Begin renaming a pane
+ * @param deps.closePane - Close a pane
+ * @param deps.togglePaneBreathingMonitor - Toggle breathing monitor for a pane
+ * @returns Context menu manager API
  */
-export function createContextMenus({ state, bridge, shellProfileManager, reportError, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor }) {
+export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
+  const { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
+
   // Bind handleMenuAction with all dependencies
-  const boundHandleMenuAction = (action, paneId) =>
-    handleMenuAction(action, paneId, { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor });
+  const boundHandleMenuAction = (action: string, paneId: string): void =>
+    handleMenuAction(action, paneId, { state, bridge, shellProfileManager, reportError: deps.reportError, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor });
 
   return {
-    showContextMenu: (items, x, y, paneId) =>
+    showContextMenu: (items: MenuItem[], x: number, y: number, paneId: string): void =>
       showContextMenu(items, x, y, paneId, state, bridge, boundHandleMenuAction),
-    hideContextMenu: () => hideContextMenu(state),
-    showTerminalContextMenu: (node, event) =>
-      showTerminalContextMenu(node, event, state, bridge, shellProfileManager),
-    showTabContextMenu: (paneId, event) =>
-      showTabContextMenu(paneId, event, state, bridge),
-    showColorPicker: (paneId) =>
+    hideContextMenu: (): void => hideContextMenu(state),
+    showTerminalContextMenu: (node: PaneNode, event: MouseEvent): void =>
+      showTerminalContextMenu(node, event, state, bridge, shellProfileManager, boundHandleMenuAction),
+    showTabContextMenu: (paneId: string, event: MouseEvent): void =>
+      showTabContextMenu(paneId, event, state, bridge, boundHandleMenuAction),
+    showColorPicker: (paneId: string): void =>
       showColorPicker(paneId, state, bridge, focusPane, boundHandleMenuAction),
-    setPaneColor: (paneId, color) => setPaneColor(paneId, color, state),
-    clearPaneColor: (paneId) => clearPaneColor(paneId, state),
-    pasteImageIntoTerminal: (paneId, options) =>
-      pasteImageIntoTerminal(paneId, state, bridge, options),
+    setPaneColor: (paneId: string, color: string): void => setPaneColor(paneId, color, state),
+    clearPaneColor: (paneId: string): void => clearPaneColor(paneId, state),
+    pasteImageIntoTerminal: (paneId: string, options?: PasteImageOptions): void => {
+      void pasteImageIntoTerminal(paneId, state, bridge, options);
+    },
     handleMenuAction: boundHandleMenuAction,
   };
 }

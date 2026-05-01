@@ -1,9 +1,64 @@
-import { setIcon } from './icons.js';
+import { setIcon } from './icons';
 import {
+  type Bridge,
+  type LayoutData,
+  type LayoutsListResult,
+  type LayoutSaveResult,
   readLayoutWindowBindings,
   writeLayoutWindowBindings,
   clearLayoutWindowBinding,
-} from './bridge.js';
+} from './bridge';
+import type { PaneState, SessionData } from './pane-state';
+import type { ModalStack, CloseFn } from './modal-stack';
+
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+/** Dependencies injected into createLayoutManager. */
+export interface LayoutManagerDeps {
+  bridge: Bridge;
+  paneState: PaneState;
+  modalStack: ModalStack;
+  reportError: (error: unknown) => void;
+  layoutsButtonEl: HTMLElement;
+  onManageLayouts?: () => void;
+}
+
+/** The public API surface returned by createLayoutManager. */
+export interface LayoutManager {
+  setWindowLayoutId: (layoutId: string | null) => void;
+  getWindowLayoutId: () => string | null;
+  refreshLayouts: () => Promise<LayoutsListResult>;
+  saveCurrentLayout: () => Promise<void>;
+  saveLayoutAs: (name: string) => Promise<void>;
+  switchLayout: (layoutId: string) => Promise<void>;
+  updateLayoutsIndicator: () => void;
+  deleteLayoutById: (layoutId: string) => Promise<void>;
+  renameLayoutById: (layoutId: string, newName: string) => void;
+  toggleLayoutsDropdown: () => Promise<void>;
+  closeLayoutsDropdown: () => void;
+  scheduleWindowLayoutSave: (delay?: number) => void;
+  flushWindowLayoutSave: () => void;
+  getLayoutDisplayName: (layoutId: string | null) => string;
+  createDefaultLayout: () => LayoutData;
+  getLayouts: () => LayoutData[];
+  getDefaultLayoutId: () => string;
+  setLayoutRestoreComplete: (value: boolean) => void;
+  // Internal accessors for layout-modal
+  _getSelectedLayoutId: () => string | null;
+  _setSelectedLayoutId: (id: string | null) => void;
+  _getRenamingLayoutId: () => string | null;
+  _setRenamingLayoutId: (id: string | null) => void;
+  _setLayouts: (newLayouts: LayoutData[]) => void;
+  _setDefaultLayoutId: (id: string) => void;
+  createLayoutFromCurrentWindow: (layoutId: string, name: string) => LayoutData;
+  restoreSession: (session: { panes?: SessionData['panes']; focusedPaneIndex?: number }) => boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
 
 export function createLayoutManager({
   bridge,
@@ -12,18 +67,18 @@ export function createLayoutManager({
   reportError,
   layoutsButtonEl,
   onManageLayouts,
-}) {
-  let windowLayoutId = null;
-  let layouts = [];
-  let defaultLayoutId = '';
-  let selectedLayoutId = null;
-  let renamingLayoutId = null;
-  let pendingLayoutSave = null;
-  let layoutsDropdownOpen = false;
-  let layoutsDropdownEl = null;
-  let layoutRestoreComplete = false;
+}: LayoutManagerDeps): LayoutManager {
+  let windowLayoutId: string | null = null;
+  let layouts: LayoutData[] = [];
+  let defaultLayoutId: string = '';
+  let selectedLayoutId: string | null = null;
+  let renamingLayoutId: string | null = null;
+  let pendingLayoutSave: ReturnType<typeof setTimeout> | null = null;
+  let layoutsDropdownOpen: boolean = false;
+  let layoutsDropdownEl: HTMLDivElement | null = null;
+  let layoutRestoreComplete: boolean = false;
 
-  function setWindowLayoutId(layoutId) {
+  function setWindowLayoutId(layoutId: string | null): void {
     if (!layoutId || windowLayoutId === layoutId) return;
     if (windowLayoutId) {
       clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
@@ -34,25 +89,25 @@ export function createLayoutManager({
     writeLayoutWindowBindings(bindings);
   }
 
-  function buildSessionData() {
+  function buildSessionData(): SessionData {
     return paneState.buildSessionData();
   }
 
-  function restoreSession(session) {
+  function restoreSession(session: { panes?: SessionData['panes']; focusedPaneIndex?: number }): boolean {
     return paneState.restoreSession(session);
   }
 
-  function createLayoutFromCurrentWindow(layoutId, name) {
-    const session = buildSessionData();
+  function createLayoutFromCurrentWindow(layoutId: string, name: string): LayoutData {
+    const session: SessionData = buildSessionData();
     return {
       id: layoutId,
       name,
-      panes: session.panes,
+      panes: session.panes as unknown as LayoutData['panes'],
       focusedPaneIndex: session.focusedPaneIndex,
     };
   }
 
-  function createDefaultLayout() {
+  function createDefaultLayout(): LayoutData {
     const currentPanes = paneState.getPanes();
     return {
       id: 'default',
@@ -65,19 +120,19 @@ export function createLayoutManager({
         customColor: p.customColor,
         shellProfileId: p.shellProfileId,
         breathingMonitor: p.breathingMonitor !== false,
-      })),
+      })) as unknown as LayoutData['panes'],
       focusedPaneIndex: 0,
     };
   }
 
-  async function refreshLayouts() {
+  async function refreshLayouts(): Promise<LayoutsListResult> {
     const config = await bridge.listLayouts();
     layouts = config.layouts ?? [];
     defaultLayoutId = config.defaultLayoutId ?? '';
     return config;
   }
 
-  async function saveCurrentLayout() {
+  async function saveCurrentLayout(): Promise<void> {
     if (!windowLayoutId) {
       throw new Error('Current window is not bound to a layout');
     }
@@ -89,7 +144,7 @@ export function createLayoutManager({
     updateLayoutsIndicator();
   }
 
-  async function saveLayoutAs(name) {
+  async function saveLayoutAs(name: string): Promise<void> {
     if (!name || typeof name !== 'string' || !name.trim()) return;
     name = name.trim();
     const layout = createLayoutFromCurrentWindow(name.toLowerCase().replace(/\s+/g, '-'), name);
@@ -100,30 +155,30 @@ export function createLayoutManager({
     updateLayoutsIndicator();
   }
 
-  async function switchLayout(layoutId) {
+  async function switchLayout(layoutId: string): Promise<void> {
     const layout = layouts.find((l) => l.id === layoutId);
     if (!layout) return;
-    restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
+    restoreSession({ panes: layout.panes as unknown as SessionData['panes'], focusedPaneIndex: layout.focusedPaneIndex });
     setWindowLayoutId(layoutId);
     flushWindowLayoutSave();
     updateLayoutsIndicator();
   }
 
-  function updateLayoutsIndicator() {
+  function updateLayoutsIndicator(): void {
     if (!layoutsButtonEl) return;
     const currentLayout = layouts.find((l) => l.id === windowLayoutId);
     const layoutName = currentLayout ? currentLayout.name : 'No layout';
     layoutsButtonEl.setAttribute('aria-label', `Layouts (${layoutName})`);
   }
 
-  function deleteLayoutById(layoutId) {
+  function deleteLayoutById(layoutId: string): Promise<void> {
     if (layoutId === windowLayoutId) {
       reportError(new Error('Cannot delete the layout used by this window'));
       return Promise.resolve();
     }
     return bridge.deleteLayout(layoutId)
       .then(() => bridge.listLayouts())
-      .then((config) => {
+      .then((config: LayoutsListResult) => {
         layouts = config.layouts ?? [];
         defaultLayoutId = config.defaultLayoutId ?? '';
         updateLayoutsIndicator();
@@ -131,16 +186,16 @@ export function createLayoutManager({
       .catch(reportError);
   }
 
-  function renameLayoutById(layoutId, newName) {
+  function renameLayoutById(layoutId: string, newName: string): void {
     bridge.renameLayout(layoutId, newName)
       .then(() => bridge.listLayouts())
-      .then((config) => {
+      .then((config: LayoutsListResult) => {
         layouts = config.layouts ?? [];
       })
       .catch(reportError);
   }
 
-  function scheduleWindowLayoutSave(delay = 250) {
+  function scheduleWindowLayoutSave(delay: number = 250): void {
     if (!layoutRestoreComplete || !windowLayoutId) return;
     if (pendingLayoutSave !== null) {
       window.clearTimeout(pendingLayoutSave);
@@ -151,7 +206,7 @@ export function createLayoutManager({
     }, delay);
   }
 
-  function flushWindowLayoutSave() {
+  function flushWindowLayoutSave(): void {
     if (pendingLayoutSave !== null) {
       window.clearTimeout(pendingLayoutSave);
       pendingLayoutSave = null;
@@ -161,14 +216,14 @@ export function createLayoutManager({
     }
   }
 
-  async function toggleLayoutsDropdown() {
+  async function toggleLayoutsDropdown(): Promise<void> {
     if (layoutsDropdownOpen) {
       closeLayoutsDropdown();
       return;
     }
     try {
       await refreshLayouts();
-    } catch (error) {
+    } catch (error: unknown) {
       reportError(error);
     }
 
@@ -196,7 +251,7 @@ export function createLayoutManager({
         label.textContent = layout.name || layout.id;
 
         item.append(label, checkmark);
-        item.addEventListener('click', (event) => {
+        item.addEventListener('click', (event: MouseEvent) => {
           event.stopPropagation();
           bridge.openLayoutWindow(layout.id).catch(reportError);
           closeLayoutsDropdown();
@@ -212,7 +267,7 @@ export function createLayoutManager({
     const saveAction = document.createElement('div');
     saveAction.className = 'layouts-dropdown-action';
     saveAction.textContent = 'Save Layout As…';
-    saveAction.addEventListener('click', (event) => {
+    saveAction.addEventListener('click', (event: MouseEvent) => {
       event.stopPropagation();
       if (saveAction.classList.contains('is-editing')) return;
       saveAction.classList.add('is-editing');
@@ -253,9 +308,9 @@ export function createLayoutManager({
         restore();
       };
 
-      confirmBtn.addEventListener('click', (e) => { e.stopPropagation(); doConfirm(); });
-      cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); doCancel(); });
-      input.addEventListener('keydown', (e) => {
+      confirmBtn.addEventListener('click', (e: MouseEvent) => { e.stopPropagation(); doConfirm(); });
+      cancelBtn.addEventListener('click', (e: MouseEvent) => { e.stopPropagation(); doCancel(); });
+      input.addEventListener('keydown', (e: KeyboardEvent) => {
         e.stopPropagation();
         if (e.key === 'Enter') { e.preventDefault(); doConfirm(); }
         if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
@@ -270,7 +325,7 @@ export function createLayoutManager({
     const manageAction = document.createElement('div');
     manageAction.className = 'layouts-dropdown-action';
     manageAction.textContent = 'Manage Layouts…';
-    manageAction.addEventListener('click', (event) => {
+    manageAction.addEventListener('click', (event: MouseEvent) => {
       event.stopPropagation();
       closeLayoutsDropdown();
       onManageLayouts?.();
@@ -286,7 +341,7 @@ export function createLayoutManager({
     });
   }
 
-  function closeLayoutsDropdown() {
+  function closeLayoutsDropdown(): void {
     if (layoutsDropdownEl) {
       layoutsDropdownEl.remove();
       layoutsDropdownEl = null;
@@ -296,28 +351,28 @@ export function createLayoutManager({
     modalStack.unregister(closeLayoutsDropdown);
   }
 
-  function handleLayoutsDropdownOutsideClick(event) {
-    if (!layoutsButtonEl.contains(event.target)) {
+  function handleLayoutsDropdownOutsideClick(event: MouseEvent): void {
+    if (!layoutsButtonEl.contains(event.target as Node)) {
       closeLayoutsDropdown();
     }
   }
 
-  function getLayoutDisplayName(layoutId) {
+  function getLayoutDisplayName(layoutId: string | null): string {
     if (!layoutId) return 'Layout';
     const layout = layouts.find((item) => item.id === layoutId);
     return layout?.name || (layoutId === 'default' ? 'Default' : layoutId);
   }
 
-  function getWindowLayoutId() { return windowLayoutId; }
-  function getLayouts() { return layouts; }
-  function getDefaultLayoutId() { return defaultLayoutId; }
-  function _getSelectedLayoutId() { return selectedLayoutId; }
-  function _setSelectedLayoutId(id) { selectedLayoutId = id; }
-  function _getRenamingLayoutId() { return renamingLayoutId; }
-  function _setRenamingLayoutId(id) { renamingLayoutId = id; }
-  function _setLayouts(newLayouts) { layouts = newLayouts; }
-  function _setDefaultLayoutId(id) { defaultLayoutId = id; }
-  function setLayoutRestoreComplete(value) { layoutRestoreComplete = value; }
+  function getWindowLayoutId(): string | null { return windowLayoutId; }
+  function getLayouts(): LayoutData[] { return layouts; }
+  function getDefaultLayoutId(): string { return defaultLayoutId; }
+  function _getSelectedLayoutId(): string | null { return selectedLayoutId; }
+  function _setSelectedLayoutId(id: string | null): void { selectedLayoutId = id; }
+  function _getRenamingLayoutId(): string | null { return renamingLayoutId; }
+  function _setRenamingLayoutId(id: string | null): void { renamingLayoutId = id; }
+  function _setLayouts(newLayouts: LayoutData[]): void { layouts = newLayouts; }
+  function _setDefaultLayoutId(id: string): void { defaultLayoutId = id; }
+  function setLayoutRestoreComplete(value: boolean): void { layoutRestoreComplete = value; }
 
   return {
     setWindowLayoutId,

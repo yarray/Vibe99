@@ -4,9 +4,96 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
-import { getDefaultFontFamily } from './settings.js';
+import { getDefaultFontFamily } from './settings';
+import type { Bridge } from './bridge';
+import type { Pane, PaneState } from './pane-state';
+import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
+import type { SettingsManager } from './settings';
+import type { TabBar } from './tab-bar';
 
-function extractPathFromOsc7(data) {
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+export interface PaneNode {
+  paneId: string;
+  cwd: string;
+  root: HTMLElement;
+  terminalHost: HTMLElement & { _xterm?: Terminal };
+  terminal: Terminal;
+  fitAddon: FitAddon;
+  sessionReady: boolean;
+  sizeKey: string;
+  needsFit: boolean;
+  accent: string;
+  _shellChanging?: boolean;
+  _shellChangeTime?: number;
+}
+
+interface TerminalTheme {
+  background: string;
+  foreground: string;
+  cursor: string;
+  cursorAccent: string;
+  selectionBackground: string;
+  [colorName: string]: string;
+}
+
+export interface PaneRendererDeps {
+  bridge: Bridge;
+  paneState: PaneState;
+  settingsManager: SettingsManager;
+  paneAlert: PaneAlertStrategy;
+  paneActivityWatcher: {
+    noteResize: (paneId: string) => void;
+    noteData: (paneId: string) => void;
+    setFocus: (paneId: string | null) => void;
+    forget: (paneId: string) => void;
+    setPaneEnabled: (paneId: string, enabled: boolean) => void;
+  };
+  reportError: (error: unknown) => void;
+  stageEl: HTMLElement;
+  getMode: () => string;
+  onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
+  onTerminalTitleChange: (paneId: string, title: string) => void;
+  onTerminalContextMenu: (node: PaneNode, event: MouseEvent) => Promise<void> | void;
+  scheduleWindowLayoutSave: () => void;
+  tabBar: TabBar;
+  getPaneLabel: (pane: Pane) => string;
+  onPaneCwdChanged: (paneId: string, cwd: string) => void;
+}
+
+export interface PaneRenderer {
+  ensurePaneNodes: () => void;
+  renderPanes: (refit?: boolean) => void;
+  fitTerminal: (paneId: string, force?: boolean) => void;
+  getNode: (paneId: string) => PaneNode | null;
+  write: (paneId: string, data: string) => void;
+  copySelection: (paneId: string) => boolean;
+  pasteInto: (paneId: string, options?: { clipboardSnapshot?: { text: string; hasImage: boolean } }) => Promise<boolean>;
+  selectAll: (paneId: string) => boolean;
+  focusTerminal: (paneId: string) => void;
+  blurTerminal: (paneId: string) => void;
+  clearTerminal: (paneId: string) => void;
+  writeln: (paneId: string, text: string) => void;
+  changePaneShell: (paneId: string, profileId: string, previousProfileId?: string | null) => void;
+  entryNeedsTabRefresh: (paneId: string) => boolean;
+  setAlerted: (paneId: string, alerted: boolean) => void;
+  rootContains: (paneId: string, el: Node) => boolean;
+  hasSelection: (paneId: string) => boolean;
+  isSessionReady: (paneId: string) => boolean;
+  setSessionReady: (paneId: string, ready: boolean) => void;
+  getShellChangeTime: (paneId: string) => number | null;
+  isShellChanging: (paneId: string) => boolean;
+  initializePaneTerminal: (node: PaneNode) => Promise<void>;
+  destroyPane: (paneId: string) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function extractPathFromOsc7(data: string): string | null {
   const prefix = 'file://';
   if (!data.startsWith(prefix)) {
     return null;
@@ -27,7 +114,7 @@ function extractPathFromOsc7(data) {
   }
 }
 
-export function getTextColorForBackground(hexColor) {
+export function getTextColorForBackground(hexColor: string): string {
   const r = parseInt(hexColor.slice(1, 3), 16);
   const g = parseInt(hexColor.slice(3, 5), 16);
   const b = parseInt(hexColor.slice(5, 7), 16);
@@ -51,10 +138,10 @@ export function createPaneRenderer({
   tabBar,
   getPaneLabel,
   onPaneCwdChanged,
-}) {
-  const paneNodeMap = new Map();
+}: PaneRendererDeps): PaneRenderer {
+  const paneNodeMap = new Map<string, PaneNode>();
 
-  function isWindowsCtrlVPasteHotkey(event) {
+  function isWindowsCtrlVPasteHotkey(event: KeyboardEvent): boolean {
     return (
       bridge.platform === 'win32' &&
       event.ctrlKey &&
@@ -65,7 +152,7 @@ export function createPaneRenderer({
     );
   }
 
-  function getPreviewWidth(stageWidth, count) {
+  function getPreviewWidth(stageWidth: number, count: number): number {
     if (count <= 1) {
       return 0;
     }
@@ -77,7 +164,7 @@ export function createPaneRenderer({
     return (stageWidth - settingsManager.settings.paneWidth) / (count - 1);
   }
 
-  function createTerminalTheme(accent) {
+  function createTerminalTheme(accent: string): TerminalTheme {
     return {
       background: '#11111100',
       foreground: '#d9d4c7',
@@ -103,21 +190,21 @@ export function createPaneRenderer({
     };
   }
 
-  function isLinkOpenModifierPressed(event) {
+  function isLinkOpenModifierPressed(event: MouseEvent | KeyboardEvent): boolean {
     return event.ctrlKey || (bridge.platform === 'darwin' && event.metaKey);
   }
 
-  function handleTerminalLinkActivation(event, uri) {
+  function handleTerminalLinkActivation(event: MouseEvent, uri: string): void {
     if (!isLinkOpenModifierPressed(event)) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
-    void bridge.openExternalUrl(uri).catch(reportError);
+    void Promise.resolve(bridge.openExternalUrl(uri)).catch(reportError);
   }
 
-  function getPaneLeft(index, previewWidth, focusedIndex) {
+  function getPaneLeft(index: number, previewWidth: number, focusedIndex: number): number {
     if (previewWidth >= settingsManager.settings.paneWidth) {
       return index * settingsManager.settings.paneWidth;
     }
@@ -135,7 +222,7 @@ export function createPaneRenderer({
     return focusedLeft + settingsManager.settings.paneWidth + (index - focusedIndex - 1) * previewWidth;
   }
 
-  function createPane(pane) {
+  function createPane(pane: Pane): PaneNode {
     const paneEl = document.createElement('article');
     paneEl.className = 'pane';
     const accentColor = pane.customColor || pane.accent;
@@ -157,7 +244,7 @@ export function createPaneRenderer({
     terminalHost.className = 'terminal-host';
     surface.append(terminalHost);
     body.append(surface);
-    paneAlert.attach(paneEl, body);
+    paneAlert.attach();
     shell.append(body);
     paneEl.append(shell);
 
@@ -182,7 +269,7 @@ export function createPaneRenderer({
     terminal.loadAddon(new Unicode11Addon());
     terminal.unicode.activeVersion = '11';
     terminal.open(terminalHost);
-    terminalHost._xterm = terminal;
+    (terminalHost as HTMLDivElement & { _xterm?: Terminal })._xterm = terminal;
     try { terminal.loadAddon(new WebglAddon()); } catch {}
     terminal.attachCustomKeyEventHandler((event) => {
       if (
@@ -292,12 +379,12 @@ export function createPaneRenderer({
     return node;
   }
 
-  function entryNeedsTabRefresh(paneId) {
+  function entryNeedsTabRefresh(paneId: string): boolean {
     const pane = paneState.getPaneById(paneId);
     return Boolean(pane && pane.title === null);
   }
 
-  function fitTerminal(node, force = false) {
+  function fitTerminal(node: PaneNode, force = false): void {
     node.terminal.options.fontSize = settingsManager.settings.fontSize;
     node.terminal.options.fontFamily = settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform);
     node.fitAddon.fit();
@@ -319,7 +406,7 @@ export function createPaneRenderer({
     node.needsFit = false;
   }
 
-  async function initializePaneTerminal(node) {
+  async function initializePaneTerminal(node: PaneNode): Promise<void> {
     fitTerminal(node, true);
     const pane = paneState.getPaneById(node.paneId);
     const profileId = pane?.shellProfileId ?? null;
@@ -339,7 +426,7 @@ export function createPaneRenderer({
     }
   }
 
-  function ensurePaneNodes() {
+  function ensurePaneNodes(): void {
     const currentPanes = paneState.getPanes();
     const activeIds = new Set(currentPanes.map((pane) => pane.id));
 
@@ -366,7 +453,7 @@ export function createPaneRenderer({
     }
   }
 
-  function renderPanes(refit = false) {
+  function renderPanes(refit = false): void {
     const currentPanes = paneState.getPanes();
     const stageWidth = stageEl.clientWidth;
     const stageHeight = stageEl.clientHeight;
@@ -378,6 +465,7 @@ export function createPaneRenderer({
 
     currentPanes.forEach((pane, index) => {
       const node = paneNodeMap.get(pane.id);
+      if (!node) return;
       const left = getPaneLeft(index, previewWidth, focusedIndex);
       const isFocused = index === focusedIndex;
       const accentColor = pane.customColor || pane.accent;
@@ -400,11 +488,11 @@ export function createPaneRenderer({
     });
   }
 
-  function getNode(paneId) {
+  function getNode(paneId: string): PaneNode | null {
     return paneNodeMap.get(paneId) ?? null;
   }
 
-  async function getClipboardSnapshot() {
+  async function getClipboardSnapshot(): Promise<{ text: string; hasImage: boolean }> {
     try {
       return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
     } catch {
@@ -412,7 +500,7 @@ export function createPaneRenderer({
     }
   }
 
-  function copyTerminalSelection(paneId) {
+  function copyTerminalSelection(paneId: string): boolean {
     const node = getNode(paneId);
     if (!node) {
       return false;
@@ -427,7 +515,7 @@ export function createPaneRenderer({
     return true;
   }
 
-  async function pasteIntoTerminal(paneId, options = {}) {
+  async function pasteIntoTerminal(paneId: string, options: { clipboardSnapshot?: { text: string; hasImage: boolean } } = {}): Promise<boolean> {
     const node = getNode(paneId);
     if (!node?.sessionReady) {
       return false;
@@ -446,7 +534,7 @@ export function createPaneRenderer({
     return true;
   }
 
-  function selectAllInTerminal(paneId) {
+  function selectAllInTerminal(paneId: string): boolean {
     const node = getNode(paneId);
     if (!node) {
       return false;
@@ -456,7 +544,7 @@ export function createPaneRenderer({
     return true;
   }
 
-  async function pasteImageIntoTerminal(paneId, options = {}) {
+  async function pasteImageIntoTerminal(paneId: string, options: { clipboardSnapshot?: { text: string; hasImage: boolean } } = {}): Promise<boolean> {
     const node = getNode(paneId);
     if (!node?.sessionReady) {
       return false;
@@ -471,7 +559,7 @@ export function createPaneRenderer({
     return true;
   }
 
-  function changePaneShell(paneId, profileId, previousProfileId) {
+  function changePaneShell(paneId: string, profileId: string, previousProfileId?: string | null): void {
     const node = getNode(paneId);
     if (!node) return;
 
@@ -493,7 +581,7 @@ export function createPaneRenderer({
     });
   }
 
-  function destroyPane(paneId) {
+  function destroyPane(paneId: string): void {
     const node = getNode(paneId);
     if (!node) return;
     paneActivityWatcher.forget(paneId);
@@ -573,12 +661,12 @@ export function createPaneRenderer({
     getShellChangeTime: (paneId) => {
       const node = getNode(paneId);
       if (!node) return null;
-      return node._shellChangeTime;
+      return node._shellChangeTime ?? null;
     },
     isShellChanging: (paneId) => {
       const node = getNode(paneId);
       if (!node) return false;
-      return node._shellChanging;
+      return node._shellChanging ?? false;
     },
     initializePaneTerminal: (node) => initializePaneTerminal(node),
     destroyPane,

@@ -1,6 +1,54 @@
-import * as ShortcutsRegistry from './shortcuts-registry.js';
+import * as ShortcutsRegistry from './shortcuts-registry';
+import type { Bridge } from './bridge';
 
-export function getDefaultFontFamily(platform) {
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+export interface AppSettings {
+  fontSize: number;
+  fontFamily: string;
+  paneOpacity: number;
+  paneMaskOpacity: number;
+  paneWidth: number;
+  breathingAlertEnabled: boolean;
+}
+
+export interface SettingsManagerDeps {
+  bridge: Bridge;
+  reportError: (error: unknown) => void;
+  applyCallback: () => void;
+  paneActivityWatcher: {
+    setGlobalEnabled: (enabled: boolean) => void;
+  };
+}
+
+export interface SettingsManager {
+  readonly settings: AppSettings;
+  applySettings(): void;
+  applyPersistedSettings(nextSettings: unknown): void;
+  scheduleSettingsSave(): void;
+  flushSettingsSave(): void;
+}
+
+interface PersistedSettings {
+  version: number;
+  ui: AppSettings & {
+    shortcuts: Record<string, ShortcutsRegistry.ShortcutOverride>;
+  };
+}
+
+/** Shape expected from the persistence layer (all fields optional). */
+interface PersistedSettingsRaw {
+  version?: number;
+  ui?: Partial<AppSettings & { shortcuts: Record<string, unknown>; paneMaskAlpha?: number }>;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+export function getDefaultFontFamily(platform: string): string {
   if (platform === 'win32' || platform === 'windows') {
     return 'Consolas, "Cascadia Mono", "Courier New", monospace';
   }
@@ -10,7 +58,11 @@ export function getDefaultFontFamily(platform) {
   return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", monospace';
 }
 
-export function createSettingsManager(deps) {
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
+export function createSettingsManager(deps: SettingsManagerDeps): SettingsManager {
   const {
     bridge,
     reportError,
@@ -18,19 +70,19 @@ export function createSettingsManager(deps) {
     paneActivityWatcher,
   } = deps;
 
-  const fontSizeInput = document.getElementById('font-size-input');
-  const fontFamilyInput = document.getElementById('font-family-input');
-  const paneWidthRange = document.getElementById('pane-width-range');
-  const paneWidthInput = document.getElementById('pane-width-input');
-  const paneOpacityRange = document.getElementById('pane-opacity-range');
-  const paneOpacityInput = document.getElementById('pane-opacity-input');
-  const paneMaskOpacityRange = document.getElementById('pane-mask-alpha-range');
-  const paneMaskOpacityInput = document.getElementById('pane-mask-alpha-input');
-  const breathingToggle = document.getElementById('breathing-alert-toggle');
-  const breathingDot = document.getElementById('breathing-alert-dot');
-  const breathingRow = document.getElementById('breathing-alert-row');
+  const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement;
+  const fontFamilyInput = document.getElementById('font-family-input') as HTMLInputElement;
+  const paneWidthRange = document.getElementById('pane-width-range') as HTMLInputElement;
+  const paneWidthInput = document.getElementById('pane-width-input') as HTMLInputElement;
+  const paneOpacityRange = document.getElementById('pane-opacity-range') as HTMLInputElement;
+  const paneOpacityInput = document.getElementById('pane-opacity-input') as HTMLInputElement;
+  const paneMaskOpacityRange = document.getElementById('pane-mask-alpha-range') as HTMLInputElement;
+  const paneMaskOpacityInput = document.getElementById('pane-mask-alpha-input') as HTMLInputElement;
+  const breathingToggle = document.getElementById('breathing-alert-toggle') as HTMLInputElement;
+  const breathingDot = document.getElementById('breathing-alert-dot') as HTMLElement;
+  const breathingRow = document.getElementById('breathing-alert-row') as HTMLElement;
 
-  const settings = {
+  const settings: AppSettings = {
     fontSize: 13,
     fontFamily: getDefaultFontFamily(bridge.platform),
     paneOpacity: 0.8,
@@ -39,9 +91,9 @@ export function createSettingsManager(deps) {
     breathingAlertEnabled: true,
   };
 
-  let pendingSettingsSave = null;
+  let pendingSettingsSave: number | null = null;
 
-  function applySettings() {
+  function applySettings(): void {
     document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
     document.documentElement.style.setProperty('--app-font-family', settings.fontFamily);
     document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
@@ -60,18 +112,19 @@ export function createSettingsManager(deps) {
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
   }
 
-  function applyPersistedSettings(nextSettings) {
+  function applyPersistedSettings(nextSettings: unknown): void {
     if (!nextSettings || typeof nextSettings !== 'object') {
       return;
     }
 
-    const uiSettings =
-      nextSettings && typeof nextSettings.ui === 'object' && nextSettings.ui !== null
-        ? nextSettings.ui
-        : nextSettings;
+    const raw = nextSettings as PersistedSettingsRaw;
+    const uiSettings: NonNullable<PersistedSettingsRaw['ui']> =
+      raw.ui && typeof raw.ui === 'object' && raw.ui !== null
+        ? raw.ui
+        : (raw as Partial<AppSettings>);
 
     if (Number.isFinite(uiSettings.fontSize)) {
-      settings.fontSize = uiSettings.fontSize;
+      settings.fontSize = uiSettings.fontSize!;
     }
 
     if (typeof uiSettings.fontFamily === 'string') {
@@ -79,25 +132,25 @@ export function createSettingsManager(deps) {
     }
 
     if (Number.isFinite(uiSettings.paneOpacity)) {
-      settings.paneOpacity = Math.max(0.55, Math.min(1, uiSettings.paneOpacity));
+      settings.paneOpacity = Math.max(0.55, Math.min(1, uiSettings.paneOpacity!));
     }
 
     if (Number.isFinite(uiSettings.paneMaskOpacity)) {
-      settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskOpacity));
+      settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskOpacity!));
     }
 
-    // Migrate legacy paneMaskAlpha → paneMaskOpacity
-    if (Number.isFinite(uiSettings.paneMaskAlpha) && !Number.isFinite(uiSettings.paneMaskOpacity)) {
+    // Migrate legacy paneMaskAlpha -> paneMaskOpacity
+    if (uiSettings.paneMaskAlpha !== undefined && Number.isFinite(uiSettings.paneMaskAlpha) && !Number.isFinite(uiSettings.paneMaskOpacity)) {
       settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskAlpha));
     }
 
     // Migrate v3 inverted mask opacity: old value was 1 - overlay opacity.
-    if (nextSettings?.version != null && nextSettings.version < 4) {
+    if (raw.version != null && raw.version < 4) {
       settings.paneMaskOpacity = 1 - settings.paneMaskOpacity;
     }
 
     if (Number.isFinite(uiSettings.paneWidth)) {
-      settings.paneWidth = uiSettings.paneWidth;
+      settings.paneWidth = uiSettings.paneWidth!;
     }
 
     if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
@@ -105,14 +158,14 @@ export function createSettingsManager(deps) {
     }
 
     // Load keyboard shortcuts
-    if (typeof uiSettings.shortcuts === 'object' && uiSettings.shortcuts !== null) {
-      ShortcutsRegistry.loadShortcutsFromSettings(uiSettings);
+    if (uiSettings.shortcuts && typeof uiSettings.shortcuts === 'object') {
+      ShortcutsRegistry.loadShortcutsFromSettings(uiSettings.shortcuts);
     } else {
       ShortcutsRegistry.loadShortcutsFromSettings({});
     }
   }
 
-  function buildSettingsPayloadForCurrentWindow() {
+  function buildSettingsPayloadForCurrentWindow(): PersistedSettings {
     return {
       version: 6,
       ui: {
@@ -122,23 +175,23 @@ export function createSettingsManager(deps) {
     };
   }
 
-  function scheduleSettingsSave() {
+  function scheduleSettingsSave(): void {
     if (pendingSettingsSave !== null) {
       window.clearTimeout(pendingSettingsSave);
     }
 
     pendingSettingsSave = window.setTimeout(() => {
       pendingSettingsSave = null;
-      bridge.saveSettings(buildSettingsPayloadForCurrentWindow()).catch(reportError);
+      bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
     }, 150);
   }
 
-  function flushSettingsSave() {
+  function flushSettingsSave(): void {
     if (pendingSettingsSave !== null) {
       window.clearTimeout(pendingSettingsSave);
       pendingSettingsSave = null;
     }
-    void bridge.saveSettings(buildSettingsPayloadForCurrentWindow()).catch(reportError);
+    void bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
   }
 
   // Font size
@@ -164,7 +217,7 @@ export function createSettingsManager(deps) {
   });
 
   // Pane width
-  function updatePaneWidth(nextValue) {
+  function updatePaneWidth(nextValue: string): void {
     const parsedValue = Number(nextValue);
     if (!Number.isFinite(parsedValue)) {
       applySettings();
@@ -186,7 +239,7 @@ export function createSettingsManager(deps) {
   });
 
   // Pane opacity
-  function updatePaneOpacity(nextValue) {
+  function updatePaneOpacity(nextValue: string): void {
     const parsedValue = Number(nextValue);
     if (!Number.isFinite(parsedValue)) {
       applySettings();
@@ -207,7 +260,7 @@ export function createSettingsManager(deps) {
   });
 
   // Pane mask opacity
-  function updatePaneMaskOpacity(nextValue) {
+  function updatePaneMaskOpacity(nextValue: string): void {
     const parsedValue = Number(nextValue);
     if (!Number.isFinite(parsedValue)) {
       applySettings();
@@ -228,7 +281,7 @@ export function createSettingsManager(deps) {
   });
 
   // Breathing alert
-  function toggleBreathingAlert() {
+  function toggleBreathingAlert(): void {
     breathingToggle.checked = !breathingToggle.checked;
     settings.breathingAlertEnabled = breathingToggle.checked;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);

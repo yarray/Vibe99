@@ -3,33 +3,70 @@
  *
  * Handles tab rendering, drag-and-drop reordering, focus management,
  * and inline renaming for the terminal pane tabs.
- *
- * @module tab-bar
  */
 
-/**
- * Creates a tab bar instance.
- *
- * @param {Object} deps - Dependencies
- * @param {Object} deps.paneState - Pane state manager from pane-state.js
- * @param {Object} deps.state - Local state object containing transient UI state
- * @param {string|null} deps.state.renamingPaneId - ID of the pane being renamed
- * @param {Object|null} deps.state.dragState - Current drag state
- * @param {Object|null} deps.state.pendingTabFocus - Pending tab focus state
- * @param {string} deps.state.currentMode - Current mode ('terminal' or 'nav')
- * @param {string|null} deps.state.pendingClosePaneId - ID of pane pending close
- * @param {Function} deps.getPaneLabel - Function to get label for a pane
- * @param {Function} deps.getTextForBg - Function to get text color for background
- * @param {Function} deps.onTabClick - Callback when tab is clicked (focusPane)
- * @param {Function} deps.onTabContext - Callback when tab is context-clicked
- * @param {Function} deps.onTabDrag - Callback when tab is dragged (fromIndex, toIndex)
- * @param {Function} deps.onRename - Callback when tab is renamed (paneId, title)
- * @param {Function} deps.onCloseTab - Callback when tab close is clicked (index)
- * @param {Function} deps.reportError - Error reporting function
- * @param {HTMLElement} deps.tabsListEl - Container element for tabs
- * @param {Function} deps.setIcon - Icon setting function from icons.js
- * @returns {Object} Tab bar API
- */
+import type { Pane, PaneState } from './pane-state';
+import type { IconName } from './icons';
+
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+export interface DragState {
+  paneId: string;
+  pointerId: number;
+  startX: number;
+  currentX: number;
+  dropIndex: number;
+  hasMoved: boolean;
+}
+
+export interface PendingTabFocus {
+  paneId: string;
+  timerId: number;
+}
+
+export interface TabBarLocalState {
+  renamingPaneId: string | null;
+  dragState: DragState | null;
+  pendingTabFocus: PendingTabFocus | null;
+  currentMode: string;
+  pendingClosePaneId: string | null;
+}
+
+interface DragMeta {
+  isDragging: boolean;
+  insertBefore: boolean;
+  offsetX: number;
+}
+
+export interface TabBarDeps {
+  paneState: PaneState;
+  state: TabBarLocalState;
+  getPaneLabel: (pane: Pane) => string;
+  getTextColorForBackground: (hexColor: string) => string;
+  onTabClick: (paneId: string) => void;
+  onTabContext: (paneId: string, event: PointerEvent | MouseEvent) => void;
+  onTabDrag: (fromIndex: number, toIndex: number) => void;
+  onRename: (paneId: string, title: string | null) => void;
+  onCloseTab: (index: number) => void;
+  reportError: (error: unknown) => void;
+  tabsListEl: HTMLElement;
+  setIcon: (el: HTMLElement, name: IconName, size?: number) => void;
+}
+
+export interface TabBar {
+  renderTabs: () => void;
+  beginRenamePane: (index: number) => void;
+  cancelRenamePane: () => void;
+  commitRenamePane: (paneId: string, nextTitle: string) => void;
+  state: TabBarLocalState;
+}
+
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
 export function createTabBar({
   paneState,
   state,
@@ -43,14 +80,10 @@ export function createTabBar({
   reportError,
   tabsListEl,
   setIcon,
-}) {
+}: TabBarDeps): TabBar {
   let isRenderingTabs = false;
 
-  /**
-   * Begins renaming a pane.
-   * @param {number} index - Pane index
-   */
-  function beginRenamePane(index) {
+  function beginRenamePane(index: number): void {
     const panes = paneState.getPanes();
     const pane = panes[index];
     if (!pane) {
@@ -67,10 +100,7 @@ export function createTabBar({
     }
   }
 
-  /**
-   * Cancels renaming a pane.
-   */
-  function cancelRenamePane() {
+  function cancelRenamePane(): void {
     state.renamingPaneId = null;
     try {
       renderTabs();
@@ -79,21 +109,13 @@ export function createTabBar({
     }
   }
 
-  /**
-   * Commits the rename of a pane.
-   * @param {string} paneId - Pane ID
-   * @param {string} nextTitle - New title
-   */
-  function commitRenamePane(paneId, nextTitle) {
+  function commitRenamePane(paneId: string, nextTitle: string): void {
     const trimmedTitle = nextTitle.trim();
     state.renamingPaneId = null;
     onRename(paneId, trimmedTitle || null);
   }
 
-  /**
-   * Clears pending tab focus.
-   */
-  function clearPendingTabFocus() {
+  function clearPendingTabFocus(): void {
     if (!state.pendingTabFocus) {
       return;
     }
@@ -102,11 +124,7 @@ export function createTabBar({
     state.pendingTabFocus = null;
   }
 
-  /**
-   * Schedules tab focus after a delay.
-   * @param {string} paneId - Pane ID to focus
-   */
-  function scheduleTabFocus(paneId) {
+  function scheduleTabFocus(paneId: string): void {
     clearPendingTabFocus();
     state.pendingTabFocus = {
       paneId,
@@ -117,11 +135,7 @@ export function createTabBar({
     };
   }
 
-  /**
-   * Handles pointer up on a tab.
-   * @param {string} paneId - Pane ID
-   */
-  function activateTabPointerUp(paneId) {
+  function activateTabPointerUp(paneId: string): void {
     if (state.pendingTabFocus?.paneId === paneId) {
       clearPendingTabFocus();
       const paneIndex = paneState.getPaneIndex(paneId);
@@ -134,12 +148,7 @@ export function createTabBar({
     scheduleTabFocus(paneId);
   }
 
-  /**
-   * Begins dragging a tab.
-   * @param {number} index - Tab index
-   * @param {PointerEvent} event - Pointer event
-   */
-  function beginTabDrag(index, event) {
+  function beginTabDrag(index: number, event: PointerEvent): void {
     if (event.button !== 0 || state.renamingPaneId !== null) {
       return;
     }
@@ -166,11 +175,7 @@ export function createTabBar({
     window.addEventListener('pointercancel', handleTabPointerUp);
   }
 
-  /**
-   * Handles pointer move during tab drag.
-   * @param {PointerEvent} event - Pointer event
-   */
-  function handleTabPointerMove(event) {
+  function handleTabPointerMove(event: PointerEvent): void {
     if (!state.dragState || event.pointerId !== state.dragState.pointerId) {
       return;
     }
@@ -188,11 +193,7 @@ export function createTabBar({
     renderTabs();
   }
 
-  /**
-   * Handles pointer up during tab drag.
-   * @param {PointerEvent} event - Pointer event
-   */
-  function handleTabPointerUp(event) {
+  function handleTabPointerUp(event: PointerEvent): void {
     if (!state.dragState || event.pointerId !== state.dragState.pointerId) {
       return;
     }
@@ -213,10 +214,7 @@ export function createTabBar({
     }
   }
 
-  /**
-   * Ends the current tab drag operation.
-   */
-  function endTabDrag() {
+  function endTabDrag(): void {
     state.dragState = null;
     document.body.classList.remove('is-dragging-tabs');
     window.removeEventListener('pointermove', handleTabPointerMove);
@@ -224,13 +222,8 @@ export function createTabBar({
     window.removeEventListener('pointercancel', handleTabPointerUp);
   }
 
-  /**
-   * Gets the drop index for a tab based on client X position.
-   * @param {number} clientX - Client X coordinate
-   * @returns {number} Drop index
-   */
-  function getTabDropIndex(clientX) {
-    const tabElements = [...tabsListEl.querySelectorAll('.tab')].filter(
+  function getTabDropIndex(clientX: number): number {
+    const tabElements = [...tabsListEl.querySelectorAll<HTMLDivElement>('.tab')].filter(
       (tab) => tab.dataset.paneId !== state.dragState?.paneId
     );
 
@@ -246,15 +239,7 @@ export function createTabBar({
     return slot;
   }
 
-  /**
-   * Creates a tab DOM element.
-   * @param {Object} pane - Pane data
-   * @param {number} index - Tab index
-   * @param {number} focusedIndex - Index of the focused tab
-   * @param {Object} dragMeta - Drag metadata
-   * @returns {HTMLElement} Tab element
-   */
-  function createTab(pane, index, focusedIndex, dragMeta) {
+  function createTab(pane: Pane, index: number, focusedIndex: number, dragMeta: DragMeta): HTMLElement {
     const tab = document.createElement('div');
     tab.className = `tab${index === focusedIndex ? ' is-focused' : ''}`;
     if (dragMeta?.isDragging) {
@@ -295,22 +280,22 @@ export function createTabBar({
       swatch.style.setProperty('--swatch-text-color', 'var(--tab-text-color)');
     }
 
-    let label;
+    let label: HTMLElement;
     if (state.renamingPaneId === pane.id) {
-      label = document.createElement('input');
-      label.className = 'tab-input';
-      label.type = 'text';
-      label.value = getPaneLabel(pane);
-      label.setAttribute('aria-label', `Rename tab ${pane.id}`);
-      label.addEventListener('click', (event) => {
+      const input = document.createElement('input');
+      input.className = 'tab-input';
+      input.type = 'text';
+      input.value = getPaneLabel(pane);
+      input.setAttribute('aria-label', `Rename tab ${pane.id}`);
+      input.addEventListener('click', (event) => {
         event.stopPropagation();
       });
-      label.addEventListener('mousedown', (event) => {
+      input.addEventListener('mousedown', (event) => {
         event.stopPropagation();
       });
-      label.addEventListener('keydown', (event) => {
+      input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
-          commitRenamePane(pane.id, label.value);
+          commitRenamePane(pane.id, input.value);
         }
 
         if (event.key === 'Escape') {
@@ -318,17 +303,21 @@ export function createTabBar({
           cancelRenamePane();
         }
       });
-      label.addEventListener('blur', () => {
-        commitRenamePane(pane.id, label.value);
+      input.addEventListener('blur', () => {
+        if (state.renamingPaneId === pane.id) {
+          commitRenamePane(pane.id, input.value);
+        }
       });
       queueMicrotask(() => {
-        label.focus();
-        label.select();
+        input.focus();
+        input.select();
       });
+      label = input;
     } else {
-      label = document.createElement('span');
-      label.className = 'tab-label';
-      label.textContent = getPaneLabel(pane);
+      const span = document.createElement('span');
+      span.className = 'tab-label';
+      span.textContent = getPaneLabel(pane);
+      label = span;
     }
 
     const close = document.createElement('button');
@@ -356,10 +345,7 @@ export function createTabBar({
     return tab;
   }
 
-  /**
-   * Renders all tabs.
-   */
-  function renderTabs() {
+  function renderTabs(): void {
     if (isRenderingTabs) {
       return;
     }
@@ -367,16 +353,17 @@ export function createTabBar({
     const panes = paneState.getPanes();
     const focusedIndex = paneState.getFocusedIndex();
     const draggedPaneId = state.dragState?.paneId ?? null;
+    const ds = state.dragState;
     let slot = 0;
 
     tabsListEl.replaceChildren(
       ...panes.map((pane, index) => {
-        const isDragging = pane.id === draggedPaneId && state.dragState?.hasMoved;
-        const insertBefore = !isDragging && state.dragState?.hasMoved && state.dragState.dropIndex === slot;
-        const dragMeta = {
+        const isDragging = pane.id === draggedPaneId && ds?.hasMoved === true;
+        const insertBefore = !isDragging && ds?.hasMoved === true && ds.dropIndex === slot;
+        const dragMeta: DragMeta = {
           isDragging,
           insertBefore,
-          offsetX: isDragging ? state.dragState.currentX - state.dragState.startX : 0,
+          offsetX: isDragging && ds ? ds.currentX - ds.startX : 0,
         };
         if (!isDragging) {
           slot += 1;
@@ -392,5 +379,6 @@ export function createTabBar({
     beginRenamePane,
     cancelRenamePane,
     commitRenamePane,
+    state,
   };
 }

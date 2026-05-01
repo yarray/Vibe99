@@ -1,6 +1,42 @@
-import { icon, setIcon } from './icons.js';
+import { icon, setIcon } from './icons';
+import type { Bridge, LayoutData, LayoutsListResult } from './bridge';
+import type { PaneState } from './pane-state';
+import type { ModalStack } from './modal-stack';
+import type { LayoutManager } from './layout-manager';
 
-const LAYOUT_MODAL_POLL_INTERVAL = 3000; // 3 seconds
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+/** Dependencies injected into createLayoutModal. */
+export interface LayoutModalDeps {
+  bridge: Bridge;
+  paneState: PaneState;
+  modalStack: ModalStack;
+  reportError: (error: unknown) => void;
+  layoutManager: LayoutManager;
+}
+
+/** The public API surface returned by createLayoutModal. */
+export interface LayoutModal {
+  openLayoutsModal: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Internal types
+// ---------------------------------------------------------------------------
+
+/** Extended overlay element with typed custom properties for layout modal DOM refs. */
+interface LayoutModalOverlay extends HTMLDivElement {
+  _modalLayoutList: HTMLDivElement | null;
+  _modalLayoutEditor: HTMLDivElement | null;
+}
+
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
+const LAYOUT_MODAL_POLL_INTERVAL: number = 3000; // 3 seconds
 
 export function createLayoutModal({
   bridge,
@@ -8,18 +44,18 @@ export function createLayoutModal({
   modalStack,
   reportError,
   layoutManager,
-}) {
-  let layoutModalPollTimer = null;
+}: LayoutModalDeps): LayoutModal {
+  let layoutModalPollTimer: ReturnType<typeof setInterval> | null = null;
 
-  function openLayoutsModal() {
+  function openLayoutsModal(): void {
     bridge.listLayouts()
-      .then((config) => {
+      .then((config: LayoutsListResult) => {
         layoutManager._setLayouts(config.layouts ?? []);
         layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
       })
       .catch(reportError)
       .finally(() => {
-        const overlay = document.createElement('div');
+        const overlay: LayoutModalOverlay = document.createElement('div') as LayoutModalOverlay;
         overlay.className = 'settings-modal-overlay';
 
         overlay.innerHTML = `
@@ -52,14 +88,14 @@ export function createLayoutModal({
           modalStack.unregister(closeModal);
         };
 
-        overlay.addEventListener('click', (e) => {
+        overlay.addEventListener('click', (e: MouseEvent) => {
           if (e.target === overlay) closeModal();
         });
 
-        overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+        overlay.querySelector('.settings-modal-close')!.addEventListener('click', closeModal);
         modalStack.register(closeModal);
 
-        overlay.querySelector('#modal-layout-add').addEventListener('click', () => {
+        overlay.querySelector('#modal-layout-add')!.addEventListener('click', () => {
           const listEl = overlay._modalLayoutList;
           if (!listEl) return;
           const existing = listEl.querySelector('.layout-item.is-editing');
@@ -80,7 +116,7 @@ export function createLayoutModal({
             const layout = layoutManager.createLayoutFromCurrentWindow(trimmed.toLowerCase().replace(/\s+/g, '-'), trimmed);
             bridge.saveLayout(layout)
               .then(() => bridge.listLayouts())
-              .then((config) => {
+              .then((config: LayoutsListResult) => {
                 layoutManager._setLayouts(config.layouts ?? []);
                 layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
                 layoutManager.setWindowLayoutId(layout.id);
@@ -90,7 +126,7 @@ export function createLayoutModal({
               .catch(reportError);
           };
 
-          input.addEventListener('keydown', (event) => {
+          input.addEventListener('keydown', (event: KeyboardEvent) => {
             if (event.key === 'Enter') confirm();
             if (event.key === 'Escape') cleanup();
           });
@@ -116,13 +152,13 @@ export function createLayoutModal({
             const layoutsChanged =
               newLayouts.length !== oldLayouts.length ||
               newDefaultLayoutId !== oldDefaultLayoutId ||
-              newLayouts.some((nl) => {
-                const existing = oldLayouts.find((l) => l.id === nl.id);
+              newLayouts.some((nl: LayoutData) => {
+                const existing = oldLayouts.find((l: LayoutData) => l.id === nl.id);
                 if (!existing) return true;
                 return existing.name !== nl.name ||
                        JSON.stringify(existing.panes) !== JSON.stringify(nl.panes);
               }) ||
-              oldLayouts.some((el) => !newLayouts.find((l) => l.id === el.id));
+              oldLayouts.some((el: LayoutData) => !newLayouts.find((l: LayoutData) => l.id === el.id));
 
             if (layoutsChanged) {
               layoutManager._setLayouts(newLayouts);
@@ -130,26 +166,26 @@ export function createLayoutModal({
               layoutManager.updateLayoutsIndicator();
               renderModalLayouts(overlay);
             }
-          } catch (err) {
+          } catch (err: unknown) {
             console.error('Layout modal poll error:', err);
           }
         }, LAYOUT_MODAL_POLL_INTERVAL);
       });
   }
 
-  function renderModalLayouts(overlay) {
-    const listEl = overlay?._modalLayoutList ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-list');
-    const editorEl = overlay?._modalLayoutEditor ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-editor');
+  function renderModalLayouts(overlay: LayoutModalOverlay): void {
+    const listEl: HTMLDivElement | null = overlay?._modalLayoutList ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-list') as HTMLDivElement | null;
+    const editorEl: HTMLDivElement | null = overlay?._modalLayoutEditor ?? document.querySelector('.settings-modal-overlay')?.querySelector('#modal-layout-editor') as HTMLDivElement | null;
     if (!listEl || !editorEl) return;
 
     listEl.replaceChildren();
     editorEl.replaceChildren();
 
-    const layouts = layoutManager.getLayouts();
-    const defaultLayoutId = layoutManager.getDefaultLayoutId();
-    const windowLayoutId = layoutManager.getWindowLayoutId();
-    const selectedLayoutId = layoutManager._getSelectedLayoutId();
-    const renamingLayoutId = layoutManager._getRenamingLayoutId();
+    const layouts: LayoutData[] = layoutManager.getLayouts();
+    const defaultLayoutId: string = layoutManager.getDefaultLayoutId();
+    const windowLayoutId: string | null = layoutManager.getWindowLayoutId();
+    const selectedLayoutId: string | null = layoutManager._getSelectedLayoutId();
+    const renamingLayoutId: string | null = layoutManager._getRenamingLayoutId();
 
     if (layouts.length === 0) {
       const empty = document.createElement('div');
@@ -158,29 +194,29 @@ export function createLayoutModal({
       listEl.appendChild(empty);
     } else {
       for (const layout of layouts) {
-        const isActive = layout.id === windowLayoutId;
-        const isDefault = layout.id === defaultLayoutId;
-        const isSelected = layout.id === selectedLayoutId;
+        const isActive: boolean = layout.id === windowLayoutId;
+        const isDefault: boolean = layout.id === defaultLayoutId;
+        const isSelected: boolean = layout.id === selectedLayoutId;
         const item = document.createElement('div');
         item.className = `layout-item${isActive ? ' is-active' : ''}${isDefault ? ' is-default' : ''}${isSelected ? ' is-selected' : ''}`;
         item.dataset.layoutId = layout.id;
 
-        let nameEl;
+        let nameEl: HTMLElement;
         if (renamingLayoutId === layout.id) {
-          nameEl = document.createElement('input');
-          nameEl.type = 'text';
-          nameEl.className = 'layout-name layout-name-input';
-          nameEl.value = layout.name || layout.id;
-          nameEl.addEventListener('click', (e) => e.stopPropagation());
-          nameEl.addEventListener('mousedown', (e) => e.stopPropagation());
-          nameEl.addEventListener('keydown', (event) => {
+          const inputEl = document.createElement('input');
+          inputEl.type = 'text';
+          inputEl.className = 'layout-name layout-name-input';
+          inputEl.value = layout.name || layout.id;
+          inputEl.addEventListener('click', (e: MouseEvent) => e.stopPropagation());
+          inputEl.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation());
+          inputEl.addEventListener('keydown', (event: KeyboardEvent) => {
             if (event.key === 'Enter') {
-              const newName = nameEl.value.trim();
+              const newName = inputEl.value.trim();
               layoutManager._setRenamingLayoutId(null);
               if (newName) {
                 bridge.renameLayout(layout.id, newName)
                   .then(() => bridge.listLayouts())
-                  .then((config) => {
+                  .then((config: LayoutsListResult) => {
                     layoutManager._setLayouts(config.layouts ?? []);
                     layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
                     layoutManager.updateLayoutsIndicator();
@@ -196,13 +232,13 @@ export function createLayoutModal({
               renderModalLayouts(overlay);
             }
           });
-          nameEl.addEventListener('blur', () => {
-            const newName = nameEl.value.trim();
+          inputEl.addEventListener('blur', () => {
+            const newName = inputEl.value.trim();
             layoutManager._setRenamingLayoutId(null);
             if (newName) {
               bridge.renameLayout(layout.id, newName)
                 .then(() => bridge.listLayouts())
-                .then((config) => {
+                .then((config: LayoutsListResult) => {
                   layoutManager._setLayouts(config.layouts ?? []);
                   layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
                   layoutManager.updateLayoutsIndicator();
@@ -213,6 +249,7 @@ export function createLayoutModal({
               renderModalLayouts(overlay);
             }
           });
+          nameEl = inputEl;
         } else {
           nameEl = document.createElement('div');
           nameEl.className = 'layout-name';
@@ -222,7 +259,7 @@ export function createLayoutModal({
 
         const info = document.createElement('div');
         info.className = 'layout-pane-count';
-        const panesCount = (layout.panes?.length) ?? 0;
+        const panesCount: number = (layout.panes?.length) ?? 0;
         info.textContent = `${panesCount} pane${panesCount === 1 ? '' : 's'}`;
 
         const actions = document.createElement('div');
@@ -233,7 +270,7 @@ export function createLayoutModal({
         switchBtn.className = 'settings-btn';
         setIcon(switchBtn, 'external-link', 12);
         switchBtn.title = 'Open in new window';
-        switchBtn.addEventListener('click', (e) => {
+        switchBtn.addEventListener('click', (e: MouseEvent) => {
           e.stopPropagation();
           bridge.openLayoutWindow(layout.id).catch(reportError);
           overlay?.remove();
@@ -245,12 +282,12 @@ export function createLayoutModal({
         renameBtn.className = 'settings-btn';
         setIcon(renameBtn, 'pencil', 12);
         renameBtn.title = 'Rename layout';
-        renameBtn.addEventListener('click', async (e) => {
+        renameBtn.addEventListener('click', async (e: MouseEvent) => {
           e.stopPropagation();
           layoutManager._setRenamingLayoutId(layout.id);
           renderModalLayouts(overlay);
           queueMicrotask(() => {
-            const input = listEl.querySelector(`.layout-item[data-layout-id="${layout.id}"] .layout-name-input`);
+            const input = listEl.querySelector(`.layout-item[data-layout-id="${layout.id}"] .layout-name-input`) as HTMLInputElement | null;
             if (input) { input.focus(); input.select(); }
           });
         });
@@ -262,7 +299,7 @@ export function createLayoutModal({
           deleteBtn.className = 'settings-btn';
           setIcon(deleteBtn, 'x', 12);
           deleteBtn.title = 'Delete layout';
-          deleteBtn.addEventListener('click', (e) => {
+          deleteBtn.addEventListener('click', (e: MouseEvent) => {
             e.stopPropagation();
             if (selectedLayoutId === layout.id) layoutManager._setSelectedLayoutId(null);
             layoutManager.deleteLayoutById(layout.id)
@@ -277,8 +314,8 @@ export function createLayoutModal({
         if (isActive) checkmark.classList.add('is-active');
 
         item.append(nameEl, info, actions, checkmark);
-        item.addEventListener('click', (e) => {
-          if (e.target.closest('.layout-actions')) return;
+        item.addEventListener('click', (e: MouseEvent) => {
+          if ((e.target as HTMLElement).closest('.layout-actions')) return;
           layoutManager._setSelectedLayoutId(layout.id);
           renderModalLayouts(overlay);
         });
@@ -286,7 +323,7 @@ export function createLayoutModal({
       }
     }
 
-    const selected = layouts.find((l) => l.id === selectedLayoutId) || null;
+    const selected: LayoutData | null = layouts.find((l: LayoutData) => l.id === selectedLayoutId) || null;
     if (selected) {
       const info = document.createElement('div');
       info.className = 'layout-info';
@@ -297,7 +334,7 @@ export function createLayoutModal({
       nameInput.type = 'text';
       nameInput.className = 'layout-name-input';
       nameInput.value = selected.name || '';
-      const originalName = selected.name || '';
+      const originalName: string = selected.name || '';
       const confirmBtn = document.createElement('button');
       confirmBtn.type = 'button';
       confirmBtn.className = 'settings-btn layout-name-btn layout-name-btn-confirm';
@@ -314,7 +351,7 @@ export function createLayoutModal({
         if (!newName) return;
         bridge.renameLayout(selected.id, newName)
           .then(() => bridge.listLayouts())
-          .then((config) => {
+          .then((config: LayoutsListResult) => {
             layoutManager._setLayouts(config.layouts ?? []);
             layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? layoutManager.getDefaultLayoutId());
             layoutManager.updateLayoutsIndicator();
@@ -326,7 +363,7 @@ export function createLayoutModal({
 
       confirmBtn.addEventListener('click', doSave);
       cancelBtn.addEventListener('click', doCancel);
-      nameInput.addEventListener('keydown', (e) => {
+      nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.key === 'Enter') { e.preventDefault(); doSave(); }
         if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
       });
@@ -338,7 +375,7 @@ export function createLayoutModal({
 
       const actionsRow = document.createElement('div');
       actionsRow.className = 'layout-info-actions';
-      const isDefault = selected.id === defaultLayoutId;
+      const isDefault: boolean = selected.id === defaultLayoutId;
       const setDefaultBtn = document.createElement('button');
       setDefaultBtn.type = 'button';
       setDefaultBtn.className = 'settings-btn layout-info-btn';
@@ -347,7 +384,7 @@ export function createLayoutModal({
       setDefaultBtn.title = isDefault ? 'This is the default layout' : 'Set this layout to restore on startup';
       setDefaultBtn.addEventListener('click', () => {
         bridge.setLayoutAsDefault(selected.id)
-          .then((config) => {
+          .then((config: LayoutsListResult) => {
             layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? selected.id);
             renderModalLayouts(overlay);
           })
@@ -366,7 +403,7 @@ export function createLayoutModal({
       actionsRow.appendChild(openInNewWindowBtn);
       info.appendChild(actionsRow);
 
-      const panesCount = selected.panes?.length ?? 0;
+      const panesCount: number = selected.panes?.length ?? 0;
       const paneCountLabel = document.createElement('div');
       paneCountLabel.className = 'layout-pane-count-label';
       paneCountLabel.textContent = `Panes (${panesCount})`;
@@ -379,7 +416,7 @@ export function createLayoutModal({
         paneItem.className = 'layout-pane-item';
         const paneTitle = document.createElement('div');
         paneTitle.className = 'layout-pane-title';
-        paneTitle.textContent = pane.title || 'Untitled';
+        paneTitle.textContent = (pane.title as string | undefined) || 'Untitled';
         paneItem.appendChild(paneTitle);
         const paneDetails = document.createElement('div');
         paneDetails.className = 'layout-pane-details';

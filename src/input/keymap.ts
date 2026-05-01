@@ -23,7 +23,33 @@
  * The order of rows is the priority order: first match wins.
  */
 
-export const KEYMAP = [
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+export interface KeymapEntry {
+  mode: string;
+  chord: string;
+  action: string;
+  hint?: string;
+  skipInInput?: boolean;
+  stopPropagation?: boolean;
+  id?: string;
+}
+
+export interface ParsedChord {
+  key: string;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  _digitRange?: { lo: number; hi: number };
+}
+
+// ---------------------------------------------------------------------------
+// Keymap table
+// ---------------------------------------------------------------------------
+
+export const KEYMAP: KeymapEntry[] = [
   // Global
   { mode: '*',   chord: 'Ctrl+Shift+O',    action: 'toggleCommandPalette',  hint: 'goto pane',         stopPropagation: true },
   { mode: '*',   chord: 'Ctrl+Shift+P',    action: 'toggleCommandList',     hint: 'commands',         stopPropagation: true },
@@ -74,14 +100,12 @@ const MOD_TOKENS = new Set(['ctrl', 'cmd', 'meta', 'shift', 'alt', 'option']);
 
 /**
  * Parse a chord string into an array of alternatives.
- * @param {string} chord
- * @returns {Array<{key: string, ctrl: boolean, shift: boolean, alt: boolean}>}
  */
-export function parseChord(chord) {
+export function parseChord(chord: string): ParsedChord[] {
   return chord.split('|').map(parseChordAlt);
 }
 
-function parseChordAlt(alt) {
+function parseChordAlt(alt: string): ParsedChord {
   const tokens = alt.trim().split('+').map((t) => t.trim()).filter(Boolean);
   if (tokens.length === 0) {
     throw new Error(`Empty chord alternative: ${alt}`);
@@ -123,14 +147,14 @@ function parseChordAlt(alt) {
  * are compared case-insensitively so chord `Ctrl+Shift+C` fires regardless of
  * whether Shift causes the browser to deliver `c` or `C`.
  */
-export function matchesChord(event, parsedAlts) {
+export function matchesChord(event: KeyboardEvent, parsedAlts: ParsedChord[]): boolean {
   for (const alt of parsedAlts) {
     if (matchesChordAlt(event, alt)) return true;
   }
   return false;
 }
 
-function matchesChordAlt(event, alt) {
+function matchesChordAlt(event: KeyboardEvent, alt: ParsedChord): boolean {
   // Digit range: '1..9' matches a single digit key without modifiers.
   if (alt._digitRange) {
     const { lo, hi } = alt._digitRange;
@@ -164,7 +188,7 @@ function matchesChordAlt(event, alt) {
   return true;
 }
 
-function normalizeKey(key) {
+function normalizeKey(key: string): string {
   if (typeof key !== 'string') return key;
   return key.length === 1 ? key.toLowerCase() : key;
 }
@@ -177,10 +201,10 @@ function normalizeKey(key) {
  * Format a chord for display in UI (settings modal, status bar).
  * For multi-alternative chords, only the first alternative is shown.
  */
-export function formatChord(chord, platform = 'linux') {
+export function formatChord(chord: string, platform: string = 'linux'): string {
   const [first] = parseChord(chord);
   const isMac = platform === 'darwin';
-  const parts = [];
+  const parts: string[] = [];
   if (first.ctrl)  parts.push(isMac ? '⌘' : '⌃');
   if (first.shift) parts.push('⇧');
   if (first.alt)   parts.push('⌥');
@@ -188,7 +212,7 @@ export function formatChord(chord, platform = 'linux') {
   return parts.join('');
 }
 
-function formatKeyForDisplay(key) {
+function formatKeyForDisplay(key: string): string {
   if (key === ' ') return 'Space';
   return key;
 }
