@@ -57,7 +57,7 @@ export function createLayoutManager({
     return {
       id: 'default',
       name: 'Default',
-      panes: currentPanes.slice(0, 1).map((p) => ({
+      panes: currentPanes.map((p) => ({
         paneId: p.id,
         title: p.title,
         cwd: p.cwd,
