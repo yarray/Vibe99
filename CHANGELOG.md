@@ -19,6 +19,10 @@
 ### Fixed
 
 - Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).
+- Status bar overflow when terminal titles are too long (VIB-163):
+  - `.status-bar` now has `overflow: hidden` to prevent content overflow
+  - `.status-hint` is now shrinkable (`flex: 0 1 auto`) with `min-width: 0` and text truncation (`text-overflow: ellipsis`)
+  - Terminal titles >64 characters are truncated to keep the tail (e.g., "...powershell.exe")
 
 ### Added
 
