@@ -6,10 +6,14 @@
 //!
 //! ## Design decisions
 //!
-//! - **`wsl.exe` is the sole detection mechanism.** We run `wsl.exe --list
-//!   --quiet` and check for a zero exit code. This matches how VS Code and
-//!   other tools detect WSL availability — no registry scraping or path
-//!   probing (P1: minimal primitives).
+//! - **WSL detection uses the Windows registry.** We check whether
+//!   `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` contains
+//!   distribution sub-keys. This is instant (microseconds) and avoids
+//!   spawning `wsl.exe`, which on Windows 10 2004+ is a stub that contacts
+//!   Microsoft Store / Windows Update and can hang indefinitely when WSL
+//!   is not installed (VIB-162). Distribution listing and shell detection
+//!   still invoke `wsl.exe` (with a timeout), but only when the registry
+//!   confirms WSL is present.
 //!
 //! - **Path conversion is pure-string.** `C:\Users\foo → /mnt/c/Users/foo`.
 //!   UNC paths (`\\server\share`) and drive-relative paths (`C:bar`) are
@@ -21,28 +25,91 @@
 //!   polluting the Linux environment (P11: functional self-discipline).
 
 #[cfg(target_os = "windows")]
-use std::{os::windows::process::CommandExt, process::Command};
+use std::{
+    io::Read,
+    os::windows::process::CommandExt,
+    process::{Command, Output},
+    sync::OnceLock,
+    time::{Duration, Instant},
+};
+
+/// Cached result of WSL availability check (registry-based).
+#[cfg(target_os = "windows")]
+static WSL_AVAILABLE: OnceLock<bool> = OnceLock::new();
+
+/// Timeout for `wsl.exe` subprocess calls.
+///
+/// 3 seconds is long enough for a properly configured WSL installation to
+/// respond, but short enough to avoid noticeable UI lag when WSL is not
+/// installed.
+const WSL_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Interval between `try_wait()` polls while waiting for `wsl.exe`.
+const WSL_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 // ----------------------------------------------------------------
 // Detection
 // ----------------------------------------------------------------
 
+/// Run a `Command` with a timeout, collecting its full output.
+///
+/// Spawns the command and polls `try_wait()` until it exits or the timeout
+/// elapses. On timeout the child is **killed** and then reaped — no
+/// zombie process or thread is leaked (VIB-162).
+///
+/// Returns `None` if the command fails to spawn, times out, or `try_wait`
+/// reports an error.
+#[cfg(target_os = "windows")]
+fn run_with_timeout(mut cmd: Command) -> Option<Output> {
+    let mut child = cmd.spawn().ok()?;
+    let deadline = Instant::now() + WSL_TIMEOUT;
+
+    let status = loop {
+        match child.try_wait() {
+            // Child has exited — collect status.
+            Ok(Some(status)) => break status,
+            // Still running — check deadline.
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait(); // reap the zombie
+                return None;
+            }
+            Ok(None) => std::thread::sleep(WSL_POLL_INTERVAL),
+            // OS error (e.g. child already reaped) — bail out.
+            Err(_) => {
+                let _ = child.kill();
+                return None;
+            }
+        }
+    };
+
+    // Process exited — drain stdout / stderr.
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    if let Some(mut out) = child.stdout.take() {
+        let _ = out.read_to_end(&mut stdout);
+    }
+    if let Some(mut err) = child.stderr.take() {
+        let _ = err.read_to_end(&mut stderr);
+    }
+
+    Some(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
 /// Whether WSL is available on this system.
 ///
 /// On non-Windows platforms this always returns `false`.
-/// On Windows it probes for `wsl.exe` by running `wsl.exe --list --quiet`
-/// with a short timeout, so the check is fast even when WSL is not installed.
+/// On Windows it checks the registry for WSL distribution sub-keys under
+/// `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss`. This is instant
+/// (no process spawn, no timeout) and the result is cached.
 pub fn is_wsl_available() -> bool {
     #[cfg(target_os = "windows")]
     {
-        Command::new("wsl.exe")
-            .args(["--list", "--quiet"])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        *WSL_AVAILABLE.get_or_init(registry_has_wsl_distributions)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -50,30 +117,55 @@ pub fn is_wsl_available() -> bool {
     }
 }
 
+/// Check whether the WSL registry key has at least one distribution sub-key.
+///
+/// When WSL is installed and has at least one distribution, Windows creates
+/// GUID sub-keys under `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss`.
+/// If this key is missing or empty, WSL is not available — no `wsl.exe`
+/// call needed, zero delay.
+#[cfg(target_os = "windows")]
+fn registry_has_wsl_distributions() -> bool {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+    use winreg::RegKey;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let lxss = match hkcu
+        .open_subkey_with_flags(r"Software\Microsoft\Windows\CurrentVersion\Lxss", KEY_READ)
+    {
+        Ok(k) => k,
+        Err(_) => return false,
+    };
+
+    // Any sub-key means at least one distribution is registered.
+    lxss.enum_keys().any(|_| true)
+}
+
 /// List installed WSL distributions.
 ///
 /// Returns distribution names (e.g. `["Ubuntu", "Debian"]`). Returns an
 /// empty vec if WSL is not available or no distributions are installed.
+///
+/// The `wsl.exe` call has a 3-second timeout to avoid hanging when WSL is
+/// not installed (VIB-162).
 pub fn list_distributions() -> Vec<String> {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("wsl.exe")
-            .args(["--list", "--quiet"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-            .output();
+        let output = match run_with_timeout(
+            Command::new("wsl.exe")
+                .args(["--list", "--quiet"])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(0x0800_0000), // CREATE_NO_WINDOW
+        ) {
+            Some(out) if out.status.success() => out,
+            _ => return Vec::new(),
+        };
 
-        match output {
-            Ok(out) if out.status.success() => {
-                let text = decode_utf16le(&out.stdout);
-                text.lines()
-                    .map(|line| line.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect()
-            }
-            _ => Vec::new(),
-        }
+        let text = decode_utf16le(&output.stdout);
+        text.lines()
+            .map(|line| line.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -245,16 +337,19 @@ pub fn wsl_shell_args(distro: Option<&str>, shell_cmd: &str, shell_args: &[Strin
 /// 'echo $SHELL'`.
 ///
 /// Returns the shell path (e.g. `/bin/bash`) or `None` if detection fails.
+///
+/// The `wsl.exe` call has a 3-second timeout to avoid hanging when WSL is
+/// not installed (VIB-162).
 pub fn detect_wsl_default_shell() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("wsl.exe")
-            .args(["--", "sh", "-c", "echo $SHELL"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-            .output()
-            .ok()?;
+        let output = run_with_timeout(
+            Command::new("wsl.exe")
+                .args(["--", "sh", "-c", "echo $SHELL"])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(0x0800_0000), // CREATE_NO_WINDOW
+        )?;
 
         if !output.status.success() {
             return None;
