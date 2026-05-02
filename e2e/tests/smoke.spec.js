@@ -1,5 +1,5 @@
 import { waitForAppReady, getPaneCount, getTabCount } from '../helpers/app-launch.js';
-import { waitForTerminalReady, getTerminalText, writeToTerminal, clearCapturedOutput } from '../helpers/terminal-helpers.js';
+import { waitForTerminalReady, waitForTerminalOutput, writeToTerminal, clearCapturedOutput } from '../helpers/terminal-helpers.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 
 describe('Vibe99 smoke test', () => {
@@ -22,10 +22,7 @@ describe('Vibe99 smoke test', () => {
   it('accepts keyboard input in the focused terminal', async () => {
     await clearCapturedOutput(0);
     await writeToTerminal(0, 'echo hello\n');
-    await browser.pause(1000);
-
-    const text = await getTerminalText(0);
-    expect(text.includes('echo hello')).toBe(true);
+    await waitForTerminalOutput('hello', 0, 15000);
   });
 
   after(async () => {
