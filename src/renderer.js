@@ -546,7 +546,6 @@ const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, re
   }
 
   if (panes.length === 1) {
-    void bridge.closeWindow().catch(reportError);
     return;
   }
 

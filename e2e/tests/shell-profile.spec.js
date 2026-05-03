@@ -499,6 +499,9 @@ describe('Shell Profile', () => {
         }
       }
 
+      // Wait for submenu to appear (WebKitGTK may need longer than 300ms)
+      await waitForElement('.context-menu-submenu .context-menu-item', 3000);
+
       const submenuItems = await $$('.context-menu-submenu .context-menu-item');
       expect(submenuItems.length).toBeGreaterThanOrEqual(1);
 

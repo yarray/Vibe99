@@ -203,7 +203,7 @@ impl PtyManager {
         } else if shell_stem == "bash" {
             cmd.env(
                 "PROMPT_COMMAND",
-                r#"printf "\033]7;file://%s%s\007" "$(hostname)" "$PWD""#,
+                r#"printf "\033]7;file://%s%s\007" "$(hostname)" "$PWD"; printf "\033]0;%s@%s:%s\007" "$USER" "$(hostname)" "$PWD""#,
             );
         }
 
