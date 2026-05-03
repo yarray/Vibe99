@@ -172,6 +172,38 @@ async function selectTerminalText(paneIndex = 0) {
 }
 
 /**
+ * Ensure exactly `target` tabs exist by clicking add/close buttons via JS.
+ * Much faster than browser.keys() in Docker (1 WD roundtrip vs 3 per action).
+ */
+async function ensureTabCount(target, { minPause = 600 } = {}) {
+  let count = await getTabCount();
+
+  while (count < target) {
+    await browser.execute(() => {
+      const btn = document.getElementById('tabs-add');
+      if (btn) btn.click();
+    });
+    await browser.pause(minPause);
+    count = await getTabCount();
+  }
+
+  while (count > target) {
+    const closed = await browser.execute((idx) => {
+      const tabs = document.querySelectorAll('#tabs-list .tab');
+      const tab = tabs[idx];
+      if (!tab) return false;
+      const closeBtn = tab.querySelector('.tab-close');
+      if (!closeBtn) return false;
+      closeBtn.click();
+      return true;
+    }, count - 1);
+    if (!closed) break;
+    await browser.pause(minPause);
+    count = await getTabCount();
+  }
+}
+
+/**
  * Wait for rename input to appear on a tab.
  */
 async function waitForRenameInput(tabIndex, timeout = 5000) {
@@ -471,79 +503,45 @@ describe('Context Menu', () => {
     });
 
     it('should disable "Close Tab" when only one tab exists', async () => {
-      // Ensure only 1 tab
-      let count = await getTabCount();
-      while (count > 1) {
-        // Close via Ctrl+B, x, x (navigation mode close)
-        await browser.keys(['Control', 'b']);
-        await browser.pause(200);
-        await browser.keys('x');
-        await browser.pause(300);
-        await browser.keys('x');
-        await browser.pause(500);
-        count = await getTabCount();
-      }
-
-      expect(count).toBe(1);
+      await ensureTabCount(1);
+      expect(await getTabCount()).toBe(1);
 
       await rightClickTab(0);
       await waitForContextMenu();
 
-      // Close Tab should be disabled
       expect(await isContextMenuItemDisabled('Close Tab')).toBe(true);
 
       await dismissContextMenu();
     });
 
     it('should enable "Close Tab" when multiple tabs exist', async () => {
-      // Ensure at least 2 tabs
-      let count = await getTabCount();
-      while (count < 3) {
-        await browser.keys(['Control', 'n']);
-        await browser.pause(500);
-        count = await getTabCount();
-      }
-
-      expect(count).toBeGreaterThan(1);
+      await ensureTabCount(3);
+      expect(await getTabCount()).toBeGreaterThan(1);
 
       await rightClickTab(1);
       await waitForContextMenu();
 
-      // Close Tab should be enabled
       expect(await isContextMenuItemDisabled('Close Tab')).toBe(false);
 
       await dismissContextMenu();
     });
 
     it('should close tab on "Close Tab" action', async () => {
-      let count = await getTabCount();
-      while (count < 3) {
-        await browser.keys(['Control', 'n']);
-        await browser.pause(500);
-        count = await getTabCount();
-      }
-
-      const countBefore = count;
+      await ensureTabCount(3);
+      const countBefore = await getTabCount();
       expect(countBefore).toBeGreaterThan(1);
 
-      // Right-click the second tab and close it
       await rightClickTab(1);
       await waitForContextMenu();
       await clickContextMenuItem('Close Tab');
-      await browser.pause(500);
+      await browser.pause(600);
 
       const countAfter = await getTabCount();
       expect(countAfter).toBe(countBefore - 1);
     });
 
     it('should close menu when clicking outside', async () => {
-      // Ensure we have panes (previous test may have closed some)
-      let count = await getTabCount();
-      while (count < 2) {
-        await browser.keys(['Control', 'n']);
-        await browser.pause(500);
-        count = await getTabCount();
-      }
+      await ensureTabCount(2);
 
       await rightClickTab(0);
       await waitForContextMenu();
