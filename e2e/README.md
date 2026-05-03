@@ -21,16 +21,18 @@ The image (~2–3 GB) contains Ubuntu 22.04, Node.js 22, Rust stable, `tauri-dri
 The image already has a compiled binary. Start a container and run the test suite:
 
 ```bash
-docker run --rm vibe99-builder \
+docker run --rm --privileged vibe99-builder \
   bash -c "npm run test:e2e"
 ```
+
+> **Note:** `--privileged` is required because WebKitWebDriver needs access to file descriptor operations that Docker's default seccomp profile blocks.
 
 The WDIO config (`wdio.conf.js`) automatically starts Xvfb (virtual display) and `tauri-driver` before running specs.
 
 #### Run a specific test
 
 ```bash
-docker run --rm vibe99-builder \
+docker run --rm --privileged vibe99-builder \
   bash -c "npm run test:e2e -- layout"
 ```
 
@@ -41,14 +43,14 @@ See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
 To build from your local source (e.g. after making changes), mount it over the image's built-in repo and recompile:
 
 ```bash
-docker run --rm -v $(pwd):/app/Vibe99 vibe99-builder \
+docker run --rm --privileged -v $(pwd):/app/Vibe99 vibe99-builder \
   bash -c "npm ci && npm run tauri:build"
 ```
 
 For faster incremental builds, persist the Cargo target directory with a named volume:
 
 ```bash
-docker run --rm \
+docker run --rm --privileged \
   -v $(pwd):/app/Vibe99 \
   -v vibe99-cargo-target:/app/Vibe99/src-tauri/target \
   vibe99-builder \
@@ -58,7 +60,7 @@ docker run --rm \
 Then run e2e against the freshly compiled binary:
 
 ```bash
-docker run --rm -v $(pwd):/app/Vibe99 vibe99-builder \
+docker run --rm --privileged -v $(pwd):/app/Vibe99 vibe99-builder \
   bash -c "cd e2e && npm ci && cd .. && npm run test:e2e"
 ```
 
@@ -85,7 +87,7 @@ npm ci && npm run tauri:build
 npm run test:e2e
 ```
 
-Prerequisites for local runs on Linux: `libwebkit2gtk-4.1-dev`, `xvfb`, `tauri-driver` (`cargo install tauri-driver`).
+Prerequisites for local runs on Linux: `libwebkit2gtk-4.1-dev`, `webkit2gtk-driver`, `xvfb`, `tauri-driver` (`cargo install tauri-driver`).
 
 ## Windows
 
