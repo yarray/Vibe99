@@ -4,6 +4,26 @@
  */
 
 /**
+ * Get visible text from an element, with fallback for WebKitGTK.
+ * WebKitGTK's WebDriver getText() may return empty strings for elements
+ * that do have visible text. Falls back to innerText via JS execution.
+ */
+export async function getTextSafe(selectorOrElement) {
+  const el = typeof selectorOrElement === 'string'
+    ? await $(selectorOrElement)
+    : selectorOrElement;
+  if (!el || !(await el.isExisting())) return '';
+
+  const webdriverText = await el.getText();
+  if (webdriverText) return webdriverText;
+
+  // WebKitGTK fallback: read innerText via JS
+  return await browser.execute((element) => {
+    return element.innerText || element.textContent || '';
+  }, el);
+}
+
+/**
  * Set an input element's value AND dispatch the events needed
  * for React/framework change handlers to fire on WebView2.
  * WebDriver's setValue() alone doesn't trigger these events.

@@ -2,7 +2,7 @@ import os from 'os';
 import { waitForAppReady, getPaneCount, getFocusedPane, getPaneByIndex } from '../helpers/app-launch.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import { waitForElement, waitForCondition } from '../helpers/wait-for.js';
-import { setInputValue } from '../helpers/webview2-helpers.js';
+import { setInputValue, getTextSafe } from '../helpers/webview2-helpers.js';
 
 const isWindows = os.platform() === 'win32';
 
@@ -122,7 +122,7 @@ async function getHighlightedItem() {
 async function getEmptyMessage() {
   const empty = await $('.command-palette-empty');
   if (!empty || !(await empty.isExisting())) return null;
-  return await empty.getText();
+  return await getTextSafe(empty);
 }
 
 describe('Command Palette', () => {
@@ -175,7 +175,7 @@ describe('Command Palette', () => {
       expect(swatch).toExist();
       expect(label).toExist();
 
-      const labelText = await label.getText();
+      const labelText = await getTextSafe(label);
       expect(labelText).toBeTruthy();
     });
 
@@ -266,7 +266,7 @@ describe('Command Palette', () => {
       for (const item of items) {
         const label = await item.$('.command-palette-label');
         if (label) {
-          const text = await label.getText();
+          const text = await getTextSafe(label);
           labels.push(text);
         }
       }

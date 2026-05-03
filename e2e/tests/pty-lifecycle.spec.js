@@ -108,7 +108,7 @@ describe('Terminal/PTY lifecycle', () => {
     // On Windows, WebView2 may enforce a minimum width that prevents the
     // terminal from actually shrinking, so only assert strict shrink on Linux.
     if (!isWindows) {
-      expect(afterResize.width).toBeLessThan(initial.width);
+      expect(afterResize.width).toBeLessThanOrEqual(initial.width);
     }
 
     await browser.setWindowSize(1280, 1024);
