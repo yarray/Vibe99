@@ -7,6 +7,7 @@ import {
   clearCapturedOutput,
 } from '../helpers/terminal-helpers.js';
 import { waitForCondition } from '../helpers/wait-for.js';
+import { getTextSafe } from '../helpers/webview2-helpers.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 
 const isWindows = os.platform() === 'win32';
@@ -40,7 +41,7 @@ async function getTabLabel(index) {
   if (!tabs[index]) return '';
   const label = await tabs[index].$('.tab-label');
   if (!label) return '';
-  return await label.getText();
+  return await getTextSafe(label);
 }
 
 async function waitForPaneCount(count, timeout = 10000) {
@@ -167,8 +168,8 @@ describe('Terminal/PTY lifecycle', () => {
     expect(hosts.length).toBe(1);
   });
 
-  // After this test: 0 panes (app may close or show empty state).
-  it('closes window when last pane exits', async () => {
+  // After this test: 1 pane remains (window stays open).
+  it('keeps window open when last pane exits', async () => {
     // Only 1 pane left (at index 0)
     const tabs = await $$('#tabs-list .tab');
     const closeBtn = await tabs[0].$('.tab-close');
@@ -178,28 +179,22 @@ describe('Terminal/PTY lifecycle', () => {
     await focusPaneByIndex(0);
     await browser.pause(300);
 
-    // Send exit with leading newline to clear shell state
     await clearCapturedOutput(0);
     await writeToTerminal(0, '\r\nexit\r\n');
 
-    if (isWindows) {
-      // Known issue on Windows: the last pane's shell exit via PTY write
-      // does not trigger pane removal. Verify the close button is disabled
-      // (tested above) and the pane still responds to input.
-      await browser.pause(2000);
-      const paneCount = await getPaneCount();
-      expect(paneCount).toBe(1);
-      return;
-    }
-
+    // After shell exit, the window stays open with the exit message visible.
+    // The pane count remains 1 — the terminal just shows the exit code.
     await waitForCondition(
       async () => {
-        const panes = await $$('.pane');
-        return panes.length === 0;
+        const captured = await getCapturedOutput(0);
+        return captured.includes('process exited');
       },
       10000,
       500,
     );
+
+    const paneCount = await getPaneCount();
+    expect(paneCount).toBe(1);
   });
 
   after(async () => {

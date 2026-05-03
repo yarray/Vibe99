@@ -2,6 +2,7 @@ import os from 'os';
 import { waitForAppReady, getPaneCount, getTabCount } from '../helpers/app-launch.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import { waitForElement, waitForCondition } from '../helpers/wait-for.js';
+import { getTextSafe } from '../helpers/webview2-helpers.js';
 
 const isWindows = os.platform() === 'win32';
 
@@ -382,7 +383,7 @@ describe('Pane management and navigation', () => {
       const closeBtn = await $(`#tabs-list .tab[data-pane-id="${focusedId}"] .tab-close`);
       expect(await closeBtn.isExisting()).toBe(true);
 
-      const text = await closeBtn.getText();
+      const text = await getTextSafe(closeBtn);
       expect(text).toBe('?');
 
       const hasPending = await browser.execute((id) => {
