@@ -1,5 +1,6 @@
 import { getPaneCount, waitForAppReady } from '../helpers/app-launch.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
+import { getTextSafe } from '../helpers/webview2-helpers.js';
 import {
   openLayoutsDropdown,
   closeLayoutsDropdown,
@@ -81,7 +82,7 @@ describe('Layout', () => {
     expect(items.length).toBeGreaterThanOrEqual(1);
 
     const firstItem = items[0];
-    const text = await firstItem.getText();
+    const text = await getTextSafe(firstItem);
     expect(text).toBe('No saved layouts');
   });
 
@@ -93,7 +94,7 @@ describe('Layout', () => {
     expect(items.length).toBe(1);
 
     const label = await items[0].$('.layouts-dropdown-label');
-    const text = await label.getText();
+    const text = await getTextSafe(label);
     expect(text).toBe('Test Layout');
   });
 
@@ -180,7 +181,7 @@ describe('Layout', () => {
     expect(items.length).toBe(1);
 
     const nameEl = await items[0].$('.layout-name');
-    const text = await nameEl.getText();
+    const text = await getTextSafe(nameEl);
     expect(text).toBe('New Modal Layout');
   });
 
@@ -192,7 +193,7 @@ describe('Layout', () => {
 
     const items = await getModalLayoutItems();
     const nameEl = await items[0].$('.layout-name');
-    const text = await nameEl.getText();
+    const text = await getTextSafe(nameEl);
     expect(text).toBe('Renamed Layout');
   });
 
@@ -215,7 +216,7 @@ describe('Layout', () => {
     for (const item of items) {
       const nameEl = await item.$('.layout-name');
       if (await nameEl.isExisting()) {
-        labels.push((await nameEl.getText()).replace(/^★\s*/, ''));
+        labels.push((await getTextSafe(nameEl)).replace(/^★\s*/, ''));
       }
     }
     expect(labels).not.toContain('To Delete');
@@ -263,7 +264,7 @@ describe('Layout', () => {
     // Verify the list updates
     const items = await getModalLayoutItems();
     const nameEl = await items[0].$('.layout-name');
-    const text = await nameEl.getText();
+    const text = await getTextSafe(nameEl);
     expect(text).toBe('Updated Name');
   });
 
@@ -285,7 +286,7 @@ describe('Layout', () => {
     for (const item of items) {
       const label = await item.$('.layouts-dropdown-label');
       if (await label.isExisting()) {
-        labels.push(await label.getText());
+        labels.push(await getTextSafe(label));
       }
     }
     expect(labels).toContain('Persistent Layout');

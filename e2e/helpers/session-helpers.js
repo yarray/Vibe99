@@ -1,6 +1,6 @@
 import os from 'os';
 import { waitForCondition } from './wait-for.js';
-import { nativeDoubleClick } from './webview2-helpers.js';
+import { nativeDoubleClick, getTextSafe } from './webview2-helpers.js';
 
 const isWindows = os.platform() === 'win32';
 
@@ -135,7 +135,7 @@ export async function getTabLabelAt(index) {
   if (!tabs[index]) return null;
   const label = await tabs[index].$('.tab-label');
   if (!label) return null;
-  return await label.getText();
+  return await getTextSafe(label);
 }
 
 export async function getPaneColorAt(index) {

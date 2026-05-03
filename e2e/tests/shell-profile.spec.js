@@ -2,7 +2,7 @@ import { waitForAppReady } from '../helpers/app-launch.js';
 import { openSettingsPanel, closeSettingsPanel, resetSettings } from '../helpers/settings-helpers.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import { waitForElement, waitForCondition } from '../helpers/wait-for.js';
-import { dispatchContextMenu, jsClick } from '../helpers/webview2-helpers.js';
+import { dispatchContextMenu, jsClick, getTextSafe } from '../helpers/webview2-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -111,7 +111,7 @@ async function fillProfileEditor({ id, name, command, args }) {
 /** Get the text content of a profile item's name element. */
 async function getProfileItemName(item) {
   const nameEl = await item.$('.shell-profile-name');
-  return nameEl ? await nameEl.getText() : '';
+  return nameEl ? await getTextSafe(nameEl) : '';
 }
 
 /** Click an action button (★, ⧉, ✕) on a profile item by label or title. */
@@ -120,7 +120,7 @@ async function clickProfileAction(profileId, label) {
   if (!item) throw new Error(`Profile item not found: ${profileId}`);
   const buttons = await item.$$('.shell-profile-actions .settings-btn');
   for (const btn of buttons) {
-    const text = await btn.getText();
+    const text = await getTextSafe(btn);
     const title = await btn.getAttribute('title');
     if (text.trim() === label || (title && title.includes(label)) ||
         (label === '★' && title && title.includes('default'))) {
@@ -403,7 +403,7 @@ describe('Shell Profile', () => {
       const actionBtns = await detectedItem.$$('.shell-profile-actions .settings-btn');
       const labels = [];
       for (const btn of actionBtns) {
-        labels.push(await btn.getText());
+        labels.push(await getTextSafe(btn));
       }
       expect(labels).not.toContain('✕');
     });
@@ -460,7 +460,7 @@ describe('Shell Profile', () => {
       for (const item of menuItems) {
         const label = await item.$('.context-menu-label');
         if (label) {
-          const text = await label.getText();
+          const text = await getTextSafe(label);
           if (text.includes('Change Profile')) {
             foundChangeProfile = true;
             break;
@@ -496,7 +496,7 @@ describe('Shell Profile', () => {
       for (const item of menuItems) {
         const label = await item.$('.context-menu-label');
         if (label) {
-          const text = await label.getText();
+          const text = await getTextSafe(label);
           if (text.includes('Change Profile')) {
             await item.moveTo();
             await browser.pause(300);
@@ -511,7 +511,7 @@ describe('Shell Profile', () => {
       for (const subItem of submenuItems) {
         const subLabel = await subItem.$('.context-menu-label');
         if (subLabel) {
-          const text = await subLabel.getText();
+          const text = await getTextSafe(subLabel);
           if (text.includes('SwitchTest') || text.includes('switch-test')) {
             await subItem.click();
             await browser.pause(500);

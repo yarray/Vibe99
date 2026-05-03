@@ -1,6 +1,6 @@
 import os from 'os';
 import { waitForElement, waitForCondition } from './wait-for.js';
-import { setInputValue, jsClick } from './webview2-helpers.js';
+import { setInputValue, jsClick, getTextSafe } from './webview2-helpers.js';
 
 const isWindows = os.platform() === 'win32';
 
@@ -98,7 +98,7 @@ export async function getDropdownActions() {
 export async function clickDropdownAction(label) {
   const actions = await getDropdownActions();
   for (const action of actions) {
-    const text = await action.getText();
+    const text = await getTextSafe(action);
     if (text.includes(label)) {
       await action.click();
       await browser.pause(300);
@@ -113,7 +113,7 @@ export async function clickDropdownLayout(layoutName) {
   for (const item of items) {
     const label = await item.$('.layouts-dropdown-label');
     if (label) {
-      const text = await label.getText();
+      const text = await getTextSafe(label);
       if (text === layoutName) {
         await item.click();
         await browser.pause(300);
@@ -131,7 +131,7 @@ export async function getActiveDropdownLayout() {
     const isActive = cls && cls.includes('is-active');
     if (isActive) {
       const label = await item.$('.layouts-dropdown-label');
-      return label ? await label.getText() : null;
+      return label ? await getTextSafe(label) : null;
     }
   }
   return null;
@@ -151,7 +151,7 @@ export async function saveLayoutAs(name) {
   const actions = await getDropdownActions();
   let saveAction = null;
   for (const action of actions) {
-    const text = await action.getText();
+    const text = await getTextSafe(action);
     if (text.includes('Save Layout As')) {
       saveAction = action;
       break;
@@ -245,7 +245,7 @@ export async function clickModalLayout(layoutName) {
   for (const item of items) {
     const nameEl = await item.$('.layout-name');
     if (nameEl) {
-      const text = await nameEl.getText();
+      const text = await getTextSafe(nameEl);
       // Strip default star prefix
       const cleanText = text.replace(/^★\s*/, '');
       if (cleanText === layoutName) {
@@ -286,7 +286,7 @@ export async function renameLayoutInModal(layoutName, newName) {
   for (const item of items) {
     const nameEl = await item.$('.layout-name');
     if (nameEl) {
-      const text = await nameEl.getText();
+      const text = await getTextSafe(nameEl);
       const cleanText = text.replace(/^★\s*/, '');
       if (cleanText === layoutName) {
         const renameBtn = await item.$$('.settings-btn');
@@ -315,7 +315,7 @@ export async function deleteLayoutInModal(layoutName) {
   for (const item of items) {
     const nameEl = await item.$('.layout-name');
     if (nameEl) {
-      const text = await nameEl.getText();
+      const text = await getTextSafe(nameEl);
       const cleanText = text.replace(/^★\s*/, '');
       if (cleanText === layoutName) {
         const buttons = await item.$$('.settings-btn');
@@ -337,7 +337,7 @@ export async function switchLayoutInModal(layoutName) {
   for (const item of items) {
     const nameEl = await item.$('.layout-name');
     if (nameEl) {
-      const text = await nameEl.getText();
+      const text = await getTextSafe(nameEl);
       const cleanText = text.replace(/^★\s*/, '');
       if (cleanText === layoutName) {
         const buttons = await item.$$('.settings-btn');
