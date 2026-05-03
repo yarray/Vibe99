@@ -510,8 +510,14 @@ describe('Shell Profile', () => {
         if (subLabel) {
           const text = await getTextSafe(subLabel);
           if (text.includes('SwitchTest') || text.includes('switch-test')) {
-            await subItem.click();
-            await browser.pause(500);
+            await subItem.scrollIntoView();
+            await browser.pause(100);
+            await browser.execute((el) => {
+              el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+              el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            }, subItem);
+            await browser.pause(1000);
             break;
           }
         }
