@@ -2,7 +2,7 @@ import { waitForAppReady } from '../helpers/app-launch.js';
 import { openSettingsPanel, closeSettingsPanel, resetSettings } from '../helpers/settings-helpers.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import { waitForElement, waitForCondition } from '../helpers/wait-for.js';
-import { dispatchContextMenu, jsClick, getTextSafe } from '../helpers/webview2-helpers.js';
+import { dispatchContextMenu, jsClick, getTextSafe, setInputValue } from '../helpers/webview2-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,24 +82,16 @@ async function fillProfileEditor({ id, name, command, args }) {
   const argsInput = await $('#modal-shell-edit-args');
 
   if (name !== undefined && nameInput) {
-    await nameInput.click();
-    await nameInput.clearValue();
-    await nameInput.setValue(name);
+    await setInputValue(nameInput, name);
   }
   if (id !== undefined && idInput) {
-    await idInput.click();
-    await idInput.clearValue();
-    await idInput.setValue(id);
+    await setInputValue(idInput, id);
   }
   if (command !== undefined && commandInput) {
-    await commandInput.click();
-    await commandInput.clearValue();
-    await commandInput.setValue(command);
+    await setInputValue(commandInput, command);
   }
   if (args !== undefined && argsInput) {
-    await argsInput.click();
-    await argsInput.clearValue();
-    await argsInput.setValue(args);
+    await setInputValue(argsInput, args);
   }
 
   const saveBtn = await $('.shell-profile-editor-btn.is-primary');
@@ -120,10 +112,12 @@ async function clickProfileAction(profileId, label) {
   if (!item) throw new Error(`Profile item not found: ${profileId}`);
   const buttons = await item.$$('.shell-profile-actions .settings-btn');
   for (const btn of buttons) {
-    const text = await getTextSafe(btn);
     const title = await btn.getAttribute('title');
+    const text = await getTextSafe(btn);
     if (text.trim() === label || (title && title.includes(label)) ||
-        (label === '★' && title && title.includes('default'))) {
+        (label === '✕' && title && title.toLowerCase().includes('delete')) ||
+        (label === '⧉' && title && title.toLowerCase().includes('clone')) ||
+        (label === '★' && title && title.toLowerCase().includes('default'))) {
       try {
         await btn.click();
       } catch (e) {
