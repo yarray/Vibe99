@@ -42,7 +42,7 @@ To build from your local source (e.g. after making changes), mount it over the i
 
 ```bash
 docker run --rm -v $(pwd):/app/Vibe99 vibe99-builder \
-  bash -c "npm ci && npm run vite:build && cd src-tauri && cargo build --release"
+  bash -c "npm ci && npm run tauri:build"
 ```
 
 For faster incremental builds, persist the Cargo target directory with a named volume:
@@ -52,7 +52,7 @@ docker run --rm \
   -v $(pwd):/app/Vibe99 \
   -v vibe99-cargo-target:/app/Vibe99/src-tauri/target \
   vibe99-builder \
-  bash -c "npm ci && npm run vite:build && cd src-tauri && cargo build --release"
+  bash -c "npm ci && npm run tauri:build"
 ```
 
 Then run e2e against the freshly compiled binary:
