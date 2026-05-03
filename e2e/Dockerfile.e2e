@@ -38,9 +38,7 @@ RUN git clone https://github.com/yarray/Vibe99.git
 
 WORKDIR /app/Vibe99
 RUN npm ci \
-    && npm run vite:build \
-    && cd src-tauri && cargo build --release \
-    && strip --strip-debug target/release/vibe99 2>/dev/null; true
+    && npm run tauri:build
 
 # 6. 安装 e2e 依赖
 WORKDIR /app/Vibe99/e2e
