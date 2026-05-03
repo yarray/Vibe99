@@ -1,0 +1,1 @@
+Fix e2e test runner on Ubuntu 20.04 with jammy webkit but without linuxbrew glibc: use run-app.sh shim to set LD_LIBRARY_PATH for the app, and strip custom library paths from the environment before launching Xvfb and tauri-driver so they use system glibc.
