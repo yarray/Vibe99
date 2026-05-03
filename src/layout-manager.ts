@@ -79,14 +79,16 @@ export function createLayoutManager({
   let layoutRestoreComplete: boolean = false;
 
   function setWindowLayoutId(layoutId: string | null): void {
-    if (!layoutId || windowLayoutId === layoutId) return;
+    if (windowLayoutId === layoutId) return;
     if (windowLayoutId) {
       clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
     }
     windowLayoutId = layoutId;
-    const bindings = readLayoutWindowBindings();
-    bindings[layoutId] = bridge.currentWindowLabel;
-    writeLayoutWindowBindings(bindings);
+    if (layoutId) {
+      const bindings = readLayoutWindowBindings();
+      bindings[layoutId] = bridge.currentWindowLabel;
+      writeLayoutWindowBindings(bindings);
+    }
   }
 
   function buildSessionData(): SessionData {
