@@ -83,6 +83,10 @@ async function waitForClipboardTextContaining(expectedText, timeout = 5000) {
 }
 
 async function executeCommand(command, paneIndex = 0) {
+  // Send Ctrl+C first to cancel any leftover input from previous tests
+  // (e.g., pasted special characters that bash hasn't consumed yet).
+  await writeToTerminal(paneIndex, '\x03');
+  await browser.pause(100);
   await writeToTerminal(paneIndex, command + '\n');
   await waitForTerminalOutput(command, paneIndex, 5000);
 }
