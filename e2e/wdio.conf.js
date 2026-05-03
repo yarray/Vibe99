@@ -18,8 +18,23 @@ const appDataDir = isWindows
   : path.join(os.homedir(), '.local', 'share', 'com.vibe99.app');
 const runAppShim = path.join(__dirname, 'run-app.sh');
 const linuxbrewGlibc = '/home/linuxbrew/.linuxbrew/Cellar/glibc/2.39/lib/ld-linux-x86-64.so.2';
-const needsRuntimeShim = !isWindows && fs.existsSync(linuxbrewGlibc);
+const jammyWebKit = '/opt/webkit-jammy/usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc';
+const needsRuntimeShim = !isWindows && (fs.existsSync(linuxbrewGlibc) || fs.existsSync(jammyWebKit));
 const applicationPath = needsRuntimeShim && fs.existsSync(runAppShim) ? runAppShim : binaryPath;
+
+// On Linux with custom library paths (jammy webkit / glib), we need to keep
+// LD_LIBRARY_PATH clean for system tools like Xvfb and tauri-driver.
+// The app itself gets the custom paths via run-app.sh instead.
+const savedLdLibraryPath = process.env.LD_LIBRARY_PATH || '';
+const customLibPaths = ['/opt/glib-2.72', '/opt/webkit-jammy'];
+const hasCustomLibPath = !isWindows && customLibPaths.some((p) => savedLdLibraryPath.includes(p));
+if (hasCustomLibPath) {
+  // Strip custom library paths so Xvfb and tauri-driver use system libs
+  const cleanPaths = savedLdLibraryPath
+    .split(':')
+    .filter((p) => !customLibPaths.some((cp) => p.includes(cp)));
+  process.env.LD_LIBRARY_PATH = cleanPaths.length > 0 ? cleanPaths.join(':') : '';
+}
 
 let tauriDriver;
 let xvfb;
