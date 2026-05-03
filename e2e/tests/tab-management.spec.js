@@ -2,7 +2,7 @@ import os from 'os';
 import { waitForAppReady, getPaneCount, getTabCount } from '../helpers/app-launch.js';
 import { waitForCondition } from '../helpers/wait-for.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
-import { dispatchContextMenu, jsClick, nativeDoubleClick } from '../helpers/webview2-helpers.js';
+import { dispatchContextMenu, jsClick, nativeDoubleClick, getTextSafe } from '../helpers/webview2-helpers.js';
 
 const isWindows = os.platform() === 'win32';
 
@@ -14,7 +14,7 @@ async function getTabLabel(index) {
   if (!tabs[index]) return '';
   const label = await tabs[index].$('.tab-label');
   if (!label) return '';
-  return await label.getText();
+  return await getTextSafe(label);
 }
 
 /**
@@ -154,7 +154,7 @@ async function clickContextMenuItem(labelText) {
   const menu = await $('.context-menu');
   const items = await menu.$$('.context-menu-item');
   for (const item of items) {
-    const text = await item.getText();
+    const text = await getTextSafe(item);
     if (text.includes(labelText)) {
       await item.click();
       await browser.pause(300);
@@ -245,9 +245,8 @@ describe('Tab management', () => {
 
       const tabsEditing = await $$('#tabs-list .tab');
       const input = await tabsEditing[0].$('.tab-input');
-      await input.clearValue();
-      // Set value to a single space
-      await input.setValue(' ');
+      await browser.execute((el) => { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); }, input);
+      await browser.execute((el) => { el.value = ' '; el.dispatchEvent(new Event('input', { bubbles: true })); }, input);
       await browser.keys('Enter');
       await browser.pause(300);
 
