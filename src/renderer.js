@@ -2272,8 +2272,13 @@ function createPane(pane) {
     if (!trimmedTitle) {
       return;
     }
+    // Truncate titles >64 chars, keeping the tail (e.g., "...powershell.exe")
+    const truncatedTitle =
+      trimmedTitle.length > 64
+        ? '...' + trimmedTitle.slice(-61)
+        : trimmedTitle;
     panes = panes.map((entry) =>
-      entry.id === pane.id ? { ...entry, terminalTitle: trimmedTitle } : entry
+      entry.id === pane.id ? { ...entry, terminalTitle: truncatedTitle } : entry
     );
     if (entryNeedsTabRefresh(pane.id)) {
       renderTabs();
