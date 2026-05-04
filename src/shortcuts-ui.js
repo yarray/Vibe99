@@ -6,6 +6,7 @@
  */
 
 import * as ShortcutsRegistry from './shortcuts-registry.js';
+import { icon, setIcon } from './icons.js';
 
 /**
  * Get human-readable names for shortcut actions
@@ -90,6 +91,13 @@ function showConfirmDialog(message) {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) cleanup(false);
     });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        cleanup(false);
+      }
+    });
 
     okBtn.focus();
   });
@@ -106,7 +114,7 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
     <div class="settings-modal" style="min-width: 420px;">
       <div class="settings-modal-header">
         <span>Keyboard Shortcuts</span>
-        <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+        <button type="button" class="settings-modal-close" aria-label="Close">${icon('x', 16)}</button>
       </div>
       <div class="settings-modal-body" style="max-height: 450px; overflow-y: auto;">
         <div class="shortcuts-list" id="modal-shortcuts-list"></div>
@@ -193,7 +201,7 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
       editBtn.className = 'shortcut-edit-btn';
-      editBtn.textContent = '✎';
+      setIcon(editBtn, 'pencil', 12);
       editBtn.title = 'Change shortcut';
       editBtn.addEventListener('click', () => {
         startShortcutRecording(id, () => renderModalShortcuts());

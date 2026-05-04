@@ -53,7 +53,10 @@ fn read_shell_config(app: &AppHandle) -> Result<(Value, ShellConfig), String> {
 
     Ok((
         sanitized,
-        ShellConfig { profiles, default_profile },
+        ShellConfig {
+            profiles,
+            default_profile,
+        },
     ))
 }
 
@@ -149,10 +152,7 @@ pub fn shell_profile_set(app: AppHandle, profile_id: String) -> Result<ShellConf
 /// The `name` field is optional (defaults to `id` if absent). The `args`
 /// field is optional (defaults to `[]`).
 #[tauri::command]
-pub fn shell_profile_add(
-    app: AppHandle,
-    profile: Value,
-) -> Result<ShellConfig, String> {
+pub fn shell_profile_add(app: AppHandle, profile: Value) -> Result<ShellConfig, String> {
     let state = app.state::<SettingsState>();
     let _guard = state
         .lock
@@ -161,11 +161,15 @@ pub fn shell_profile_add(
 
     let (mut config, mut shell_config) = read_shell_config(&app)?;
 
-    let new_profile =
-        ShellProfile::sanitize(&profile).ok_or("invalid profile: 'id' and 'command' are required")?;
+    let new_profile = ShellProfile::sanitize(&profile)
+        .ok_or("invalid profile: 'id' and 'command' are required")?;
 
     // Upsert: replace existing profile with the same id, or append.
-    if let Some(existing) = shell_config.profiles.iter_mut().find(|p| p.id == new_profile.id) {
+    if let Some(existing) = shell_config
+        .profiles
+        .iter_mut()
+        .find(|p| p.id == new_profile.id)
+    {
         *existing = new_profile;
     } else {
         shell_config.profiles.push(new_profile);

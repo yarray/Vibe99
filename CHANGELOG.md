@@ -4,8 +4,42 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Multi-window architecture refactor (VIB-104):**
+  - PTY sessions now keyed by `(window_label, pane_id)` compound address (`PaneRef`) instead of `pane_id` alone, preventing cross-window collisions when multiple windows use the same sequential pane IDs.
+  - Layout window creation moved from Rust (`layout_open_window`, `layout_open_in_new_window`) to frontend using Tauri's `WebviewWindow` API. Window creation is now UI navigation owned by the frontend.
+  - Layout windows no longer write `settings.session` or `activeLayoutId` to disk. Only the main window persists session state.
+  - `WindowContext` introduced via URL `?layoutId=xxx` to distinguish main vs layout windows at startup.
+  - Terminal exit events now include a `reason` field (`"exited"` / `"killed"`). Killed sessions (backend cleanup) no longer auto-close UI panes.
+  - Window cleanup (`destroy_for_window`) is now non-blocking: sessions are removed from the registry under lock, then killed in a background thread to avoid blocking the Tauri window event thread.
+  - Removed `layout_open_window` and `layout_open_in_new_window` Rust commands from the backend.
+  - Added `core:webview:allow-create-webview-window` capability.
+
+### Fixed
+
+- Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).
+
+### Added
+
+- E2E tests for Settings panel (VIB-113):
+  - Settings panel toggle tests (open/close via button, click outside to close)
+  - Font settings tests (font size with limits 10-24, font family)
+  - Pane size settings tests (pane width with limits 520-2000)
+  - Pane transparency settings tests (pane opacity with limits 0.55-1)
+  - BG mask transparency settings tests (mask opacity with limits 0-1)
+  - Breathing alert toggle tests (checkbox state, persistence)
+  - Settings persistence tests (individual and multiple settings)
+- Layout edit panel enhancements (VIB-88):
+  - "Set as Default" button to set a layout as the default layout (loaded on application startup)
+  - Visual indicator (★) for default layouts in the layout list
+  - Enhanced layout info display with pane list preview showing shell type and working directory for each pane
+  - `defaultLayoutId` field in settings schema to persist the default layout
+
 ### Improved
 
+- Layout dropdown (`.layouts-dropdown`): unified visual style with context-menu — matching background color (`#1e1e1e`), box-shadow, font, padding, hover effect, and separator margin (VIB-89).
+- Replaced all Layout-related `window.prompt()` calls with inline DOM inputs for layout operations — popover inputs near the trigger element for Save Current Layout and direct inline inputs in Layout Manager Modal for Add/Rename, matching the existing design (dark theme, Enter/Esc shortcuts, auto-focus) (VIB-77/VIB-90).
 - Status bar shortcut hints: merged Ctrl+← and Ctrl+→ pane navigation into single compact hint `Ctrl+←→ change pane` (VIB-72).
 
 - ESC key: unified close behavior — closes the topmost modal/panel (settings panel, color picker, shell profiles modal, keyboard shortcuts modal), without affecting fullscreen state. Fullscreen exit is now only via the fullscreen button or F11 (VIB-67).
@@ -29,6 +63,13 @@
   - `layout_save` — upserts a layout (add or replace by id), returns full settings.
   - `layout_delete` — removes a layout and clears `activeLayoutId` if it pointed to the deleted one.
   - `layout_rename` — updates the name of an existing layout.
+- Layout Manager Modal enhancements (VIB-94):
+  - "Set as Default" button in layout editor panel — sets a layout to be automatically restored on application startup
+  - Pane details display in layout editor — shows each pane's title, working directory (shortened), and shell profile
+  - "Open in New Window" button (⎆) in layout list — currently switches layout in place (fallback until Sub-4/VIB-92 is complete)
+  - Visual indicator (★) for default layout in the layout list
+  - Rust backend: `defaultLayoutId` field in settings schema with sanitization
+  - Startup logic now restores `defaultLayoutId` before falling back to `activeLayoutId`
 
 ### Improved
 

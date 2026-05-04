@@ -15,12 +15,12 @@
         <div class="tabs-list" id="tabs-list"></div>
         <div class="tabs-actions">
           <div class="tabs-add-group">
-            <button class="tabs-add" id="tabs-add" type="button" aria-label="Add pane">＋</button>
-            <button class="tabs-add-dropdown" id="tabs-add-dropdown" type="button" aria-label="Add pane with profile"></button>
+            <button class="tabs-add" id="tabs-add" type="button" aria-label="Add pane"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+            <button class="tabs-add-profile" id="tabs-add-profile" type="button" aria-label="Add pane with profile"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></svg></button>
           </div>
-          <button class="tabs-layouts" id="tabs-layouts" type="button" aria-label="Switch layout">▦</button>
-          <button class="tabs-fullscreen" id="tabs-fullscreen" type="button" aria-label="Toggle fullscreen">&#9974;</button>
-          <button class="tabs-settings" id="tabs-settings" type="button" aria-label="Open settings">&#9881;</button>
+          <button class="tabs-layouts" id="tabs-layouts" type="button" aria-label="Layouts"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></button>
+          <button class="tabs-fullscreen" id="tabs-fullscreen" type="button" aria-label="Toggle fullscreen"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+          <button class="tabs-settings" id="tabs-settings" type="button" aria-label="Open settings"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
         <section class="settings-panel is-hidden" id="settings-panel" aria-label="Settings">
           <div class="settings-section">
@@ -36,7 +36,6 @@
 
             <label class="settings-row" for="pane-width-range">
               <span>Pane width</span>
-              <span id="pane-width-value">720px</span>
             </label>
             <div class="settings-dual">
               <input id="pane-width-range" type="range" min="520" max="2000" step="10" value="720" />
@@ -45,7 +44,6 @@
 
             <label class="settings-row" for="pane-opacity-range">
               <span>Pane opacity</span>
-              <span id="pane-opacity-value">0.80</span>
             </label>
             <div class="settings-dual">
               <input id="pane-opacity-range" type="range" min="0.55" max="1" step="0.01" value="0.8" />
@@ -54,17 +52,17 @@
 
             <label class="settings-row" for="pane-mask-alpha-range">
               <span>BG mask opacity</span>
-              <span id="pane-mask-alpha-value">0.75</span>
             </label>
             <div class="settings-dual">
               <input id="pane-mask-alpha-range" type="range" min="0" max="1" step="0.01" value="0.75" />
               <input class="settings-number" id="pane-mask-alpha-input" type="number" min="0" max="1" step="0.01" value="0.75" />
             </div>
 
-            <label class="settings-row" for="breathing-alert-toggle">
+            <div class="settings-row settings-clickable-row" id="breathing-alert-row" role="button" tabindex="0" aria-label="Toggle background activity alert">
               <span>Background activity alert</span>
-              <input id="breathing-alert-toggle" class="settings-checkbox" type="checkbox" checked />
-            </label>
+              <span id="breathing-alert-dot" class="settings-toggle-dot is-active"></span>
+            </div>
+            <input id="breathing-alert-toggle" type="checkbox" checked style="display:none" />
 
           </div>
 

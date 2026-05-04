@@ -27,4 +27,6 @@ jobs:
         run: node ./scripts/check-changelog-fragment.mjs "origin/${GITHUB_BASE_REF}"
 
       - name: Validate changelog fragments
-        run: towncrier check --config towncrier.toml --compare-with origin/main
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: towncrier check --config towncrier.toml --compare-with origin/${GITHUB_BASE_REF}

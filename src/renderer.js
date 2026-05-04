@@ -15,6 +15,7 @@ import '@xterm/xterm/css/xterm.css';
 import * as ShortcutsRegistry from './shortcuts-registry.js';
 import * as ShortcutsUI from './shortcuts-ui.js';
 import * as ColorsRegistry from './colors-registry.js';
+import { icon, setIcon } from './icons.js';
 import { createActions } from './input/actions.js';
 import { createDispatcher } from './input/dispatcher.js';
 import { formatChord } from './input/keymap.js';
@@ -44,6 +45,8 @@ function getDefaultFontFamily(platform = getRuntimePlatform()) {
 function basename(path) {
   return path.replace(/\/+$/, '').split('/').pop() || '/';
 }
+
+const LAYOUT_FOCUS_NOTICE_EVENT = 'vibe99:layout-focus-notice';
 
 // OSC 7 format: \x1b]7;file://hostname/path\x07
 // Extracts the path from the OSC 7 sequence and URL-decodes it.
@@ -116,6 +119,7 @@ function createUnavailableBridge() {
 
   return {
     platform: getRuntimePlatform(),
+    currentWindowLabel: 'browser',
     defaultCwd,
     defaultTabTitle: basename(defaultCwd),
     createTerminal: fail,
@@ -132,16 +136,22 @@ function createUnavailableBridge() {
     saveSettings: () => Promise.resolve({}),
     listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
     addShellProfile: fail,
-    listLayouts: () => Promise.resolve({ layouts: [], activeLayoutId: '' }),
+    listLayouts: () => Promise.resolve({ layouts: [], defaultLayoutId: '' }),
     saveLayout: fail,
     deleteLayout: fail,
     renameLayout: fail,
+    openLayoutWindow: fail,
+    openLayoutInNewWindow: fail,
+    isWindowFullscreen: undefined,
+    setWindowFullscreen: undefined,
+    setLayoutAsDefault: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
     onTerminalData: () => () => {},
     onTerminalExit: () => () => {},
     onMenuAction: () => () => {},
+    onLayoutFocusNotice: undefined,
     cwdReady: Promise.resolve(),
   };
 }
@@ -149,6 +159,7 @@ function createUnavailableBridge() {
 function createTauriBridge(tauri) {
   const { invoke } = tauri.core;
   const { getCurrentWindow } = tauri.window;
+  const { WebviewWindow } = tauri.webviewWindow;
   const { readText: clipboardReadText, writeText: clipboardWriteText } =
     tauri.clipboardManager;
   const { openUrl } = tauri.opener;
@@ -162,20 +173,70 @@ function createTauriBridge(tauri) {
     return btoa(binary);
   }
 
+  const currentWebview = tauri.webview.getCurrentWebview();
+
   function onTauriEvent(event, handler) {
-    const unlisten = tauri.event.listen(event, (e) => handler(e.payload));
+    const unlisten = currentWebview.listen(event, (e) => handler(e.payload));
     return () => unlisten.then((fn) => fn());
   }
 
-  // Resolve the real CWD from the Tauri backend so the initial tab title
-  // shows the directory basename (e.g. "/home/yar/projects" → "projects").
   let _resolvedCwd = '.';
   const _cwdReady = invoke('get_cwd')
     .then((cwd) => { _resolvedCwd = cwd; })
     .catch(() => {});
+  const currentWindow = getCurrentWindow();
+
+  async function focusWindow(win) {
+    await win.unminimize().catch(() => {});
+    await win.show().catch(() => {});
+    await win.setFocus();
+    await Promise.resolve(tauri.event?.emitTo?.(win.label, LAYOUT_FOCUS_NOTICE_EVENT))
+      .catch(() => {});
+  }
+
+  function getLayoutWindowLabel(layoutId) {
+    const safeLabel = layoutId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `layout-${safeLabel}`;
+  }
+
+  async function openLayoutWindow(layoutId) {
+    if (layoutId === windowLayoutId) {
+      return focusWindow(currentWindow);
+    }
+
+    const boundLabel = getBoundLayoutWindowLabel(layoutId);
+    if (boundLabel) {
+      const bound = await WebviewWindow.getByLabel(boundLabel);
+      if (bound) {
+        return focusWindow(bound);
+      }
+      clearLayoutWindowBinding(layoutId, boundLabel);
+    }
+
+    const label = getLayoutWindowLabel(layoutId);
+    const existing = layoutId === 'default'
+      ? await WebviewWindow.getByLabel('main')
+      : await WebviewWindow.getByLabel(label);
+    if (existing) {
+      return focusWindow(existing);
+    }
+
+    const url = `index.html?layoutId=${encodeURIComponent(layoutId)}`;
+    const win = new WebviewWindow(label, {
+      url,
+      title: `Vibe99 - ${layoutId}`,
+      width: 1600,
+      height: 920,
+      minWidth: 960,
+      minHeight: 640,
+      center: true,
+    });
+    return win.once('tauri://created', () => {}).then(() => {});
+  }
 
   return {
     platform: getRuntimePlatform(),
+    currentWindowLabel: currentWindow.label,
     get defaultCwd() { return _resolvedCwd; },
     get defaultTabTitle() { return basename(_resolvedCwd); },
     createTerminal: (payload) =>
@@ -220,12 +281,18 @@ function createTauriBridge(tauri) {
     saveLayout: (layout) => invoke('layout_save', { layout }),
     deleteLayout: (layoutId) => invoke('layout_delete', { layoutId }),
     renameLayout: (layoutId, newName) => invoke('layout_rename', { layoutId, newName }),
+    openLayoutWindow: (layoutId) => openLayoutWindow(layoutId),
+    openLayoutInNewWindow: (layoutId) => openLayoutWindow(layoutId),
+    isWindowFullscreen: () => getCurrentWindow().isFullscreen(),
+    setWindowFullscreen: (fullscreen) => getCurrentWindow().setFullscreen(fullscreen),
+    setLayoutAsDefault: (layoutId) => invoke('layout_set_default', { layoutId }),
     removeShellProfile: (profileId) => invoke('shell_profile_remove', { profileId }),
     setDefaultShellProfile: (profileId) => invoke('shell_profile_set', { profileId }),
     detectShellProfiles: () => invoke('shell_profiles_detect'),
     onTerminalData: (handler) => onTauriEvent('vibe99:terminal-data', handler),
     onTerminalExit: (handler) => onTauriEvent('vibe99:terminal-exit', handler),
     onMenuAction: (handler) => onTauriEvent('vibe99:menu-action', handler),
+    onLayoutFocusNotice: (handler) => onTauriEvent(LAYOUT_FOCUS_NOTICE_EVENT, handler),
     cwdReady: _cwdReady,
   };
 }
@@ -233,6 +300,12 @@ function createTauriBridge(tauri) {
 const bridge = window.__TAURI__
   ? createTauriBridge(window.__TAURI__)
   : window.vibe99 ?? createUnavailableBridge();
+
+const windowContext = (() => {
+  const params = new URLSearchParams(window.location.search);
+  const layoutId = params.get('layoutId');
+  return layoutId ? { kind: 'layout', layoutId } : { kind: 'main' };
+})();
 
 const initialPanes = [
   {
@@ -271,10 +344,63 @@ let dragState = null;
 let currentMode = 'terminal'; // 'terminal' | 'nav'
 let enterNavSourcePaneId = null; // Track which pane was focused when entering nav mode
 let pendingTabFocus = null;
-let sessionRestoreComplete = false;
+let layoutRestoreComplete = false;
 let layouts = [];
-let activeLayoutId = '';
+let windowLayoutId = null;
+let defaultLayoutId = '';
 let selectedLayoutId = null;
+let renamingLayoutId = null;
+let layoutFocusNotice = null;
+let layoutFocusNoticeTimer = null;
+const LAYOUT_WINDOW_BINDINGS_KEY = 'vibe99.layoutWindowBindings';
+
+// Auto-refresh polling for Layouts modal
+const LAYOUT_MODAL_POLL_INTERVAL = 3000; // 3 seconds
+let layoutModalPollTimer = null;
+
+function readLayoutWindowBindings() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LAYOUT_WINDOW_BINDINGS_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLayoutWindowBindings(bindings) {
+  try {
+    window.localStorage.setItem(LAYOUT_WINDOW_BINDINGS_KEY, JSON.stringify(bindings));
+  } catch {
+    // Best effort only. The stable Tauri window label still prevents duplicates
+    // for layout windows created through the normal UI path.
+  }
+}
+
+function getBoundLayoutWindowLabel(layoutId) {
+  const label = readLayoutWindowBindings()[layoutId];
+  return typeof label === 'string' && label ? label : null;
+}
+
+function clearLayoutWindowBinding(layoutId, expectedLabel = null) {
+  if (!layoutId) return;
+  const bindings = readLayoutWindowBindings();
+  if (expectedLabel !== null && bindings[layoutId] !== expectedLabel) return;
+  delete bindings[layoutId];
+  writeLayoutWindowBindings(bindings);
+}
+
+function setWindowLayoutId(layoutId) {
+  if (!layoutId || windowLayoutId === layoutId) return;
+
+  if (windowLayoutId) {
+    clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
+  }
+
+  windowLayoutId = layoutId;
+  const bindings = readLayoutWindowBindings();
+  bindings[layoutId] = bridge.currentWindowLabel;
+  writeLayoutWindowBindings(bindings);
+}
 
 // Mode management
 function setMode(next) {
@@ -302,7 +428,7 @@ const tabsListEl = document.getElementById('tabs-list');
 const statusLabelEl = document.getElementById('status-label');
 const statusHintEl = document.getElementById('status-hint');
 const addPaneButtonEl = document.getElementById('tabs-add');
-const addPaneDropdownButtonEl = document.getElementById('tabs-add-dropdown');
+const addProfileButtonEl = document.getElementById('tabs-add-profile');
 const layoutsButtonEl = document.getElementById('tabs-layouts');
 const settingsButtonEl = document.getElementById('tabs-settings');
 const fullscreenButtonEl = document.getElementById('tabs-fullscreen');
@@ -311,14 +437,12 @@ const fontSizeInputEl = document.getElementById('font-size-input');
 const fontFamilyInputEl = document.getElementById('font-family-input');
 const paneWidthRangeEl = document.getElementById('pane-width-range');
 const paneWidthInputEl = document.getElementById('pane-width-input');
-const paneWidthValueEl = document.getElementById('pane-width-value');
 const paneOpacityRangeEl = document.getElementById('pane-opacity-range');
 const paneOpacityInputEl = document.getElementById('pane-opacity-input');
-const paneOpacityValueEl = document.getElementById('pane-opacity-value');
 const paneMaskOpacityRangeEl = document.getElementById('pane-mask-alpha-range');
 const paneMaskOpacityInputEl = document.getElementById('pane-mask-alpha-input');
-const paneMaskOpacityValueEl = document.getElementById('pane-mask-alpha-value');
 const breathingAlertToggleEl = document.getElementById('breathing-alert-toggle');
+const breathingAlertDotEl = document.getElementById('breathing-alert-dot');
 const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn');
 const layoutsSettingsBtn = document.getElementById('layouts-settings-btn');
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn');
@@ -332,7 +456,7 @@ const settings = {
   breathingAlertEnabled: true,
 };
 let pendingSettingsSave = null;
-let pendingCwdSave = null;
+let pendingLayoutSave = null;
 
 // Called when a pane's cwd changes via OSC 7. Immediately updates the pane
 // and schedules a debounced settings save.
@@ -348,14 +472,7 @@ function onPaneCwdChanged(paneId, newCwd) {
 
   panes[paneIndex] = { ...panes[paneIndex], cwd: newCwd };
 
-  // Clear any pending cwd save and schedule a new one
-  if (pendingCwdSave !== null) {
-    window.clearTimeout(pendingCwdSave);
-  }
-  pendingCwdSave = window.setTimeout(() => {
-    pendingCwdSave = null;
-    scheduleSettingsSave();
-  }, 5000);
+  scheduleWindowLayoutSave(5000);
 }
 
 let shellProfiles = [];
@@ -390,9 +507,21 @@ const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
   paneActivityWatcher.noteData(paneId);
 });
 
-const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode }) => {
+bridge.onLayoutFocusNotice?.(() => {
+  if (!windowLayoutId) return;
+  refocusCurrentPaneTerminal();
+  showLayoutFocusNotice(windowLayoutId);
+});
+
+const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
   const node = paneNodeMap.get(paneId);
   if (!node) {
+    return;
+  }
+
+  // Killed sessions are backend-initiated cleanup — don't auto-close UI panes.
+  if (reason === 'killed') {
+    node.sessionReady = false;
     return;
   }
 
@@ -417,7 +546,6 @@ const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode }) 
   }
 
   if (panes.length === 1) {
-    void bridge.closeWindow().catch(reportError);
     return;
   }
 
@@ -457,6 +585,7 @@ function getPaneLabel(pane) {
 
 function applySettings() {
   document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
+  document.documentElement.style.setProperty('--app-font-family', settings.fontFamily);
   document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
   document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
   document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
@@ -464,14 +593,12 @@ function applySettings() {
   fontFamilyInputEl.value = settings.fontFamily;
   paneWidthRangeEl.value = String(settings.paneWidth);
   paneWidthInputEl.value = String(settings.paneWidth);
-  paneWidthValueEl.textContent = `${settings.paneWidth}px`;
   paneOpacityRangeEl.value = settings.paneOpacity.toFixed(2);
   paneOpacityInputEl.value = settings.paneOpacity.toFixed(2);
-  paneOpacityValueEl.textContent = settings.paneOpacity.toFixed(2);
   paneMaskOpacityRangeEl.value = settings.paneMaskOpacity.toFixed(2);
   paneMaskOpacityInputEl.value = settings.paneMaskOpacity.toFixed(2);
-  paneMaskOpacityValueEl.textContent = settings.paneMaskOpacity.toFixed(2);
   breathingAlertToggleEl.checked = settings.breathingAlertEnabled;
+  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
   paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
 }
 
@@ -599,47 +726,101 @@ function restoreSession(session) {
   paneCycleState = null;
 }
 
-function saveCurrentLayout(name) {
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    name = window.prompt('Layout name:');
-    if (!name) return;
-  }
-  name = name.trim();
+function createLayoutFromCurrentWindow(layoutId, name) {
   const session = buildSessionData();
-  const layout = {
-    id: name.toLowerCase().replace(/\s+/g, '-'),
+  return {
+    id: layoutId,
     name,
     panes: session.panes,
     focusedPaneIndex: session.focusedPaneIndex,
   };
-  bridge.saveLayout(layout)
-    .then(() => bridge.listLayouts())
-    .then((config) => {
-      layouts = config.layouts ?? [];
-      activeLayoutId = config.activeLayoutId ?? layout.id;
-      scheduleSettingsSave();
-    })
-    .catch(reportError);
 }
 
-function switchLayout(layoutId) {
+function createDefaultLayout() {
+  return {
+    id: 'default',
+    name: 'Default',
+    panes: initialPanes.map((p) => ({
+      paneId: p.id,
+      title: p.title,
+      cwd: bridge.defaultCwd,
+      accent: p.accent,
+      customColor: p.customColor,
+      shellProfileId: p.shellProfileId,
+      breathingMonitor: p.breathingMonitor !== false,
+    })),
+    focusedPaneIndex: 0,
+  };
+}
+
+async function refreshLayouts() {
+  const config = await bridge.listLayouts();
+  layouts = config.layouts ?? [];
+  defaultLayoutId = config.defaultLayoutId ?? '';
+  return config;
+}
+
+async function saveCurrentLayout() {
+  if (!windowLayoutId) {
+    throw new Error('Current window is not bound to a layout');
+  }
+
+  const existing = layouts.find((l) => l.id === windowLayoutId);
+  const layout = createLayoutFromCurrentWindow(
+    windowLayoutId,
+    existing?.name || windowLayoutId,
+  );
+  const config = await bridge.saveLayout(layout);
+  layouts = config.layouts ?? layouts;
+  defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
+  updateLayoutsIndicator();
+}
+
+async function saveLayoutAs(name) {
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return;
+  }
+  name = name.trim();
+  const layout = createLayoutFromCurrentWindow(name.toLowerCase().replace(/\s+/g, '-'), name);
+  const config = await bridge.saveLayout(layout);
+  layouts = config.layouts ?? [];
+  defaultLayoutId = config.defaultLayoutId ?? '';
+  setWindowLayoutId(layout.id);
+  updateLayoutsIndicator();
+}
+
+async function switchLayout(layoutId) {
   const layout = layouts.find((l) => l.id === layoutId);
   if (!layout) return;
   restoreSession({ panes: layout.panes, focusedPaneIndex: layout.focusedPaneIndex });
   ensurePaneNodes();
-  activeLayoutId = layoutId;
-  scheduleSettingsSave();
+  setWindowLayoutId(layoutId);
+  flushWindowLayoutSave();
+  updateLayoutsIndicator();
+}
+
+/**
+ * Update the layouts button to reflect this window's bound layout.
+ */
+function updateLayoutsIndicator() {
+  if (!layoutsButtonEl) return;
+  const currentLayout = layouts.find((l) => l.id === windowLayoutId);
+  const layoutName = currentLayout ? currentLayout.name : 'No layout';
+  layoutsButtonEl.setAttribute('aria-label', `Layouts (${layoutName})`);
 }
 
 function deleteLayoutById(layoutId) {
-  bridge.deleteLayout(layoutId)
+  if (layoutId === windowLayoutId) {
+    reportError(new Error('Cannot delete the layout used by this window'));
+    return Promise.resolve();
+  }
+
+  return bridge.deleteLayout(layoutId)
     .then(() => bridge.listLayouts())
     .then((config) => {
       layouts = config.layouts ?? [];
-      if (activeLayoutId === layoutId) {
-        activeLayoutId = '';
-      }
-      scheduleSettingsSave();
+      defaultLayoutId = config.defaultLayoutId ?? '';
+      updateLayoutsIndicator();
     })
     .catch(reportError);
 }
@@ -659,11 +840,17 @@ async function toggleLayoutsDropdown() {
     return;
   }
 
+  // Close other menus
+  closeSettingsPanel();
+  const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
+  if (existingProfilePopup) {
+    existingProfilePopup.remove();
+    document.removeEventListener('click', dismissAddPaneProfilePopup);
+  }
+
   // Reload layouts to ensure we have the latest list
   try {
-    const config = await bridge.listLayouts();
-    layouts = config.layouts ?? [];
-    activeLayoutId = config.activeLayoutId ?? '';
+    await refreshLayouts();
   } catch (error) {
     reportError(error);
   }
@@ -683,21 +870,24 @@ async function toggleLayoutsDropdown() {
     for (const layout of layouts) {
       const item = document.createElement('div');
       item.className = 'layouts-dropdown-item';
-      if (layout.id === activeLayoutId) {
+      if (layout.id === windowLayoutId) {
         item.classList.add('is-active');
       }
 
       const checkmark = document.createElement('span');
-      checkmark.className = 'layouts-dropdown-check';
-      checkmark.textContent = layout.id === activeLayoutId ? '✓' : '';
+      checkmark.className = 'layout-item-current';
+      if (layout.id === windowLayoutId) {
+        checkmark.classList.add('is-active');
+      }
 
       const label = document.createElement('span');
       label.className = 'layouts-dropdown-label';
       label.textContent = layout.name || layout.id;
 
-      item.append(checkmark, label);
-      item.addEventListener('click', () => {
-        switchLayout(layout.id);
+      item.append(label, checkmark);
+      item.addEventListener('click', (event) => {
+        event.stopPropagation();
+        bridge.openLayoutWindow(layout.id).catch(reportError);
         closeLayoutsDropdown();
       });
 
@@ -710,13 +900,69 @@ async function toggleLayoutsDropdown() {
   separator.className = 'layouts-dropdown-separator';
   layoutsDropdownEl.appendChild(separator);
 
-  // "Save Current Layout..." action
+  // "Save Layout As..." action
   const saveAction = document.createElement('div');
   saveAction.className = 'layouts-dropdown-action';
-  saveAction.textContent = 'Save Current Layout…';
-  saveAction.addEventListener('click', () => {
-    saveCurrentLayout();
-    closeLayoutsDropdown();
+  saveAction.textContent = 'Save Layout As…';
+  saveAction.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (saveAction.classList.contains('is-editing')) return;
+
+    saveAction.classList.add('is-editing');
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'layouts-dropdown-input';
+    input.placeholder = 'Layout name';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-confirm';
+    setIcon(confirmBtn, 'check', 14);
+    confirmBtn.title = 'Confirm (Enter)';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-cancel';
+    setIcon(cancelBtn, 'x', 14);
+    cancelBtn.title = 'Cancel (Esc)';
+
+    let confirmed = false;
+
+    const restore = () => {
+      saveAction.classList.remove('is-editing');
+      saveAction.replaceChildren();
+      saveAction.textContent = 'Save Layout As…';
+    };
+
+    const doConfirm = () => {
+      if (confirmed) return;
+      confirmed = true;
+      const value = input.value.trim();
+      if (value) {
+        saveLayoutAs(value).catch(reportError);
+      }
+      closeLayoutsDropdown();
+    };
+
+    const doCancel = () => {
+      if (confirmed) return;
+      confirmed = true;
+      restore();
+    };
+
+    confirmBtn.addEventListener('click', (e) => { e.stopPropagation(); doConfirm(); });
+    cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); doCancel(); });
+
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); doConfirm(); }
+      if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
+    });
+
+    saveAction.replaceChildren();
+    saveAction.append(input, confirmBtn, cancelBtn);
+    queueMicrotask(() => input.focus());
   });
   layoutsDropdownEl.appendChild(saveAction);
 
@@ -724,7 +970,8 @@ async function toggleLayoutsDropdown() {
   const manageAction = document.createElement('div');
   manageAction.className = 'layouts-dropdown-action';
   manageAction.textContent = 'Manage Layouts…';
-  manageAction.addEventListener('click', () => {
+  manageAction.addEventListener('click', (event) => {
+    event.stopPropagation();
     openLayoutsModal();
     closeLayoutsDropdown();
   });
@@ -733,6 +980,7 @@ async function toggleLayoutsDropdown() {
   // Position and append
   layoutsButtonEl.appendChild(layoutsDropdownEl);
   layoutsDropdownOpen = true;
+  registerModal(closeLayoutsDropdown);
 
   // Close on outside click
   requestAnimationFrame(() => {
@@ -747,12 +995,23 @@ function closeLayoutsDropdown() {
   }
   layoutsDropdownOpen = false;
   document.removeEventListener('click', handleLayoutsDropdownOutsideClick);
+  unregisterModal(closeLayoutsDropdown);
 }
 
 function handleLayoutsDropdownOutsideClick(event) {
   if (!layoutsButtonEl.contains(event.target)) {
     closeLayoutsDropdown();
   }
+}
+
+function buildSettingsPayloadForCurrentWindow() {
+  return {
+    version: 6,
+    ui: {
+      ...settings,
+      shortcuts: ShortcutsRegistry.getShortcutsForSave()
+    },
+  };
 }
 
 function scheduleSettingsSave() {
@@ -762,17 +1021,21 @@ function scheduleSettingsSave() {
 
   pendingSettingsSave = window.setTimeout(() => {
     pendingSettingsSave = null;
-    const settingsToSave = {
-      version: 5,
-      ui: {
-        ...settings,
-        shortcuts: ShortcutsRegistry.getShortcutsForSave()
-      },
-      session: buildSessionData(),
-      activeLayoutId,
-    };
-    bridge.saveSettings(settingsToSave).catch(reportError);
+    bridge.saveSettings(buildSettingsPayloadForCurrentWindow()).catch(reportError);
   }, 150);
+}
+
+function scheduleWindowLayoutSave(delay = 250) {
+  if (!layoutRestoreComplete || !windowLayoutId) return;
+
+  if (pendingLayoutSave !== null) {
+    window.clearTimeout(pendingLayoutSave);
+  }
+
+  pendingLayoutSave = window.setTimeout(() => {
+    pendingLayoutSave = null;
+    saveCurrentLayout().catch(reportError);
+  }, delay);
 }
 
 function flushSettingsSave() {
@@ -780,20 +1043,17 @@ function flushSettingsSave() {
     window.clearTimeout(pendingSettingsSave);
     pendingSettingsSave = null;
   }
-  if (pendingCwdSave !== null) {
-    window.clearTimeout(pendingCwdSave);
-    pendingCwdSave = null;
+  void bridge.saveSettings(buildSettingsPayloadForCurrentWindow()).catch(reportError);
+}
+
+function flushWindowLayoutSave() {
+  if (pendingLayoutSave !== null) {
+    window.clearTimeout(pendingLayoutSave);
+    pendingLayoutSave = null;
   }
-  const settingsToSave = {
-    version: 5,
-    ui: {
-      ...settings,
-      shortcuts: ShortcutsRegistry.getShortcutsForSave()
-    },
-    session: buildSessionData(),
-    activeLayoutId,
-  };
-  void bridge.saveSettings(settingsToSave).catch(reportError);
+  if (layoutRestoreComplete && windowLayoutId) {
+    void saveCurrentLayout().catch(reportError);
+  }
 }
 
 // ----------------------------------------------------------------
@@ -838,7 +1098,7 @@ function changePaneShell(paneId, profileId) {
   panes = panes.map((p) =>
     p.id === paneId ? { ...p, shellProfileId: profileId } : p
   );
-  scheduleSettingsSave();
+  scheduleWindowLayoutSave();
 
   // Suppress the exit handler — the old PTY is about to be replaced.
   // spawn() on the backend already destroys any previous session.
@@ -853,7 +1113,7 @@ function changePaneShell(paneId, profileId) {
       panes = panes.map((p) =>
         p.id === paneId ? { ...p, shellProfileId: previousProfileId } : p
       );
-      scheduleSettingsSave();
+      scheduleWindowLayoutSave();
     }
   });
 }
@@ -873,9 +1133,9 @@ function openShellProfilesModal() {
       <div class="settings-modal-header">
         <div class="settings-modal-title-group">
           <span>Shell Profiles</span>
-          <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">+</button>
+          <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">${icon('plus', 18)}</button>
         </div>
-        <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+        <button type="button" class="settings-modal-close" aria-label="Close">${icon('x', 16)}</button>
       </div>
       <div class="settings-modal-body shell-profiles-modal-body">
         <div class="shell-profiles-sidebar">
@@ -977,7 +1237,7 @@ function renderModalShellProfiles() {
 
       // Quick actions: set default, clone, delete
       if (profile.id !== defaultShellProfileId) {
-        actions.appendChild(createProfileActionButton('★', 'Set as default', () => {
+        actions.appendChild(createProfileActionButton('star', 'Set as default', () => {
           const apply = (config) => {
             const userIds = new Set((config.profiles ?? []).map((p) => p.id));
             shellProfiles = [...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))];
@@ -994,12 +1254,12 @@ function renderModalShellProfiles() {
         }));
       }
 
-      actions.appendChild(createProfileActionButton('⧉', 'Clone profile', () => {
+      actions.appendChild(createProfileActionButton('copy', 'Clone profile', () => {
         cloneProfile(profile);
       }));
 
       if (!isDetected) {
-        actions.appendChild(createProfileActionButton('✕', 'Delete', () => {
+        actions.appendChild(createProfileActionButton('x', 'Delete', () => {
           if (selectedShellProfileId === profile.id) {
             selectedShellProfileId = null;
             editingShellProfile = null;
@@ -1115,7 +1375,7 @@ function openLayoutsModal() {
   bridge.listLayouts()
     .then((config) => {
       layouts = config.layouts ?? [];
-      activeLayoutId = config.activeLayoutId ?? '';
+      defaultLayoutId = config.defaultLayoutId ?? '';
     })
     .catch(reportError)
     .finally(() => {
@@ -1127,9 +1387,9 @@ function openLayoutsModal() {
           <div class="settings-modal-header">
             <div class="settings-modal-title-group">
               <span>Layouts</span>
-              <button type="button" class="layouts-add-btn" id="modal-layout-add" aria-label="Add Layout">+</button>
+              <button type="button" class="layouts-add-btn" id="modal-layout-add" aria-label="Add Layout">${icon('plus', 18)}</button>
             </div>
-            <button type="button" class="settings-modal-close" aria-label="Close">×</button>
+            <button type="button" class="settings-modal-close" aria-label="Close">${icon('x', 16)}</button>
           </div>
           <div class="settings-modal-body layouts-modal-body">
             <div class="layouts-sidebar">
@@ -1143,8 +1403,14 @@ function openLayoutsModal() {
       `;
 
       const closeModal = () => {
+        // Clear the polling timer when modal closes
+        if (layoutModalPollTimer) {
+          clearInterval(layoutModalPollTimer);
+          layoutModalPollTimer = null;
+        }
         overlay.remove();
         selectedLayoutId = null;
+        unregisterModal(closeModal);
       };
 
       overlay.addEventListener('click', (e) => {
@@ -1152,28 +1418,63 @@ function openLayoutsModal() {
       });
 
       overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
+      registerModal(closeModal);
 
-      // Add Layout button
+      // Add Layout button — inserts inline input at top of list
       overlay.querySelector('#modal-layout-add').addEventListener('click', () => {
-        const name = window.prompt('Layout name:');
-        if (!name || !name.trim()) return;
-        const trimmed = name.trim();
-        const session = buildSessionData();
-        const layout = {
-          id: trimmed.toLowerCase().replace(/\s+/g, '-'),
-          name: trimmed,
-          panes: session.panes,
-          focusedPaneIndex: session.focusedPaneIndex,
+        const listEl = overlay._modalLayoutList;
+        if (!listEl) return;
+
+        // Remove any existing inline input
+        const existing = listEl.querySelector('.layout-item.is-editing');
+        if (existing) existing.remove();
+
+        const item = document.createElement('div');
+        item.className = 'layout-item is-editing';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'layout-name-input';
+        input.placeholder = 'Layout name';
+
+        const cleanup = () => {
+          item.remove();
         };
-        bridge.saveLayout(layout)
-          .then(() => bridge.listLayouts())
-          .then((config) => {
-            layouts = config.layouts ?? [];
-            activeLayoutId = config.activeLayoutId ?? layout.id;
-            scheduleSettingsSave();
-            renderModalLayouts(overlay);
-          })
-          .catch(reportError);
+
+        const confirm = () => {
+          const trimmed = input.value.trim();
+          cleanup();
+          if (!trimmed) return;
+          const layout = createLayoutFromCurrentWindow(trimmed.toLowerCase().replace(/\s+/g, '-'), trimmed);
+          bridge.saveLayout(layout)
+            .then(() => bridge.listLayouts())
+            .then((config) => {
+              layouts = config.layouts ?? [];
+              defaultLayoutId = config.defaultLayoutId ?? '';
+              setWindowLayoutId(layout.id);
+              updateLayoutsIndicator();
+              renderModalLayouts(overlay);
+            })
+            .catch(reportError);
+        };
+
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            confirm();
+          }
+          if (event.key === 'Escape') {
+            cleanup();
+          }
+        });
+
+        input.addEventListener('blur', confirm);
+
+        item.appendChild(input);
+        listEl.insertBefore(item, listEl.firstChild);
+
+        queueMicrotask(() => {
+          input.focus();
+        });
       });
 
       document.body.appendChild(overlay);
@@ -1184,6 +1485,38 @@ function openLayoutsModal() {
 
       // initial render
       renderModalLayouts(overlay);
+
+      // Start polling for layout updates
+      layoutModalPollTimer = setInterval(async () => {
+        try {
+          const config = await bridge.listLayouts();
+          const newLayouts = config.layouts ?? [];
+          const newDefaultLayoutId = config.defaultLayoutId ?? '';
+
+          // Check if layouts have changed (compare IDs and names)
+          const layoutsChanged =
+            newLayouts.length !== layouts.length ||
+            newDefaultLayoutId !== defaultLayoutId ||
+            newLayouts.some((newLayout) => {
+              const existing = layouts.find((l) => l.id === newLayout.id);
+              if (!existing) return true;
+              // Check if name or panes have changed
+              return existing.name !== newLayout.name ||
+                     JSON.stringify(existing.panes) !== JSON.stringify(newLayout.panes);
+            }) ||
+            layouts.some((existing) => !newLayouts.find((l) => l.id === existing.id));
+
+          if (layoutsChanged) {
+            layouts = newLayouts;
+            defaultLayoutId = newDefaultLayoutId;
+            updateLayoutsIndicator();
+            renderModalLayouts(overlay);
+          }
+        } catch (err) {
+          // Silently ignore polling errors to avoid disrupting the UI
+          console.error('Layout modal poll error:', err);
+        }
+      }, LAYOUT_MODAL_POLL_INTERVAL);
     });
 }
 
@@ -1203,15 +1536,71 @@ function renderModalLayouts(overlay) {
     listEl.appendChild(empty);
   } else {
     for (const layout of layouts) {
-      const isActive = layout.id === activeLayoutId;
+      const isActive = layout.id === windowLayoutId;
+      const isDefault = layout.id === defaultLayoutId;
       const isSelected = layout.id === selectedLayoutId;
       const item = document.createElement('div');
-      item.className = `layout-item${isActive ? ' is-active' : ''}${isSelected ? ' is-selected' : ''}`;
+      item.className = `layout-item${isActive ? ' is-active' : ''}${isDefault ? ' is-default' : ''}${isSelected ? ' is-selected' : ''}`;
       item.dataset.layoutId = layout.id;
 
-      const nameEl = document.createElement('div');
-      nameEl.className = 'layout-name';
-      nameEl.textContent = layout.name || layout.id;
+      let nameEl;
+      if (renamingLayoutId === layout.id) {
+        nameEl = document.createElement('input');
+        nameEl.type = 'text';
+        nameEl.className = 'layout-name layout-name-input';
+        nameEl.value = layout.name || layout.id;
+        nameEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+        nameEl.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+        });
+        nameEl.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            const newName = nameEl.value.trim();
+            renamingLayoutId = null;
+            if (newName) {
+              bridge.renameLayout(layout.id, newName)
+                .then(() => bridge.listLayouts())
+                .then((config) => {
+                  layouts = config.layouts ?? [];
+                  defaultLayoutId = config.defaultLayoutId ?? '';
+                  updateLayoutsIndicator();
+                  renderModalLayouts(overlay);
+                })
+                .catch(reportError);
+            } else {
+              renderModalLayouts(overlay);
+            }
+          }
+          if (event.key === 'Escape') {
+            renamingLayoutId = null;
+            renderModalLayouts(overlay);
+          }
+        });
+        nameEl.addEventListener('blur', () => {
+          const newName = nameEl.value.trim();
+          renamingLayoutId = null;
+          if (newName) {
+            bridge.renameLayout(layout.id, newName)
+              .then(() => bridge.listLayouts())
+              .then((config) => {
+                layouts = config.layouts ?? [];
+                defaultLayoutId = config.defaultLayoutId ?? '';
+                updateLayoutsIndicator();
+                renderModalLayouts(overlay);
+              })
+              .catch(reportError);
+          } else {
+            renderModalLayouts(overlay);
+          }
+        });
+      } else {
+        nameEl = document.createElement('div');
+        nameEl.className = 'layout-name';
+        const nameText = layout.name || layout.id;
+        nameEl.innerHTML = isDefault ? `${icon('star', 14)} ${nameText}` : nameText;
+      }
 
       const info = document.createElement('div');
       info.className = 'layout-pane-count';
@@ -1221,18 +1610,16 @@ function renderModalLayouts(overlay) {
       const actions = document.createElement('div');
       actions.className = 'layout-actions';
 
-      // Switch layout button
+      // "Open in New Window" button (fallback to switchLayout until Sub-4 is complete)
       const switchBtn = document.createElement('button');
       switchBtn.type = 'button';
       switchBtn.className = 'settings-btn';
-      switchBtn.textContent = '→';
-      switchBtn.title = 'Switch to layout';
+      setIcon(switchBtn, 'external-link', 12);
+      switchBtn.title = 'Open in new window';
       switchBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        switchLayout(layout.id);
-        // Close modal after switching
+        bridge.openLayoutWindow(layout.id).catch(reportError);
         overlay?.remove();
-        scheduleSettingsSave();
       });
       actions.appendChild(switchBtn);
 
@@ -1240,47 +1627,46 @@ function renderModalLayouts(overlay) {
       const renameBtn = document.createElement('button');
       renameBtn.type = 'button';
       renameBtn.className = 'settings-btn';
-      renameBtn.textContent = '✎';
+      setIcon(renameBtn, 'pencil', 12);
       renameBtn.title = 'Rename layout';
-      renameBtn.addEventListener('click', (e) => {
+      renameBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const newName = window.prompt('Rename layout', layout.name || layout.id);
-        if (newName) {
-          bridge.renameLayout(layout.id, newName)
-            .then(() => bridge.listLayouts())
-            .then((config) => {
-              layouts = config.layouts ?? [];
-              activeLayoutId = config.activeLayoutId ?? activeLayoutId;
-              renderModalLayouts(overlay);
-            })
-            .catch(reportError);
-        }
+        renamingLayoutId = layout.id;
+        renderModalLayouts(overlay);
+        // Focus the input after re-render
+        queueMicrotask(() => {
+          const input = listEl.querySelector(`.layout-item[data-layout-id="${layout.id}"] .layout-name-input`);
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        });
       });
       actions.appendChild(renameBtn);
 
       // Delete button (not allowed for default)
-      if (layout.id !== 'default') {
+      if (layout.id !== 'default' && layout.id !== windowLayoutId) {
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'settings-btn';
-        deleteBtn.textContent = '✕';
+        setIcon(deleteBtn, 'x', 12);
         deleteBtn.title = 'Delete layout';
         deleteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          bridge.deleteLayout(layout.id)
-            .then(() => bridge.listLayouts())
-            .then((config) => {
-              layouts = config.layouts ?? [];
-              activeLayoutId = config.activeLayoutId ?? activeLayoutId;
-              if (selectedLayoutId === layout.id) selectedLayoutId = null;
-              renderModalLayouts(overlay);
-            })
+          if (selectedLayoutId === layout.id) selectedLayoutId = null;
+          deleteLayoutById(layout.id)
+            .then(() => renderModalLayouts(overlay))
             .catch(reportError);
         });
         actions.appendChild(deleteBtn);
       }
 
-      item.append(nameEl, info, actions);
+      // Active layout indicator (small yellow dot, matching dropdown style)
+      const checkmark = document.createElement('span');
+      checkmark.className = 'layout-item-current';
+      if (isActive) checkmark.classList.add('is-active');
+
+      item.append(nameEl, info, actions, checkmark);
 
       // Click selects layout (without triggering actions)
       item.addEventListener('click', (e) => {
@@ -1299,48 +1685,135 @@ function renderModalLayouts(overlay) {
     const info = document.createElement('div');
     info.className = 'layout-info';
 
-    const nameLabel = document.createElement('label');
-    nameLabel.textContent = 'Name';
+    // Name row: input + confirm + cancel
+    const nameRow = document.createElement('div');
+    nameRow.className = 'layout-name-row';
+
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
+    nameInput.className = 'layout-name-input';
     nameInput.value = selected.name || '';
-    info.appendChild(nameLabel);
-    info.appendChild(nameInput);
+    const originalName = selected.name || '';
 
-    const actionsRow = document.createElement('div');
-    actionsRow.className = 'layout-info-actions';
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.className = 'settings-btn layout-info-btn is-primary';
-    saveBtn.textContent = 'Save Layout';
-    saveBtn.addEventListener('click', () => {
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'settings-btn layout-name-btn layout-name-btn-confirm';
+    setIcon(confirmBtn, 'check', 14);
+    confirmBtn.title = 'Confirm (Enter)';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'settings-btn layout-name-btn layout-name-btn-cancel';
+    setIcon(cancelBtn, 'x', 14);
+    cancelBtn.title = 'Cancel (Esc)';
+
+    const doSave = () => {
       const newName = nameInput.value.trim();
       if (!newName) return;
-      const session = buildSessionData();
-      const updatedLayout = {
-        id: selected.id,
-        name: newName,
-        panes: session.panes,
-        focusedPaneIndex: session.focusedPaneIndex,
-      };
-      bridge.saveLayout(updatedLayout)
+      bridge.renameLayout(selected.id, newName)
         .then(() => bridge.listLayouts())
         .then((config) => {
           layouts = config.layouts ?? [];
-          activeLayoutId = config.activeLayoutId ?? selected.id;
-          scheduleSettingsSave();
+          defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
+          updateLayoutsIndicator();
+          renderModalLayouts(overlay);
+        })
+        .catch(reportError);
+    };
+
+    const doCancel = () => {
+      nameInput.value = originalName;
+    };
+
+    confirmBtn.addEventListener('click', doSave);
+    cancelBtn.addEventListener('click', doCancel);
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+      if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
+    });
+
+    nameRow.appendChild(nameInput);
+    nameRow.appendChild(confirmBtn);
+    nameRow.appendChild(cancelBtn);
+    info.appendChild(nameRow);
+
+    // Set as Default row
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'layout-info-actions';
+
+    // "Set as Default" button — uses dedicated backend command for proper validation
+    const isDefault = selected.id === defaultLayoutId;
+    const setDefaultBtn = document.createElement('button');
+    setDefaultBtn.type = 'button';
+    setDefaultBtn.className = 'settings-btn layout-info-btn';
+    setDefaultBtn.innerHTML = isDefault ? `${icon('check', 14)} Default` : 'Set as Default';
+    setDefaultBtn.disabled = isDefault;
+    setDefaultBtn.title = isDefault ? 'This is the default layout' : 'Set this layout to restore on startup';
+    setDefaultBtn.addEventListener('click', () => {
+      bridge.setLayoutAsDefault(selected.id)
+        .then((config) => {
+          defaultLayoutId = config.defaultLayoutId ?? selected.id;
           renderModalLayouts(overlay);
         })
         .catch(reportError);
     });
-    actionsRow.appendChild(saveBtn);
+    actionsRow.appendChild(setDefaultBtn);
+
+    // Open in New Window button
+    const openInNewWindowBtn = document.createElement('button');
+    openInNewWindowBtn.type = 'button';
+    openInNewWindowBtn.className = 'settings-btn layout-info-btn';
+    openInNewWindowBtn.textContent = 'Open in New Window';
+    openInNewWindowBtn.addEventListener('click', async () => {
+      await bridge.openLayoutInNewWindow(selected.id).catch(reportError);
+      overlay?.remove();
+    });
+    actionsRow.appendChild(openInNewWindowBtn);
     info.appendChild(actionsRow);
 
-    const paneInfo = document.createElement('div');
-    paneInfo.style.fontSize = '12px';
-    paneInfo.style.color = 'var(--panel-muted)';
-    paneInfo.textContent = `${selected.panes?.length ?? 0} pane(s) in this layout`;
-    info.appendChild(paneInfo);
+    // Pane count and details
+    const panesCount = selected.panes?.length ?? 0;
+    const paneCountLabel = document.createElement('div');
+    paneCountLabel.className = 'layout-pane-count-label';
+    paneCountLabel.textContent = `Panes (${panesCount})`;
+    info.appendChild(paneCountLabel);
+
+    // Pane details list
+    const panesList = document.createElement('div');
+    panesList.className = 'layout-panes-list';
+    for (const pane of selected.panes ?? []) {
+      const paneItem = document.createElement('div');
+      paneItem.className = 'layout-pane-item';
+
+      const paneTitle = document.createElement('div');
+      paneTitle.className = 'layout-pane-title';
+      paneTitle.textContent = pane.title || 'Untitled';
+      paneItem.appendChild(paneTitle);
+
+      const paneDetails = document.createElement('div');
+      paneDetails.className = 'layout-pane-details';
+
+      const paneCwd = document.createElement('span');
+      paneCwd.className = 'layout-pane-cwd';
+      // Shorten home directory path
+      const shortCwd = pane.cwd?.replace(/^\/home\/[^\/]+/, '~') ?? pane.cwd ?? 'unknown';
+      paneCwd.textContent = shortCwd;
+      paneDetails.appendChild(paneCwd);
+
+      if (pane.shellProfileId) {
+        const profile = shellProfiles.find((p) => p.id === pane.shellProfileId);
+        if (profile) {
+          const paneProfile = document.createElement('span');
+          paneProfile.className = 'layout-pane-profile';
+          paneProfile.textContent = `(${profile.name || profile.id})`;
+          paneDetails.appendChild(paneProfile);
+        }
+      }
+
+      paneItem.appendChild(paneDetails);
+      panesList.appendChild(paneItem);
+    }
+    info.appendChild(panesList);
 
     editorEl.appendChild(info);
   } else {
@@ -1631,6 +2104,7 @@ function createTab(pane, index, focusedIndex, dragMeta) {
       }
 
       if (event.key === 'Escape') {
+        event.stopPropagation();
         cancelRenamePane();
       }
     });
@@ -1650,7 +2124,7 @@ function createTab(pane, index, focusedIndex, dragMeta) {
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'tab-close';
-  close.textContent = 'x';
+  setIcon(close, 'x', 14);
   close.setAttribute('aria-label', `Close tab ${pane.id}`);
   close.disabled = panes.length === 1;
 
@@ -1721,6 +2195,7 @@ function createPane(pane) {
   terminal.loadAddon(new Unicode11Addon());
   terminal.unicode.activeVersion = '11';
   terminal.open(terminalHost);
+  terminalHost._xterm = terminal;
   try { terminal.loadAddon(new WebglAddon()); } catch {}
   terminal.attachCustomKeyEventHandler((event) => {
     // Ctrl+Tab is reserved for pane MRU cycling — never let xterm forward
@@ -1921,7 +2396,7 @@ function ensurePaneNodes() {
 }
 
 function createPaneData(shellProfileId = null) {
-  const usedAccents = new Set(panes.map((p) => p.accent.toLowerCase()));
+  const usedAccents = new Set(panes.map((p) => (p.customColor || p.accent).toLowerCase()));
   const accent = ColorsRegistry.ACCENT_PALETTE.find((c) => !usedAccents.has(c.toLowerCase()))
     || ColorsRegistry.ACCENT_PALETTE[(nextPaneNumber - 1) % ColorsRegistry.ACCENT_PALETTE.length];
   const focusedPane = panes[getFocusedIndex()];
@@ -1971,6 +2446,9 @@ function focusPane(paneId, options = {}) {
   recordPaneVisit(paneId);
   render();
   const node = paneNodeMap.get(paneId);
+  if (node) {
+    paneAlert.setAlerted(node.root, false);
+  }
   if (node && focusTerminal) {
     requestAnimationFrame(() => {
       node.terminal.focus();
@@ -1978,9 +2456,51 @@ function focusPane(paneId, options = {}) {
   }
 }
 
+function refocusCurrentPaneTerminal() {
+  const node = paneNodeMap.get(focusedPaneId);
+  if (!node) return;
+  paneCycleState = null;
+  setMode('terminal');
+  requestAnimationFrame(() => {
+    node.terminal.focus();
+  });
+}
+
+function getLayoutDisplayName(layoutId) {
+  if (!layoutId) return 'Layout';
+  const layout = layouts.find((item) => item.id === layoutId);
+  return layout?.name || (layoutId === 'default' ? 'Default' : layoutId);
+}
+
+function getFocusedPaneAccent() {
+  const pane = panes[getFocusedIndex()];
+  return pane?.customColor || pane?.accent || '#ffd166';
+}
+
+function showLayoutFocusNotice(layoutId) {
+  const layoutName = getLayoutDisplayName(layoutId);
+  layoutFocusNotice = { layoutId };
+  document.body.style.setProperty('--layout-focus-accent', getFocusedPaneAccent());
+  document.body.dataset.layoutFocusName = layoutName;
+  document.body.classList.remove('is-layout-focus-notice');
+  void document.body.offsetWidth;
+  document.body.classList.add('is-layout-focus-notice');
+  updateStatus();
+
+  window.clearTimeout(layoutFocusNoticeTimer);
+  layoutFocusNoticeTimer = window.setTimeout(() => {
+    layoutFocusNotice = null;
+    delete document.body.dataset.layoutFocusName;
+    document.body.classList.remove('is-layout-focus-notice');
+    updateStatus();
+  }, 1400);
+}
+
 function addPane(shellProfileId = null) {
   const newPane = createPaneData(shellProfileId);
   paneCycleState = null;
+  currentMode = 'terminal';
+  document.body.classList.remove('is-navigation-mode');
   panes = [...panes, newPane];
   focusedPaneId = newPane.id;
   recordPaneVisit(newPane.id);
@@ -2015,8 +2535,9 @@ function closePane(index, options = {}) {
     bridge.destroyTerminal({ paneId: closingPane.id });
   }
 
+  const wasFocused = closingPane.id === focusedPaneId;
   const remainingPanes = panes.filter((_, paneIndex) => paneIndex !== index);
-  if (closingPane.id === focusedPaneId) {
+  if (wasFocused) {
     const fallbackIndex = Math.max(0, index - 1);
     focusedPaneId = remainingPanes[fallbackIndex]?.id ?? remainingPanes[0]?.id ?? null;
   }
@@ -2026,6 +2547,17 @@ function closePane(index, options = {}) {
   recordPaneVisit(focusedPaneId);
 
   render(true);
+
+  // After closing a pane, if the focused pane was closed, focus the new pane's terminal
+  if (wasFocused && focusedPaneId) {
+    requestAnimationFrame(() => {
+      const node = paneNodeMap.get(focusedPaneId);
+      if (node) {
+        setMode('terminal');
+        node.terminal.focus();
+      }
+    });
+  }
 }
 
 function beginRenamePane(index) {
@@ -2252,8 +2784,8 @@ function render(refit = false) {
   renderTabs();
   renderPanes(refit);
   updateStatus();
-  if (sessionRestoreComplete) {
-    scheduleSettingsSave();
+  if (layoutRestoreComplete) {
+    scheduleWindowLayoutSave();
   }
 }
 
@@ -2499,7 +3031,7 @@ function showContextMenu(items, x, y, paneId) {
         if (child.isDefault) {
           const check = document.createElement('span');
           check.className = 'context-menu-shortcut';
-          check.textContent = '★';
+          check.innerHTML = icon('star', 12);
           childRow.appendChild(check);
         }
 
@@ -2537,6 +3069,7 @@ function showContextMenu(items, x, y, paneId) {
   queueMicrotask(() => {
     document.addEventListener('pointerdown', dismissContextMenuOnOutside);
     window.addEventListener('blur', hideContextMenu);
+    registerModal(hideContextMenu);
   });
 }
 
@@ -2547,6 +3080,7 @@ function hideContextMenu() {
   }
   document.removeEventListener('pointerdown', dismissContextMenuOnOutside);
   window.removeEventListener('blur', hideContextMenu);
+  unregisterModal(hideContextMenu);
 }
 
 function dismissContextMenuOnOutside(event) {
@@ -2576,7 +3110,7 @@ async function showTerminalContextMenu(node, event) {
     {
       label: 'Background activity alert',
       action: 'pane-toggle-breathing',
-      shortcut: breathingOn ? '✓' : '',
+      shortcut: breathingOn ? icon('check', 12) : '',
     },
     { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
   ];
@@ -2634,7 +3168,7 @@ function showColorPicker(paneId) {
     <div class="color-picker-dialog">
       <div class="color-picker-header">
         <span>Pane Color</span>
-        <button type="button" class="color-picker-close" aria-label="Close">×</button>
+        <button type="button" class="color-picker-close" aria-label="Close">${icon('x', 16)}</button>
       </div>
       <div class="color-picker-presets">
         ${presetColors.map((color, index) => `
@@ -2786,7 +3320,7 @@ function setPaneColor(paneId, color) {
   if (paneIndex === -1) return;
 
   panes[paneIndex] = { ...panes[paneIndex], customColor: color };
-  scheduleSettingsSave();
+  scheduleWindowLayoutSave();
   render();
 }
 
@@ -2795,7 +3329,7 @@ function clearPaneColor(paneId) {
   if (paneIndex === -1) return;
 
   panes[paneIndex] = { ...panes[paneIndex], customColor: undefined };
-  scheduleSettingsSave();
+  scheduleWindowLayoutSave();
   render();
 }
 
@@ -2806,7 +3340,7 @@ function togglePaneBreathingMonitor(paneId) {
   const next = panes[paneIndex].breathingMonitor === false;
   panes[paneIndex] = { ...panes[paneIndex], breathingMonitor: next };
   paneActivityWatcher.setPaneEnabled(paneId, next);
-  scheduleSettingsSave();
+  scheduleWindowLayoutSave();
 }
 
 // VIB-16: open the command palette over the current panes. Build a
@@ -2842,21 +3376,23 @@ function openCommandList() {
   }
 
   const items = [
+    { id: 'new-pane-with-profile', label: 'New Panel with Profile' },
     { id: 'change-profile',  label: 'Change profile' },
     { id: 'change-color',    label: 'Change color' },
     { id: 'rename-pane',     label: 'Rename pane' },
     { id: 'profile-settings',  label: 'Profile settings' },
     { id: 'shortcuts-settings', label: 'Shortcuts settings' },
-    { id: 'layout-save',     label: 'Layout: Save Current Layout' },
-    { id: 'layout-default',  label: 'Layout: Switch to Default' },
+    { id: 'layout-default',  label: 'Layout: Open Default' },
     ...layouts
       .filter((l) => l.id !== 'default')
-      .map((l) => ({ id: `layout-switch:${l.id}`, label: `Layout: Switch to ${l.name}` })),
+      .map((l) => ({ id: `layout-open:${l.id}`, label: `Layout: Open ${l.name}` })),
     { id: 'layout-manage',   label: 'Layout: Manage Layouts' },
   ];
 
   openCommandPalette(items, (commandId) => {
-    if (commandId === 'change-profile') {
+    if (commandId === 'new-pane-with-profile') {
+      openNewPaneProfilePicker();
+    } else if (commandId === 'change-profile') {
       openProfileSwitcher();
     } else if (commandId === 'change-color') {
       showColorPicker(focusedPaneId);
@@ -2869,13 +3405,11 @@ function openCommandList() {
       closeKeyboardShortcutsModal();
       registerModal(closeKeyboardShortcutsModal);
       ShortcutsUI.openKeyboardShortcutsModal(bridge, scheduleSettingsSave);
-    } else if (commandId === 'layout-save') {
-      saveCurrentLayout().catch(reportError);
     } else if (commandId === 'layout-default') {
-      switchLayout('default');
-    } else if (commandId.startsWith('layout-switch:')) {
-      const layoutId = commandId.slice('layout-switch:'.length);
-      switchLayout(layoutId);
+      bridge.openLayoutWindow('default').catch(reportError);
+    } else if (commandId.startsWith('layout-open:')) {
+      const layoutId = commandId.slice('layout-open:'.length);
+      bridge.openLayoutWindow(layoutId).catch(reportError);
     } else if (commandId === 'layout-manage') {
       openLayoutsModal();
     }
@@ -2903,6 +3437,43 @@ function openProfileSwitcher() {
     placeholder: 'Select a profile…',
     emptyText: 'No matching profiles',
   });
+}
+
+function openNewPaneProfilePicker() {
+  hideContextMenu();
+  if (renamingPaneId !== null) {
+    cancelRenamePane();
+  }
+  if (!settingsPanelEl.classList.contains('is-hidden')) {
+    closeSettingsPanel();
+  }
+
+  const doOpen = (profiles) => {
+    if (profiles.length === 0) {
+      statusLabelEl.textContent = 'No profiles available';
+      statusHintEl.textContent = '';
+      return;
+    }
+
+    const items = profiles.map((p) => ({
+      id: p.id,
+      label: p.name || p.id,
+    }));
+
+    openCommandPalette(items, (profileId) => {
+      addPane(profileId);
+      focusPane(focusedPaneId);
+    }, {
+      placeholder: 'Select a profile for new pane…',
+      emptyText: 'No matching profiles',
+    });
+  };
+
+  if (shellProfiles.length === 0) {
+    loadShellProfiles().then(() => doOpen(shellProfiles));
+  } else {
+    doOpen(shellProfiles);
+  }
 }
 
 async function pasteImageIntoTerminal(paneId = focusedPaneId, options = {}) {
@@ -3020,6 +3591,13 @@ function cancelNavigationMode() {
 }
 
 function updateStatus() {
+  if (layoutFocusNotice) {
+    statusLabelEl.textContent = 'Layout focused';
+    statusLabelEl.classList.remove('is-navigation-mode');
+    statusHintEl.textContent = getLayoutDisplayName(layoutFocusNotice.layoutId);
+    return;
+  }
+
   const focusedPane = panes[getFocusedIndex()];
   const focusedPaneLabel = getPaneLabel(focusedPane) || focusedPane.id;
 
@@ -3095,6 +3673,7 @@ function startInlineRename(paneId) {
 function closeKeyboardShortcutsModal() {
   const overlay = document.querySelector('.settings-modal-overlay');
   if (overlay) overlay.remove();
+  unregisterModal(closeKeyboardShortcutsModal);
 }
 
 function openKeymapHelpModal() {
@@ -3129,6 +3708,7 @@ const keyboardActions = createActions({
   closeCommandPalette,
   openTabSwitcher,
   openCommandList,
+  openNewPaneProfilePicker,
   focusPaneAt,
   getPaneCount,
   getPaneIdAt,
@@ -3183,8 +3763,7 @@ function unregisterModal(closeFn) {
 function closeTopModal() {
   const closeFn = modalStack[modalStack.length - 1];
   if (closeFn) closeFn();
-  // Return focus to the current pane after closing a modal
-  if (focusedPaneId) {
+  if (focusedPaneId && modalStack.length === 0) {
     focusPane(focusedPaneId, { focusTerminal: true });
   }
 }
@@ -3214,14 +3793,26 @@ function showAddPaneProfilePopup() {
   renderAddPaneProfilePopup(shellProfiles);
 }
 
+function closeAddPaneProfilePopup() {
+  const popup = document.querySelector('.add-pane-profile-popup');
+  if (popup) {
+    popup.remove();
+  }
+  document.removeEventListener('click', dismissAddPaneProfilePopup);
+  unregisterModal(closeAddPaneProfilePopup);
+}
+
 function renderAddPaneProfilePopup(profiles) {
   // Remove any existing popup
   const existing = document.querySelector('.add-pane-profile-popup');
   if (existing) {
-    existing.remove();
-    document.removeEventListener('click', dismissAddPaneProfilePopup);
+    closeAddPaneProfilePopup();
     return;
   }
+
+  // Close other menus
+  closeSettingsPanel();
+  closeLayoutsDropdown();
 
   const popup = document.createElement('div');
   popup.className = 'add-pane-profile-popup';
@@ -3251,8 +3842,7 @@ function renderAddPaneProfilePopup(profiles) {
 
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-        popup.remove();
-        document.removeEventListener('click', dismissAddPaneProfilePopup);
+        closeAddPaneProfilePopup();
         try {
           addPane(profile.id);
         } catch (error) {
@@ -3264,10 +3854,11 @@ function renderAddPaneProfilePopup(profiles) {
     }
   }
 
-  // Position popup below the dropdown button
-  const rect = addPaneDropdownButtonEl.getBoundingClientRect();
+  // Position popup aligned with the tabs panel bottom (same as Settings)
+  const rect = addProfileButtonEl.getBoundingClientRect();
+  const tabsPanelRect = document.querySelector('.tabs-panel').getBoundingClientRect();
   popup.style.left = `${rect.left}px`;
-  popup.style.top = `${rect.bottom + 2}px`;
+  popup.style.top = `${tabsPanelRect.bottom + 1}px`;
   document.body.appendChild(popup);
 
   // Adjust if popup overflows the right edge of the viewport
@@ -3278,21 +3869,21 @@ function renderAddPaneProfilePopup(profiles) {
       popup.style.left = `${Math.max(8, parseFloat(popup.style.left) - overflow)}px`;
     }
     document.addEventListener('click', dismissAddPaneProfilePopup);
+    registerModal(closeAddPaneProfilePopup);
   });
 }
 
 function dismissAddPaneProfilePopup(event) {
   const popup = document.querySelector('.add-pane-profile-popup');
-  if (popup && !popup.contains(event.target) && event.target !== addPaneDropdownButtonEl) {
-    popup.remove();
-    document.removeEventListener('click', dismissAddPaneProfilePopup);
+  if (popup && !popup.contains(event.target) && event.target !== addProfileButtonEl) {
+    closeAddPaneProfilePopup();
   }
 }
 
-addPaneDropdownButtonEl.addEventListener('click', (event) => {
+addProfileButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
   try {
-    showAddPaneProfilePopup();
+    openNewPaneProfilePicker();
   } catch (error) {
     reportError(error);
   }
@@ -3305,6 +3896,14 @@ layoutsButtonEl.addEventListener('click', (event) => {
 
 settingsButtonEl.addEventListener('click', (event) => {
   event.stopPropagation();
+
+  // Close other menus
+  const existingProfilePopup = document.querySelector('.add-pane-profile-popup');
+  if (existingProfilePopup) {
+    closeAddPaneProfilePopup();
+  }
+  closeLayoutsDropdown();
+
   const wasHidden = settingsPanelEl.classList.toggle('is-hidden');
   if (wasHidden) {
     closeSettingsPanel();
@@ -3361,7 +3960,14 @@ keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
 });
 
 // Fullscreen toggle
-function isFullscreenSupported() {
+function isNativeFullscreenSupported() {
+  return (
+    typeof bridge.isWindowFullscreen === 'function' &&
+    typeof bridge.setWindowFullscreen === 'function'
+  );
+}
+
+function isDomFullscreenSupported() {
   return (
     document.documentElement.requestFullscreen ||
     document.documentElement.webkitRequestFullscreen ||
@@ -3369,7 +3975,11 @@ function isFullscreenSupported() {
   );
 }
 
-function getIsFullscreen() {
+function isFullscreenSupported() {
+  return isNativeFullscreenSupported() || isDomFullscreenSupported();
+}
+
+function getDomFullscreenElement() {
   return (
     document.fullscreenElement ||
     document.webkitFullscreenElement ||
@@ -3377,27 +3987,42 @@ function getIsFullscreen() {
   );
 }
 
-function updateFullscreenButton() {
-  const isFs = getIsFullscreen();
-  fullscreenButtonEl.classList.toggle('is-fullscreen', Boolean(isFs));
-  fullscreenButtonEl.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Enter fullscreen');
+async function getIsFullscreen() {
+  if (isNativeFullscreenSupported()) {
+    return bridge.isWindowFullscreen();
+  }
+  return Boolean(getDomFullscreenElement());
 }
 
-function toggleFullscreen() {
+async function updateFullscreenButton() {
+  const isFs = await getIsFullscreen().catch(() => false);
+  fullscreenButtonEl.classList.toggle('is-fullscreen', Boolean(isFs));
+  fullscreenButtonEl.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Enter fullscreen');
+  setIcon(fullscreenButtonEl, isFs ? 'minimize' : 'maximize', 18);
+}
+
+async function toggleFullscreen() {
   if (!isFullscreenSupported()) {
     return;
   }
 
-  if (getIsFullscreen()) {
+  if (isNativeFullscreenSupported()) {
+    const isFs = await bridge.isWindowFullscreen();
+    await bridge.setWindowFullscreen(!isFs);
+    await updateFullscreenButton();
+    return;
+  }
+
+  if (getDomFullscreenElement()) {
     if (document.exitFullscreen) {
-      document.exitFullscreen();
+      await document.exitFullscreen();
     } else if (document.webkitExitFullscreen) {
       document.webkitExitFullscreen();
     }
   } else {
     const elem = document.documentElement;
     if (elem.requestFullscreen) {
-      elem.requestFullscreen();
+      await elem.requestFullscreen();
     } else if (elem.webkitRequestFullscreen) {
       elem.webkitRequestFullscreen();
     }
@@ -3410,14 +4035,31 @@ function hideFullscreenButtonIfUnsupported() {
   }
 }
 
-document.addEventListener('fullscreenchange', updateFullscreenButton);
-document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+function handleFullscreenShortcut(event) {
+  if (event.key !== 'F11' || !isFullscreenSupported()) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  toggleFullscreen().catch(reportError);
+}
+
+document.addEventListener('fullscreenchange', () => {
+  updateFullscreenButton().catch(reportError);
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  updateFullscreenButton().catch(reportError);
+});
+window.addEventListener('keydown', handleFullscreenShortcut, true);
 
 fullscreenButtonEl.addEventListener('click', () => {
-  toggleFullscreen();
+  toggleFullscreen().catch(reportError);
 });
 
 hideFullscreenButtonIfUnsupported();
+updateFullscreenButton().catch(reportError);
 
 settingsPanelEl.addEventListener('click', (event) => {
   event.stopPropagation();
@@ -3504,8 +4146,23 @@ paneMaskOpacityInputEl.addEventListener('change', () => {
   updatePaneMaskOpacity(paneMaskOpacityInputEl.value);
 });
 
+const breathingAlertRowEl = document.getElementById('breathing-alert-row');
+
+function toggleBreathingAlert() {
+  breathingAlertToggleEl.checked = !breathingAlertToggleEl.checked;
+  settings.breathingAlertEnabled = breathingAlertToggleEl.checked;
+  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
+  paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+  scheduleSettingsSave();
+}
+
+breathingAlertRowEl.addEventListener('click', () => {
+  toggleBreathingAlert();
+});
+
 breathingAlertToggleEl.addEventListener('change', () => {
   settings.breathingAlertEnabled = breathingAlertToggleEl.checked;
+  breathingAlertDotEl.classList.toggle('is-active', settings.breathingAlertEnabled);
   paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
   scheduleSettingsSave();
 });
@@ -3524,6 +4181,7 @@ window.addEventListener('pointerdown', (event) => {
 // Global ESC: close the topmost modal/panel registered in the stack
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    event.preventDefault();
     closeTopModal();
   }
 });
@@ -3545,44 +4203,50 @@ window.addEventListener('DOMContentLoaded', async () => {
     applySettings();
     loadShellProfiles();
 
-    const layoutConfig = await bridge.listLayouts();
-    layouts = layoutConfig.layouts ?? [];
-    activeLayoutId = layoutConfig.activeLayoutId ?? '';
+    await refreshLayouts();
 
-    // Migration: if layouts is empty and session.panes exists, auto-create Default
-    if (layouts.length === 0 && savedSettings?.session?.panes?.length > 0) {
-      const defaultLayout = {
-        id: 'default',
-        name: 'Default',
-        panes: savedSettings.session.panes,
-        focusedPaneIndex: savedSettings.session.focusedPaneIndex ?? 0,
-      };
-      await bridge.saveLayout(defaultLayout);
-      layouts = [defaultLayout];
-      activeLayoutId = 'default';
+    let defaultLayout = layouts.find((l) => l.id === defaultLayoutId)
+      || layouts.find((l) => l.id === 'default');
+
+    if (!defaultLayout) {
+      defaultLayout = createDefaultLayout();
+      const saved = await bridge.saveLayout(defaultLayout);
+      layouts = saved.layouts ?? [defaultLayout];
+      defaultLayoutId = saved.defaultLayoutId ?? defaultLayoutId;
     }
 
-    if (activeLayoutId && layouts.find((l) => l.id === activeLayoutId)) {
-      switchLayout(activeLayoutId);
-    } else if (savedSettings?.session?.panes?.length > 0) {
-      restoreSession(savedSettings.session);
-    } else {
-      panes = panes.map((p) =>
-        p.title === null
-          ? { ...p, cwd: bridge.defaultCwd, terminalTitle: bridge.defaultTabTitle }
-          : p
-      );
+    if (defaultLayoutId !== defaultLayout.id) {
+      const config = await bridge.setLayoutAsDefault(defaultLayout.id);
+      layouts = config.layouts ?? layouts;
+      defaultLayoutId = config.defaultLayoutId ?? defaultLayout.id;
     }
 
+    const targetLayoutId = windowContext.kind === 'layout'
+      ? windowContext.layoutId
+      : defaultLayoutId;
+    const targetLayout = layouts.find((l) => l.id === targetLayoutId);
+    if (!targetLayout) {
+      throw new Error(`Layout not found: ${targetLayoutId}`);
+    }
+
+    setWindowLayoutId(targetLayout.id);
+    restoreSession({ panes: targetLayout.panes, focusedPaneIndex: targetLayout.focusedPaneIndex });
+    ensurePaneNodes();
+
+    updateLayoutsIndicator();
     render(true);
-    sessionRestoreComplete = true;
+    layoutRestoreComplete = true;
   } catch (error) {
     reportError(error);
+    const msg = error instanceof Error ? error.message : String(error);
+    document.body.innerHTML = `<div style="color:#e06c75;padding:2em;font-family:monospace;white-space:pre-wrap">Initialization failed: ${msg}</div>`;
   }
 });
 
 window.addEventListener('beforeunload', () => {
+  flushWindowLayoutSave();
   flushSettingsSave();
+  clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();

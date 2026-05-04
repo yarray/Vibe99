@@ -1,0 +1,1 @@
+Closing a layout window (including the main/default layout window) no longer kills PTY sessions belonging to other layout windows. Previously, closing the main window called `destroy_all_terminals`, which destroyed all PTY sessions globally regardless of which window they belonged to.

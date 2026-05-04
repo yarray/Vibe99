@@ -1,7 +1,7 @@
 {
   "name": "vibe99",
   "productName": "Vibe99",
-  "version": "0.9.1",
+  "version": "0.10.8",
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Vibe99 terminal application",
@@ -12,7 +12,8 @@
     "vite:build": "vite build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "test:e2e": "node ./scripts/run-e2e.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

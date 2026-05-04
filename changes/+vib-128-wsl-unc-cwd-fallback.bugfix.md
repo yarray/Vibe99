@@ -1,0 +1,1 @@
+Fixed PowerShell sessions failing with `cargo metadata` OS error 448 when the saved working directory is a WSL UNC path (`\\wsl.localhost\...`) or POSIX path (`/home/...`). These paths are now rejected during cwd resolution for native Windows shells, falling back to the system cwd or home directory instead.
