@@ -1,7 +1,8 @@
 name: Windows Validation
 
 on:
-  workflow_dispatch:  # disabled
+  pull_request:
+  push:
     branches:
       - main
 
