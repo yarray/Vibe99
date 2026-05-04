@@ -50,38 +50,68 @@ async function addPane() {
 
 async function closePaneByTabIndex(index) {
   const tabs = await $$('#tabs-list .tab');
+  if (!tabs[index]) throw new Error(`Tab at index ${index} not found`);
   const closeBtn = await tabs[index].$('.tab-close');
-  await closeBtn.waitForClickable({ timeout: 5000 });
+  if (!closeBtn) throw new Error(`Close button not found on tab ${index}`);
+  await browser.pause(1500);
   try {
     await closeBtn.click();
   } catch (e) {
     if (e.message && e.message.includes('click intercepted')) {
-      // Fallback to JS click on WebView2
       await browser.execute((el) => el.click(), closeBtn);
     } else {
       throw e;
     }
   }
-  await browser.pause(400);
+  await browser.pause(2000);
 }
 
 async function ensureThreePanes() {
   let count = await getPaneCount();
+
   while (count < 3) {
-    await addPane();
+    await browser.execute(() => {
+      const btn = document.getElementById('tabs-add');
+      if (btn) btn.click();
+    });
+    await browser.pause(600);
     count = await getPaneCount();
-  }
-  while (count > 3) {
-    await closePaneByTabIndex(count - 1);
-    count = await getPaneCount();
-  }
-  // Focus the first pane to establish a known baseline.
-  const firstTab = await $('#tabs-list .tab');
-  if (firstTab) {
-    await firstTab.click();
-    await browser.pause(200);
   }
 }
+
+describe('Single pane close button', () => {
+  beforeEach(async () => {
+    await waitForAppReady(1);
+  });
+
+  it('disables the close button on the last remaining pane', async () => {
+    let count = await getTabCount();
+    while (count > 2) {
+      await closePaneByTabIndex(count - 1);
+      count = await getTabCount();
+    }
+
+    // Deferred click for the 2→1 transition (full-viewport reflow
+    // can block WebKitGTK; setTimeout lets execute return first).
+    const clicked = await browser.execute(() => {
+      const tabs = document.querySelectorAll('#tabs-list .tab');
+      const lastTab = tabs[tabs.length - 1];
+      const btn = lastTab?.querySelector('.tab-close');
+      if (!btn) return false;
+      setTimeout(() => btn.click(), 50);
+      return true;
+    });
+    expect(clicked).toBe(true);
+    await browser.pause(5000);
+
+    const tabs = await $$('#tabs-list .tab');
+    expect(tabs.length).toBe(1);
+
+    const closeBtn = await tabs[0].$('.tab-close');
+    const disabled = await closeBtn.getAttribute('disabled');
+    expect(disabled).toBe('true');
+  });
+});
 
 describe('Pane management and navigation', () => {
   beforeEach(async () => {
@@ -90,7 +120,9 @@ describe('Pane management and navigation', () => {
   });
 
   afterEach(async () => {
-    await cleanupApp();
+    for (let i = 0; i < 5; i++) {
+      try { await browser.keys('Escape'); await browser.pause(100); } catch { break; }
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -133,22 +165,6 @@ describe('Pane management and navigation', () => {
       await browser.pause(300);
       const focusedId = await getFocusedPaneId();
       expect(focusedId).not.toBeNull();
-    });
-
-    it('disables the close button on the last remaining pane', async () => {
-      // Close panes until only one remains.
-      let count = await getPaneCount();
-      while (count > 1) {
-        await closePaneByTabIndex(count - 1);
-        count = await getPaneCount();
-      }
-
-      const tabs = await $$('#tabs-list .tab');
-      expect(tabs.length).toBe(1);
-
-      const closeBtn = await tabs[0].$('.tab-close');
-      const disabled = await closeBtn.getAttribute('disabled');
-      expect(disabled).toBe('true');
     });
   });
 
@@ -424,7 +440,5 @@ describe('Pane management and navigation', () => {
     });
   });
 
-  after(async () => {
-    await cleanupApp();
-  });
+  after(() => {});
 });

@@ -4,8 +4,17 @@ async function closePaneByTabIndex(index) {
   const tabs = await $$('#tabs-list .tab');
   const closeBtn = await tabs[index]?.$('.tab-close');
   if (!closeBtn) return false;
-  await browser.execute((el) => el.click(), closeBtn);
-  await browser.pause(300);
+  await browser.pause(1500);
+  try {
+    await closeBtn.click();
+  } catch (e) {
+    if (e.message && e.message.includes('click intercepted')) {
+      await browser.execute((el) => el.click(), closeBtn);
+    } else {
+      throw e;
+    }
+  }
+  await browser.pause(2000);
   return true;
 }
 

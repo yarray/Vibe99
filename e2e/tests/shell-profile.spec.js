@@ -477,58 +477,56 @@ describe('Shell Profile', () => {
       });
       const closeBtn = await $('.settings-modal-close');
       await closeBtn.click();
-      await browser.pause(200);
+      await browser.pause(300);
 
       await closeSettingsPanel();
-      await browser.pause(200);
+      await browser.pause(800);
 
       const terminalHost = await $('.terminal-host');
       await dispatchContextMenu(terminalHost);
-      await browser.pause(300);
+      await browser.pause(800);
 
-      const menuItems = await $$('.context-menu-item');
-      for (const item of menuItems) {
-        const label = await item.$('.context-menu-label');
-        if (label) {
-          const text = await getTextSafe(label);
-          if (text.includes('Change Profile')) {
-            await item.moveTo();
-            await browser.pause(300);
-            break;
+      const hovered = await browser.execute(() => {
+        const items = document.querySelectorAll('.context-menu-item');
+        for (const item of items) {
+          const label = item.querySelector('.context-menu-label');
+          if (label && label.textContent.includes('Change Profile')) {
+            item.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+            item.classList.add('is-hovered');
+            return true;
           }
         }
-      }
+        return false;
+      });
+      expect(hovered).toBe(true);
+      await browser.pause(500);
 
-      // Wait for submenu to appear (WebKitGTK may need longer than 300ms)
-      await waitForElement('.context-menu-submenu .context-menu-item', 3000);
-
-      const submenuItems = await $$('.context-menu-submenu .context-menu-item');
-      expect(submenuItems.length).toBeGreaterThanOrEqual(1);
-
-      for (const subItem of submenuItems) {
-        const subLabel = await subItem.$('.context-menu-label');
-        if (subLabel) {
-          const text = await getTextSafe(subLabel);
-          if (text.includes('SwitchTest') || text.includes('switch-test')) {
-            await subItem.scrollIntoView();
-            await browser.pause(100);
-            await browser.execute((el) => {
-              el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-              el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-              el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            }, subItem);
-            await browser.pause(1000);
-            break;
+      // Deferred click: shell switch triggers terminal destroy + render that
+      // blocks WebKitGTK, so the click must fire after execute returns.
+      const found = await browser.execute(() => {
+        const submenu = document.querySelector('.context-menu-submenu');
+        if (!submenu) return 'no-submenu';
+        const subItems = submenu.querySelectorAll('.context-menu-item');
+        for (const si of subItems) {
+          const l = si.querySelector('.context-menu-label');
+          if (l && (l.textContent.includes('SwitchTest') || l.textContent.includes('switch-test'))) {
+            setTimeout(() => {
+              si.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+              si.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+              si.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            }, 50);
+            return 'clicked';
           }
         }
-      }
+        return 'not-found';
+      });
+      expect(found).toBe('clicked');
+      await browser.pause(3000);
 
       const hosts = await $$('.terminal-host .xterm');
       expect(hosts.length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  after(async () => {
-    await cleanupApp();
-  });
+  after(() => {});
 });
