@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 const isWindows = os.platform() === 'win32';
+const isDocker = fs.existsSync('/.dockerenv') || !!process.env.E2E_DOCKER;
 const binaryExt = isWindows ? '.exe' : '';
 
 const releaseBinary = path.join(projectRoot, 'src-tauri', 'target', 'release', `vibe99${binaryExt}`);
@@ -127,7 +128,7 @@ export const config = {
   framework: 'mocha',
   mochaOpts: {
     ui: 'bdd',
-    timeout: 60000,
+    timeout: isDocker ? 120000 : 60000,
     grep: process.env.E2E_GREP || undefined,
   },
 
