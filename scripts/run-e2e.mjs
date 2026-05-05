@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { spawn } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -123,9 +123,8 @@ try {
 }
 
 if (!fs.existsSync(wdioBin)) {
-  console.error(`WDIO binary not found at ${wdioBin}`);
-  console.error('Run `npm install` in the e2e directory first.');
-  process.exit(1);
+  console.log('e2e dependencies not found — installing...');
+  execSync('npm install', { cwd: e2eDir, stdio: 'inherit' });
 }
 
 const wdioArgs = ['run', 'wdio.conf.js'];

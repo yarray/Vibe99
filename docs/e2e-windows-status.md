@@ -1,80 +1,103 @@
 # E2E Windows/WebView2 Status
 
-**Date**: 2026-04-30
-**Branch**: `autoproj/e2e-tests`
+**Date**: 2026-05-01
+**Branch**: `autoproj/phase1-refactor`
 **Platform**: Windows 11 / WebView2
 **Test Runner**: WebdriverIO + tauri-driver + msedgedriver.exe
 
-## Current Result
+## Current Result (Post TypeScript Migration)
 
-The previously reported Windows/WebView2 failures have been resolved.
+Full suite run: **11 passed, 3 failed** out of 14 spec files.
 
-| Scope | Result |
-| --- | --- |
-| Formerly failing specs | 6/6 passing |
-| Formerly failing tests | 14/14 resolved |
-| Verification run | 72 passing, 0 failing |
-| Excluded known specs | `clipboard.spec.js`, `layout.spec.js` |
+| Spec File | Tests | Status |
+| --- | --- | --- |
+| `smoke.spec.js` | 3/3 | PASS |
+| `activity-alert.spec.js` | 7/7 | PASS |
+| `clipboard.spec.js` | 9/9 | PASS |
+| `color-picker.spec.js` | 10/10 | PASS |
+| `command-palette.spec.js` | 15/15 | PASS |
+| `context-menu.spec.js` | 13/13 | PASS |
+| `pane-management.spec.js` | 16/16 | PASS |
+| `pty-lifecycle.spec.js` | 6/6 | PASS |
+| `session-persistence.spec.js` | 9/9 | PASS |
+| `settings.spec.js` | 16/16 | PASS |
+| `shortcuts-modal-stack-fullscreen.spec.js` | 16/16 | PASS |
+| `layout.spec.js` | 9/10 | **FAIL** — "Save Layout As" layout count mismatch |
+| `shell-profile.spec.js` | ~16/18 | **FAIL** — button label mismatch (test uses Unicode, app uses text) |
+| `tab-management.spec.js` | 7/8 | **FAIL** — Escape cancel rename race condition |
 
-Verification command:
+### Failure Details
+
+#### 1. layout.spec.js — "saves current layout via Save Layout As"
+
+- **Error**: `Expected: 1, Received: <different count>`
+- **Root cause**: Likely a timing or initialization issue. After `clearAllLayouts()`, the app may auto-create a default layout, so the count after saving one new layout is 2 instead of 1. Pre-existing, not caused by TS migration.
+
+#### 2. shell-profile.spec.js — button label mismatch
+
+- **Error**: `Action button "✕" not found on profile delete-me`
+- **Root cause**: Profile action buttons were changed from Unicode symbols (`✕`, `⧉`, `★`) to plain text labels (`x`, `copy`, `star`) with title attributes (`Delete`, `Clone profile`, `Set as default`). Tests were still looking for the old Unicode symbols.
+- **Fix applied**: Updated `shell-profile.spec.js` to match by `title` attribute instead: `'Delete'`, `'Clone'`, `'Set as default'`.
+
+#### 3. tab-management.spec.js — "Escape cancels and restores original title"
+
+- **Error**: `Expected: "My Test Tab", Received: "Should Not Persist"`
+- **Root cause**: Race condition in `tab-bar.ts`. When Escape is pressed, `cancelRenamePane()` calls `renderTabs()` which destroys the input element, triggering its `blur` handler. The blur handler then calls `commitRenamePane()` with the unwanted value.
+- **Fix applied**: Added guard in blur handler — only commit if `state.renamingPaneId === pane.id` (cancel sets it to null first).
+
+## Changes in This Branch
+
+### TypeScript Migration (24 files)
+
+All `.js` modules converted to `.ts` with full type annotations:
+
+- `tsconfig.json` created (strict mode, `noEmit`, `allowJs: false`)
+- `index.html` updated to reference `renderer.ts`
+- Every factory function has typed deps and return interfaces
+- All exported types are co-located in their respective modules
+- `npx tsc --noEmit` reports **0 errors**
+- `npm run vite:build` succeeds
+- Tauri binary builds and runs correctly
+
+### Bug Fixes (pre-existing, exposed by migration)
+
+- `paneState.setFocusedPaneId()` → `paneState.focusPane()` (method didn't exist)
+- `tabBarState.pendingClosePaneId` missing setter → added
+- `tabBar.state` not exposed → added to return object
+- Null safety guards on `getFocusedPaneId()` and optional chaining throughout `renderer.ts`
+
+### CSS Fixes
+
+- Context menu: added `max-width: min(280px, calc(100vw - 16px))` in `overlays.css`
+- Line-height: added `line-height: 1.4` to `html, body` in `base.css`
+- Status bar: added `line-height: var(--status-height)` in `panes.css`
+
+## Verification Commands
 
 ```powershell
-cd e2e
-npm test -- --spec ./tests/activity-alert.spec.js --spec ./tests/pane-management.spec.js --spec ./tests/session-persistence.spec.js --spec ./tests/settings.spec.js --spec ./tests/shell-profile.spec.js --spec ./tests/tab-management.spec.js --logLevel error
-```
+# Type check
+npx tsc --noEmit
 
-## Resolved Issues
-
-### Synthetic Events on WebView2
-
-WebView2 does not reliably route synthetic `KeyboardEvent`, `PointerEvent`, or `MouseEvent` instances dispatched from `browser.execute`. Tests now avoid depending on untrusted events for core UI behavior.
-
-Changes:
-
-- `Ctrl+\`` activity navigation uses `browser.keys()`.
-- Tab rename uses native WebDriver double-click actions.
-- Rename field edits use the native input setter plus the app's existing keyboard handler.
-- Context-menu label collection avoids WDIO array quirks on WebView2.
-
-### Test State Leaks
-
-Specs that close panes down to one pane no longer poison later tests. `cleanupApp()` now dismisses overlays and restores the pane count to three when possible. `waitForAppReady()` also accepts a minimum pane count for tests that intentionally start from a one-pane state.
-
-### Settings Persistence Mismatches
-
-The app now exposes `--app-font-family` when applying font settings, and the Rust settings sanitizer preserves `ui.breathingAlertEnabled`. This aligns the saved settings schema with the renderer's UI settings payload.
-
-### Activity Alert Clearing
-
-Focusing a pane now clears its pending activity class at the renderer level. This keeps the visible pane state correct even when activity state is reached through test setup or fallback paths.
-
-### Navigation-Mode New Pane Behavior
-
-Creating a new pane from navigation mode now exits navigation mode, matching the existing close and rename navigation-mode flows.
-
-### Shell Profile Default Test
-
-The default-profile test now creates an existing default profile first, then verifies that a second profile can be promoted to default. This avoids assuming the first user-created profile will show a star button.
-
-## Verification
-
-Commands run:
-
-```powershell
+# Build
 npm run vite:build
-$env:CARGO_TARGET_DIR='target-codex'; cargo check
-npm run tauri:build
-cd e2e
-npm test -- --spec ./tests/activity-alert.spec.js --logLevel error
-npm test -- --spec ./tests/tab-management.spec.js --logLevel error
-npm test -- --spec ./tests/pane-management.spec.js --logLevel error
-npm test -- --spec ./tests/settings.spec.js --logLevel error
-npm test -- --spec ./tests/session-persistence.spec.js --logLevel error
-npm test -- --spec ./tests/shell-profile.spec.js --logLevel error
-npm test -- --spec ./tests/activity-alert.spec.js --spec ./tests/pane-management.spec.js --spec ./tests/session-persistence.spec.js --spec ./tests/settings.spec.js --spec ./tests/shell-profile.spec.js --spec ./tests/tab-management.spec.js --logLevel error
+npm run tauri build
+
+# Run full e2e suite
+node scripts/run-e2e.mjs
 ```
 
-Notes:
+## Historical Context
 
-- Plain `cargo check` against `src-tauri/target` failed on Windows with `os error 5` access-denied writes. Verification used `CARGO_TARGET_DIR=target-codex`.
-- `tauri:build` and WDIO runs required elevated process-spawn permissions in this environment.
+### Previous Status (2026-04-30)
+
+6 formerly failing specs were resolved (72 passing, 0 failing) on branch `autoproj/e2e-tests`. That work addressed synthetic event handling on WebView2, test state leaks, settings persistence mismatches, and activity alert clearing.
+
+### Pre-Migration Bug Fixes
+
+The TypeScript migration was motivated by interface mismatch bugs that static analysis now catches:
+
+- Wrong method names on adapter objects (`setFocusedPaneId` vs `focusPane`)
+- Missing property accessors (setter for `pendingClosePaneId`)
+- Missing exports (`tabBar.state`)
+
+These are exactly the class of errors that `tsc --noEmit` prevents at edit time.

@@ -14,7 +14,59 @@
  * import on the rest of the renderer; it's testable in isolation.
  */
 
-export function createActions(deps) {
+export interface ActionsDeps {
+  addPane: () => void;
+  openNewPaneProfilePicker: () => void;
+  enterNavigationMode: () => void;
+  cycleToRecentPane: (opts: { reverse: boolean }) => void;
+  cycleToNextLitPane: () => void;
+  navigateLeft: () => void;
+  navigateRight: () => void;
+  copyTerminalSelection: () => void;
+  pasteIntoTerminal: () => Promise<void>;
+  isCommandPaletteOpen: () => boolean;
+  closeCommandPalette: () => void;
+  openTabSwitcher: () => void;
+  openCommandList: () => void;
+  moveFocus: (delta: number) => void;
+  focusPane: (paneId: string, opts?: { focusTerminal?: boolean }) => void;
+  cancelNavigationMode: () => void;
+  getFocusedPaneId: () => string;
+  focusPaneAt: (index: number) => void;
+  getPaneCount: () => number;
+  getPaneIdAt: (index: number) => string | undefined;
+  requestClosePane: (paneId: string) => void;
+  startInlineRename: (paneId: string) => void;
+  openKeymapHelpModal: () => void;
+  openLayoutsModal: () => void;
+}
+
+export interface ActionsTable {
+  newPane: () => void;
+  newPaneWithProfile: () => void;
+  enterNav: () => void;
+  cycleRecent: () => void;
+  cycleRecentReverse: () => void;
+  cycleLitPane: () => void;
+  navigateLeft: () => void;
+  navigateRight: () => void;
+  copyTerminalSelection: () => void;
+  pasteIntoTerminal: () => void;
+  toggleCommandPalette: () => void;
+  toggleCommandList: () => void;
+  focusPrev: () => void;
+  focusNext: () => void;
+  commitFocus: () => void;
+  cancelNav: () => void;
+  focusFirst: () => void;
+  focusLast: () => void;
+  jumpTo: (e: KeyboardEvent) => void;
+  closePane: () => void;
+  renamePane: () => void;
+  openLayouts: () => void;
+}
+
+export function createActions(deps: ActionsDeps): ActionsTable {
   return {
     // Pane lifecycle / focus
     newPane: () => deps.addPane(),
@@ -57,7 +109,7 @@ export function createActions(deps) {
     // Navigation mode — movement (VIB-33)
     focusFirst:    () => deps.focusPaneAt(0),
     focusLast:     () => deps.focusPaneAt(deps.getPaneCount() - 1),
-    jumpTo:        (e) => {
+    jumpTo:        (e: KeyboardEvent) => {
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= deps.getPaneCount()) {
         const paneId = deps.getPaneIdAt(n - 1);
