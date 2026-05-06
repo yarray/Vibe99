@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **DOM capability extraction (VIB-173):** Extracted DOM creation and lifecycle from `pane-renderer.ts` into new `src/pane/capabilities/dom-capability.ts` (~174 lines). Factory `createDomBehavior(deps)` returns `{ name: 'dom', open(ctx), close(ctx, api) }`. open() creates DOM tree: root(article.pane) > shell > body > surface > terminalHost. API includes: `root`/`terminalHost` refs, `mount(container)`/`unmount()`, `setLayout({ left, height, zIndex })`, `setFocused(isFocused, isNavTarget)`, `setAccent(color)`, `dispose()`. Integrates breathing mask alert strategy and registers click-focus and right-click context menu events. All class names preserved from existing implementation.
+
 ### Changed
 
 - **CSS architecture (VIB-146):** Split `src/styles.css` (2344 lines) into 8 purpose-oriented files under `src/styles/`: `base.css` (CSS variables, resets, app-shell), `tabs.css` (tabs panel & actions), `panes.css` (stage, pane, terminal, status bar), `settings-modal.css` (settings panel, keyboard shortcuts), `shell-profiles.css` (shell profiles list & editor), `overlays.css` (context menu, color picker), `layouts.css` (layout manager modal, layouts dropdown), `animations.css` (keyframes, reduced-motion). All rules preserved; no behavior change.
