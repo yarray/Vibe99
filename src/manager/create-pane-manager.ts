@@ -9,13 +9,15 @@
  * @module manager/create-pane-manager
  */
 
-import { createPane, type Pane, type PaneDeps } from '../pane/create-pane.js';
+import { createPane, type Pane, type PaneDeps, type PaneBehavior } from '../pane/create-pane.js';
 import { createDomBehavior } from '../pane/capabilities/dom-capability.js';
 import { createActivityBehavior } from '../pane/capabilities/activity-capability.js';
 import { createClipboardBehavior } from '../pane/capabilities/clipboard-capability.js';
 import { createPaneActivityWatcher } from '../pane-activity-watcher.js';
 import type { Backend } from '../backend.js';
 import type { PaneAlertStrategy } from '../pane-alert-breathing-mask.js';
+import type { ActivityCapability } from '../pane/capabilities/activity-capability.js';
+import type { DomCapabilityApi } from '../pane/capabilities/dom-capability.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,9 +79,26 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
   let activePaneId: string | null = null;
   let nextPaneNumber = 1;
 
-  // Shared activity watcher. The watcher itself has no breathing-mask knowledge;
-  // its onAlert/onClear callbacks are registered per-pane by activity-capability.
-  const watcher = createPaneActivityWatcher();
+  // Shared activity watcher. Global onAlert/onClear callbacks dispatch to the
+  // per-pane activity capability API.
+  const watcher = createPaneActivityWatcher({
+    onAlert: (paneId) => {
+      const apis = capabilityApis.get(paneId);
+      const activityApi = apis?.get('activity') as ActivityCapability | undefined;
+      const domApi = apis?.get('dom') as DomCapabilityApi | undefined;
+      if (activityApi && domApi) {
+        activityApi.setAlerted(domApi.root, true);
+      }
+    },
+    onClear: (paneId) => {
+      const apis = capabilityApis.get(paneId);
+      const activityApi = apis?.get('activity') as ActivityCapability | undefined;
+      const domApi = apis?.get('dom') as DomCapabilityApi | undefined;
+      if (activityApi && domApi) {
+        activityApi.setAlerted(domApi.root, false);
+      }
+    },
+  });
 
   // Capability factories: dom → terminal → pty → activity → clipboard → color → shell
   const stub = (name: string) => ({ name, create: () => ({ name, open: () => ({ stub: true }), close: () => {} }) });
@@ -134,7 +153,7 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
     const domDeps = { paneAlert, onPaneClick, onTerminalContextMenu };
     for (const factory of capabilityFactories) {
       const behavior = factory.name === 'dom' ? factory.create(domDeps) : factory.create(null);
-      pane.use(behavior);
+      pane.use(behavior as unknown as PaneBehavior);
       const api = (behavior as { open: (ctx: unknown) => unknown }).open({ id: paneId, getState: pane.getState, emit: () => {}, capability: pane.capability.bind(pane) });
       if (api && typeof api === 'object') apis.set(factory.name, api);
     }
