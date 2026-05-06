@@ -350,7 +350,7 @@ function showTerminalContextMenu(
   shellProfileManager: ShellProfileManagerLike,
   handleMenuAction: HandleMenuActionFn,
 ): void {
-  getClipboardSnapshot(bridge).then((clipboardSnapshot) => {
+  getClipboardSnapshot(backend).then((clipboardSnapshot) => {
 
     const shellProfiles = shellProfileManager.getShellProfiles();
     const defaultShellProfileId = shellProfileManager.getDefaultShellProfileId();
@@ -386,7 +386,7 @@ function showTerminalContextMenu(
       );
     }
 
-    showContextMenu(items, event.clientX, event.clientY, node.paneId, state, bridge, handleMenuAction);
+    showContextMenu(items, event.clientX, event.clientY, node.paneId, state, backend, handleMenuAction);
   });
 }
 
@@ -417,7 +417,7 @@ function showTabContextMenu(
     { label: 'Rename Tab', action: 'tab-rename' },
     { label: 'Close Tab', action: 'tab-close', disabled: panes.length <= 1 },
   ];
-  showContextMenu(items, event.clientX, event.clientY, paneId, state, bridge, handleMenuAction);
+  showContextMenu(items, event.clientX, event.clientY, paneId, state, backend, handleMenuAction);
 }
 
 // ---------------------------------------------------------------------------
@@ -642,20 +642,20 @@ function handleMenuAction(
   paneId: string,
   deps: HandleMenuActionDeps,
 ): void {
-  const { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
+  const { state, backend, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
 
   if (action === 'terminal-copy') {
-    copyTerminalSelection(paneId, state, bridge);
+    copyTerminalSelection(paneId, state, backend);
     return;
   }
 
   if (action === 'terminal-paste') {
-    pasteIntoTerminal(paneId, state, bridge);
+    pasteIntoTerminal(paneId, state, backend);
     return;
   }
 
   if (action === 'terminal-paste-image') {
-    pasteImageIntoTerminal(paneId, state, bridge);
+    pasteImageIntoTerminal(paneId, state, backend);
     return;
   }
 
@@ -665,7 +665,7 @@ function handleMenuAction(
   }
 
   if (action === 'terminal-change-color') {
-    showColorPicker(paneId, state, bridge, focusPane, (a, p) => handleMenuAction(a, p, deps));
+    showColorPicker(paneId, state, backend, focusPane, (a, p) => handleMenuAction(a, p, deps));
     return;
   }
 
@@ -686,7 +686,7 @@ function handleMenuAction(
   }
 
   if (action === 'tab-change-color') {
-    showColorPicker(paneId, state, bridge, focusPane, (a, p) => handleMenuAction(a, p, deps));
+    showColorPicker(paneId, state, backend, focusPane, (a, p) => handleMenuAction(a, p, deps));
     return;
   }
 
@@ -721,7 +721,7 @@ function handleMenuAction(
  *
  * @param deps - Dependencies
  * @param deps.state - Shared state object
- * @param deps.bridge - Tauri bridge
+ * @param deps.backend - Tauri backend
  * @param deps.shellProfileManager - Shell profile manager
  * @param deps.reportError - Error reporting function
  * @param deps.focusPane - Focus a pane
@@ -731,26 +731,26 @@ function handleMenuAction(
  * @returns Context menu manager API
  */
 export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
-  const { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
+  const { state, backend, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
 
   // Bind handleMenuAction with all dependencies
   const boundHandleMenuAction = (action: string, paneId: string): void =>
-    handleMenuAction(action, paneId, { state, bridge, shellProfileManager, reportError: deps.reportError, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor });
+    handleMenuAction(action, paneId, { state, backend, shellProfileManager, reportError: deps.reportError, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor });
 
   return {
     showContextMenu: (items: MenuItem[], x: number, y: number, paneId: string): void =>
-      showContextMenu(items, x, y, paneId, state, bridge, boundHandleMenuAction),
+      showContextMenu(items, x, y, paneId, state, backend, boundHandleMenuAction),
     hideContextMenu: (): void => hideContextMenu(state),
     showTerminalContextMenu: (node: PaneNode, event: MouseEvent): void =>
-      showTerminalContextMenu(node, event, state, bridge, shellProfileManager, boundHandleMenuAction),
+      showTerminalContextMenu(node, event, state, backend, shellProfileManager, boundHandleMenuAction),
     showTabContextMenu: (paneId: string, event: MouseEvent): void =>
-      showTabContextMenu(paneId, event, state, bridge, boundHandleMenuAction),
+      showTabContextMenu(paneId, event, state, backend, boundHandleMenuAction),
     showColorPicker: (paneId: string): void =>
-      showColorPicker(paneId, state, bridge, focusPane, boundHandleMenuAction),
+      showColorPicker(paneId, state, backend, focusPane, boundHandleMenuAction),
     setPaneColor: (paneId: string, color: string): void => setPaneColor(paneId, color, state),
     clearPaneColor: (paneId: string): void => clearPaneColor(paneId, state),
     pasteImageIntoTerminal: (paneId: string, options?: PasteImageOptions): void => {
-      void pasteImageIntoTerminal(paneId, state, bridge, options);
+      void pasteImageIntoTerminal(paneId, state, backend, options);
     },
     handleMenuAction: boundHandleMenuAction,
   };

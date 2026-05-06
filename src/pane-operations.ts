@@ -3,7 +3,8 @@
 import type { Pane, PaneState } from './pane-state';
 import type { PaneRenderer } from './pane-renderer';
 import type { TabBar, TabBarLocalState } from './tab-bar';
-import type { Bridge, ClipboardSnapshot } from './bridge';
+import type { Backend } from './backend';
+import type { ClipboardSnapshot } from './backend';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -47,7 +48,7 @@ export interface PaneOperations {
   togglePaneBreathingMonitor: (paneId: string) => boolean;
   getFocusedPaneAccent: () => string;
   isEditableTarget: () => boolean;
-  getClipboardSnapshot: (bridge: Bridge) => Promise<ClipboardSnapshot>;
+  getClipboardSnapshot: (backend: Backend) => Promise<ClipboardSnapshot>;
   getPaneLabel: (pane: Pane) => string;
   handleTerminalExit: (event: { paneId: string; exitCode: number; reason: string }) => boolean;
 }
@@ -249,12 +250,8 @@ export function createPaneOperations({
     );
   }
 
-  async function getClipboardSnapshot(bridge: Bridge): Promise<ClipboardSnapshot> {
-    try {
-      return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
-    } catch {
-      return { text: '', hasImage: false };
-    }
+  async function getClipboardSnapshot(backend: Backend): Promise<ClipboardSnapshot> {
+    return await backend.clipboard.snapshot();
   }
 
   function getPaneLabel(pane: Pane): string {

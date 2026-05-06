@@ -14,7 +14,7 @@ import { createDomBehavior } from '../pane/capabilities/dom-capability.js';
 import { createActivityBehavior } from '../pane/capabilities/activity-capability.js';
 import { createClipboardBehavior } from '../pane/capabilities/clipboard-capability.js';
 import { createPaneActivityWatcher } from '../pane-activity-watcher.js';
-import type { Bridge } from '../bridge.js';
+import type { Backend } from '../backend.js';
 import type { PaneAlertStrategy } from '../pane-alert-breathing-mask.js';
 
 // ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ export interface PaneInitialState {
 }
 
 export interface PaneManagerDeps {
-  bridge: Bridge;
+  backend: Backend;
   paneAlert: PaneAlertStrategy;
   onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
   onTerminalContextMenu: (node: { paneId: string; root: HTMLElement; terminalHost: HTMLElement }, event: MouseEvent) => Promise<void> | void;
@@ -70,7 +70,7 @@ export interface PaneManager {
 // ---------------------------------------------------------------------------
 
 export function createPaneManager(deps: PaneManagerDeps): PaneManager {
-  const { bridge, paneAlert, onPaneClick, onTerminalContextMenu, onStateChange, defaultCwd = bridge.defaultCwd, defaultTabTitle = bridge.defaultTabTitle, getAccentPalette = () => ['#61afef', '#98c379', '#e5c07b', '#c678dd', '#e06c75'], } = deps;
+  const { backend, paneAlert, onPaneClick, onTerminalContextMenu, onStateChange, defaultCwd = backend.defaultCwd, defaultTabTitle = backend.defaultTabTitle, getAccentPalette = () => ['#61afef', '#98c379', '#e5c07b', '#c678dd', '#e06c75'], } = deps;
 
   const panes = new Map<string, Pane>();
   const capabilityApis = new Map<string, Map<string, unknown>>();
@@ -87,7 +87,7 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
     { name: 'dom', create: (d: unknown) => createDomBehavior(d as Parameters<typeof createDomBehavior>[0]) },
     stub('terminal'), stub('pty'),
     { name: 'activity', create: () => createActivityBehavior({ watcher, alert: paneAlert }) },
-    { name: 'clipboard', create: () => createClipboardBehavior({ bridge }) },
+    { name: 'clipboard', create: () => createClipboardBehavior({ backend }) },
     stub('color'), stub('shell'),
   ];
 
@@ -99,11 +99,11 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
   };
 
   const createPty = async (paneId: string, cwd: string, shellProfileId: string | null): Promise<void> => {
-    try { await bridge.terminal.create({ paneId, cols: 80, rows: 24, cwd, shellProfileId: shellProfileId ?? undefined }); }
+    try { await backend.terminal.create({ paneId, cols: 80, rows: 24, cwd, shellProfileId: shellProfileId ?? undefined }); }
     catch (e) { console.error(`Failed to create PTY for ${paneId}:`, e); }
   };
   const destroyPty = async (paneId: string): Promise<void> => {
-    try { await bridge.terminal.destroy({ paneId }); }
+    try { await backend.terminal.destroy({ paneId }); }
     catch (e) { console.error(`Failed to destroy PTY for ${paneId}:`, e); }
   };
 
