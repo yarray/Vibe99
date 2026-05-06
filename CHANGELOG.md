@@ -48,6 +48,8 @@
 
 ### Added
 
+- **Terminal capability (VIB-174):** Created `src/pane/capabilities/terminal-capability.ts` (122 lines) to manage xterm.js instance and addons lifecycle. Extracts terminal creation logic from `pane-renderer.ts`. Provides `createTerminalBehavior(deps)` factory function with xterm instance creation, addon loading (FitAddon, WebLinksAddon, Unicode11Addon, WebglAddon), event registration (onData, onTitleChange, onSelectionChange), and mounting to dom capability's terminalHost. API includes: instance, fitAddon, write, focus, blur, fit, resize, setTheme, hasSelection, getSelection, selectAll, writeln, clear, dispose.
+
 - E2E tests for Settings panel (VIB-113):
   - Settings panel toggle tests (open/close via button, click outside to close)
   - Font settings tests (font size with limits 10-24, font family)
