@@ -7,85 +7,27 @@
  * @module pane-state
  */
 
+// Re-export shared types from the central types module for backward compatibility
+export type {
+  Pane,
+  SessionPaneEntry,
+  SessionData,
+  PaneStateDeps,
+  PaneState,
+} from './pane/types';
+
+// Import locally for use in the function body
+import type { Pane, SessionPaneEntry, SessionData, PaneStateDeps, PaneState } from './pane/types';
+
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
 
-/** Shape of a single pane object. */
-export interface Pane {
-  id: string;
-  title: string | null;
-  terminalTitle: string;
-  cwd: string;
-  accent: string;
-  customColor?: string;
-  shellProfileId: string | null;
-  breathingMonitor?: boolean;
-}
+// (Types are re-exported from ./pane/types above for backward compatibility)
 
-/** Serialized pane entry as stored in session / layout data. */
-export interface SessionPaneEntry {
-  paneId: string;
-  title: string | null;
-  cwd: string;
-  accent: string;
-  customColor?: string;
-  shellProfileId: string | null;
-  breathingMonitor: boolean;
-}
-
-/** Full session payload produced by `buildSessionData` and consumed by `restoreSession`. */
-export interface SessionData {
-  version: number;
-  panes: SessionPaneEntry[];
-  focusedPaneIndex: number;
-}
-
-/** Dependencies injected into `createPaneState`. */
-export interface PaneStateDeps {
-  defaultCwd: string;
-  defaultTabTitle: string;
-  getAccentPalette: () => string[];
-  onStateChange?: () => void;
-}
-
-/** The full public API surface returned by `createPaneState`. */
-export interface PaneState {
-  // Read operations
-  getPanes: () => Pane[];
-  getFocusedPaneId: () => string | null;
-  getPaneById: (paneId: string) => Pane | null;
-  getPaneIndex: (paneId: string) => number;
-  getFocusedIndex: () => number;
-
-  // Write operations
-  addPane: (shellProfileId?: string | null) => string;
-  closePane: (index: number) => string | null;
-  focusPane: (paneId: string) => boolean;
-  moveFocus: (delta: number) => boolean;
-  navigateLeft: () => boolean;
-  navigateRight: () => boolean;
-  reorderPane: (paneId: string, newIndex: number) => boolean;
-
-  // MRU operations
-  cycleToRecentPane: (options?: { reverse?: boolean }) => string | null;
-  commitPaneCycle: () => void;
-  hasActivePaneCycle: () => boolean;
-  recordPaneVisit: (paneId: string | null) => void;
-
-  // Property modification operations
-  setPaneTitle: (paneId: string, title: string | null) => boolean;
-  setPaneCwd: (paneId: string, cwd: string) => boolean;
-  setPaneColor: (paneId: string, color: string) => boolean;
-  clearPaneColor: (paneId: string) => boolean;
-  setPaneShellProfile: (paneId: string, profileId: string | null) => boolean;
-  setPaneTerminalTitle: (paneId: string, terminalTitle: string) => boolean;
-  togglePaneBreathingMonitor: (paneId: string) => boolean;
-
-  // Session operations
-  buildSessionData: () => SessionData;
-  restoreSession: (session: { panes?: SessionPaneEntry[]; focusedPaneIndex?: number }) => boolean;
-}
+// ---------------------------------------------------------------------------
+// Internal types
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Internal types

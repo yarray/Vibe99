@@ -6,6 +6,8 @@
 
 ### Changed
 
+- **Pane types extraction (VIB-189):** Extracted shared types (`PaneNode`, `Pane`, `PaneState`, `PaneRenderer`, `PaneRendererDeps`, `SessionData`, `SessionPaneEntry`, `PaneStateDeps`) from `pane-renderer.ts` and `pane-state.ts` into `src/pane/types.ts`. Both files now re-export from `pane/types.ts` for backward compatibility. No runtime behavior change.
+
 - **PaneManager lifecycle fix + real capabilities (VIB-183):** Replaced 4 stub capabilities (terminal, pty, color, shell) with real implementations in `create-pane-manager.ts`. Now uses `pane.use(behavior) × N → pane.open()` lifecycle instead of manually calling `behavior.open()` before `pane.open()`. Removed `capabilityApis` Map in favor of `pane.capability(name)` lookup. Added `setState(key, value)` to `PaneHandle` interface so color/shell capabilities can mutate pane state through the handle. Created `createPtyAdapter()` to bridge `PaneHandle` → `PtyBehaviorContext` (adapts `getCwd`/`getShellProfileId` from `getState`, routes `onOutput` through `capability('terminal').write()`). Activity watcher dispatch now uses `pane.capability()` instead of separate API map.
 
 ### Added

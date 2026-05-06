@@ -11,6 +11,9 @@ import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
 import type { SettingsManager } from './settings';
 import type { TabBar } from './tab-bar';
 
+// Re-export shared types for backward compatibility
+export type * from './pane/types';
+
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
@@ -494,7 +497,7 @@ export function createPaneRenderer({
 
   async function getClipboardSnapshot(): Promise<{ text: string; hasImage: boolean }> {
     try {
-      return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+      return await backend.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
     } catch {
       return { text: '', hasImage: false };
     }
