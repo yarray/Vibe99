@@ -4,7 +4,7 @@
  * @module pane/capabilities/clipboard-capability
  */
 
-import type { Bridge } from '../../bridge';
+import type { Backend } from '../../backend';
 
 export interface ClipboardBehaviorContext {
   id: string;
@@ -12,7 +12,7 @@ export interface ClipboardBehaviorContext {
 }
 
 export interface ClipboardBehaviorDeps {
-  bridge: Bridge;
+  backend: Backend;
 }
 
 export interface ClipboardCapability {
@@ -22,7 +22,7 @@ export interface ClipboardCapability {
 }
 
 export function createClipboardBehavior(deps: ClipboardBehaviorDeps) {
-  const { bridge } = deps;
+  const { backend } = deps;
   let ctx: ClipboardBehaviorContext | null = null;
 
   return {
@@ -43,7 +43,7 @@ export function createClipboardBehavior(deps: ClipboardBehaviorDeps) {
 
       terminal.onSelectionChange(() => {
         const selection = terminal.getSelection();
-        if (selection) bridge.writeClipboardText(selection);
+        if (selection) void backend.clipboard.write(selection);
       });
 
       terminal.parser.registerOscHandler(52, (data) => {
@@ -55,7 +55,7 @@ export function createClipboardBehavior(deps: ClipboardBehaviorDeps) {
           const text = new TextDecoder().decode(
             Uint8Array.from(atob(base64Text), (c) => c.charCodeAt(0)),
           );
-          bridge.writeClipboardText(text);
+          void backend.clipboard.write(text);
         } catch { /* invalid base64 */ }
         return true;
       });
@@ -72,24 +72,20 @@ export function createClipboardBehavior(deps: ClipboardBehaviorDeps) {
       }>('terminal');
       const terminal = termCap?.instance;
       if (!terminal?.sessionReady) return false;
-      if (bridge.platform === 'win32') {
+      if (backend.platform === 'win32') {
         terminal.paste(text);
       } else {
-        bridge.writeTerminal({ paneId: ctx.id, data: text });
+        void backend.terminal.write({ paneId: ctx.id, data: text });
       }
       return true;
     },
 
     readClipboard(): Promise<string> {
-      return bridge.readClipboardText();
+      return backend.clipboard.read();
     },
 
     snapshot(): Promise<{ text: string; hasImage: boolean }> {
-      try {
-        return bridge.getClipboardSnapshot?.() ?? Promise.resolve({ text: '', hasImage: false });
-      } catch {
-        return Promise.resolve({ text: '', hasImage: false });
-      }
+      return backend.clipboard.snapshot();
     },
   };
 }

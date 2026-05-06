@@ -4,12 +4,25 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **PaneManager lifecycle fix + real capabilities (VIB-183):** Replaced 4 stub capabilities (terminal, pty, color, shell) with real implementations in `create-pane-manager.ts`. Now uses `pane.use(behavior) × N → pane.open()` lifecycle instead of manually calling `behavior.open()` before `pane.open()`. Removed `capabilityApis` Map in favor of `pane.capability(name)` lookup. Added `setState(key, value)` to `PaneHandle` interface so color/shell capabilities can mutate pane state through the handle. Created `createPtyAdapter()` to bridge `PaneHandle` → `PtyBehaviorContext` (adapts `getCwd`/`getShellProfileId` from `getState`, routes `onOutput` through `capability('terminal').write()`). Activity watcher dispatch now uses `pane.capability()` instead of separate API map.
+
 ### Added
+
+- **PTY capability module (VIB-175):** Created `src/pane/capabilities/pty-capability.ts` (119 lines) extracting PTY session lifecycle from `pane-renderer.ts`. Factory `createPtyBehavior(deps)` returns `{ name: 'pty', open(ctx), close() }`. `open(ctx)` registers per-pane backend event listeners (onData/onExit filtered by paneId) and returns self-contained session API: `sessionReady`/`isShellChanging`/`recentShellChange` getters; `create()`/`write()`/`resize()`/`destroy()`/`beginShellChange()`/`endShellChange()`/`close()` methods. No xterm dependency — pure backend session management.
 
 - **DOM capability extraction (VIB-173):** Extracted DOM creation and lifecycle from `pane-renderer.ts` into new `src/pane/capabilities/dom-capability.ts` (~174 lines). Factory `createDomBehavior(deps)` returns `{ name: 'dom', open(ctx), close(ctx, api) }`. open() creates DOM tree: root(article.pane) > shell > body > surface > terminalHost. API includes: `root`/`terminalHost` refs, `mount(container)`/`unmount()`, `setLayout({ left, height, zIndex })`, `setFocused(isFocused, isNavTarget)`, `setAccent(color)`, `dispose()`. Integrates breathing mask alert strategy and registers click-focus and right-click context menu events. All class names preserved from existing implementation.
 - **Pane manager (VIB-178):** Created `src/manager/create-pane-manager.ts` (~188 lines) for Pane collection CRUD, focus management, layout coordination, and session persistence. Factory `createPaneManager(deps)` returns manager with: `create(initialState)` creates pane mounting capabilities in order (dom→terminal→pty→activity→clipboard→color→shell) then calls `pane.open()`, `destroy(paneId)` calls `pane.close()` + removes from collection + destroys PTY, `get(paneId)`/`getAll()`/`getActive()`/`getActiveId()` for read access, `setActive(paneId)` sets active pane, `size()` returns pane count, `serializeAll()` serializes all panes for session persistence, `restoreSession()` restores panes from serialized entries. Integrates with `bridge.terminal` for PTY creation/destruction. Uses stub capabilities for terminal/pty/activity/clipboard/color/shell (to be implemented in follow-up tasks).
+- **Focus controller (VIB-179):** Created `src/manager/create-focus-controller.ts` (~170 lines) extracting MRU order, pane cycling, and navigation mode logic from `pane-state.ts` and `renderer.ts`. Factory `createFocusController(paneManager, deps)` returns controller with: `getMode()`/`setMode()`/`enterNavigationMode()`/`cancelNavigationMode()` for navigation mode state management including `enterNavSourcePaneId` tracking, `recordPaneVisit()`/`cycleToRecentPane()`/`commitPaneCycle()`/`hasActivePaneCycle()` for MRU-based Ctrl+Tab cycling, `focusPane()`/`moveFocus()`/`navigateLeft()`/`navigateRight()`/`focusPaneAt()` for focus movement with appropriate MRU updates, `getPaneCount()`/`getPaneIdAt()` for pane indexing. Integrates with `PaneManager` via `paneManager.getAll()`/`getActiveId()`/`setActive()`/`size()`. Delegates DOM/rendering side effects to `onModeChange`/`onFocusChange` callbacks.
 
 ### Changed
+
+- **Backend/Bridge unification (VIB-186):**
+  - Added flat alias properties (e.g., `createTerminal`, `writeTerminal`, `readClipboardText`, `writeClipboardText`) to `Backend` interface in `src/backend.ts` to match the full `Bridge` interface
+  - Switched Phase 2 files `src/pane/capabilities/clipboard-capability.ts` and `src/manager/create-pane-manager.ts` to import `Backend` from `backend.ts` instead of `Bridge` from `bridge.ts`
+  - `bridge.ts` is preserved unchanged for backward compatibility with existing code
+  - No functional changes; Phase 2 code now consistently uses the new `backend.ts` module
 
 - **Backend API domain grouping (VIB-171):**
   - Created new `src/backend.ts` (~540 lines) that exports `createBackend(tauri)` function with domain-grouped APIs

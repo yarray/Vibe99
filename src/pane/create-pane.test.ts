@@ -33,7 +33,7 @@ describe('createPane', () => {
   it('open() is idempotent', () => {
     let count = 0;
     const pane = createPane({ id: 'p' });
-    pane.use({ open: () => { count++; } });
+    pane.use({ name: 'stub', open: () => { count++; } });
     pane.open();
     pane.open();
     expect(count).toBe(1);
@@ -42,6 +42,7 @@ describe('createPane', () => {
   it('command() dispatches to behavior and returns result', () => {
     const pane = createPane({ id: 'p' });
     pane.use({
+      name: 'cmd',
       command: (_p, payload) => {
         return `result: ${payload}`;
       },
@@ -50,13 +51,62 @@ describe('createPane', () => {
     expect(result).toBe('result: bar');
   });
 
-  it('capability() returns named property from a behavior', () => {
+  it('capability() returns undefined before open()', () => {
     const pane = createPane({ id: 'p' });
     pane.use({
-      myCapability: () => 'cap-value',
+      name: 'myCap',
+      open: () => ({ value: 42 }),
     });
-    const cap = pane.capability<( () => string)>('myCapability');
-    expect(cap?.()).toBe('cap-value');
+    expect(pane.capability('myCap')).toBeUndefined();
+  });
+
+  it('capability() returns API collected from open()', () => {
+    const pane = createPane({ id: 'p' });
+    pane.use({
+      name: 'myCap',
+      open: () => ({ getValue: () => 'cap-value' }),
+    });
+    pane.open();
+    const cap = pane.capability<{ getValue: () => string }>('myCap');
+    expect(cap?.getValue()).toBe('cap-value');
+  });
+
+  it('open() collects APIs from multiple behaviors into capability map', () => {
+    const pane = createPane({ id: 'p' });
+    pane.use({ name: 'alpha', open: () => ({ tag: 'a' }) });
+    pane.use({ name: 'beta', open: () => ({ tag: 'b' }) });
+    pane.open();
+    expect(pane.capability<{ tag: string }>('alpha')?.tag).toBe('a');
+    expect(pane.capability<{ tag: string }>('beta')?.tag).toBe('b');
+  });
+
+  it('open() skips behaviors whose open() returns undefined', () => {
+    const pane = createPane({ id: 'p' });
+    let sideEffect = false;
+    pane.use({ name: 'noReturn', open: () => { sideEffect = true; } });
+    pane.open();
+    expect(sideEffect).toBe(true);
+    expect(pane.capability('noReturn')).toBeUndefined();
+  });
+
+  it('handle.capability() enables inter-capability lookup during open()', () => {
+    const pane = createPane({ id: 'p' });
+    let receivedDom: unknown = null;
+    const host = { tag: 'div' };
+    pane.use({
+      name: 'dom',
+      open: () => ({ host }),
+    });
+    pane.use({
+      name: 'terminal',
+      open: (h) => {
+        receivedDom = h.capability('dom');
+        return { write: (s: string) => s };
+      },
+    });
+    pane.open();
+    expect(receivedDom).toEqual({ host });
+    expect((receivedDom as { host: { tag: string } }).host.tag).toBe('div');
   });
 
   it('getState / setState work correctly', () => {
@@ -69,8 +119,8 @@ describe('createPane', () => {
   it('close() calls behaviors in reverse order', () => {
     const order: string[] = [];
     const pane = createPane({ id: 'p' });
-    pane.use({ name: 'a', close: () => order.push('a') });
-    pane.use({ name: 'b', close: () => order.push('b') });
+    pane.use({ name: 'a', close: () => { order.push('a'); } });
+    pane.use({ name: 'b', close: () => { order.push('b'); } });
     pane.open();
     pane.close();
     expect(order).toEqual(['b', 'a']);
@@ -79,7 +129,7 @@ describe('createPane', () => {
   it('close() is idempotent', () => {
     let count = 0;
     const pane = createPane({ id: 'p' });
-    pane.use({ close: () => { count++; } });
+    pane.use({ name: 'stub', close: () => { count++; } });
     pane.open();
     pane.close();
     pane.close();
@@ -120,7 +170,6 @@ describe('createPane', () => {
     const pane = createPane({ id: 'p' });
     pane.open();
     pane.close();
-    // Should not throw
-    pane.use({ open: () => { throw new Error('should not be called'); } });
+    pane.use({ name: 'late', open: () => { throw new Error('should not be called'); } });
   });
 });

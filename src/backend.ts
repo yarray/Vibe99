@@ -184,6 +184,41 @@ export interface Backend {
 
   // Lifecycle
   cwdReady: Promise<void>;
+
+  // -- Flat aliases (backward compat with Bridge consumers) --
+  createTerminal: TerminalApi['create'];
+  writeTerminal: TerminalApi['write'];
+  resizeTerminal: TerminalApi['resize'];
+  destroyTerminal: TerminalApi['destroy'];
+  onTerminalData: TerminalApi['onData'];
+  onTerminalExit: TerminalApi['onExit'];
+
+  readClipboardText: ClipboardApi['read'];
+  writeClipboardText: ClipboardApi['write'];
+  getClipboardSnapshot: ClipboardApi['snapshot'];
+
+  loadSettings: SettingsApi['load'];
+  saveSettings: SettingsApi['save'];
+
+  listShellProfiles: ShellApi['list'];
+  addShellProfile: ShellApi['add'];
+  removeShellProfile: ShellApi['remove'];
+  setDefaultShellProfile: ShellApi['setDefault'];
+  detectShellProfiles: ShellApi['detect'];
+
+  closeWindow: WindowApi['close'];
+  openExternalUrl: WindowApi['openUrl'];
+  showContextMenu: WindowApi['showMenu'];
+
+  listLayouts: LayoutsApi['list'];
+  saveLayout: LayoutsApi['save'];
+  deleteLayout: LayoutsApi['delete'];
+  renameLayout: LayoutsApi['rename'];
+  openLayoutWindow: LayoutsApi['openWindow'];
+  openLayoutInNewWindow: LayoutsApi['openInNewWindow'];
+  isWindowFullscreen: LayoutsApi['isFullscreen'];
+  setWindowFullscreen: LayoutsApi['setFullscreen'];
+  setLayoutAsDefault: LayoutsApi['setAsDefault'];
 }
 
 // ============================================================================
@@ -310,54 +345,101 @@ function createUnavailableBackend(): Backend {
 
   const defaultCwd = '/';
 
+  const terminal = {
+    create: fail,
+    write: fail,
+    resize: fail,
+    destroy: fail,
+    onData: () => () => {},
+    onExit: () => () => {},
+  };
+
+  const clipboard = {
+    read: () => Promise.reject(new Error('Clipboard is unavailable')),
+    write: fail,
+    snapshot: async () => ({ text: '', hasImage: false }),
+  };
+
+  const settings = {
+    load: () => Promise.resolve({}),
+    save: () => Promise.resolve({}),
+  };
+
+  const shell = {
+    list: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
+    add: fail,
+    remove: fail,
+    setDefault: fail,
+    detect: () => Promise.resolve([]),
+  };
+
+  const window = {
+    close: fail,
+    openUrl: fail,
+    showMenu: () => {},
+  };
+
+  const layouts = {
+    list: () => Promise.resolve({ layouts: [], defaultLayoutId: '' }),
+    save: fail,
+    delete: fail,
+    rename: fail,
+    openWindow: fail,
+    openInNewWindow: fail,
+    isFullscreen: undefined,
+    setFullscreen: undefined,
+    setAsDefault: fail,
+  };
+
   return {
     platform: getRuntimePlatform(),
     currentWindowLabel: 'browser',
     defaultCwd,
     defaultTabTitle: basename(defaultCwd),
-    terminal: {
-      create: fail,
-      write: fail,
-      resize: fail,
-      destroy: fail,
-      onData: () => () => {},
-      onExit: () => () => {},
-    },
-    clipboard: {
-      read: () => Promise.reject(new Error('Clipboard is unavailable')),
-      write: fail,
-      snapshot: async () => ({ text: '', hasImage: false }),
-    },
-    settings: {
-      load: () => Promise.resolve({}),
-      save: () => Promise.resolve({}),
-    },
-    shell: {
-      list: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
-      add: fail,
-      remove: fail,
-      setDefault: fail,
-      detect: () => Promise.resolve([]),
-    },
-    window: {
-      close: fail,
-      openUrl: fail,
-      showMenu: () => {},
-    },
-    layouts: {
-      list: () => Promise.resolve({ layouts: [], defaultLayoutId: '' }),
-      save: fail,
-      delete: fail,
-      rename: fail,
-      openWindow: fail,
-      openInNewWindow: fail,
-      isFullscreen: undefined,
-      setFullscreen: undefined,
-      setAsDefault: fail,
-    },
+    terminal,
+    clipboard,
+    settings,
+    shell,
+    window,
+    layouts,
     onMenuAction: () => () => {},
     onLayoutFocusNotice: undefined,
     cwdReady: Promise.resolve(),
+
+    // Flat aliases
+    createTerminal: terminal.create,
+    writeTerminal: terminal.write,
+    resizeTerminal: terminal.resize,
+    destroyTerminal: terminal.destroy,
+    onTerminalData: terminal.onData,
+    onTerminalExit: terminal.onExit,
+
+    readClipboardText: clipboard.read,
+    writeClipboardText: clipboard.write,
+    getClipboardSnapshot: clipboard.snapshot,
+
+    loadSettings: settings.load,
+    saveSettings: settings.save,
+
+    listShellProfiles: shell.list,
+    addShellProfile: shell.add,
+    removeShellProfile: shell.remove,
+    setDefaultShellProfile: shell.setDefault,
+    detectShellProfiles: shell.detect,
+
+    closeWindow: window.close,
+    openExternalUrl: window.openUrl,
+    showContextMenu: window.showMenu,
+
+    listLayouts: layouts.list,
+    saveLayout: layouts.save,
+    deleteLayout: layouts.delete,
+    renameLayout: layouts.rename,
+    openLayoutWindow: layouts.openWindow,
+    openLayoutInNewWindow: layouts.openInNewWindow,
+    isWindowFullscreen: layouts.isFullscreen,
+    setWindowFullscreen: layouts.setFullscreen,
+    setLayoutAsDefault: layouts.setAsDefault,
   };
 }
 
@@ -434,82 +516,132 @@ function createTauriBackend(tauri: TauriGlobal, windowLayoutId: string | null): 
     return win.once('tauri://created', () => {}).then(() => {});
   }
 
+  const onMenuAction = (handler: (event: MenuActionEvent) => void) =>
+    onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler);
+  const onLayoutFocusNotice = (handler: () => void) =>
+    onTauriEvent<void>(LAYOUT_FOCUS_NOTICE_EVENT, handler);
+
+  const terminal: TerminalApi = {
+    create: (payload: TerminalCreatePayload) =>
+      invoke('terminal_create', {
+        paneId: payload.paneId,
+        cols: payload.cols,
+        rows: payload.rows,
+        cwd: payload.cwd,
+        shellProfileId: payload.shellProfileId ?? null,
+      }) as Promise<void>,
+    write: (payload: TerminalWritePayload) =>
+      invoke('terminal_write', {
+        paneId: payload.paneId,
+        data: base64Encode(payload.data),
+      }) as Promise<void>,
+    resize: (payload: TerminalResizePayload) =>
+      invoke('terminal_resize', {
+        paneId: payload.paneId,
+        cols: payload.cols,
+        rows: payload.rows,
+      }) as Promise<void>,
+    destroy: (payload: TerminalDestroyPayload) =>
+      invoke('terminal_destroy', { paneId: payload.paneId }) as Promise<void>,
+    onData: (handler: (event: TerminalDataEvent) => void) =>
+      onTauriEvent<TerminalDataEvent>('vibe99:terminal-data', handler),
+    onExit: (handler: (event: TerminalExitEvent) => void) =>
+      onTauriEvent<TerminalExitEvent>('vibe99:terminal-exit', handler),
+  };
+
+  const clipboard: ClipboardApi = {
+    read: () => clipboardReadText(),
+    write: (text: string) => clipboardWriteText(text),
+    snapshot: async () => {
+      try {
+        const text = await clipboardReadText();
+        return { text: text ?? '', hasImage: false };
+      } catch {
+        return { text: '', hasImage: false };
+      }
+    },
+  };
+
+  const settings: SettingsApi = {
+    load: () => invoke<SettingsData>('settings_load'),
+    save: (payload: SettingsData) => invoke<SettingsData>('settings_save', { settings: payload }),
+  };
+
+  const shell: ShellApi = {
+    list: () => invoke<ShellProfilesListResult>('shell_profiles_list'),
+    add: (profile: ShellProfileData) => invoke<void>('shell_profile_add', { profile }),
+    remove: (profileId: string) => invoke<void>('shell_profile_remove', { profileId }),
+    setDefault: (profileId: string) => invoke<void>('shell_profile_set', { profileId }),
+    detect: () => invoke<string[]>('shell_profiles_detect'),
+  };
+
+  const window: WindowApi = {
+    close: () => getCurrentWindow().close(),
+    openUrl: (url: string) => openUrl(url),
+    showMenu: () => {},
+  };
+
+  const layouts: LayoutsApi = {
+    list: () => invoke<LayoutsListResult>('layouts_list'),
+    save: (layout: LayoutData) => invoke<LayoutsListResult>('layout_save', { layout }),
+    delete: (layoutId: string) => invoke<void>('layout_delete', { layoutId }),
+    rename: (layoutId: string, newName: string) => invoke<void>('layout_rename', { layoutId, newName }),
+    openWindow: (layoutId: string) => openLayoutWindow(layoutId),
+    openInNewWindow: (layoutId: string) => openLayoutWindow(layoutId),
+    isFullscreen: () => getCurrentWindow().isFullscreen(),
+    setFullscreen: (fullscreen: boolean) => getCurrentWindow().setFullscreen(fullscreen),
+    setAsDefault: (layoutId: string) => invoke<LayoutsListResult>('layout_set_default', { layoutId }),
+  };
+
   return {
     platform: getRuntimePlatform(),
     currentWindowLabel: currentWindow.label,
     get defaultCwd() { return _resolvedCwd; },
     get defaultTabTitle() { return basename(_resolvedCwd); },
-    terminal: {
-      create: (payload: TerminalCreatePayload) =>
-        invoke('terminal_create', {
-          paneId: payload.paneId,
-          cols: payload.cols,
-          rows: payload.rows,
-          cwd: payload.cwd,
-          shellProfileId: payload.shellProfileId ?? null,
-        }),
-      write: (payload: TerminalWritePayload) =>
-        invoke('terminal_write', {
-          paneId: payload.paneId,
-          data: base64Encode(payload.data),
-        }),
-      resize: (payload: TerminalResizePayload) =>
-        invoke('terminal_resize', {
-          paneId: payload.paneId,
-          cols: payload.cols,
-          rows: payload.rows,
-        }),
-      destroy: (payload: TerminalDestroyPayload) =>
-        invoke('terminal_destroy', { paneId: payload.paneId }),
-      onData: (handler: (event: TerminalDataEvent) => void) =>
-        onTauriEvent<TerminalDataEvent>('vibe99:terminal-data', handler),
-      onExit: (handler: (event: TerminalExitEvent) => void) =>
-        onTauriEvent<TerminalExitEvent>('vibe99:terminal-exit', handler),
-    },
-    clipboard: {
-      read: () => clipboardReadText(),
-      write: (text: string) => clipboardWriteText(text),
-      snapshot: async () => {
-        try {
-          const text = await clipboardReadText();
-          return { text: text ?? '', hasImage: false };
-        } catch {
-          return { text: '', hasImage: false };
-        }
-      },
-    },
-    settings: {
-      load: () => invoke('settings_load'),
-      save: (payload: SettingsData) => invoke('settings_save', { settings: payload }),
-    },
-    shell: {
-      list: () => invoke('shell_profiles_list'),
-      add: (profile: ShellProfileData) => invoke('shell_profile_add', { profile }),
-      remove: (profileId: string) => invoke('shell_profile_remove', { profileId }),
-      setDefault: (profileId: string) => invoke('shell_profile_set', { profileId }),
-      detect: () => invoke('shell_profiles_detect'),
-    },
-    window: {
-      close: () => getCurrentWindow().close(),
-      openUrl: (url: string) => openUrl(url),
-      showMenu: () => {},
-    },
-    layouts: {
-      list: () => invoke('layouts_list'),
-      save: (layout: LayoutData) => invoke('layout_save', { layout }),
-      delete: (layoutId: string) => invoke('layout_delete', { layoutId }),
-      rename: (layoutId: string, newName: string) => invoke('layout_rename', { layoutId, newName }),
-      openWindow: (layoutId: string) => openLayoutWindow(layoutId),
-      openInNewWindow: (layoutId: string) => openLayoutWindow(layoutId),
-      isFullscreen: () => getCurrentWindow().isFullscreen(),
-      setFullscreen: (fullscreen: boolean) => getCurrentWindow().setFullscreen(fullscreen),
-      setAsDefault: (layoutId: string) => invoke('layout_set_default', { layoutId }),
-    },
-    onMenuAction: (handler: (event: MenuActionEvent) => void) =>
-      onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler),
-    onLayoutFocusNotice: (handler: () => void) =>
-      onTauriEvent<void>(LAYOUT_FOCUS_NOTICE_EVENT, handler),
+    terminal,
+    clipboard,
+    settings,
+    shell,
+    window,
+    layouts,
+    onMenuAction,
+    onLayoutFocusNotice,
     cwdReady: _cwdReady,
+
+    // Flat aliases
+    createTerminal: terminal.create,
+    writeTerminal: terminal.write,
+    resizeTerminal: terminal.resize,
+    destroyTerminal: terminal.destroy,
+    onTerminalData: terminal.onData,
+    onTerminalExit: terminal.onExit,
+
+    readClipboardText: clipboard.read,
+    writeClipboardText: clipboard.write,
+    getClipboardSnapshot: clipboard.snapshot,
+
+    loadSettings: settings.load,
+    saveSettings: settings.save,
+
+    listShellProfiles: shell.list,
+    addShellProfile: shell.add,
+    removeShellProfile: shell.remove,
+    setDefaultShellProfile: shell.setDefault,
+    detectShellProfiles: shell.detect,
+
+    closeWindow: window.close,
+    openExternalUrl: window.openUrl,
+    showContextMenu: window.showMenu,
+
+    listLayouts: layouts.list,
+    saveLayout: layouts.save,
+    deleteLayout: layouts.delete,
+    renameLayout: layouts.rename,
+    openLayoutWindow: layouts.openWindow,
+    openLayoutInNewWindow: layouts.openInNewWindow,
+    isWindowFullscreen: layouts.isFullscreen,
+    setWindowFullscreen: layouts.setFullscreen,
+    setLayoutAsDefault: layouts.setAsDefault,
   };
 }
 

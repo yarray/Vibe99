@@ -5,17 +5,24 @@
  * Integrates with backend for PTY creation/destruction.
  *
  * Capability mounting order: dom → terminal → pty → activity → clipboard → color → shell
+ * Lifecycle: pane.use(behavior) × N → pane.open() → all behaviors opened in order
  *
  * @module manager/create-pane-manager
  */
 
-import { createPane, type Pane, type PaneDeps } from '../pane/create-pane.js';
+import { createPane, type Pane, type PaneBehavior, type PaneHandle } from '../pane/create-pane.js';
 import { createDomBehavior } from '../pane/capabilities/dom-capability.js';
-import { createActivityBehavior } from '../pane/capabilities/activity-capability.js';
+import { createTerminalBehavior, type TerminalCapability } from '../pane/capabilities/terminal-capability.js';
+import { createPtyBehavior, type PtyCapability, type PtyBehaviorContext } from '../pane/capabilities/pty-capability.js';
+import { createActivityBehavior, type ActivityCapability } from '../pane/capabilities/activity-capability.js';
 import { createClipboardBehavior } from '../pane/capabilities/clipboard-capability.js';
+import { createColorBehavior } from '../pane/capabilities/color-capability.js';
+import { createShellBehavior } from '../pane/capabilities/shell-capability.js';
 import { createPaneActivityWatcher } from '../pane-activity-watcher.js';
-import type { Bridge } from '../bridge.js';
+import { getDefaultFontFamily } from '../settings.js';
+import type { Backend } from '../backend.js';
 import type { PaneAlertStrategy } from '../pane-alert-breathing-mask.js';
+import type { DomCapabilityApi } from '../pane/capabilities/dom-capability.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,7 +49,7 @@ export interface PaneInitialState {
 }
 
 export interface PaneManagerDeps {
-  bridge: Bridge;
+  backend: Backend;
   paneAlert: PaneAlertStrategy;
   onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
   onTerminalContextMenu: (node: { paneId: string; root: HTMLElement; terminalHost: HTMLElement }, event: MouseEvent) => Promise<void> | void;
@@ -66,45 +73,81 @@ export interface PaneManager {
 }
 
 // ---------------------------------------------------------------------------
+// Pty adapter — bridges PaneHandle to PtyBehaviorContext
+// ---------------------------------------------------------------------------
+
+function createPtyAdapter(
+  ptyBehavior: ReturnType<typeof createPtyBehavior>,
+  defaultCwd: string,
+): PaneBehavior {
+  return {
+    name: 'pty',
+    open(handle: PaneHandle): PtyCapability {
+      const ctx: PtyBehaviorContext = {
+        id: handle.id,
+        getCwd: () => (handle.getState<string>('cwd') as string | undefined) ?? defaultCwd,
+        getShellProfileId: () => handle.getState<string>('shellProfileId') ?? null,
+        onOutput: (data: string) => {
+          handle.capability<TerminalCapability>('terminal')?.write(data);
+        },
+        capability: handle.capability,
+      };
+      return ptyBehavior.open(ctx);
+    },
+    close(): void {
+      ptyBehavior.close();
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
 export function createPaneManager(deps: PaneManagerDeps): PaneManager {
-  const { bridge, paneAlert, onPaneClick, onTerminalContextMenu, onStateChange, defaultCwd = bridge.defaultCwd, defaultTabTitle = bridge.defaultTabTitle, getAccentPalette = () => ['#61afef', '#98c379', '#e5c07b', '#c678dd', '#e06c75'], } = deps;
+  const {
+    backend,
+    paneAlert,
+    onPaneClick,
+    onTerminalContextMenu,
+    onStateChange,
+    defaultCwd = backend.defaultCwd,
+    defaultTabTitle = backend.defaultTabTitle,
+    getAccentPalette = () => ['#61afef', '#98c379', '#e5c07b', '#c678dd', '#e06c75'],
+  } = deps;
 
   const panes = new Map<string, Pane>();
-  const capabilityApis = new Map<string, Map<string, unknown>>();
   let activePaneId: string | null = null;
   let nextPaneNumber = 1;
 
-  // Shared activity watcher. The watcher itself has no breathing-mask knowledge;
-  // its onAlert/onClear callbacks are registered per-pane by activity-capability.
-  const watcher = createPaneActivityWatcher();
-
-  // Capability factories: dom → terminal → pty → activity → clipboard → color → shell
-  const stub = (name: string) => ({ name, create: () => ({ name, open: () => ({ stub: true }), close: () => {} }) });
-  const capabilityFactories = [
-    { name: 'dom', create: (d: unknown) => createDomBehavior(d as Parameters<typeof createDomBehavior>[0]) },
-    stub('terminal'), stub('pty'),
-    { name: 'activity', create: () => createActivityBehavior({ watcher, alert: paneAlert }) },
-    { name: 'clipboard', create: () => createClipboardBehavior({ bridge }) },
-    stub('color'), stub('shell'),
-  ];
+  // Shared activity watcher. Global onAlert/onClear callbacks dispatch to the
+  // per-pane activity capability API via pane.capability().
+  const watcher = createPaneActivityWatcher({
+    onAlert: (paneId) => {
+      const pane = panes.get(paneId);
+      if (!pane) return;
+      const activityApi = pane.capability<ActivityCapability>('activity');
+      const domApi = pane.capability<DomCapabilityApi>('dom');
+      if (activityApi && domApi) {
+        activityApi.setAlerted(domApi.root, true);
+      }
+    },
+    onClear: (paneId) => {
+      const pane = panes.get(paneId);
+      if (!pane) return;
+      const activityApi = pane.capability<ActivityCapability>('activity');
+      const domApi = pane.capability<DomCapabilityApi>('dom');
+      if (activityApi && domApi) {
+        activityApi.setAlerted(domApi.root, false);
+      }
+    },
+  });
 
   const notify = (): void => { onStateChange?.(); };
   const genId = (): string => `p${nextPaneNumber++}`;
   const getNextAccent = (): string => {
     const used = new Set(Array.from(panes.values()).map((p) => (p.getState<string>('accent') || '#61afef').toLowerCase()));
     return getAccentPalette().find((c) => !used.has(c.toLowerCase())) ?? getAccentPalette()[(nextPaneNumber - 1) % getAccentPalette().length];
-  };
-
-  const createPty = async (paneId: string, cwd: string, shellProfileId: string | null): Promise<void> => {
-    try { await bridge.terminal.create({ paneId, cols: 80, rows: 24, cwd, shellProfileId: shellProfileId ?? undefined }); }
-    catch (e) { console.error(`Failed to create PTY for ${paneId}:`, e); }
-  };
-  const destroyPty = async (paneId: string): Promise<void> => {
-    try { await bridge.terminal.destroy({ paneId }); }
-    catch (e) { console.error(`Failed to destroy PTY for ${paneId}:`, e); }
   };
 
   const get = (paneId: string): Pane | null => panes.get(paneId) ?? null;
@@ -115,8 +158,9 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
 
   const create = (initialState: PaneInitialState): Pane => {
     const paneId = initialState.paneId ?? genId();
+    const accent = initialState.accent ?? getNextAccent();
     const state: Record<string, unknown> = {
-      accent: initialState.accent ?? getNextAccent(),
+      accent,
       title: initialState.title ?? null,
       cwd: initialState.cwd ?? defaultCwd,
       customColor: initialState.customColor,
@@ -124,23 +168,67 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
       breathingMonitor: initialState.breathingMonitor ?? false,
       terminalTitle: defaultTabTitle,
     };
-    const pane = createPane({
-      id: paneId,
-      initialState: state,
-      deps: { onEvent: (e, id) => { if (e.type === 'close') capabilityApis.delete(id); } },
-    });
 
-    const apis = new Map<string, unknown>();
-    const domDeps = { paneAlert, onPaneClick, onTerminalContextMenu };
-    for (const factory of capabilityFactories) {
-      const behavior = factory.name === 'dom' ? factory.create(domDeps) : factory.create(null);
-      pane.use(behavior);
-      const api = (behavior as { open: (ctx: unknown) => unknown }).open({ id: paneId, getState: pane.getState, emit: () => {}, capability: pane.capability.bind(pane) });
-      if (api && typeof api === 'object') apis.set(factory.name, api);
-    }
-    capabilityApis.set(paneId, apis);
+    const pane = createPane({ id: paneId, initialState: state });
+
+    pane.use(createDomBehavior({
+      paneAlert,
+      onPaneClick,
+      onTerminalContextMenu,
+    }) as unknown as PaneBehavior);
+
+    // 2. terminal — xterm.js lifecycle
+    pane.use(createTerminalBehavior({
+      getFontFamily: () => getDefaultFontFamily(backend.platform),
+      getFontSize: () => 13,
+      getAccent: () => pane.getState<string>('accent') ?? '#61afef',
+      onData: (data) => {
+        pane.capability<PtyCapability>('pty')?.write(data);
+      },
+      onTitleChange: (title) => {
+        pane.setState({ terminalTitle: title });
+      },
+      onSelectionChange: () => {
+        // Clipboard capability handles auto-copy via its own terminal hooks
+      },
+    }) as unknown as PaneBehavior);
+
+    // 3. pty — backend PTY session lifecycle (adapter bridges PaneHandle → PtyBehaviorContext)
+    const ptyBehavior = createPtyBehavior({
+      backend,
+      onExit: (event) => {
+        console.warn(`PTY exited for pane ${event.paneId}: code=${event.exitCode} reason=${event.reason}`);
+      },
+    });
+    pane.use(createPtyAdapter(ptyBehavior, defaultCwd));
+
+    // 4. activity — pane-activity-watcher integration
+    pane.use(createActivityBehavior({ watcher, alert: paneAlert }) as unknown as PaneBehavior);
+
+    // 5. clipboard — auto-copy + OSC 52
+    pane.use(createClipboardBehavior({ backend }) as unknown as PaneBehavior);
+
+    // 6. color — accent color management
+    pane.use(createColorBehavior({
+      getAccent: () => pane.getState<string>('accent') ?? '#61afef',
+      setCustomColor: (_paneId: string, _color: string) => {
+        // DOM update handled by render loop watching state changes
+      },
+      clearCustomColor: (_paneId: string) => {
+        // DOM update handled by render loop watching state changes
+      },
+      scheduleWindowLayoutSave: () => onStateChange?.(),
+    }) as unknown as PaneBehavior);
+
+    // 7. shell — shell profile switching
+    pane.use(createShellBehavior({
+      scheduleWindowLayoutSave: () => onStateChange?.(),
+    }) as unknown as PaneBehavior);
+
     pane.open();
-    void createPty(paneId, initialState.cwd ?? defaultCwd, initialState.shellProfileId ?? null);
+
+    void pane.capability<PtyCapability>('pty')?.create(80, 24);
+
     panes.set(paneId, pane);
     activePaneId = paneId;
     notify();
@@ -150,10 +238,8 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
   const destroy = (paneId: string): boolean => {
     const pane = panes.get(paneId);
     if (!pane || panes.size === 1) return false;
-    void destroyPty(paneId);
     pane.close();
     panes.delete(paneId);
-    capabilityApis.delete(paneId);
     if (activePaneId === paneId) activePaneId = Array.from(panes.keys())[0] ?? null;
     notify();
     return true;
@@ -180,9 +266,8 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
   });
 
   const restoreSession = (entries: SessionPaneEntry[], focusedPaneIndex: number): void => {
-    for (const paneId of panes.keys()) { void destroyPty(paneId); panes.get(paneId)?.close(); }
+    for (const paneId of panes.keys()) { panes.get(paneId)?.close(); }
     panes.clear();
-    capabilityApis.clear();
     nextPaneNumber = 1;
     activePaneId = null;
     for (const entry of entries) {
