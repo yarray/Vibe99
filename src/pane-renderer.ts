@@ -494,7 +494,7 @@ export function createPaneRenderer({
 
   async function getClipboardSnapshot(): Promise<{ text: string; hasImage: boolean }> {
     try {
-      return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+      return await backend.clipboard.snapshot();
     } catch {
       return { text: '', hasImage: false };
     }

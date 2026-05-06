@@ -191,7 +191,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       window.clearTimeout(pendingSettingsSave);
       pendingSettingsSave = null;
     }
-    void backend.settings.save(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
+    void backend.settings.save(buildSettingsPayloadForCurrentWindow() as unknown as import('./backend').SettingsData).catch(reportError);
   }
 
   // Font size

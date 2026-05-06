@@ -49,6 +49,7 @@ export interface FocusController {
   // Queries
   getPaneCount(): number;
   getPaneIdAt(index: number): string | null;
+  getActiveId(): string | null;
 }
 
 export interface FocusControllerDeps {
@@ -224,5 +225,6 @@ export function createFocusController(
     focusPaneAt,
     getPaneCount,
     getPaneIdAt,
+    getActiveId: () => paneCollection.getActiveId(),
   };
 }
