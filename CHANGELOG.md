@@ -18,7 +18,7 @@
 
 ### Fixed
 
-- Windows startup hang when WSL is not installed. WSL detection now checks the Windows registry (`HKCU\...\Lxss`) for installed distributions instead of running `wsl.exe`, making the check instant (zero delay on machines without WSL). Remaining `wsl.exe` calls (distribution listing, shell detection) have a 3-second timeout with proper child-process cleanup (VIB-162).
+- Windows startup hang when WSL is not installed. WSL detection now checks the Windows registry (`HKCU\...\Lxss`) for installed distributions instead of running `wsl.exe`, making the check instant (zero delay on machines without WSL). Remaining `wsl.exe` calls (distribution listing, shell detection) have a 60-second timeout with proper child-process cleanup. When WSL is unavailable, a persistent marker is saved to skip future checks; users can re-detect via the profile management UI after installing WSL (VIB-162).
 - Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).
 
 ### Added

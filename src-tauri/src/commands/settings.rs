@@ -123,6 +123,7 @@ fn sanitize_shell_profiles(profiles: Option<&Value>) -> Vec<ShellProfile> {
 /// Ensures `defaultProfile` refers to an existing profile. If the
 /// referenced id is missing or the field is absent, falls back to
 /// the first profile's id (or an empty string if no profiles exist).
+/// Preserves the `wslUnavailable` marker if present.
 fn sanitize_shell_config(shell: Option<&Value>, profiles: &[ShellProfile]) -> Value {
     let raw_default = shell
         .and_then(|s| s.as_object())
@@ -137,10 +138,24 @@ fn sanitize_shell_config(shell: Option<&Value>, profiles: &[ShellProfile]) -> Va
         profiles.first().map(|p| p.id.clone()).unwrap_or_default()
     };
 
-    serde_json::json!({
+    let wsl_unavailable = shell
+        .and_then(|s| s.as_object())
+        .and_then(|o| o.get("wslUnavailable"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let mut result = serde_json::json!({
         "profiles": profiles,
         "defaultProfile": default_id,
-    })
+    });
+
+    if wsl_unavailable {
+        if let Some(obj) = result.as_object_mut() {
+            obj.insert("wslUnavailable".into(), Value::Bool(true));
+        }
+    }
+
+    result
 }
 
 // ----------------------------------------------------------------
@@ -590,4 +605,91 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
     std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
 
     Ok(sanitized)
+}
+
+// ----------------------------------------------------------------
+// WSL detection marker
+// ----------------------------------------------------------------
+
+/// Get the WSL unavailable marker from settings.
+///
+/// Returns `true` if WSL was previously detected as unavailable and the
+/// user has not re-detected since. This marker is set automatically when
+/// WSL detection fails, and can be cleared via the `shell_profiles_redetect`
+/// command.
+pub fn get_wsl_unavailable_marker(app: &AppHandle) -> Result<bool, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let path = settings_path(app)?;
+
+    if !path.exists() {
+        return Ok(false);
+    }
+
+    let contents =
+        std::fs::read_to_string(&path).map_err(|e| format!("failed to read settings: {e}"))?;
+
+    let parsed: Value =
+        serde_json::from_str(&contents).unwrap_or_else(|_| sanitize_config(&Value::Null));
+
+    Ok(parsed
+        .get("shell")
+        .and_then(|s| s.get("wslUnavailable"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false))
+}
+
+/// Set the WSL unavailable marker in settings.
+///
+/// When `true`, this marker indicates that WSL is not available on this
+/// system. The marker is persisted so that future app starts skip the
+/// WSL detection process. Users can clear this marker via the profile
+/// management UI to re-detect WSL after installation.
+pub fn set_wsl_unavailable_marker(app: &AppHandle, unavailable: bool) -> Result<(), String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let path = settings_path(app)?;
+
+    let raw = if path.exists() {
+        let contents =
+            std::fs::read_to_string(&path).map_err(|e| format!("failed to read settings: {e}"))?;
+        serde_json::from_str(&contents).unwrap_or(Value::Null)
+    } else {
+        Value::Null
+    };
+
+    let sanitized = sanitize_config(&raw);
+
+    if let Some(obj) = sanitized.as_object() {
+        let mut shell_obj = obj.get("shell").and_then(|v| v.as_object().cloned()).unwrap_or_else(|| {
+            serde_json::json!({
+                "profiles": [],
+                "defaultProfile": "",
+            })
+            .as_object()
+            .unwrap()
+            .clone()
+        });
+
+        shell_obj.insert("wslUnavailable".into(), Value::Bool(unavailable));
+
+        let mut updated = sanitized.clone();
+        if let Some(o) = updated.as_object_mut() {
+            o.insert("shell".into(), Value::Object(shell_obj));
+        }
+
+        let serialized = serde_json::to_string_pretty(&updated)
+            .map_err(|e| format!("failed to serialize settings: {e}"))?;
+        std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
+    }
+
+    Ok(())
 }

@@ -661,6 +661,90 @@ pub fn auto_detected_candidates() -> Vec<ShellCandidate> {
     candidates
 }
 
+/// Return platform-specific shell candidates via environment inspection,
+/// respecting the WSL unavailable marker.
+///
+/// This is the same as `auto_detected_candidates()` but takes an `AppHandle`
+/// to check for a persistent WSL unavailable marker. When the marker is set,
+/// WSL detection is skipped entirely.
+///
+/// This function is used by the shell profile detection UI, where users can
+/// re-detect after installing WSL via the `shell_profiles_redetect` command.
+pub fn auto_detected_candidates_with_app(app: &tauri::AppHandle) -> Vec<ShellCandidate> {
+    let mut candidates: Vec<ShellCandidate> = Vec::new();
+
+    if cfg!(target_os = "windows") {
+        // Windows: check custom env, then PowerShell, then pwsh, then
+        // ComSpec, then cmd.exe, then WSL (if available).
+        if let Ok(custom) = std::env::var("VIBE99_WINDOWS_SHELL") {
+            if !custom.is_empty() {
+                // Special case: "wsl.exe" triggers WSL detection.
+                if custom.eq_ignore_ascii_case("wsl.exe") {
+                    push_wsl_candidates_with_app(&mut candidates, None, app);
+                } else {
+                    candidates.push(ShellCandidate {
+                        shell: PathBuf::from(&custom),
+                        args: vec![],
+                        display_name: None,
+                    });
+                }
+            }
+        }
+        for shell in &["powershell.exe", "pwsh.exe", "cmd.exe"] {
+            candidates.push(ShellCandidate {
+                shell: PathBuf::from(shell),
+                args: vec![],
+                display_name: None,
+            });
+        }
+        if let Ok(comspec) = std::env::var("ComSpec") {
+            if !comspec.is_empty() {
+                candidates.push(ShellCandidate {
+                    shell: PathBuf::from(&comspec),
+                    args: vec![],
+                    display_name: None,
+                });
+            }
+        }
+        // Append WSL candidates after native Windows shells.
+        push_wsl_candidates_with_app(&mut candidates, None, app);
+    } else {
+        // Unix (Linux / macOS): $SHELL first (only if absolute), then
+        // platform-specific fallbacks, deduplicated.
+        let mut seen = HashSet::new();
+
+        if let Ok(shell) = std::env::var("SHELL") {
+            let p = PathBuf::from(&shell);
+            if p.is_absolute() && seen.insert(p.clone()) {
+                candidates.push(ShellCandidate {
+                    shell: p,
+                    args: vec!["-il".into()],
+                    display_name: None,
+                });
+            }
+        }
+
+        let fallbacks: &[&str] = if cfg!(target_os = "macos") {
+            &["/bin/zsh", "/bin/bash", "/bin/sh"]
+        } else {
+            &["/bin/bash", "/bin/sh"]
+        };
+
+        for shell in fallbacks {
+            let p = PathBuf::from(shell);
+            if seen.insert(p.clone()) && is_executable(&p) {
+                candidates.push(ShellCandidate {
+                    shell: p,
+                    args: vec!["-il".into()],
+                    display_name: None,
+                });
+            }
+        }
+    }
+
+    candidates
+}
+
 /// Append WSL shell candidates to the list — one per detected distribution.
 ///
 /// On non-Windows or when WSL is not available this is a no-op.
@@ -697,6 +781,66 @@ fn push_wsl_candidates(candidates: &mut Vec<ShellCandidate>, distro_override: Op
 
 #[cfg(not(target_os = "windows"))]
 fn push_wsl_candidates(_candidates: &mut Vec<ShellCandidate>, _distro_override: Option<&str>) {}
+
+/// Append WSL shell candidates to the list, checking the persistent unavailable marker.
+///
+/// This is the same as `push_wsl_candidates()` but takes an `AppHandle` to check
+/// for a persistent `wslUnavailable` marker in settings. When the marker is set,
+/// WSL detection is skipped entirely and the marker is preserved. When WSL is
+/// confirmed unavailable via registry check, the marker is set for future skips.
+///
+/// This function is used by the shell profile detection UI, where users can
+/// re-detect after installing WSL via the `shell_profiles_redetect` command.
+#[cfg(target_os = "windows")]
+fn push_wsl_candidates_with_app(
+    candidates: &mut Vec<ShellCandidate>,
+    distro_override: Option<&str>,
+    app: &tauri::AppHandle,
+) {
+    use crate::commands::settings;
+
+    // Check if WSL was previously marked as unavailable.
+    if settings::get_wsl_unavailable_marker(app).unwrap_or(false) {
+        return;
+    }
+
+    // Check if WSL is available via registry (instant check).
+    if !wsl::is_wsl_available() {
+        // WSL is not available - set the marker to skip future checks.
+        let _ = settings::set_wsl_unavailable_marker(app, true);
+        return;
+    }
+
+    let default_shell = wsl::detect_wsl_default_shell().unwrap_or_else(|| "/bin/bash".into());
+
+    if let Some(distro) = distro_override {
+        let args = wsl::wsl_shell_args(Some(distro), &default_shell, &["-il".into()]);
+        candidates.push(ShellCandidate {
+            shell: PathBuf::from("wsl.exe"),
+            args,
+            display_name: Some(format!("WSL ({})", distro)),
+        });
+        return;
+    }
+
+    let distros = wsl::list_distributions();
+    for distro in &distros {
+        let args = wsl::wsl_shell_args(Some(distro), &default_shell, &["-il".into()]);
+        candidates.push(ShellCandidate {
+            shell: PathBuf::from("wsl.exe"),
+            args,
+            display_name: Some(format!("WSL ({})", distro)),
+        });
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn push_wsl_candidates_with_app(
+    _candidates: &mut Vec<ShellCandidate>,
+    _distro_override: Option<&str>,
+    _app: &tauri::AppHandle,
+) {
+}
 
 /// Build a `CommandBuilder` for a shell candidate. Returns an error if
 /// the candidate binary does not exist or is not executable.

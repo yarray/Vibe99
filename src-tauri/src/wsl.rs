@@ -39,10 +39,9 @@ static WSL_AVAILABLE: OnceLock<bool> = OnceLock::new();
 
 /// Timeout for `wsl.exe` subprocess calls.
 ///
-/// 3 seconds is long enough for a properly configured WSL installation to
-/// respond, but short enough to avoid noticeable UI lag when WSL is not
-/// installed.
-const WSL_TIMEOUT: Duration = Duration::from_secs(3);
+/// 60 seconds allows WSL to start and respond even on first launch or
+/// after system updates.
+const WSL_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Interval between `try_wait()` polls while waiting for `wsl.exe`.
 const WSL_POLL_INTERVAL: Duration = Duration::from_millis(100);

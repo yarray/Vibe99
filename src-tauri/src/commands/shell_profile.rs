@@ -254,8 +254,8 @@ pub fn shell_profile_remove(app: AppHandle, profile_id: String) -> Result<ShellC
 /// that are not necessarily in the user's settings. The frontend can
 /// merge them into the profile list so users can see and select them.
 #[tauri::command]
-pub fn shell_profiles_detect() -> Vec<ShellProfile> {
-    let candidates = crate::pty::auto_detected_candidates();
+pub fn shell_profiles_detect(app: AppHandle) -> Vec<ShellProfile> {
+    let candidates = crate::pty::auto_detected_candidates_with_app(&app);
     let mut profiles = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 
@@ -282,4 +282,18 @@ pub fn shell_profiles_detect() -> Vec<ShellProfile> {
     }
 
     profiles
+}
+
+/// Re-detect available shells, clearing any cached WSL unavailable marker.
+///
+/// This command should be called when the user explicitly requests a re-detect
+/// (e.g. after installing WSL). It clears the persistent `wslUnavailable` marker
+/// and returns a fresh list of detected shell profiles.
+#[tauri::command]
+pub fn shell_profiles_redetect(app: AppHandle) -> Result<Vec<ShellProfile>, String> {
+    // Clear the WSL unavailable marker
+    super::settings::set_wsl_unavailable_marker(&app, false)?;
+
+    // Return a fresh list of detected profiles
+    Ok(shell_profiles_detect(app))
 }
