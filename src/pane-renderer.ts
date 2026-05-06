@@ -11,24 +11,11 @@ import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
 import type { SettingsManager } from './settings';
 import type { TabBar } from './tab-bar';
 
-// ---------------------------------------------------------------------------
-// Exported types
-// ---------------------------------------------------------------------------
+// Re-export shared types for backward compatibility
+export type * from './pane/types';
 
-export interface PaneNode {
-  paneId: string;
-  cwd: string;
-  root: HTMLElement;
-  terminalHost: HTMLElement & { _xterm?: Terminal };
-  terminal: Terminal;
-  fitAddon: FitAddon;
-  sessionReady: boolean;
-  sizeKey: string;
-  needsFit: boolean;
-  accent: string;
-  _shellChanging?: boolean;
-  _shellChangeTime?: number;
-}
+// Import locally so types are available within this file
+import type { PaneNode, PaneRendererDeps, PaneRenderer } from './pane/types';
 
 interface TerminalTheme {
   background: string;
@@ -38,60 +25,6 @@ interface TerminalTheme {
   selectionBackground: string;
   [colorName: string]: string;
 }
-
-export interface PaneRendererDeps {
-  backend: Backend;
-  paneState: PaneState;
-  settingsManager: SettingsManager;
-  paneAlert: PaneAlertStrategy;
-  paneActivityWatcher: {
-    noteResize: (paneId: string) => void;
-    noteData: (paneId: string) => void;
-    setFocus: (paneId: string | null) => void;
-    forget: (paneId: string) => void;
-    setPaneEnabled: (paneId: string, enabled: boolean) => void;
-  };
-  reportError: (error: unknown) => void;
-  stageEl: HTMLElement;
-  getMode: () => string;
-  onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
-  onTerminalTitleChange: (paneId: string, title: string) => void;
-  onTerminalContextMenu: (node: PaneNode, event: MouseEvent) => Promise<void> | void;
-  scheduleWindowLayoutSave: () => void;
-  tabBar: TabBar;
-  getPaneLabel: (pane: Pane) => string;
-  onPaneCwdChanged: (paneId: string, cwd: string) => void;
-}
-
-export interface PaneRenderer {
-  ensurePaneNodes: () => void;
-  renderPanes: (refit?: boolean) => void;
-  fitTerminal: (paneId: string, force?: boolean) => void;
-  getNode: (paneId: string) => PaneNode | null;
-  write: (paneId: string, data: string) => void;
-  copySelection: (paneId: string) => boolean;
-  pasteInto: (paneId: string, options?: { clipboardSnapshot?: { text: string; hasImage: boolean } }) => Promise<boolean>;
-  selectAll: (paneId: string) => boolean;
-  focusTerminal: (paneId: string) => void;
-  blurTerminal: (paneId: string) => void;
-  clearTerminal: (paneId: string) => void;
-  writeln: (paneId: string, text: string) => void;
-  changePaneShell: (paneId: string, profileId: string, previousProfileId?: string | null) => void;
-  entryNeedsTabRefresh: (paneId: string) => boolean;
-  setAlerted: (paneId: string, alerted: boolean) => void;
-  rootContains: (paneId: string, el: Node) => boolean;
-  hasSelection: (paneId: string) => boolean;
-  isSessionReady: (paneId: string) => boolean;
-  setSessionReady: (paneId: string, ready: boolean) => void;
-  getShellChangeTime: (paneId: string) => number | null;
-  isShellChanging: (paneId: string) => boolean;
-  initializePaneTerminal: (node: PaneNode) => Promise<void>;
-  destroyPane: (paneId: string) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function extractPathFromOsc7(data: string): string | null {
   const prefix = 'file://';
