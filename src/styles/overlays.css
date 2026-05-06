@@ -70,6 +70,20 @@
   color: rgba(255, 255, 255, 0.4);
 }
 
+/* Toggle dot for context menu items (VIB-143) */
+.context-menu-toggle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  transition: background 150ms ease;
+}
+
+.context-menu-toggle-dot.is-active {
+  background: var(--status-highlight);
+}
+
 .context-menu-submenu {
   display: none;
   position: absolute;
