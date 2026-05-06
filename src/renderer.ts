@@ -277,17 +277,6 @@ contextMenus = createContextMenus({
   },
 });
 
-paneOps = createPaneOperations({
-  paneState,
-  paneRenderer,
-  tabBar,
-  layoutManager,
-  render,
-  focusController,
-  state: tabBarState,
-});
-
-// ── Phase 2: PaneManager (first real integration path) ─────────────────────
 const paneManager: PaneManager = createPaneManager({
   backend,
   paneAlert,
@@ -295,6 +284,15 @@ const paneManager: PaneManager = createPaneManager({
   onTerminalContextMenu: (node, evt) => void contextMenus?.showTerminalContextMenu(node as PaneNode, evt),
   onStateChange: () => render(),
   getAccentPalette: () => [...ColorsRegistry.ACCENT_PALETTE],
+});
+
+paneOps = createPaneOperations({
+  paneManager,
+  tabBar,
+  layoutManager,
+  render,
+  focusController,
+  state: tabBarState,
 });
 
 const commandPaletteEntries = createCommandPaletteEntries({

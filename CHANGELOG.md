@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **pane-operations.ts migration to PaneManager (VIB-191):** Replaced all `paneState`/`paneRenderer` dependencies with `paneManager` + capability API. `PaneOperationsDeps` now takes `paneManager: PaneManager` instead of `paneState`/`paneRenderer`. All pane CRUD goes through `paneManager.getAll()`/`create()`/`destroy()`. All terminal/DOM/activity/PTY operations go through `pane.capability('terminal'|'dom'|'activity'|'pty')`. `getPaneLabel` accepts structural type `{ title, terminalTitle }` for compatibility with both old and new Pane types. No imports from `pane-state` or `pane-renderer` remain.
+
 ### Added
 
 - **renderer.ts first real PaneManager integration (VIB-184):** Added PaneManager instance to `renderer.ts` (38 net new lines). The "add pane" button now creates panes through `PaneManager.create()` — proving the Phase 2 system works end-to-end (terminal renders, PTY connects, input works). Old system continues as fallback. PaneManager panes use `pm`-prefixed IDs to avoid collision with old pane IDs. Added guards to `terminal.onData`/`onExit` listeners to skip PaneManager-managed panes. Also fixed TS errors in `terminal-capability.ts` (PaneHandle signature, WebLinksAddon callback param order), `clipboard-capability.ts` (onSelectionChange type), and `renderer.ts` (context menu type bridge).
