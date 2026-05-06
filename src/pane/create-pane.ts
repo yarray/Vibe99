@@ -3,14 +3,18 @@
  * Pure logic — no DOM, no IPC.
  */
 export interface PaneBehavior {
-  name?: string;
-  open?: (h: PaneHandle) => void | Promise<void>;
+  name: string;
+  open?: (h: PaneHandle) => unknown;
   close?: (h: PaneHandle) => void | Promise<void>;
-  command?: (h: PaneHandle, payload: unknown) => void | Promise<unknown>;
-  [cap: string]: ((...a: unknown[]) => unknown) | unknown;
+  command?: (h: PaneHandle, payload: unknown) => unknown;
 }
 
-export interface PaneHandle { id: string; getState: <T>(k: string) => T | undefined; }
+export interface PaneHandle {
+  id: string;
+  getState: <T>(k: string) => T | undefined;
+  capability: <T>(name: string) => T | undefined;
+  emit: (event: string, payload?: unknown) => void;
+}
 export interface PaneDeps { onEvent?: (e: PaneLifecycleEvent, paneId: string) => void; }
 
 export type PaneLifecycleEvent =
@@ -38,9 +42,20 @@ export function createPane({ id, initialState = {}, deps = {} }: {
   deps?: PaneDeps;
 }): Pane {
   const behaviors: PaneBehavior[] = [];
+  const capabilities = new Map<string, unknown>();
   let isOpen = false, isClosed = false;
   let state: Record<string, unknown> = { ...initialState };
-  const handle: PaneHandle = { id, getState: <T>(k: string): T | undefined => state[k] as T };
+
+  const handle: PaneHandle = {
+    id,
+    getState: <T>(k: string): T | undefined => state[k] as T,
+    capability: <T>(name: string): T | undefined => capabilities.get(name) as T | undefined,
+    emit: (event: string, payload?: unknown): void => {
+      for (const h of listeners[event] ?? []) h({ type: event } as PaneLifecycleEvent);
+      deps.onEvent?.({ type: event } as PaneLifecycleEvent, id);
+    },
+  };
+
   const listeners: Record<string, ((e: PaneLifecycleEvent) => void)[]> = {};
 
   const emit = (e: PaneLifecycleEvent): void => {
@@ -54,7 +69,10 @@ export function createPane({ id, initialState = {}, deps = {} }: {
   const open = (): Pane => {
     if (isOpen || isClosed) return pane;
     isOpen = true;
-    for (const b of behaviors) b.open?.(handle);
+    for (const b of behaviors) {
+      const api = b.open?.(handle);
+      if (api !== undefined) capabilities.set(b.name, api);
+    }
     emit({ type: 'open' });
     return pane;
   };
@@ -71,8 +89,7 @@ export function createPane({ id, initialState = {}, deps = {} }: {
   };
 
   const capability = <T = unknown>(name: string): T | undefined => {
-    for (const b of behaviors) { if (name in b) return b[name] as T; }
-    return undefined;
+    return capabilities.get(name) as T | undefined;
   };
 
   const getState = <T>(key: string): T | undefined => state[key] as T;
