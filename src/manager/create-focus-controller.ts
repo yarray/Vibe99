@@ -2,16 +2,27 @@
  * Focus Controller — MRU order, pane cycling, and navigation mode.
  *
  * Extracted from pane-state.ts and renderer.ts for Phase 2 refactor.
- * Layers on top of PaneManager; owns no pane collection state.
+ * Layers on top of a pane collection; owns no pane collection state.
  *
  * @module manager/create-focus-controller
  */
 
-import type { PaneManager } from './create-pane-manager.js';
-
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
+
+/** Minimal pane shape required by the focus controller. */
+export interface PaneLike {
+  id: string;
+}
+
+/** Minimal pane collection shape required by the focus controller. */
+export interface PaneCollection {
+  getAll(): PaneLike[];
+  getActiveId(): string | null;
+  setActive(paneId: string): boolean;
+  size(): number;
+}
 
 export interface FocusController {
   // Mode
@@ -23,6 +34,7 @@ export interface FocusController {
 
   // MRU
   recordPaneVisit(paneId: string | null): void;
+  syncMru(): void;
   cycleToRecentPane(options?: { reverse?: boolean }): string | null;
   commitPaneCycle(): void;
   hasActivePaneCycle(): boolean;
@@ -58,7 +70,7 @@ interface PaneCycleState {
 // ---------------------------------------------------------------------------
 
 export function createFocusController(
-  paneManager: PaneManager,
+  paneCollection: PaneCollection,
   deps: FocusControllerDeps = {},
 ): FocusController {
   let mode = 'terminal';
@@ -70,9 +82,9 @@ export function createFocusController(
   const notifyFocus = (paneId: string | null): void => deps.onFocusChange?.(paneId);
 
   const syncMru = (): void => {
-    const known = new Set(paneManager.getAll().map((p) => p.id));
+    const known = new Set(paneCollection.getAll().map((p) => p.id));
     paneMruOrder = paneMruOrder.filter((id) => known.has(id));
-    for (const pane of paneManager.getAll()) {
+    for (const pane of paneCollection.getAll()) {
       if (!paneMruOrder.includes(pane.id)) {
         paneMruOrder.push(pane.id);
       }
@@ -86,8 +98,8 @@ export function createFocusController(
   };
 
   const enterNavigationMode = (): void => {
-    if (paneManager.size() === 0) return;
-    enterNavSourcePaneId = paneManager.getActiveId();
+    if (paneCollection.size() === 0) return;
+    enterNavSourcePaneId = paneCollection.getActiveId();
     setMode('nav');
   };
 
@@ -95,7 +107,7 @@ export function createFocusController(
     if (enterNavSourcePaneId) {
       const sourceId = enterNavSourcePaneId;
       enterNavSourcePaneId = null;
-      paneManager.setActive(sourceId);
+      paneCollection.setActive(sourceId);
       recordPaneVisit(sourceId);
       setMode('terminal');
       notifyFocus(sourceId);
@@ -111,7 +123,7 @@ export function createFocusController(
   };
 
   const cycleToRecentPane = ({ reverse = false }: { reverse?: boolean } = {}): string | null => {
-    if (paneManager.size() < 2) return null;
+    if (paneCollection.size() < 2) return null;
     syncMru();
     if (!paneCycleState) {
       paneCycleState = { snapshot: [...paneMruOrder], index: 0 };
@@ -121,12 +133,12 @@ export function createFocusController(
     const step = reverse ? -1 : 1;
     paneCycleState.index = (paneCycleState.index + step + snapshot.length) % snapshot.length;
     const targetId = snapshot[paneCycleState.index];
-    const known = new Set(paneManager.getAll().map((p) => p.id));
+    const known = new Set(paneCollection.getAll().map((p) => p.id));
     if (!known.has(targetId)) {
       paneCycleState = null;
       return null;
     }
-    paneManager.setActive(targetId);
+    paneCollection.setActive(targetId);
     notifyFocus(targetId);
     return targetId;
   };
@@ -134,12 +146,12 @@ export function createFocusController(
   const commitPaneCycle = (): void => {
     if (!paneCycleState) return;
     paneCycleState = null;
-    recordPaneVisit(paneManager.getActiveId());
-    notifyFocus(paneManager.getActiveId());
+    recordPaneVisit(paneCollection.getActiveId());
+    notifyFocus(paneCollection.getActiveId());
   };
 
   const focusPane = (paneId: string): boolean => {
-    if (!paneManager.setActive(paneId)) return false;
+    if (!paneCollection.setActive(paneId)) return false;
     recordPaneVisit(paneId);
     setMode('terminal');
     notifyFocus(paneId);
@@ -147,20 +159,20 @@ export function createFocusController(
   };
 
   const moveFocus = (delta: number): boolean => {
-    const all = paneManager.getAll();
+    const all = paneCollection.getAll();
     if (all.length === 0) return false;
-    const activeId = paneManager.getActiveId();
+    const activeId = paneCollection.getActiveId();
     const focusedIndex = activeId !== null ? all.findIndex((p) => p.id === activeId) : 0;
     const nextIndex = (focusedIndex + delta + all.length) % all.length;
-    paneManager.setActive(all[nextIndex].id);
+    paneCollection.setActive(all[nextIndex].id);
     notifyFocus(all[nextIndex].id);
     return true;
   };
 
   const navigateLeft = (): boolean => {
-    const all = paneManager.getAll();
+    const all = paneCollection.getAll();
     if (all.length === 0) return false;
-    const activeId = paneManager.getActiveId();
+    const activeId = paneCollection.getActiveId();
     const focusedIndex = activeId !== null ? all.findIndex((p) => p.id === activeId) : 0;
     const nextIndex = focusedIndex - 1;
     if (nextIndex < 0) return false;
@@ -168,9 +180,9 @@ export function createFocusController(
   };
 
   const navigateRight = (): boolean => {
-    const all = paneManager.getAll();
+    const all = paneCollection.getAll();
     if (all.length === 0) return false;
-    const activeId = paneManager.getActiveId();
+    const activeId = paneCollection.getActiveId();
     const focusedIndex = activeId !== null ? all.findIndex((p) => p.id === activeId) : 0;
     const nextIndex = focusedIndex + 1;
     if (nextIndex >= all.length) return false;
@@ -178,18 +190,18 @@ export function createFocusController(
   };
 
   const focusPaneAt = (index: number): boolean => {
-    const all = paneManager.getAll();
+    const all = paneCollection.getAll();
     if (all.length === 0 || index < 0 || index >= all.length) return false;
-    paneManager.setActive(all[index].id);
+    paneCollection.setActive(all[index].id);
     recordPaneVisit(all[index].id);
     notifyFocus(all[index].id);
     return true;
   };
 
-  const getPaneCount = (): number => paneManager.size();
+  const getPaneCount = (): number => paneCollection.size();
 
   const getPaneIdAt = (index: number): string | null => {
-    const all = paneManager.getAll();
+    const all = paneCollection.getAll();
     if (all.length === 0 || index < 0 || index >= all.length) return null;
     return all[index].id;
   };
@@ -201,6 +213,7 @@ export function createFocusController(
     cancelNavigationMode,
     getEnterNavSourcePaneId: () => enterNavSourcePaneId,
     recordPaneVisit,
+    syncMru,
     cycleToRecentPane,
     commitPaneCycle,
     hasActivePaneCycle: () => paneCycleState !== null,

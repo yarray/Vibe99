@@ -1,0 +1,1 @@
+Integrate `create-focus-controller.ts` with the renderer and pane operations. FocusController now manages MRU order, Ctrl+Tab pane cycling, navigation mode, and focus movement. It layers on top of paneState via a lightweight PaneCollection adapter.
