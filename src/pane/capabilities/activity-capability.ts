@@ -27,9 +27,9 @@ export interface ActivityCapability {
 
 export type ActivityBehavior = {
   name: 'activity';
-  open(ctx: ActivityBehaviorContext): void;
+  open(ctx: ActivityBehaviorContext): ActivityCapability;
   close(ctx: ActivityBehaviorContext): void;
-} & ActivityCapability;
+};
 
 export function createActivityBehavior(deps: ActivityBehaviorDeps): ActivityBehavior {
   const { watcher, alert } = deps;
@@ -37,35 +37,27 @@ export function createActivityBehavior(deps: ActivityBehaviorDeps): ActivityBeha
   return {
     name: 'activity' as const,
 
-    open(ctx: ActivityBehaviorContext): void {
-      const breathingMonitor: boolean = ctx.getState<boolean>('breathingMonitor') ?? false;
+    open(ctx: ActivityBehaviorContext): ActivityCapability {
+      const breathingMonitor: boolean = (ctx.getState('breathingMonitor') as boolean | undefined) ?? false;
       watcher.setPaneEnabled(ctx.id, breathingMonitor);
 
-      watcher.onAlert?.(ctx.id, () => {
-        const dom = ctx.capability<{ root: HTMLElement }>('dom');
-        if (breathingMonitor) alert.setAlerted(dom?.root as HTMLElement, true);
-        ctx.emit('activity-alert', { paneId: ctx.id });
-      });
+      return {
+        noteOutput(): void {
+          watcher.noteData(ctx.id);
+        },
 
-      watcher.onClear?.(ctx.id, () => {
-        const dom = ctx.capability<{ root: HTMLElement }>('dom');
-        alert.setAlerted(dom?.root as HTMLElement, false);
-        ctx.emit('activity-clear', { paneId: ctx.id });
-      });
+        setEnabled(enabled: boolean): void {
+          watcher.setPaneEnabled(ctx.id, enabled);
+        },
+
+        setAlerted(root: HTMLElement, alerted: boolean): void {
+          alert.setAlerted(root, alerted);
+        },
+      };
     },
 
     close(ctx: ActivityBehaviorContext): void {
       watcher.forget(ctx.id);
-    },
-
-    noteOutput(): void { /* caller uses watcher.noteData directly */ },
-
-    setEnabled(enabled: boolean): void {
-      watcher.setPaneEnabled(ctx.id, enabled);
-    },
-
-    setAlerted(root: HTMLElement, alerted: boolean): void {
-      alert.setAlerted(root, alerted);
     },
   };
 }
