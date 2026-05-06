@@ -486,20 +486,24 @@ describe('Shell Profile', () => {
       await dispatchContextMenu(terminalHost);
       await browser.pause(300);
 
-      const menuItems = await $$('.context-menu-item');
-      for (const item of menuItems) {
-        const label = await item.$('.context-menu-label');
-        if (label) {
-          const text = await getTextSafe(label);
-          if (text.includes('Change Profile')) {
-            await item.moveTo();
-            await browser.pause(300);
+      // Force submenu open via JS — CSS :hover is unreliable in Xvfb/WebKitGTK.
+      // The submenu uses `.context-menu-parent:hover > .context-menu-submenu { display: block }`
+      // which WebDriver's moveTo() cannot reliably trigger in a headless environment.
+      await browser.execute(() => {
+        const items = document.querySelectorAll(
+          '.context-menu > .context-menu-item',
+        );
+        for (const item of items) {
+          const label = item.querySelector('.context-menu-label');
+          if (label && label.textContent.includes('Change Profile')) {
+            const submenu = item.querySelector('.context-menu-submenu');
+            if (submenu) submenu.style.display = 'block';
             break;
           }
         }
-      }
+      });
 
-      // Wait for submenu to appear (WebKitGTK may need longer than 300ms)
+      // Wait for submenu items to be rendered
       await waitForElement('.context-menu-submenu .context-menu-item', 3000);
 
       const submenuItems = await $$('.context-menu-submenu .context-menu-item');
