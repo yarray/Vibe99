@@ -2,7 +2,7 @@ import { openCommandPalette, type PaletteItem } from './command-palette';
 import type { PaneState } from './pane-state';
 import type { PaneRenderer } from './pane-renderer';
 import type { TabBar } from './tab-bar';
-import type { Bridge } from './bridge';
+import type { Backend } from './backend';
 import type { SettingsManager } from './settings';
 import type { ModalStack } from './modal-stack';
 import type { ShellProfileManager, ShellProfile } from './shell-profiles';
@@ -43,7 +43,7 @@ export interface CommandPaletteEntriesDeps {
   layoutModal: LayoutModalForPalette;
   shellProfileManager: ShellProfileManager | null;
   contextMenus: ContextMenusForPalette | null;
-  bridge: Bridge;
+  backend: Backend;
   settingsManager: SettingsManager;
   modalStack: ModalStack;
   focusPane: (paneId: string | null) => void;
@@ -78,7 +78,7 @@ export function createCommandPaletteEntries({
   layoutModal,
   shellProfileManager,
   contextMenus,
-  bridge,
+  backend,
   settingsManager,
   modalStack,
   focusPane,
@@ -147,12 +147,12 @@ export function createCommandPaletteEntries({
       } else if (commandId === 'shortcuts-settings') {
         closeKeyboardShortcutsModal();
         modalStack.register(closeKeyboardShortcutsModal);
-        ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
+        ShortcutsUI.openKeyboardShortcutsModal(backend, settingsManager.scheduleSettingsSave);
       } else if (commandId === 'layout-default') {
-        bridge.openLayoutWindow('default').catch(() => {});
+        backend.layouts.openWindow('default').catch(() => {});
       } else if (commandId.startsWith('layout-open:')) {
         const layoutId = commandId.slice('layout-open:'.length);
-        bridge.openLayoutWindow(layoutId).catch(() => {});
+        backend.layouts.openWindow(layoutId).catch(() => {});
       } else if (commandId === 'layout-manage') {
         layoutModal.openLayoutsModal();
       }

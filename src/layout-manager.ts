@@ -1,13 +1,13 @@
 import { setIcon } from './icons';
 import {
-  type Bridge,
+  type Backend,
   type LayoutData,
   type LayoutsListResult,
   type LayoutSaveResult,
   readLayoutWindowBindings,
   writeLayoutWindowBindings,
   clearLayoutWindowBinding,
-} from './bridge';
+} from './backend';
 import type { PaneState, SessionData } from './pane-state';
 import type { ModalStack, CloseFn } from './modal-stack';
 
@@ -17,7 +17,7 @@ import type { ModalStack, CloseFn } from './modal-stack';
 
 /** Dependencies injected into createLayoutManager. */
 export interface LayoutManagerDeps {
-  bridge: Bridge;
+  backend: Backend;
   paneState: PaneState;
   modalStack: ModalStack;
   reportError: (error: unknown) => void;
@@ -61,7 +61,7 @@ export interface LayoutManager {
 // ---------------------------------------------------------------------------
 
 export function createLayoutManager({
-  bridge,
+  backend,
   paneState,
   modalStack,
   reportError,
@@ -81,12 +81,12 @@ export function createLayoutManager({
   function setWindowLayoutId(layoutId: string | null): void {
     if (windowLayoutId === layoutId) return;
     if (windowLayoutId) {
-      clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
+      clearLayoutWindowBinding(windowLayoutId, backend.currentWindowLabel);
     }
     windowLayoutId = layoutId;
     if (layoutId) {
       const bindings = readLayoutWindowBindings();
-      bindings[layoutId] = bridge.currentWindowLabel;
+      bindings[layoutId] = backend.currentWindowLabel;
       writeLayoutWindowBindings(bindings);
     }
   }
@@ -128,7 +128,7 @@ export function createLayoutManager({
   }
 
   async function refreshLayouts(): Promise<LayoutsListResult> {
-    const config = await bridge.listLayouts();
+    const config = await backend.layouts.list();
     layouts = config.layouts ?? [];
     defaultLayoutId = config.defaultLayoutId ?? '';
     return config;
@@ -140,7 +140,7 @@ export function createLayoutManager({
     }
     const existing = layouts.find((l) => l.id === windowLayoutId);
     const layout = createLayoutFromCurrentWindow(windowLayoutId, existing?.name || windowLayoutId);
-    const config = await bridge.saveLayout(layout);
+    const config = await backend.layouts.save(layout);
     layouts = config.layouts ?? layouts;
     defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
     updateLayoutsIndicator();
@@ -150,7 +150,7 @@ export function createLayoutManager({
     if (!name || typeof name !== 'string' || !name.trim()) return;
     name = name.trim();
     const layout = createLayoutFromCurrentWindow(name.toLowerCase().replace(/\s+/g, '-'), name);
-    const config = await bridge.saveLayout(layout);
+    const config = await backend.layouts.save(layout);
     layouts = config.layouts ?? [];
     defaultLayoutId = config.defaultLayoutId ?? '';
     setWindowLayoutId(layout.id);
@@ -178,8 +178,8 @@ export function createLayoutManager({
       reportError(new Error('Cannot delete the layout used by this window'));
       return Promise.resolve();
     }
-    return bridge.deleteLayout(layoutId)
-      .then(() => bridge.listLayouts())
+    return backend.layouts.delete(layoutId)
+      .then(() => backend.layouts.list())
       .then((config: LayoutsListResult) => {
         layouts = config.layouts ?? [];
         defaultLayoutId = config.defaultLayoutId ?? '';
@@ -189,8 +189,8 @@ export function createLayoutManager({
   }
 
   function renameLayoutById(layoutId: string, newName: string): void {
-    bridge.renameLayout(layoutId, newName)
-      .then(() => bridge.listLayouts())
+    backend.layouts.rename(layoutId, newName)
+      .then(() => backend.layouts.list())
       .then((config: LayoutsListResult) => {
         layouts = config.layouts ?? [];
       })
@@ -255,7 +255,7 @@ export function createLayoutManager({
         item.append(label, checkmark);
         item.addEventListener('click', (event: MouseEvent) => {
           event.stopPropagation();
-          bridge.openLayoutWindow(layout.id).catch(reportError);
+          backend.layouts.openWindow(layout.id).catch(reportError);
           closeLayoutsDropdown();
         });
         layoutsDropdownEl.appendChild(item);

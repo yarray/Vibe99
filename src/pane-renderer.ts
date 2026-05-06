@@ -5,7 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { getDefaultFontFamily } from './settings';
-import type { Bridge } from './bridge';
+import type { Backend } from './backend';
 import type { Pane, PaneState } from './pane-state';
 import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
 import type { SettingsManager } from './settings';
@@ -40,7 +40,7 @@ interface TerminalTheme {
 }
 
 export interface PaneRendererDeps {
-  bridge: Bridge;
+  backend: Backend;
   paneState: PaneState;
   settingsManager: SettingsManager;
   paneAlert: PaneAlertStrategy;
@@ -123,7 +123,7 @@ export function getTextColorForBackground(hexColor: string): string {
 }
 
 export function createPaneRenderer({
-  bridge,
+  backend,
   paneState,
   settingsManager,
   paneAlert,
@@ -143,7 +143,7 @@ export function createPaneRenderer({
 
   function isWindowsCtrlVPasteHotkey(event: KeyboardEvent): boolean {
     return (
-      bridge.platform === 'win32' &&
+      backend.platform === 'win32' &&
       event.ctrlKey &&
       !event.metaKey &&
       !event.altKey &&
@@ -191,7 +191,7 @@ export function createPaneRenderer({
   }
 
   function isLinkOpenModifierPressed(event: MouseEvent | KeyboardEvent): boolean {
-    return event.ctrlKey || (bridge.platform === 'darwin' && event.metaKey);
+    return event.ctrlKey || (backend.platform === 'darwin' && event.metaKey);
   }
 
   function handleTerminalLinkActivation(event: MouseEvent, uri: string): void {
@@ -201,7 +201,7 @@ export function createPaneRenderer({
 
     event.preventDefault();
     event.stopPropagation();
-    void Promise.resolve(bridge.openExternalUrl(uri)).catch(reportError);
+    void Promise.resolve(backend.window.openUrl(uri)).catch(reportError);
   }
 
   function getPaneLeft(index: number, previewWidth: number, focusedIndex: number): number {
@@ -256,7 +256,7 @@ export function createPaneRenderer({
       cursorBlink: true,
       disableStdin: false,
       drawBoldTextInBrightColors: false,
-      fontFamily: settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform),
+      fontFamily: settingsManager.settings.fontFamily || getDefaultFontFamily(backend.platform),
       fontSize: settingsManager.settings.fontSize,
       lineHeight: 1.2,
       scrollback: 5000,
@@ -327,7 +327,7 @@ export function createPaneRenderer({
 
     terminal.onData((data) => {
       if (node.sessionReady) {
-        bridge.writeTerminal({ paneId: node.paneId, data });
+        void backend.terminal.write({ paneId: node.paneId, data });
       }
     });
 
@@ -345,7 +345,7 @@ export function createPaneRenderer({
     terminal.onSelectionChange(() => {
       const selection = terminal.getSelection();
       if (selection) {
-        bridge.writeClipboardText(selection);
+        void backend.clipboard.write(selection);
       }
     });
 
@@ -363,7 +363,7 @@ export function createPaneRenderer({
         const text = new TextDecoder().decode(
           Uint8Array.from(bytes, (c) => c.charCodeAt(0))
         );
-        bridge.writeClipboardText(text);
+        void backend.clipboard.write(text);
       } catch {}
       return true;
     });
@@ -386,7 +386,7 @@ export function createPaneRenderer({
 
   function fitTerminal(node: PaneNode, force = false): void {
     node.terminal.options.fontSize = settingsManager.settings.fontSize;
-    node.terminal.options.fontFamily = settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform);
+    node.terminal.options.fontFamily = settingsManager.settings.fontFamily || getDefaultFontFamily(backend.platform);
     node.fitAddon.fit();
 
     const cols = Math.max(20, node.terminal.cols || 80);
@@ -394,7 +394,7 @@ export function createPaneRenderer({
     const nextSizeKey = `${cols}x${rows}`;
 
     if (node.sessionReady && (force || nextSizeKey !== node.sizeKey)) {
-      bridge.resizeTerminal({
+      void backend.terminal.resize({
         paneId: node.paneId,
         cols,
         rows,
@@ -411,7 +411,7 @@ export function createPaneRenderer({
     const pane = paneState.getPaneById(node.paneId);
     const profileId = pane?.shellProfileId ?? null;
     try {
-      await bridge.createTerminal({
+      await void backend.terminal.create({
         paneId: node.paneId,
         cols: node.terminal.cols,
         rows: node.terminal.rows,
@@ -433,7 +433,7 @@ export function createPaneRenderer({
     for (const [paneId, node] of paneNodeMap.entries()) {
       if (!activeIds.has(paneId)) {
         paneActivityWatcher.forget(paneId);
-        bridge.destroyTerminal({ paneId });
+        void backend.terminal.destroy({ paneId });
         node.terminal.dispose();
         node.root.remove();
         paneNodeMap.delete(paneId);
@@ -511,7 +511,7 @@ export function createPaneRenderer({
       return false;
     }
 
-    bridge.writeClipboardText(selection);
+    void backend.clipboard.write(selection);
     return true;
   }
 
@@ -521,15 +521,15 @@ export function createPaneRenderer({
       return false;
     }
 
-    const text = options.clipboardSnapshot?.text ?? (await bridge.readClipboardText());
+    const text = options.clipboardSnapshot?.text ?? (await backend.clipboard.read());
     if (!text) {
       return false;
     }
 
-    if (bridge.platform === 'win32') {
+    if (backend.platform === 'win32') {
       node.terminal.paste(text);
     } else {
-      bridge.writeTerminal({ paneId: node.paneId, data: text });
+      void backend.terminal.write({ paneId: node.paneId, data: text });
     }
     return true;
   }
@@ -555,7 +555,7 @@ export function createPaneRenderer({
       return false;
     }
 
-    bridge.writeTerminal({ paneId: node.paneId, data: '\u0016' });
+    void backend.terminal.write({ paneId: node.paneId, data: '\u0016' });
     return true;
   }
 
@@ -585,7 +585,7 @@ export function createPaneRenderer({
     const node = getNode(paneId);
     if (!node) return;
     paneActivityWatcher.forget(paneId);
-    bridge.destroyTerminal({ paneId });
+    void backend.terminal.destroy({ paneId });
     node.terminal.dispose();
     node.root.remove();
     paneNodeMap.delete(paneId);
