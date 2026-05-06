@@ -69,6 +69,7 @@ export interface ShellProfileBridge {
   addShellProfile: (profile: ShellProfile) => Promise<ShellProfileConfigResult>;
   removeShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
   setDefaultShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
+  redetectWsl: () => Promise<{ available: boolean; distributions: string[]; defaultShell: string | null }>;
 }
 
 /** Dependencies injected into createShellProfileManager. */
@@ -234,6 +235,7 @@ export function createShellProfileManager({
         <div class="settings-modal-header">
           <div class="settings-modal-title-group">
             <span>Shell Profiles</span>
+            <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-redetect" aria-label="Re-detect WSL">${icon('refresh-cw', 18)}</button>
             <button type="button" class="shell-profiles-add-btn" id="modal-shell-profile-add" aria-label="Add Profile">${icon('plus', 18)}</button>
           </div>
           <button type="button" class="settings-modal-close" aria-label="Close">${icon('x', 16)}</button>
@@ -261,6 +263,13 @@ export function createShellProfileManager({
     });
 
     overlay.querySelector('.settings-modal-close')!.addEventListener('click', closeModal);
+
+    // Re-detect button
+    overlay.querySelector('#modal-shell-profile-redetect')!.addEventListener('click', () => {
+      bridge.redetectWsl().then(() => {
+        loadShellProfiles();
+      }).catch(reportError);
+    });
 
     // Add profile button
     overlay.querySelector('#modal-shell-profile-add')!.addEventListener('click', () => {
