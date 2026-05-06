@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **renderer.ts first real PaneManager integration (VIB-184):** Added PaneManager instance to `renderer.ts` (38 net new lines). The "add pane" button now creates panes through `PaneManager.create()` — proving the Phase 2 system works end-to-end (terminal renders, PTY connects, input works). Old system continues as fallback. PaneManager panes use `pm`-prefixed IDs to avoid collision with old pane IDs. Added guards to `terminal.onData`/`onExit` listeners to skip PaneManager-managed panes. Also fixed TS errors in `terminal-capability.ts` (PaneHandle signature, WebLinksAddon callback param order), `clipboard-capability.ts` (onSelectionChange type), and `renderer.ts` (context menu type bridge).
+
 ### Changed
 
 - **PaneManager lifecycle fix + real capabilities (VIB-183):** Replaced 4 stub capabilities (terminal, pty, color, shell) with real implementations in `create-pane-manager.ts`. Now uses `pane.use(behavior) × N → pane.open()` lifecycle instead of manually calling `behavior.open()` before `pane.open()`. Removed `capabilityApis` Map in favor of `pane.capability(name)` lookup. Added `setState(key, value)` to `PaneHandle` interface so color/shell capabilities can mutate pane state through the handle. Created `createPtyAdapter()` to bridge `PaneHandle` → `PtyBehaviorContext` (adapts `getCwd`/`getShellProfileId` from `getState`, routes `onOutput` through `capability('terminal').write()`). Activity watcher dispatch now uses `pane.capability()` instead of separate API map.

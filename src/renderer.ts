@@ -34,6 +34,11 @@ import { createTabBar } from './tab-bar';
 import type { TabBarLocalState } from './tab-bar';
 import type { PaneNode } from './pane-renderer';
 import type { ShellProfile, EditingShellProfile } from './shell-profiles';
+import { createPaneManager } from './manager/create-pane-manager';
+import type { PaneManager } from './manager/create-pane-manager';
+import type { DomCapabilityApi } from './pane/capabilities/dom-capability';
+import type { TerminalCapability } from './pane/capabilities/terminal-capability';
+import type { PtyCapability } from './pane/capabilities/pty-capability';
 
 // ---------------------------------------------------------------------------
 const stageEl = document.getElementById('stage')!;
@@ -266,6 +271,16 @@ paneOps = createPaneOperations({
   state: tabBarState,
 });
 
+// ── Phase 2: PaneManager (first real integration path) ─────────────────────
+const paneManager: PaneManager = createPaneManager({
+  backend,
+  paneAlert,
+  onPaneClick: (id, opts) => paneOps?.focusPane(id, opts),
+  onTerminalContextMenu: (node, evt) => void contextMenus?.showTerminalContextMenu(node as PaneNode, evt),
+  onStateChange: () => render(),
+  getAccentPalette: () => [...ColorsRegistry.ACCENT_PALETTE],
+});
+
 const commandPaletteEntries = createCommandPaletteEntries({
   paneState,
   paneRenderer,
@@ -297,6 +312,7 @@ const fullscreenManager = createFullscreenManager({
 
 // ---------------------------------------------------------------------------
 const removeTerminalDataListener = backend.terminal.onData(({ paneId, data }) => {
+  if (paneManager.get(paneId)) return;
   paneRenderer?.write(paneId, data);
 });
 
@@ -307,6 +323,7 @@ backend.onLayoutFocusNotice?.(() => {
 });
 
 const removeTerminalExitListener = backend.terminal.onExit(({ paneId, exitCode, reason }) => {
+  if (paneManager.get(paneId)) return;
   const handled = paneOps?.handleTerminalExit({ paneId, exitCode, reason });
   if (handled === false) {
     void backend.window.close().catch(reportError);
@@ -464,7 +481,27 @@ window.addEventListener('blur', () => {
 
 // ---------------------------------------------------------------------------
 addPaneButtonEl.addEventListener('click', () => {
-  try { paneOps?.addPane(); } catch (error) { reportError(error); }
+  try {
+    const pane = paneManager.create({
+      paneId: `pm${Date.now()}`,
+      title: null,
+      cwd: backend.defaultCwd,
+      accent: ColorsRegistry.ACCENT_PALETTE[paneManager.size() % ColorsRegistry.ACCENT_PALETTE.length],
+      shellProfileId: null,
+    });
+    const dom = pane.capability<DomCapabilityApi>('dom');
+    const term = pane.capability<TerminalCapability>('terminal');
+    const pty = pane.capability<PtyCapability>('pty');
+    if (dom) {
+      dom.mount(stageEl);
+      requestAnimationFrame(() => {
+        term?.fit();
+        if (term && pty) pty.resize(term.instance.cols, term.instance.rows);
+      });
+    }
+    setMode('terminal');
+    render(true);
+  } catch (error) { reportError(error); }
 });
 
 addProfileButtonEl.addEventListener('click', (event) => {
