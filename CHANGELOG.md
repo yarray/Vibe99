@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **PaneManager lifecycle fix + real capabilities (VIB-183):** Replaced 4 stub capabilities (terminal, pty, color, shell) with real implementations in `create-pane-manager.ts`. Now uses `pane.use(behavior) × N → pane.open()` lifecycle instead of manually calling `behavior.open()` before `pane.open()`. Removed `capabilityApis` Map in favor of `pane.capability(name)` lookup. Added `setState(key, value)` to `PaneHandle` interface so color/shell capabilities can mutate pane state through the handle. Created `createPtyAdapter()` to bridge `PaneHandle` → `PtyBehaviorContext` (adapts `getCwd`/`getShellProfileId` from `getState`, routes `onOutput` through `capability('terminal').write()`). Activity watcher dispatch now uses `pane.capability()` instead of separate API map.
+
 ### Added
 
 - **PTY capability module (VIB-175):** Created `src/pane/capabilities/pty-capability.ts` (119 lines) extracting PTY session lifecycle from `pane-renderer.ts`. Factory `createPtyBehavior(deps)` returns `{ name: 'pty', open(ctx), close() }`. `open(ctx)` registers per-pane backend event listeners (onData/onExit filtered by paneId) and returns self-contained session API: `sessionReady`/`isShellChanging`/`recentShellChange` getters; `create()`/`write()`/`resize()`/`destroy()`/`beginShellChange()`/`endShellChange()`/`close()` methods. No xterm dependency — pure backend session management.

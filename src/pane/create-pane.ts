@@ -12,6 +12,7 @@ export interface PaneBehavior {
 export interface PaneHandle {
   id: string;
   getState: <T>(k: string) => T | undefined;
+  setState: (key: string, value: unknown) => void;
   capability: <T>(name: string) => T | undefined;
   emit: (event: string, payload?: unknown) => void;
 }
@@ -49,6 +50,10 @@ export function createPane({ id, initialState = {}, deps = {} }: {
   const handle: PaneHandle = {
     id,
     getState: <T>(k: string): T | undefined => state[k] as T,
+    setState: (key: string, value: unknown): void => {
+      state = { ...state, [key]: value };
+      for (const k of [key]) emit({ type: 'state-change', key: k });
+    },
     capability: <T>(name: string): T | undefined => capabilities.get(name) as T | undefined,
     emit: (event: string, payload?: unknown): void => {
       for (const h of listeners[event] ?? []) h({ type: event } as PaneLifecycleEvent);
