@@ -4,6 +4,7 @@ import type { Pane, PaneState } from './pane-state';
 import type { PaneRenderer } from './pane-renderer';
 import type { TabBar, TabBarLocalState } from './tab-bar';
 import type { Bridge, ClipboardSnapshot } from './bridge';
+import type { FocusController } from './manager/create-focus-controller.js';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -21,8 +22,7 @@ export interface PaneOperationsDeps {
   tabBar: TabBar;
   layoutManager: LayoutManagerHandle;
   render: (refit?: boolean) => void;
-  setMode: (mode: string) => void;
-  getCurrentMode: () => string;
+  focusController: FocusController;
   state: TabBarLocalState;
 }
 
@@ -62,15 +62,12 @@ export function createPaneOperations({
   tabBar,
   layoutManager,
   render,
-  setMode,
-  getCurrentMode,
+  focusController,
   state,
 }: PaneOperationsDeps): PaneOperations {
   function focusPane(paneId: string, options: { focusTerminal?: boolean } = {}): void {
     const { focusTerminal = true } = options;
-    paneState.focusPane(paneId);
-    setMode('terminal');
-    render();
+    if (!focusController.focusPane(paneId)) return;
     paneRenderer?.setAlerted(paneId, false);
     if (focusTerminal) {
       paneRenderer?.focusTerminal(paneId);
@@ -78,20 +75,21 @@ export function createPaneOperations({
   }
 
   function refocusCurrentPaneTerminal(): void {
-    const paneId = paneState.getFocusedPaneId();
+    const paneId = focusController.getActiveId();
     if (!paneId) return;
-    setMode('terminal');
+    focusController.setMode('terminal');
     paneRenderer?.focusTerminal(paneId);
   }
 
   function blurFocusedTerminal(): void {
-    const paneId = paneState.getFocusedPaneId();
+    const paneId = focusController.getActiveId();
     if (paneId) paneRenderer?.blurTerminal(paneId);
   }
 
   function addPane(shellProfileId: string | null = null): string {
     const newPaneId = paneState.addPane(shellProfileId);
-    setMode('terminal');
+    focusController.recordPaneVisit(newPaneId);
+    focusController.setMode('terminal');
     document.body.classList.remove('is-navigation-mode');
     render(true);
     return newPaneId;
@@ -119,15 +117,17 @@ export function createPaneOperations({
       paneRenderer?.destroyPane(closingPane.id);
     }
 
+    focusController.commitPaneCycle();
     const wasFocused = closingPane.id === paneState.getFocusedPaneId();
     paneState.closePane(index);
     render(true);
 
     if (wasFocused) {
       const newFocusedPaneId = paneState.getFocusedPaneId();
+      focusController.recordPaneVisit(newFocusedPaneId);
       if (newFocusedPaneId) {
         requestAnimationFrame(() => {
-          setMode('terminal');
+          focusController.setMode('terminal');
           paneRenderer?.focusTerminal(newFocusedPaneId);
         });
       }
@@ -135,44 +135,28 @@ export function createPaneOperations({
   }
 
   function moveFocus(delta: number): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0) return;
-    paneState.moveFocus(delta);
-    render();
+    focusController.moveFocus(delta);
   }
 
   function navigateLeft(): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0) return;
-    const focusedIndex = paneState.getFocusedIndex();
-    const nextIndex = focusedIndex - 1;
-    if (nextIndex >= 0) {
-      focusPane(currentPanes[nextIndex].id);
-    }
+    focusController.navigateLeft();
   }
 
   function navigateRight(): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0) return;
-    const focusedIndex = paneState.getFocusedIndex();
-    const nextIndex = focusedIndex + 1;
-    if (nextIndex < currentPanes.length) {
-      focusPane(currentPanes[nextIndex].id);
-    }
+    focusController.navigateRight();
   }
 
   function cycleToRecentPane({ reverse = false }: { reverse?: boolean } = {}): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length < 2) return;
-    const targetId = paneState.cycleToRecentPane({ reverse });
+    if (focusController.getMode() !== 'terminal') {
+      focusController.setMode('terminal');
+    }
+    const targetId = focusController.cycleToRecentPane({ reverse });
     if (!targetId) return;
-    setMode('terminal');
-    render();
     paneRenderer?.focusTerminal(targetId);
   }
 
   function commitPaneCycle(): void {
-    paneState.commitPaneCycle();
+    focusController.commitPaneCycle();
   }
 
   function cycleToNextLitPane(): void {
@@ -188,20 +172,15 @@ export function createPaneOperations({
   }
 
   function focusPaneAt(index: number): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0 || index < 0 || index >= currentPanes.length) return;
-    paneState.focusPane(currentPanes[index].id);
-    render();
+    focusController.focusPaneAt(index);
   }
 
   function getPaneCount(): number {
-    return paneState.getPanes().length;
+    return focusController.getPaneCount();
   }
 
   function getPaneIdAt(index: number): string | null {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0 || index < 0 || index >= currentPanes.length) return null;
-    return currentPanes[index].id;
+    return focusController.getPaneIdAt(index);
   }
 
   function requestClosePane(paneId: string): void {
@@ -211,8 +190,8 @@ export function createPaneOperations({
         state.pendingClosePaneId = null;
         closePane(index);
         const currentPanes = paneState.getPanes();
-        if (getCurrentMode() === 'nav' && currentPanes.length > 0) {
-          const focusedId = paneState.getFocusedPaneId();
+        if (focusController.getMode() === 'nav' && currentPanes.length > 0) {
+          const focusedId = focusController.getActiveId();
           if (focusedId) focusPane(focusedId, { focusTerminal: true });
         }
       }
@@ -225,7 +204,7 @@ export function createPaneOperations({
   function startInlineRename(paneId: string): void {
     const index = paneState.getPaneIndex(paneId);
     if (index !== -1) {
-      if (getCurrentMode() === 'nav') setMode('terminal');
+      if (focusController.getMode() === 'nav') focusController.setMode('terminal');
       tabBar.beginRenamePane(index);
     }
   }
