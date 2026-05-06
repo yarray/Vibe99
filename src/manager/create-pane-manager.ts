@@ -11,6 +11,9 @@
 
 import { createPane, type Pane, type PaneDeps } from '../pane/create-pane.js';
 import { createDomBehavior } from '../pane/capabilities/dom-capability.js';
+import { createActivityBehavior } from '../pane/capabilities/activity-capability.js';
+import { createClipboardBehavior } from '../pane/capabilities/clipboard-capability.js';
+import { createPaneActivityWatcher } from '../pane-activity-watcher.js';
 import type { Bridge } from '../bridge.js';
 import type { PaneAlertStrategy } from '../pane-alert-breathing-mask.js';
 
@@ -74,11 +77,18 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
   let activePaneId: string | null = null;
   let nextPaneNumber = 1;
 
+  // Shared activity watcher. The watcher itself has no breathing-mask knowledge;
+  // its onAlert/onClear callbacks are registered per-pane by activity-capability.
+  const watcher = createPaneActivityWatcher();
+
   // Capability factories: dom → terminal → pty → activity → clipboard → color → shell
   const stub = (name: string) => ({ name, create: () => ({ name, open: () => ({ stub: true }), close: () => {} }) });
   const capabilityFactories = [
     { name: 'dom', create: (d: unknown) => createDomBehavior(d as Parameters<typeof createDomBehavior>[0]) },
-    stub('terminal'), stub('pty'), stub('activity'), stub('clipboard'), stub('color'), stub('shell'),
+    stub('terminal'), stub('pty'),
+    { name: 'activity', create: () => createActivityBehavior({ watcher, alert: paneAlert }) },
+    { name: 'clipboard', create: () => createClipboardBehavior({ bridge }) },
+    stub('color'), stub('shell'),
   ];
 
   const notify = (): void => { onStateChange?.(); };
@@ -125,7 +135,7 @@ export function createPaneManager(deps: PaneManagerDeps): PaneManager {
     for (const factory of capabilityFactories) {
       const behavior = factory.name === 'dom' ? factory.create(domDeps) : factory.create(null);
       pane.use(behavior);
-      const api = (behavior as { open: (ctx: unknown) => unknown }).open({ id: paneId, getState: pane.getState, emit: () => {} });
+      const api = (behavior as { open: (ctx: unknown) => unknown }).open({ id: paneId, getState: pane.getState, emit: () => {}, capability: pane.capability.bind(pane) });
       if (api && typeof api === 'object') apis.set(factory.name, api);
     }
     capabilityApis.set(paneId, apis);
