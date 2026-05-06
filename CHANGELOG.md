@@ -4,7 +4,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **DOM capability extraction (VIB-173):** Extracted DOM creation and lifecycle from `pane-renderer.ts` into new `src/pane/capabilities/dom-capability.ts` (~174 lines). Factory `createDomBehavior(deps)` returns `{ name: 'dom', open(ctx), close(ctx, api) }`. open() creates DOM tree: root(article.pane) > shell > body > surface > terminalHost. API includes: `root`/`terminalHost` refs, `mount(container)`/`unmount()`, `setLayout({ left, height, zIndex })`, `setFocused(isFocused, isNavTarget)`, `setAccent(color)`, `dispose()`. Integrates breathing mask alert strategy and registers click-focus and right-click context menu events. All class names preserved from existing implementation.
+- **Pane manager (VIB-178):** Created `src/manager/create-pane-manager.ts` (~188 lines) for Pane collection CRUD, focus management, layout coordination, and session persistence. Factory `createPaneManager(deps)` returns manager with: `create(initialState)` creates pane mounting capabilities in order (dom→terminal→pty→activity→clipboard→color→shell) then calls `pane.open()`, `destroy(paneId)` calls `pane.close()` + removes from collection + destroys PTY, `get(paneId)`/`getAll()`/`getActive()`/`getActiveId()` for read access, `setActive(paneId)` sets active pane, `size()` returns pane count, `serializeAll()` serializes all panes for session persistence, `restoreSession()` restores panes from serialized entries. Integrates with `bridge.terminal` for PTY creation/destruction. Uses stub capabilities for terminal/pty/activity/clipboard/color/shell (to be implemented in follow-up tasks).
+
 ### Changed
+
+- **Backend API domain grouping (VIB-171):**
+  - Created new `src/backend.ts` (~540 lines) that exports `createBackend(tauri)` function with domain-grouped APIs
+  - Grouped APIs by domain: `terminal` (create, write, resize, destroy, onData, onExit), `clipboard` (read, write, snapshot), `settings` (load, save), `shell` (list, add, remove, setDefault, detect), `window` (close, openUrl, showMenu), `layouts` (list, save, delete, rename, openWindow, openInNewWindow, isFullscreen, setFullscreen, setAsDefault)
+  - Exported shared utilities: `basename`, `clearLayoutWindowBinding`, `getBoundLayoutWindowLabel`, `readLayoutWindowBindings`, `writeLayoutWindowBindings`, `LAYOUT_FOCUS_NOTICE_EVENT`, `getRuntimePlatform`
+  - Removed flat alias methods (e.g., `createTerminal`, `writeTerminal`, `readClipboardText`) in favor of domain-grouped calls (e.g., `backend.terminal.create()`, `backend.clipboard.read()`)
+  - Updated all call sites in: `renderer.ts`, `context-menus.ts`, `layout-manager.ts`, `shell-profiles.ts`, `command-palette-entries.ts`, `layout-modal.ts`, `pane-renderer.ts`, `settings.ts`, `fullscreen-manager.ts`
+  - Preserved all existing functionality; no behavioral changes
 
 - **CSS architecture (VIB-146):** Split `src/styles.css` (2344 lines) into 8 purpose-oriented files under `src/styles/`: `base.css` (CSS variables, resets, app-shell), `tabs.css` (tabs panel & actions), `panes.css` (stage, pane, terminal, status bar), `settings-modal.css` (settings panel, keyboard shortcuts), `shell-profiles.css` (shell profiles list & editor), `overlays.css` (context menu, color picker), `layouts.css` (layout manager modal, layouts dropdown), `animations.css` (keyframes, reduced-motion). All rules preserved; no behavior change.
 - **Rust pty.rs module split (VIB-147):**
@@ -47,6 +60,8 @@
   - Terminal titles >64 characters are truncated to keep the tail (e.g., "...powershell.exe")
 
 ### Added
+
+- **Terminal capability (VIB-174):** Created `src/pane/capabilities/terminal-capability.ts` (122 lines) to manage xterm.js instance and addons lifecycle. Extracts terminal creation logic from `pane-renderer.ts`. Provides `createTerminalBehavior(deps)` factory function with xterm instance creation, addon loading (FitAddon, WebLinksAddon, Unicode11Addon, WebglAddon), event registration (onData, onTitleChange, onSelectionChange), and mounting to dom capability's terminalHost. API includes: instance, fitAddon, write, focus, blur, fit, resize, setTheme, hasSelection, getSelection, selectAll, writeln, clear, dispose.
 
 - E2E tests for Settings panel (VIB-113):
   - Settings panel toggle tests (open/close via button, click outside to close)
