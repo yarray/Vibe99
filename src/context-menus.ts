@@ -12,7 +12,7 @@ import { icon } from './icons';
 import * as ColorsRegistry from './colors-registry';
 import type { PaneNode } from './pane-renderer';
 import type { Pane } from './pane-state';
-import type { Bridge, ClipboardSnapshot } from './bridge';
+import type { Backend, ClipboardSnapshot } from './backend';
 import type { ShellProfile } from './shell-profiles';
 
 // ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ export interface ShellProfileManagerLike {
 /** Dependencies injected into `createContextMenus`. */
 export interface ContextMenusDeps {
   state: ContextMenuState;
-  bridge: Bridge;
+  backend: Backend;
   shellProfileManager: ShellProfileManagerLike;
   reportError: (error: unknown) => void;
   focusPane: (paneId: string) => void;
@@ -113,9 +113,9 @@ let _dismissContextMenuOnOutsideFn: ((event: PointerEvent) => void) | null = nul
 // Utility functions for clipboard and terminal operations
 // ---------------------------------------------------------------------------
 
-async function getClipboardSnapshot(bridge: Bridge): Promise<ClipboardSnapshot> {
+async function getClipboardSnapshot(backend: Backend): Promise<ClipboardSnapshot> {
   try {
-    return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+    return await backend.clipboard.snapshot();
   } catch {
     return { text: '', hasImage: false };
   }
@@ -124,7 +124,7 @@ async function getClipboardSnapshot(bridge: Bridge): Promise<ClipboardSnapshot> 
 function copyTerminalSelection(
   paneId: string,
   state: ContextMenuState,
-  bridge: Bridge,
+  backend: Backend,
 ): boolean {
   const node = state.getPaneNode(paneId);
   if (!node) {
@@ -136,14 +136,14 @@ function copyTerminalSelection(
     return false;
   }
 
-  bridge.writeClipboardText(selection);
+  void backend.clipboard.write(selection);
   return true;
 }
 
 async function pasteIntoTerminal(
   paneId: string,
   state: ContextMenuState,
-  bridge: Bridge,
+  backend: Backend,
   options: { clipboardSnapshot?: ClipboardSnapshot } = {},
 ): Promise<boolean> {
   const node = state.getPaneNode(paneId);
@@ -151,15 +151,15 @@ async function pasteIntoTerminal(
     return false;
   }
 
-  const text = options.clipboardSnapshot?.text ?? (await bridge.readClipboardText());
+  const text = options.clipboardSnapshot?.text ?? (await backend.clipboard.read());
   if (!text) {
     return false;
   }
 
-  if (bridge.platform === 'win32') {
+  if (backend.platform === 'win32') {
     node.terminal.paste(text);
   } else {
-    bridge.writeTerminal({ paneId: node.paneId, data: text });
+    void backend.terminal.write({ paneId: node.paneId, data: text });
   }
   return true;
 }
@@ -177,7 +177,7 @@ function selectAllInTerminal(paneId: string, state: ContextMenuState): boolean {
 async function pasteImageIntoTerminal(
   paneId: string,
   state: ContextMenuState,
-  bridge: Bridge,
+  backend: Backend,
   options: PasteImageOptions = {},
 ): Promise<boolean> {
   const node = state.getPaneNode(paneId);
@@ -185,12 +185,12 @@ async function pasteImageIntoTerminal(
     return false;
   }
 
-  const clipboardSnapshot = options.clipboardSnapshot ?? (await getClipboardSnapshot(bridge));
+  const clipboardSnapshot = options.clipboardSnapshot ?? (await getClipboardSnapshot(backend));
   if (!clipboardSnapshot.hasImage) {
     return false;
   }
 
-  bridge.writeTerminal({ paneId: node.paneId, data: '' });
+  void backend.terminal.write({ paneId: node.paneId, data: '' });
   return true;
 }
 
@@ -227,7 +227,7 @@ function showContextMenu(
   y: number,
   paneId: string,
   state: ContextMenuState,
-  bridge: Bridge,
+  backend: Backend,
   handleMenuAction: HandleMenuActionFn,
 ): void {
   hideContextMenu(state);
@@ -338,7 +338,7 @@ function showTerminalContextMenu(
   node: PaneNode,
   event: MouseEvent,
   state: ContextMenuState,
-  bridge: Bridge,
+  backend: Backend,
   shellProfileManager: ShellProfileManagerLike,
   handleMenuAction: HandleMenuActionFn,
 ): void {
@@ -386,7 +386,7 @@ function showTabContextMenu(
   paneId: string,
   event: MouseEvent,
   state: ContextMenuState,
-  bridge: Bridge,
+  backend: Backend,
   handleMenuAction: HandleMenuActionFn,
 ): void {
   const paneIndex = state.getPaneIndex(paneId);
@@ -419,7 +419,7 @@ function showTabContextMenu(
 function showColorPicker(
   paneId: string,
   state: ContextMenuState,
-  bridge: Bridge,
+  backend: Backend,
   focusPane: (paneId: string) => void,
   handleMenuAction: HandleMenuActionFn,
 ): void {
@@ -620,7 +620,7 @@ function clearPaneColor(paneId: string, state: ContextMenuState): void {
 
 interface HandleMenuActionDeps {
   state: ContextMenuState;
-  bridge: Bridge;
+  backend: Backend;
   shellProfileManager: ShellProfileManagerLike;
   reportError: (error: unknown) => void;
   focusPane: (paneId: string) => void;
