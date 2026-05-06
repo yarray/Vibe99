@@ -131,6 +131,7 @@
   color: rgba(255, 255, 255, 0.65);
   font-size: 14px;
   line-height: var(--status-height);
+  overflow: hidden;
 }
 
 #status-label {
@@ -141,9 +142,12 @@
 }
 
 .status-hint {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Hint bar styles */
