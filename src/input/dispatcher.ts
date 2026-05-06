@@ -19,7 +19,22 @@
  * effect without rebinding the listener. Parsed-chord caching keeps that cheap.
  */
 
-import { matchesChord, parseChord } from './keymap.js';
+import { matchesChord, parseChord, KeymapEntry, ParsedChord } from './keymap';
+import { ActionsTable } from './actions';
+
+interface ParsedKeymapEntry extends KeymapEntry {
+  parsedChord: ParsedChord[];
+}
+
+export interface DispatcherDeps {
+  getKeymap: () => KeymapEntry[];
+  actions: ActionsTable;
+  getMode: () => string;
+  isInputFocused: () => boolean;
+  isCommandPaletteOpen: () => boolean;
+}
+
+export type DispatchFn = (event: KeyboardEvent) => void;
 
 export function createDispatcher({
   getKeymap,
@@ -27,22 +42,22 @@ export function createDispatcher({
   getMode,
   isInputFocused,
   isCommandPaletteOpen,
-}) {
-  let cachedKeymap = null;
-  let parsedKeymap = null;
-  function getParsed() {
+}: DispatcherDeps): DispatchFn {
+  let cachedKeymap: KeymapEntry[] | null = null;
+  let parsedKeymap: ParsedKeymapEntry[] | null = null;
+  function getParsed(): ParsedKeymapEntry[] {
     const km = getKeymap();
     if (km !== cachedKeymap) {
-      parsedKeymap = km.map((entry) => ({
+      parsedKeymap = km.map((entry: KeymapEntry): ParsedKeymapEntry => ({
         ...entry,
         parsedChord: parseChord(entry.chord),
       }));
       cachedKeymap = km;
     }
-    return parsedKeymap;
+    return parsedKeymap!;
   }
 
-  return function dispatch(event) {
+  return function dispatch(event: KeyboardEvent): void {
     const mode = getMode();
     const inputFocused = isInputFocused();
     const paletteOpen = isCommandPaletteOpen();
@@ -53,7 +68,7 @@ export function createDispatcher({
       if (!matchesChord(event, entry.parsedChord)) continue;
       if (inputFocused && entry.skipInInput) continue;
 
-      const handler = actions[entry.action];
+      const handler = actions[entry.action as keyof ActionsTable];
       if (!handler) continue;
 
       event.preventDefault();

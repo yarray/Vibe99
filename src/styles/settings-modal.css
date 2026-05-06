@@ -1,0 +1,500 @@
+/* ============================================================
+   settings-modal.css — Core modal styles + Keyboard Shortcuts
+   (Shell profiles CSS has been moved to shell-profiles.css)
+   ============================================================ */
+
+/* --- Settings panel (inline dropdown) --- */
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 1px);
+  right: 4px;
+  display: grid;
+  gap: 0;
+  width: 280px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #1e1e1e;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.settings-panel.is-hidden {
+  display: none;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: var(--app-font-size);
+}
+
+.settings-dual {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-panel input[type="range"] {
+  width: 100%;
+  margin: 0;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  outline: none;
+}
+
+.settings-panel input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--status-highlight);
+  border: 2px solid var(--status-highlight);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.settings-panel input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.25);
+}
+
+.settings-panel input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.35);
+}
+
+.settings-number {
+  width: 100%;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+}
+
+.settings-color {
+  width: 56px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.settings-color::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.settings-color::-webkit-color-swatch {
+  border: none;
+}
+
+.settings-toggle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.settings-toggle-dot.is-active {
+  background: var(--status-highlight);
+}
+
+.settings-section {
+  padding: 8px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.settings-divider {
+  height: 1px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.settings-action-btn {
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.settings-clickable-row {
+  cursor: pointer;
+  margin: 0 -14px;
+  padding: 6px 14px;
+  border-radius: 0;
+  transition: background 120ms ease;
+}
+
+.settings-clickable-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-clickable-row:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.settings-row-hint {
+  color: var(--panel-muted);
+  font-size: 14px;
+  transition: color 120ms ease;
+}
+
+.settings-clickable-row:hover .settings-row-hint {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+/* --- Modal overlay (shared) --- */
+.settings-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.settings-modal {
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  min-width: 300px;
+  max-width: 400px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.settings-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.settings-modal-close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.settings-modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.settings-modal-body {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.settings-modal-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: var(--app-font-size);
+}
+
+.settings-modal-value {
+  color: var(--panel-muted);
+  font-size: 12px;
+}
+
+.settings-modal-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-modal-btn {
+  appearance: none;
+  padding: 6px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-modal-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.settings-modal-btn.primary {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.settings-modal-btn.primary:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* --- Keyboard Shortcuts Interface --- */
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.shortcut-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.shortcut-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shortcut-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.shortcut-description {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.shortcut-mode-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 196, 93, 0.15);
+  color: #ffc45d;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.shortcut-binding {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: inherit;
+  min-width: 80px;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.shortcut-keys:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.shortcut-edit-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.shortcut-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.shortcut-recorder-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.shortcut-recorder-dialog {
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  padding: 24px;
+  min-width: 320px;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  text-align: center;
+}
+
+.shortcut-recorder-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.shortcut-recorder-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 20px;
+}
+
+.shortcut-recorder-keys {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  min-height: 40px;
+}
+
+.shortcut-recorder-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.shortcut-recorder-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.shortcut-recorder-btn {
+  appearance: none;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.shortcut-recorder-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.shortcut-recorder-btn.is-primary {
+  background: rgba(255, 196, 93, 0.2);
+  border-color: rgba(255, 196, 93, 0.4);
+  color: #ffc45d;
+}
+
+.shortcut-recorder-btn.is-primary:hover {
+  background: rgba(255, 196, 93, 0.3);
+  border-color: rgba(255, 196, 93, 0.5);
+}
+
+.shortcut-conflict-warning {
+  font-size: 11px;
+  color: #ff6b57;
+  margin-top: 2px;
+}

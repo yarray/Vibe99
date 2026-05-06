@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -133,10 +134,8 @@ export const config = {
 
   onPrepare: async () => {
     if (!fs.existsSync(binaryPath)) {
-      throw new Error(
-        `Application binary not found at ${binaryPath}. ` +
-        `Run 'npm run tauri:build' from the project root first.`,
-      );
+      console.log('Application binary not found — building (debug)...');
+      execSync('npm run tauri:build-dev', { cwd: projectRoot, stdio: 'inherit' });
     }
 
     await startXvfb();

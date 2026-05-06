@@ -13,10 +13,12 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "tauri:build-dev": "tauri build --debug",
     "test:e2e": "node ./scripts/run-e2e.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "typescript": "^6.0.3",
     "vite": "^6.4.2"
   },
   "dependencies": {
