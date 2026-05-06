@@ -7,27 +7,42 @@
 // a callback invoked with the selected item id. Styles live in
 // styles.css under the `command-palette-*` prefix.
 
-import Fuse from 'fuse.js';
+import Fuse, { type FuseResult, type FuseResultMatch, type RangeTuple } from 'fuse.js';
 
 import './command-palette.css';
 
-let paletteState = null;
+/** A single selectable row inside the command palette. */
+export interface PaletteItem {
+  /** Opaque identifier passed back to onSelect. */
+  id: string;
+  /** Text matched against the query and shown in the row. */
+  label: string;
+  /** Optional CSS color string for the row swatch. */
+  accent?: string;
+}
 
-/**
- * @typedef {object} PaletteItem
- * @property {string} id     — opaque identifier passed back to onSelect.
- * @property {string} label  — text matched against the query and shown in the row.
- * @property {string} [accent] — optional CSS color string for the row swatch.
- */
+/** Options bag for openCommandPalette. */
+export interface PaletteOptions {
+  /** Placeholder text for the search input. */
+  placeholder?: string;
+  /** Text shown when the query matches nothing. */
+  emptyText?: string;
+}
+
+interface PaletteState {
+  overlay: HTMLDivElement;
+}
+
+let paletteState: PaletteState | null = null;
 
 /**
  * Open the palette. No-op if it is already open or items is empty.
- *
- * @param {PaletteItem[]} items
- * @param {(id: string) => void} onSelect
- * @param {{ placeholder?: string, emptyText?: string }} [options]
  */
-export function openCommandPalette(items, onSelect, options = {}) {
+export function openCommandPalette(
+  items: PaletteItem[],
+  onSelect: (id: string) => void,
+  options: PaletteOptions = {},
+): void {
   if (paletteState) return;
   if (!items || items.length === 0) return;
 
@@ -57,7 +72,7 @@ export function openCommandPalette(items, onSelect, options = {}) {
 
   // Mousedown anywhere inside the dialog (other than the input) would
   // otherwise blur the input. Preventing default keeps focus pinned.
-  dialog.addEventListener('mousedown', (event) => {
+  dialog.addEventListener('mousedown', (event: MouseEvent) => {
     if (event.target !== input) {
       event.preventDefault();
     }
@@ -73,14 +88,14 @@ export function openCommandPalette(items, onSelect, options = {}) {
   });
 
   let highlightedIndex = 0;
-  let currentResults = [];
+  let currentResults: FuseResult<PaletteItem>[] = [];
 
-  function selectedItem() {
+  function selectedItem(): PaletteItem | null {
     const result = currentResults[highlightedIndex];
     return result ? result.item : null;
   }
 
-  function updateHighlight() {
+  function updateHighlight(): void {
     const rows = list.querySelectorAll('.command-palette-item');
     rows.forEach((el, idx) => {
       const isOn = idx === highlightedIndex;
@@ -92,7 +107,7 @@ export function openCommandPalette(items, onSelect, options = {}) {
     });
   }
 
-  function renderRow(result, idx) {
+  function renderRow(result: FuseResult<PaletteItem>, idx: number): HTMLButtonElement {
     const { item, matches } = result;
     const row = document.createElement('button');
     row.type = 'button';
@@ -113,7 +128,7 @@ export function openCommandPalette(items, onSelect, options = {}) {
     row.append(label);
 
     // Use mousedown (not click) so the input never blurs before we act.
-    row.addEventListener('mousedown', (event) => {
+    row.addEventListener('mousedown', (event: MouseEvent) => {
       event.preventDefault();
       commit(item.id);
     });
@@ -127,7 +142,7 @@ export function openCommandPalette(items, onSelect, options = {}) {
     return row;
   }
 
-  function renderList() {
+  function renderList(): void {
     list.replaceChildren();
     if (currentResults.length === 0) {
       const empty = document.createElement('div');
@@ -142,11 +157,11 @@ export function openCommandPalette(items, onSelect, options = {}) {
     updateHighlight();
   }
 
-  function applyQuery(query) {
+  function applyQuery(query: string): void {
     const trimmed = query.trim();
     if (!trimmed) {
       // Empty query: show every item in its original order, unhighlighted.
-      currentResults = items.map((item) => ({ item, matches: [] }));
+      currentResults = items.map((item) => ({ item, refIndex: 0, matches: [] }));
     } else {
       currentResults = fuse.search(trimmed);
     }
@@ -154,14 +169,14 @@ export function openCommandPalette(items, onSelect, options = {}) {
     renderList();
   }
 
-  function commit(id) {
+  function commit(id: string): void {
     closeCommandPalette();
     onSelect(id);
   }
 
   input.addEventListener('input', () => applyQuery(input.value));
 
-  input.addEventListener('keydown', (event) => {
+  input.addEventListener('keydown', (event: KeyboardEvent) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       if (currentResults.length > 0) {
@@ -190,7 +205,7 @@ export function openCommandPalette(items, onSelect, options = {}) {
 
   // Click on the dimmed backdrop closes the palette; clicks inside the
   // dialog are handled by their own listeners.
-  overlay.addEventListener('mousedown', (event) => {
+  overlay.addEventListener('mousedown', (event: MouseEvent) => {
     if (event.target === overlay) {
       event.preventDefault();
       closeCommandPalette();
@@ -204,13 +219,13 @@ export function openCommandPalette(items, onSelect, options = {}) {
   paletteState = { overlay };
 }
 
-export function closeCommandPalette() {
+export function closeCommandPalette(): void {
   if (!paletteState) return;
   paletteState.overlay.remove();
   paletteState = null;
 }
 
-export function isCommandPaletteOpen() {
+export function isCommandPaletteOpen(): boolean {
   return paletteState !== null;
 }
 
@@ -218,7 +233,7 @@ export function isCommandPaletteOpen() {
  * Whether the keyboard event is the canonical palette toggle hotkey
  * (Ctrl+Shift+O on Windows/Linux, Cmd+Shift+O on macOS).
  */
-export function isCommandPaletteHotkey(event, platform) {
+export function isCommandPaletteHotkey(event: KeyboardEvent, platform: string): boolean {
   if (event.key.toLowerCase() !== 'o') return false;
   if (event.altKey || !event.shiftKey) return false;
   if (platform === 'darwin') {
@@ -227,8 +242,11 @@ export function isCommandPaletteHotkey(event, platform) {
   return event.ctrlKey && !event.metaKey;
 }
 
-function renderHighlightedLabel(label, matches) {
-  const indices = [];
+function renderHighlightedLabel(
+  label: string,
+  matches: ReadonlyArray<FuseResultMatch> | undefined,
+): Node[] {
+  const indices: RangeTuple[] = [];
   for (const m of matches ?? []) {
     if (m.key === 'label') {
       indices.push(...m.indices);
@@ -240,17 +258,17 @@ function renderHighlightedLabel(label, matches) {
 
   // Merge overlapping / adjacent ranges into contiguous spans.
   indices.sort((a, b) => a[0] - b[0]);
-  const merged = [];
+  const merged: RangeTuple[] = [];
   for (const range of indices) {
     const last = merged[merged.length - 1];
     if (last && range[0] <= last[1] + 1) {
       last[1] = Math.max(last[1], range[1]);
     } else {
-      merged.push([...range]);
+      merged.push([...range] as RangeTuple);
     }
   }
 
-  const nodes = [];
+  const nodes: Node[] = [];
   let cursor = 0;
   for (const [start, end] of merged) {
     if (start > cursor) {

@@ -5,14 +5,36 @@
  * including the modal dialog and recording functionality.
  */
 
-import * as ShortcutsRegistry from './shortcuts-registry.js';
-import { icon, setIcon } from './icons.js';
+import * as ShortcutsRegistry from './shortcuts-registry';
+import { icon, setIcon } from './icons';
+
+// ---------------------------------------------------------------------------
+// Exported types
+// ---------------------------------------------------------------------------
+
+/** Bridge surface consumed by the shortcuts modal. */
+export interface ShortcutsBridge {
+  platform: string;
+}
+
+// ---------------------------------------------------------------------------
+// Internal types
+// ---------------------------------------------------------------------------
+
+/** Augmented overlay element that carries modal DOM references. */
+interface ShortcutsModalOverlay extends HTMLDivElement {
+  _modalShortcutsList: HTMLDivElement;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 /**
  * Get human-readable names for shortcut actions
  */
-function getShortcutActionName(actionId) {
-  const names = {
+function getShortcutActionName(actionId: string): string {
+  const names: Record<string, string> = {
     'new-tab': 'New Tab',
     'navigation-mode': 'Navigation Mode',
     'copy': 'Copy',
@@ -35,8 +57,8 @@ function getShortcutActionName(actionId) {
 /**
  * Get description for shortcut actions
  */
-function getShortcutActionDescription(actionId) {
-  const descriptions = {
+function getShortcutActionDescription(actionId: string): string {
+  const descriptions: Record<string, string> = {
     'new-tab': 'Create a new terminal pane',
     'navigation-mode': 'Enter keyboard navigation mode',
     'copy': 'Copy selected text to clipboard',
@@ -59,7 +81,7 @@ function getShortcutActionDescription(actionId) {
 /**
  * Show a custom confirmation dialog. Returns a Promise that resolves to true/false.
  */
-function showConfirmDialog(message) {
+function showConfirmDialog(message: string): Promise<boolean> {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'shortcut-recorder-overlay';
@@ -78,10 +100,10 @@ function showConfirmDialog(message) {
 
     document.body.appendChild(overlay);
 
-    const okBtn = overlay.querySelector('#confirm-ok');
-    const cancelBtn = overlay.querySelector('#confirm-cancel');
+    const okBtn = overlay.querySelector('#confirm-ok') as HTMLButtonElement;
+    const cancelBtn = overlay.querySelector('#confirm-cancel') as HTMLButtonElement;
 
-    const cleanup = (result) => {
+    const cleanup = (result: boolean) => {
       overlay.remove();
       resolve(result);
     };
@@ -106,8 +128,8 @@ function showConfirmDialog(message) {
 /**
  * Open the keyboard shortcuts modal dialog
  */
-export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
-  const overlay = document.createElement('div');
+export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSettingsSave: (() => void) | undefined): void {
+  const overlay = document.createElement('div') as ShortcutsModalOverlay;
   overlay.className = 'settings-modal-overlay';
 
   overlay.innerHTML = `
@@ -134,15 +156,15 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
     if (e.target === overlay) closeModal();
   });
 
-  overlay.querySelector('.settings-modal-close').addEventListener('click', closeModal);
-  overlay.querySelector('.close-btn').addEventListener('click', closeModal);
+  overlay.querySelector('.settings-modal-close')!.addEventListener('click', closeModal);
+  overlay.querySelector('.close-btn')!.addEventListener('click', closeModal);
 
   // Reset shortcuts button
-  overlay.querySelector('#modal-shortcuts-reset').addEventListener('click', async () => {
+  overlay.querySelector('#modal-shortcuts-reset')!.addEventListener('click', async () => {
     const confirmed = await showConfirmDialog('Reset all keyboard shortcuts to their default values?');
     if (confirmed) {
       ShortcutsRegistry.resetShortcutsToDefaults();
-      scheduleSettingsSave();
+      if (scheduleSettingsSave) scheduleSettingsSave();
       renderModalShortcuts();
     }
   });
@@ -150,14 +172,14 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
   document.body.appendChild(overlay);
 
   // Store reference to modal list for rendering
-  overlay._modalShortcutsList = overlay.querySelector('#modal-shortcuts-list');
+  overlay._modalShortcutsList = overlay.querySelector('#modal-shortcuts-list') as HTMLDivElement;
 
   renderModalShortcuts();
 
   /**
    * Render the shortcuts list in the modal
    */
-  function renderModalShortcuts() {
+  function renderModalShortcuts(): void {
     const listEl = overlay._modalShortcutsList;
     if (!listEl) return;
 
@@ -216,7 +238,7 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
   /**
    * Start recording a new keyboard shortcut
    */
-  function startShortcutRecording(shortcutId, onRecordComplete) {
+  function startShortcutRecording(shortcutId: string, onRecordComplete: () => void): void {
     const shortcuts = ShortcutsRegistry.getKeyboardShortcuts();
     const shortcut = shortcuts[shortcutId];
     if (!shortcut) return;
@@ -243,12 +265,12 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
 
     document.body.appendChild(recorderOverlay);
 
-    let recordedShortcut = null;
-    const keysDisplay = recorderOverlay.querySelector('#shortcut-recorder-keys');
-    const saveBtn = recorderOverlay.querySelector('#shortcut-recorder-save');
-    const cancelBtn = recorderOverlay.querySelector('#shortcut-recorder-cancel');
+    let recordedShortcut: ShortcutsRegistry.ShortcutOverride | null = null;
+    const keysDisplay = recorderOverlay.querySelector('#shortcut-recorder-keys') as HTMLDivElement;
+    const saveBtn = recorderOverlay.querySelector('#shortcut-recorder-save') as HTMLButtonElement;
+    const cancelBtn = recorderOverlay.querySelector('#shortcut-recorder-cancel') as HTMLButtonElement;
 
-    const keydownHandler = (event) => {
+    const keydownHandler = (event: KeyboardEvent): void => {
       event.preventDefault();
       event.stopPropagation();
 
@@ -280,7 +302,7 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
       }
 
       // Check for conflicts
-      const newShortcut = { key: parsed.key, modifiers: parsed.modifiers };
+      const newShortcut: ShortcutsRegistry.ShortcutOverride = { key: parsed.key, modifiers: parsed.modifiers };
       const conflictId = ShortcutsRegistry.findConflict(newShortcut, shortcutId);
 
       if (conflictId) {
@@ -298,7 +320,7 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
     // Use window for event capture to ensure we get all keyboard events
     window.addEventListener('keydown', keydownHandler, true);
 
-    const closeShortcutRecorder = () => {
+    const closeShortcutRecorder = (): void => {
       window.removeEventListener('keydown', keydownHandler, true);
       recorderOverlay.remove();
     };
@@ -319,9 +341,7 @@ export function openKeyboardShortcutsModal(bridge, scheduleSettingsSave) {
         }
 
         // Update UI
-        if (onRecordComplete) {
-          onRecordComplete();
-        }
+        onRecordComplete();
         closeShortcutRecorder();
       }
     });

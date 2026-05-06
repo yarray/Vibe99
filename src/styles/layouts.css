@@ -1,0 +1,571 @@
+/* ============================================================
+   layouts.css — Layout Manager Modal + Layouts Dropdown
+   ============================================================ */
+
+/* --- Layout Manager Modal --- */
+.settings-modal.layouts-modal {
+  min-width: 700px;
+  max-width: 900px;
+  width: 90vw;
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal.layouts-modal .layouts-modal-body {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+.settings-modal.layouts-modal .layouts-sidebar {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding-right: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+.layout-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 36px;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 120ms ease;
+  border: 1px solid transparent;
+  user-select: none;
+  min-width: 0;
+}
+
+.layout-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.layout-item.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  cursor: default;
+}
+
+.layout-item.is-active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.layout-item.is-editing {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.layout-item.is-default {
+  background: transparent;
+  border-color: transparent;
+  outline: none;
+}
+
+.layout-item-current {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.layout-item-current.is-active::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-highlight);
+  vertical-align: middle;
+}
+
+.layout-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layout-item.is-default .layout-name {
+  color: #fff;
+  font-weight: 500;
+}
+
+.layout-pane-count {
+  font-size: 11px;
+  color: var(--panel-muted);
+  flex-shrink: 0;
+}
+
+.layout-pane-info {
+  font-size: 12px;
+  color: var(--panel-muted);
+  margin-top: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.layout-pane-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.layout-pane-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.pane-shell-type {
+  color: #4ecdc4;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.pane-cwd {
+  color: var(--panel-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layout-actions {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.layout-actions .settings-btn {
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  pointer-events: auto;
+}
+
+.layout-actions .settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+.layout-empty {
+  color: var(--panel-muted);
+  font-size: var(--app-font-size);
+  padding: 4px 6px;
+}
+
+.layouts-add-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.layouts-add-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--text);
+  transform: scale(1.05);
+}
+
+.settings-modal.layouts-modal .layouts-editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+.layouts-editor-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--panel-muted);
+  font-size: 14px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+.layout-info {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.layout-info label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.layout-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-name-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.layout-name-input:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.layout-name-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  flex-shrink: 0;
+}
+
+.layout-name-btn-confirm {
+  background: rgba(76, 175, 80, 0.2) !important;
+  color: #81c784 !important;
+  border-color: rgba(76, 175, 80, 0.4) !important;
+}
+
+.layout-name-btn-confirm:hover {
+  background: rgba(76, 175, 80, 0.35) !important;
+}
+
+.layout-name-btn-cancel {
+  background: rgba(244, 67, 54, 0.15) !important;
+  color: #e57373 !important;
+  border-color: rgba(244, 67, 54, 0.35) !important;
+}
+
+.layout-name-btn-cancel:hover {
+  background: rgba(244, 67, 54, 0.25) !important;
+}
+
+.layout-info input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.layout-info input:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.layout-info-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.layout-info-btn {
+  width: auto !important;
+  height: 28px !important;
+  padding: 0 16px !important;
+  font-size: 13px !important;
+  border-radius: 4px !important;
+  font-weight: 500;
+}
+
+.layout-info-actions .settings-btn.is-primary {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.layout-info-actions .settings-btn.is-primary:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+}
+
+.layout-info-actions .settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.layout-pane-count-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.layout-panes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.layout-pane-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.layout-pane-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.layout-pane-details {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.layout-pane-cwd {
+  color: rgba(255, 255, 255, 0.6);
+  font-family: ui-monospace, 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
+}
+
+.layout-pane-profile {
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+.settings-modal.layouts-modal .settings-modal-header {
+  justify-content: space-between;
+}
+
+.settings-modal.layouts-modal .settings-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-modal.layouts-modal .layouts-add-btn {
+  margin: 0;
+}
+
+.layouts-modal .settings-modal-body {
+  max-height: none;
+  overflow: visible;
+}
+
+.layout-default-star {
+  color: #f9d71c;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.layout-info-btn.is-default {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.layout-info-btn.is-default:hover {
+  opacity: 0.6;
+  background: transparent !important;
+}
+
+/* --- Layouts Dropdown Menu --- */
+.layouts-dropdown {
+  position: absolute;
+  top: calc(100% + 1px);
+  right: 4px;
+  min-width: 180px;
+  padding: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #1e1e1e;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  z-index: 100;
+  user-select: none;
+}
+
+.layouts-dropdown-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  cursor: default;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  gap: 16px;
+}
+
+.layouts-dropdown-item.is-active {
+  font-weight: 600;
+  color: var(--status-highlight);
+}
+
+.layouts-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.layouts-dropdown-label {
+  flex: 1;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layouts-dropdown-separator {
+  height: 1px;
+  margin: 4px 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.layouts-dropdown-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  cursor: default;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  gap: 16px;
+}
+
+.layouts-dropdown-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.layouts-dropdown-action.is-editing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+}
+
+.layouts-dropdown-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.layouts-dropdown-input:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.layouts-dropdown-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.layouts-dropdown-btn-confirm {
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+}
+
+.layouts-dropdown-btn-confirm:hover {
+  background: rgba(76, 175, 80, 0.35);
+}
+
+.layouts-dropdown-btn-cancel {
+  background: rgba(244, 67, 54, 0.15);
+  color: #e57373;
+  border: 1px solid rgba(244, 67, 54, 0.35);
+}
+
+.layouts-dropdown-btn-cancel:hover {
+  background: rgba(244, 67, 54, 0.25);
+}

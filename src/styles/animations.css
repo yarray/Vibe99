@@ -1,0 +1,119 @@
+/* ============================================================
+   animations.css — @keyframes and prefers-reduced-motion
+   ============================================================ */
+
+@keyframes layout-focus-stage-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  18%,
+  78% {
+    opacity: 1;
+  }
+}
+
+@keyframes layout-focus-page-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  16%,
+  68% {
+    opacity: 1;
+  }
+}
+
+@keyframes layout-focus-toast {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  14%,
+  76% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes layout-focus-tab-flash {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  24%,
+  70% {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--tab-text-color, #fff) 50%, transparent),
+      0 0 18px color-mix(in srgb, var(--pane-accent) 44%, transparent);
+  }
+}
+
+@keyframes layout-focus-status-flash {
+  0%,
+  100% {
+    background: transparent;
+  }
+  20%,
+  72% {
+    background: color-mix(in srgb, var(--layout-focus-accent, #ffd166) 16%, transparent);
+  }
+}
+
+body.is-layout-focus-notice .stage::after {
+  animation: layout-focus-stage-flash 1100ms ease-out;
+}
+
+body.is-layout-focus-notice::before {
+  animation: layout-focus-page-flash 1100ms ease-out;
+}
+
+body.is-layout-focus-notice::after {
+  animation: layout-focus-toast 1100ms ease-out;
+}
+
+body.is-layout-focus-notice .tab.is-focused {
+  animation: layout-focus-tab-flash 1100ms ease-out;
+}
+
+body.is-layout-focus-notice .status-bar {
+  animation: layout-focus-status-flash 1100ms ease-out;
+}
+
+body.is-layout-focus-notice #status-label {
+  color: var(--layout-focus-accent, #ffd166);
+  font-weight: 600;
+}
+
+body.is-layout-focus-notice .status-hint {
+  color: color-mix(in srgb, var(--layout-focus-accent, #ffd166) 72%, rgba(255, 255, 255, 0.45));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.is-layout-focus-notice::before,
+  body.is-layout-focus-notice::after,
+  body.is-layout-focus-notice .stage::after,
+  body.is-layout-focus-notice .tab.is-focused,
+  body.is-layout-focus-notice .status-bar {
+    animation: none;
+  }
+
+  body.is-layout-focus-notice .stage::after {
+    opacity: 1;
+  }
+
+  body.is-layout-focus-notice::before,
+  body.is-layout-focus-notice::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  body.is-layout-focus-notice::before {
+    transform: none;
+  }
+
+  body.is-layout-focus-notice .status-bar {
+    background: color-mix(in srgb, var(--layout-focus-accent, #ffd166) 16%, transparent);
+  }
+}
