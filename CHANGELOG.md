@@ -18,6 +18,12 @@
 
 ### Changed
 
+- **Backend/Bridge unification (VIB-186):**
+  - Added flat alias properties (e.g., `createTerminal`, `writeTerminal`, `readClipboardText`, `writeClipboardText`) to `Backend` interface in `src/backend.ts` to match the full `Bridge` interface
+  - Switched Phase 2 files `src/pane/capabilities/clipboard-capability.ts` and `src/manager/create-pane-manager.ts` to import `Backend` from `backend.ts` instead of `Bridge` from `bridge.ts`
+  - `bridge.ts` is preserved unchanged for backward compatibility with existing code
+  - No functional changes; Phase 2 code now consistently uses the new `backend.ts` module
+
 - **Backend API domain grouping (VIB-171):**
   - Created new `src/backend.ts` (~540 lines) that exports `createBackend(tauri)` function with domain-grouped APIs
   - Grouped APIs by domain: `terminal` (create, write, resize, destroy, onData, onExit), `clipboard` (read, write, snapshot), `settings` (load, save), `shell` (list, add, remove, setDefault, detect), `window` (close, openUrl, showMenu), `layouts` (list, save, delete, rename, openWindow, openInNewWindow, isFullscreen, setFullscreen, setAsDefault)
