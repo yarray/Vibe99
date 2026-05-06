@@ -32,7 +32,7 @@ export function createClipboardBehavior(deps: ClipboardBehaviorDeps) {
       ctx = context;
       const termCap = ctx.capability<{
         instance: {
-          onSelectionChange: () => void;
+          onSelectionChange: (cb: () => void) => void;
           getSelection: () => string;
           parser: { registerOscHandler: (n: number, cb: (data: string) => boolean) => boolean };
           sessionReady: boolean;

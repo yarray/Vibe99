@@ -493,11 +493,20 @@ export function createPaneRenderer({
   }
 
   async function getClipboardSnapshot(): Promise<{ text: string; hasImage: boolean }> {
+    // Bridge has been replaced by backend in VIB-183. Use backend.clipboard snapshot when available.
     try {
-      return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+      // If backend.clipboard exposes getClipboardSnapshot, use it; otherwise fall back safely
+      const cb: any = (backend as any).clipboard;
+      if (cb && typeof cb.getClipboardSnapshot === 'function') {
+        const snap = await cb.getClipboardSnapshot();
+        if (snap && typeof snap.text === 'string' && typeof snap.hasImage === 'boolean') {
+          return snap as { text: string; hasImage: boolean };
+        }
+      }
     } catch {
-      return { text: '', hasImage: false };
+      // fall through to safe default
     }
+    return { text: '', hasImage: false };
   }
 
   function copyTerminalSelection(paneId: string): boolean {

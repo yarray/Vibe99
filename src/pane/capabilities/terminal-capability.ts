@@ -4,6 +4,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { getDefaultFontFamily } from '../../settings';
+import type { PaneHandle } from '../create-pane.js';
+import type { DomCapabilityApi } from './dom-capability.js';
 
 export interface TerminalBehaviorDeps {
   getFontFamily: () => string;
@@ -63,8 +65,8 @@ export function createTerminalBehavior(deps: TerminalBehaviorDeps) {
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
 
-  function open(ctx: { id: string; capability: (name: string) => unknown; emit?: (event: string, payload: unknown) => void }): TerminalCapability {
-    const dom = ctx.capability<{ terminalHost: HTMLElement }>('dom');
+  function open(ctx: PaneHandle): TerminalCapability {
+    const dom = ctx.capability<DomCapabilityApi>('dom');
     if (!dom?.terminalHost) throw new Error('dom capability with terminalHost is required');
 
     terminal = new Terminal({
@@ -76,11 +78,11 @@ export function createTerminalBehavior(deps: TerminalBehaviorDeps) {
 
     fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new WebLinksAddon((uri, e) => {
+    terminal.loadAddon(new WebLinksAddon((e, uri) => {
       if (e.ctrlKey || (window.navigator.platform === 'Darwin' && e.metaKey)) {
         e.preventDefault();
         e.stopPropagation();
-        ctx.emit?.('openExternal', { uri });
+        ctx.emit('openExternal', { uri });
       }
     }));
     terminal.loadAddon(new Unicode11Addon());
