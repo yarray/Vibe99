@@ -1,0 +1,221 @@
+/* ============================================================
+   tabs.css — tabs panel, tab list, action buttons
+   ============================================================ */
+
+.tabs-panel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border-bottom: none;
+  min-width: 0;
+  /*border-bottom: 1px solid rgba(255, 255, 255, 0.06);*/
+}
+
+.tabs-list {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 148px;
+  width: 148px;
+  min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--panel-muted);
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.tab.is-focused {
+  color: var(--tab-text-color, #fff);
+  background: var(--pane-accent);
+  box-shadow: none;
+  border-bottom: 1px solid var(--pane-accent);
+  z-index: 1;
+}
+
+.tab.is-dragging {
+  z-index: 20;
+  transition: none;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tab.insert-before::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -1px;
+  width: 2px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.tab-main,
+.tab-close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.tab-main {
+  min-height: 33px;
+  min-width: 0;
+  width: 100%;
+  justify-content: center;
+  padding: 0 28px 0 22px;
+  color: inherit;
+  font-size: var(--app-font-size);
+  touch-action: none;
+}
+
+.tab-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 24px;
+  flex: 0 0 24px;
+  height: 100%;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.5);
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.tab-close:hover {
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab.is-focused .tab-close {
+  color: color-mix(in srgb, var(--tab-text-color) 50%, transparent);
+}
+
+.tab.is-focused .tab-close:hover {
+  color: color-mix(in srgb, var(--tab-text-color) 88%, transparent);
+  background: color-mix(in srgb, var(--tab-text-color) 5%, transparent);
+}
+
+.tab-close:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tab-swatch {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  transform: translateY(-50%);
+  background: var(--pane-accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.tab.is-focused .tab-swatch {
+  display: none;
+}
+
+.tab-label {
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: center;
+  font: inherit;
+  outline: none;
+}
+
+.tab-input::selection {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.tabs-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tabs-add-group {
+  display: inline-flex;
+  align-items: center;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tabs-add,
+.tabs-layouts,
+.tabs-add-profile,
+.tabs-settings,
+.tabs-fullscreen {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.tabs-add {
+  width: 28px;
+  height: 33px;
+}
+
+.tabs-add-profile {
+  width: 28px;
+  height: 33px;
+}
+
+.tabs-add:hover,
+.tabs-add-profile:hover,
+.tabs-layouts:hover,
+.tabs-settings:hover,
+.tabs-fullscreen:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tabs-layouts,
+.tabs-settings,
+.tabs-fullscreen {
+  width: 34px;
+  height: 33px;
+  flex: 0 0 auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tabs-fullscreen.is-hidden { display: none; }
+.tabs-fullscreen.is-fullscreen { color: #ffd166; }

@@ -1,0 +1,1 @@
+Moved the active layout checkmark (✓) from the left side to the right side in both the layouts dropdown and modal layout list to better align with common UI conventions (similar to macOS sidebar selection indicators).

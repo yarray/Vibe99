@@ -1,0 +1,1 @@
+Added E2E tests for pane management and navigation. Covers pane lifecycle (add, close, close-last-disabled), focus switching via tabs, navigation mode (Ctrl+B, h/l, Enter/Esc), MRU cycling (Ctrl+Tab/Ctrl+Shift+Tab), spatial navigation (Ctrl+ArrowLeft/Right), and nav-mode editing (n, x, r). (VIB-111)

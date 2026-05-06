@@ -1,0 +1,1 @@
+Implemented E2E testing infrastructure using WebDriverIO + tauri-driver (Tauri 2.0's official WebDriver approach). Created `e2e/` directory with WebdriverIO config, test helpers for app lifecycle, terminal interaction, settings management, and a smoke test verifying app launch with 3 default panes. Added `npm run test:e2e` script.

@@ -1,0 +1,48 @@
+# Vibe99 E2E Builder Image
+# 包含完整编译环境 + e2e 测试所需依赖
+# 用法见 README
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME=/root
+ENV PATH="/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV RUSTUP_DIST_SERVER=https://mirrors.tuna.tsinghua.edu.cn/rustup
+ENV RUSTUP_UPDATE_ROOT=https://mirrors.tuna.tsinghua.edu.cn/rustup/rustup
+
+# 1. 系统依赖（Tauri v2 + webkit2gtk-4.1 + e2e 测试）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config libssl-dev \
+    libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+    libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+    curl wget git file xz-utils ca-certificates \
+    xvfb xauth webkit2gtk-driver \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Node.js 22
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Rust stable (minimal profile)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    && rm -rf /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/doc \
+    /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/man
+
+# 4. tauri-driver（e2e WebDriver bridge）
+RUN cargo install tauri-driver
+
+# 5. 克隆 Vibe99 并预编译
+WORKDIR /app
+RUN git clone https://github.com/yarray/Vibe99.git
+
+WORKDIR /app/Vibe99
+RUN npm ci \
+    && npm run tauri:build
+
+# 6. 安装 e2e 依赖
+WORKDIR /app/Vibe99/e2e
+RUN npm ci
+
+WORKDIR /app/Vibe99
+CMD ["/bin/bash"]

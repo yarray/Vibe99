@@ -6,6 +6,27 @@
 
 ### Changed
 
+- **CSS architecture (VIB-146):** Split `src/styles.css` (2344 lines) into 8 purpose-oriented files under `src/styles/`: `base.css` (CSS variables, resets, app-shell), `tabs.css` (tabs panel & actions), `panes.css` (stage, pane, terminal, status bar), `settings-modal.css` (settings panel, keyboard shortcuts), `shell-profiles.css` (shell profiles list & editor), `overlays.css` (context menu, color picker), `layouts.css` (layout manager modal, layouts dropdown), `animations.css` (keyframes, reduced-motion). All rules preserved; no behavior change.
+- **Rust pty.rs module split (VIB-147):**
+  - Split `src-tauri/src/pty.rs` (1005 lines) into `src-tauri/src/pty/mod.rs` (574 lines) and `src-tauri/src/pty/shell_resolver.rs` (433 lines).
+  - `mod.rs` contains `PtyManager` core, `PtySession`, reader/exit threads, and `shell_candidates()` entry point.
+  - `shell_resolver.rs` contains shell discovery, command building, working directory resolution, WSL integration, and settings config loading.
+  - Pure structural refactoring — no functional logic changes.
+- **Pane renderer extraction (VIB-151):**
+  - Extracted terminal rendering and DOM management from `renderer.js` into new `pane-renderer.js` module (~612 lines)
+  - Factory function `createPaneRenderer()` accepts dependencies: `bridge`, `paneState`, `settingsManager`, `paneAlert`, `paneActivityWatcher`, `reportError`, `stageEl`, `getMode`, `onPaneClick`, `onTerminalTitleChange`, `onTerminalContextMenu`, `scheduleWindowLayoutSave`, `tabBar`, `getPaneLabel`, `onPaneCwdChanged`
+  - Returned API includes: `ensurePaneNodes`, `renderPanes`, `fitTerminal`, `getNode`, `write`, `copySelection`, `pasteInto`, `selectAll`, `focusTerminal`, `blurTerminal`, `clearTerminal`, `writeln`, `changePaneShell`, `entryNeedsTabRefresh`, `setAlerted`, `rootContains`, `hasSelection`, `isSessionReady`, `setSessionReady`, `getShellChangeTime`, `isShellChanging`, `destroyPane`
+  - `paneNodeMap` ownership moved to `pane-renderer.js`; no longer exposed to external modules
+  - All xterm.js imports (`Terminal`, `FitAddon`, `WebLinksAddon`, `WebglAddon`, `Unicode11Addon`) moved to `pane-renderer.js`
+  - `renderer.js` updated to use `paneRenderer` methods instead of direct `paneNodeMap` access
+
+- **Pane state management extraction (VIB-150):**
+  - Extracted pane state management from `renderer.js` into new `pane-state.js` module
+  - New module provides pure logic for pane state, collection operations, and session persistence
+  - Factory function `createPaneState()` accepts dependencies: `defaultCwd`, `defaultTabTitle`, `getAccentPalette`, `onStateChange`
+  - Returned API includes read operations (`getPanes`, `getFocusedPaneId`, `getPaneById`, `getPaneIndex`, `getFocusedIndex`), write operations (`addPane`, `closePane`, `focusPane`, `moveFocus`, `navigateLeft`, `navigateRight`, `reorderPane`), MRU operations (`cycleToRecentPane`, `commitPaneCycle`, `recordPaneVisit`), property modification (`setPaneTitle`, `setPaneCwd`, `setPaneColor`, `clearPaneColor`, `setPaneShellProfile`, `setPaneTerminalTitle`, `togglePaneBreathingMonitor`), and session operations (`buildSessionData`, `restoreSession`)
+  - `pane-state.js` is ~400 lines, under the 600 line requirement, with zero DOM operations
+
 - **Multi-window architecture refactor (VIB-104):**
   - PTY sessions now keyed by `(window_label, pane_id)` compound address (`PaneRef`) instead of `pane_id` alone, preventing cross-window collisions when multiple windows use the same sequential pane IDs.
   - Layout window creation moved from Rust (`layout_open_window`, `layout_open_in_new_window`) to frontend using Tauri's `WebviewWindow` API. Window creation is now UI navigation owned by the frontend.
@@ -18,10 +39,23 @@
 
 ### Fixed
 
+- Shell profile e2e test "switches terminal shell from context menu" no longer times out in Docker+Xvfb. Replaced unreliable `moveTo()` hover (CSS `:hover` doesn't fire in headless WebKitGTK) with direct JS submenu display (VIB-167).
 - Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).
+- Status bar overflow when terminal titles are too long (VIB-163):
+  - `.status-bar` now has `overflow: hidden` to prevent content overflow
+  - `.status-hint` is now shrinkable (`flex: 0 1 auto`) with `min-width: 0` and text truncation (`text-overflow: ellipsis`)
+  - Terminal titles >64 characters are truncated to keep the tail (e.g., "...powershell.exe")
 
 ### Added
 
+- E2E tests for Settings panel (VIB-113):
+  - Settings panel toggle tests (open/close via button, click outside to close)
+  - Font settings tests (font size with limits 10-24, font family)
+  - Pane size settings tests (pane width with limits 520-2000)
+  - Pane transparency settings tests (pane opacity with limits 0.55-1)
+  - BG mask transparency settings tests (mask opacity with limits 0-1)
+  - Breathing alert toggle tests (checkbox state, persistence)
+  - Settings persistence tests (individual and multiple settings)
 - Layout edit panel enhancements (VIB-88):
   - "Set as Default" button to set a layout as the default layout (loaded on application startup)
   - Visual indicator (★) for default layouts in the layout list
