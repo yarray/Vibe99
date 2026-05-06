@@ -1,0 +1,1 @@
+Context menu "Background activity alert" toggle now displays a yellow dot indicator when enabled, matching the top-right settings menu style (VIB-127). Previously showed raw SVG markup instead of a visual indicator.
