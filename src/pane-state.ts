@@ -29,10 +29,6 @@ import type { Pane, SessionPaneEntry, SessionData, PaneStateDeps, PaneState } fr
 // Internal types
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Internal types
-// ---------------------------------------------------------------------------
-
 /** Internal cycle state while the user holds Ctrl+Tab. */
 interface PaneCycleState {
   snapshot: string[];

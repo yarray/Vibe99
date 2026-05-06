@@ -26,10 +26,6 @@ interface TerminalTheme {
   [colorName: string]: string;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function extractPathFromOsc7(data: string): string | null {
   const prefix = 'file://';
   if (!data.startsWith(prefix)) {
