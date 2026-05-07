@@ -9,7 +9,7 @@
 // and decoupled from the renderer.
 
 import { icon } from './icons';
-import type { PaneNode } from './pane-renderer';
+import type { PaneNode } from './pane/types';
 
 // ---------------------------------------------------------------------------
 // Exported types

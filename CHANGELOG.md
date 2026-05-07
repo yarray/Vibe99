@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **Remove pane-state.ts and pane-renderer.ts (VIB-194):** Deleted the legacy `src/pane-state.ts` (488 lines) and `src/pane-renderer.ts` (616 lines). All consumers have been migrated to the new PaneManager-based architecture. Fixed last remaining import in `shell-profiles.ts` (PaneNode now imported from `./pane/types`) and removed stale `import('../pane-state')` references in `pane/types.ts`. `tsc --noEmit` passes with zero errors.
+
 ### Changed
 
 - **renderer.ts PaneManager integration +瘦身到 ≤250 行 (VIB-193):** Migrated `renderer.ts` to use `PaneManager` directly, removing all dependencies on `pane-state` and `pane-renderer`. Created `shell-profile-adapter.ts` to bridge `PaneManager` to the `ShellProfileState` interface required by `shell-profiles` module. Inlined `getTextColorForBackground` utility function. File size reduced from 662 lines to 225 lines (66% reduction). All pane operations now go through `paneManager` API; `focusController` receives `paneManager` directly instead of adapter. `tsc --noEmit` passes with zero errors.
