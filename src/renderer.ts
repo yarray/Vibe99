@@ -5,9 +5,9 @@ import {
 import { createPaneActivityWatcher } from './pane-activity-watcher';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask';
 import {
-  createBridge,
+  createBackend,
   clearLayoutWindowBinding,
-} from './bridge';
+} from './backend';
 import { createPaneRenderer, getTextColorForBackground } from './pane-renderer';
 import type { PaneRenderer } from './pane-renderer';
 import { createShellProfileManager } from './shell-profiles';
@@ -24,6 +24,7 @@ import * as ShortcutsRegistry from './shortcuts-registry';
 import * as ShortcutsUI from './shortcuts-ui';
 import * as ColorsRegistry from './colors-registry';
 import { createPaneState } from './pane-state';
+import { createFocusController } from './manager/create-focus-controller.js';
 import { setIcon } from './icons';
 import { createActions } from './input/actions';
 import { createDispatcher } from './input/dispatcher';
@@ -34,6 +35,11 @@ import { createTabBar } from './tab-bar';
 import type { TabBarLocalState } from './tab-bar';
 import type { PaneNode } from './pane-renderer';
 import type { ShellProfile, EditingShellProfile } from './shell-profiles';
+import { createPaneManager } from './manager/create-pane-manager';
+import type { PaneManager } from './manager/create-pane-manager';
+import type { DomCapabilityApi } from './pane/capabilities/dom-capability';
+import type { TerminalCapability } from './pane/capabilities/terminal-capability';
+import type { PtyCapability } from './pane/capabilities/pty-capability';
 
 // ---------------------------------------------------------------------------
 const stageEl = document.getElementById('stage')!;
@@ -51,9 +57,7 @@ const layoutsSettingsBtn = document.getElementById('layouts-settings-btn')!;
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn')!;
 
 // ---------------------------------------------------------------------------
-let currentMode: string = 'terminal';
 let paneRenderer: PaneRenderer | null = null;
-let enterNavSourcePaneId: string | null = null;
 let layoutRestoreComplete = false;
 let layoutFocusNotice: { layoutId: string } | null = null;
 let layoutFocusNoticeTimer: number | null = null;
@@ -75,13 +79,13 @@ const tabBarState: TabBarLocalState = (() => {
     get renamingPaneId() { return r; }, set renamingPaneId(v: string | null) { r = v; },
     get dragState() { return d; }, set dragState(v: TabBarLocalState['dragState']) { d = v; },
     get pendingTabFocus() { return p; }, set pendingTabFocus(v: TabBarLocalState['pendingTabFocus']) { p = v; },
-    get currentMode() { return currentMode; },
+    get currentMode() { return focusController.getMode(); },
     get pendingClosePaneId() { return c; }, set pendingClosePaneId(v: string | null) { c = v; },
   };
 })();
 
 // ---------------------------------------------------------------------------
-const bridge = createBridge((window as any).__TAURI__ ?? (window as any).vibe99 ?? null, null);
+const backend = createBackend((window as any).__TAURI__ ?? (window as any).vibe99 ?? null, null);
 
 const windowContext: { kind: 'layout'; layoutId: string } | { kind: 'main' } = (() => {
   const params = new URLSearchParams(window.location.search);
@@ -91,16 +95,34 @@ const windowContext: { kind: 'layout'; layoutId: string } | { kind: 'main' } = (
 
 // ---------------------------------------------------------------------------
 const paneState = createPaneState({
-  defaultCwd: bridge.defaultCwd,
-  defaultTabTitle: bridge.defaultTabTitle,
+  defaultCwd: backend.defaultCwd,
+  defaultTabTitle: backend.defaultTabTitle,
   getAccentPalette: () => [...ColorsRegistry.ACCENT_PALETTE],
   onStateChange: () => {},
 });
 
+const focusController = createFocusController(
+  {
+    getAll: () => paneState.getPanes(),
+    getActiveId: () => paneState.getFocusedPaneId(),
+    setActive: (paneId: string) => paneState.focusPane(paneId),
+    size: () => paneState.getPanes().length,
+  },
+  {
+    onModeChange: (mode) => {
+      document.body.classList.toggle('is-navigation-mode', mode === 'nav');
+      render();
+    },
+    onFocusChange: () => {
+      render();
+    },
+  },
+);
+
 const modalStack = createModalStack();
 
 const layoutManager = createLayoutManager({
-  bridge,
+  backend,
   paneState,
   modalStack,
   reportError,
@@ -110,7 +132,7 @@ const layoutManager = createLayoutManager({
 (window as any).layoutManager = layoutManager;
 
 const layoutModal = createLayoutModal({
-  bridge,
+  backend,
   paneState,
   modalStack,
   reportError,
@@ -124,7 +146,7 @@ const paneActivityWatcher = createPaneActivityWatcher({
 });
 
 const settingsManager = createSettingsManager({
-  bridge,
+  backend,
   reportError,
   applyCallback: () => render(true),
   paneActivityWatcher,
@@ -157,14 +179,14 @@ const tabBar = createTabBar({
 });
 
 paneRenderer = createPaneRenderer({
-  bridge,
+  backend,
   paneState,
   settingsManager,
   paneAlert,
   paneActivityWatcher,
   reportError,
   stageEl,
-  getMode: () => currentMode,
+  getMode: () => focusController.getMode(),
   onPaneClick: (...args) => paneOps?.focusPane(...args),
   onTerminalTitleChange: (paneId, title) => paneState.setPaneTerminalTitle(paneId, title),
   onTerminalContextMenu: (node, event) => {
@@ -186,7 +208,7 @@ let shellProfileManager: ReturnType<typeof createShellProfileManager> | null = n
 let contextMenus: ReturnType<typeof createContextMenus> | null = null;
 
 shellProfileManager = createShellProfileManager({
-  bridge: bridge as any,
+  backend: backend as any,
   state: {
     getPanels: () => paneState.getPanes(),
     setPanels: (newPanes) => {
@@ -237,13 +259,13 @@ contextMenus = createContextMenus({
     setFocusedPaneId: (id) => paneState.focusPane(id),
     getPaneNode: (paneId) => paneRenderer?.getNode(paneId) ?? null,
     clearPaneCycleState: () => {},
-    recordPaneVisit: (paneId) => paneState.recordPaneVisit(paneId),
+    recordPaneVisit: (paneId) => focusController.recordPaneVisit(paneId),
     render: () => render(),
     scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
     registerModal: (closeFn) => modalStack.register(closeFn),
     unregisterModal: (closeFn) => modalStack.unregister(closeFn),
   },
-  bridge,
+  backend,
   shellProfileManager,
   reportError,
   focusPane: (...args) => paneOps?.focusPane(...args),
@@ -255,14 +277,21 @@ contextMenus = createContextMenus({
   },
 });
 
+const paneManager: PaneManager = createPaneManager({
+  backend,
+  paneAlert,
+  onPaneClick: (id, opts) => paneOps?.focusPane(id, opts),
+  onTerminalContextMenu: (node, evt) => void contextMenus?.showTerminalContextMenu(node as PaneNode, evt),
+  onStateChange: () => render(),
+  getAccentPalette: () => [...ColorsRegistry.ACCENT_PALETTE],
+});
+
 paneOps = createPaneOperations({
-  paneState,
-  paneRenderer,
+  paneManager,
   tabBar,
   layoutManager,
   render,
-  setMode,
-  getCurrentMode: () => currentMode,
+  focusController,
   state: tabBarState,
 });
 
@@ -274,7 +303,7 @@ const commandPaletteEntries = createCommandPaletteEntries({
   layoutModal,
   shellProfileManager,
   contextMenus: contextMenus as any,
-  bridge,
+  backend,
   settingsManager,
   modalStack,
   focusPane: (id: string | null) => { if (id) paneOps?.focusPane(id); },
@@ -285,35 +314,37 @@ const commandPaletteEntries = createCommandPaletteEntries({
   settingsPanelEl,
   statusLabelEl,
   statusHintEl,
-  getCurrentMode: () => currentMode,
-  setMode,
+  getCurrentMode: () => focusController.getMode(),
+  setMode: (mode: string) => focusController.setMode(mode),
 });
 
 const fullscreenManager = createFullscreenManager({
-  bridge,
+  backend,
   fullscreenButtonEl,
   reportError,
 });
 
 // ---------------------------------------------------------------------------
-const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
+const removeTerminalDataListener = backend.terminal.onData(({ paneId, data }) => {
+  if (paneManager.get(paneId)) return;
   paneRenderer?.write(paneId, data);
 });
 
-bridge.onLayoutFocusNotice?.(() => {
+backend.onLayoutFocusNotice?.(() => {
   if (!layoutManager.getWindowLayoutId()) return;
   paneOps?.refocusCurrentPaneTerminal();
   showLayoutFocusNotice(layoutManager.getWindowLayoutId()!);
 });
 
-const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
+const removeTerminalExitListener = backend.terminal.onExit(({ paneId, exitCode, reason }) => {
+  if (paneManager.get(paneId)) return;
   const handled = paneOps?.handleTerminalExit({ paneId, exitCode, reason });
   if (handled === false) {
-    void bridge.closeWindow().catch(reportError);
+    void backend.window.close().catch(reportError);
   }
 });
 
-const removeMenuActionListener = bridge.onMenuAction(({ action, paneId }) => {
+const removeMenuActionListener = backend.onMenuAction(({ action, paneId }) => {
   try {
     contextMenus?.handleMenuAction(action, paneId ?? '');
   } catch (error) {
@@ -330,21 +361,21 @@ function reportError(error: unknown): void {
 
 // ---------------------------------------------------------------------------
 function setMode(next: string): void {
-  if (currentMode === next) return;
-  currentMode = next;
-  document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
-  render();
+  focusController.setMode(next);
 }
 
 function enterNavigationMode(): void {
-  if (paneState.getPanes().length === 0) return;
-  enterNavSourcePaneId = paneState.getFocusedPaneId();
-  setMode('nav'); paneOps?.blurFocusedTerminal(); render();
+  focusController.enterNavigationMode();
+  paneOps?.blurFocusedTerminal();
 }
 
 function cancelNavigationMode(): void {
-  if (enterNavSourcePaneId) { paneOps?.focusPane(enterNavSourcePaneId, { focusTerminal: true }); enterNavSourcePaneId = null; }
-  else { setMode('terminal'); render(); }
+  const sourceId = focusController.getEnterNavSourcePaneId();
+  focusController.cancelNavigationMode();
+  if (sourceId) {
+    paneRenderer?.focusTerminal(sourceId);
+    paneRenderer?.setAlerted(sourceId, false);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -372,13 +403,13 @@ function updateStatus(): void {
   const keymap = ShortcutsRegistry.getActiveKeymap();
   const { modeLabel, hintsHtml } = renderHintBar(
     keymap,
-    currentMode,
+    focusController.getMode(),
     focusedPaneLabel,
-    bridge.platform
+    backend.platform
   );
 
   statusLabelEl.textContent = modeLabel;
-  statusLabelEl.classList.toggle('is-navigation-mode', currentMode === 'nav');
+  statusLabelEl.classList.toggle('is-navigation-mode', focusController.getMode() === 'nav');
   statusHintEl.innerHTML = hintsHtml;
 }
 
@@ -411,7 +442,7 @@ function closeKeyboardShortcutsModal(): void {
 function openKeymapHelpModal(): void {
   closeKeyboardShortcutsModal();
   modalStack.register(closeKeyboardShortcutsModal);
-  ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
+  ShortcutsUI.openKeyboardShortcutsModal(backend, settingsManager.scheduleSettingsSave);
 }
 
 // ---------------------------------------------------------------------------
@@ -445,7 +476,7 @@ const keyboardActions = createActions({
 const dispatchKeydown = createDispatcher({
   getKeymap: ShortcutsRegistry.getActiveKeymap,
   actions: keyboardActions,
-  getMode: () => currentMode,
+  getMode: () => focusController.getMode(),
   isInputFocused: () => document.activeElement?.tagName === 'INPUT',
   isCommandPaletteOpen,
 });
@@ -453,18 +484,38 @@ const dispatchKeydown = createDispatcher({
 window.addEventListener('keydown', dispatchKeydown, true);
 
 window.addEventListener('keyup', (event) => {
-  if (paneState.hasActivePaneCycle() && (event.key === 'Control' || event.key === 'Meta')) {
-    paneState.commitPaneCycle();
+  if (focusController.hasActivePaneCycle() && (event.key === 'Control' || event.key === 'Meta')) {
+    focusController.commitPaneCycle();
   }
 });
 
 window.addEventListener('blur', () => {
-  if (paneState.hasActivePaneCycle()) paneState.commitPaneCycle();
+  if (focusController.hasActivePaneCycle()) focusController.commitPaneCycle();
 });
 
 // ---------------------------------------------------------------------------
 addPaneButtonEl.addEventListener('click', () => {
-  try { paneOps?.addPane(); } catch (error) { reportError(error); }
+  try {
+    const pane = paneManager.create({
+      paneId: `pm${Date.now()}`,
+      title: null,
+      cwd: backend.defaultCwd,
+      accent: ColorsRegistry.ACCENT_PALETTE[paneManager.size() % ColorsRegistry.ACCENT_PALETTE.length],
+      shellProfileId: null,
+    });
+    const dom = pane.capability<DomCapabilityApi>('dom');
+    const term = pane.capability<TerminalCapability>('terminal');
+    const pty = pane.capability<PtyCapability>('pty');
+    if (dom) {
+      dom.mount(stageEl);
+      requestAnimationFrame(() => {
+        term?.fit();
+        if (term && pty) pty.resize(term.instance.cols, term.instance.rows);
+      });
+    }
+    setMode('terminal');
+    render(true);
+  } catch (error) { reportError(error); }
 });
 
 addProfileButtonEl.addEventListener('click', (event) => {
@@ -505,7 +556,7 @@ shellProfilesSettingsBtn.addEventListener('keydown', (e) => {
 function openShortcutsModal(): void {
   closeKeyboardShortcutsModal();
   modalStack.register(closeKeyboardShortcutsModal);
-  ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
+  ShortcutsUI.openKeyboardShortcutsModal(backend, settingsManager.scheduleSettingsSave);
 }
 keyboardShortcutsSettingsBtn.addEventListener('click', openShortcutsModal);
 keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
@@ -542,9 +593,9 @@ window.addEventListener('resize', () => {
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
-    await bridge.cwdReady;
+    await backend.cwdReady;
 
-    const savedSettings = await bridge.loadSettings();
+    const savedSettings = await backend.settings.load();
     settingsManager.applyPersistedSettings(savedSettings);
     settingsManager.applySettings();
     shellProfileManager?.loadShellProfiles();
@@ -558,13 +609,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     if (!defaultLayout) {
       defaultLayout = layoutManager.createDefaultLayout();
-      const saved = await bridge.saveLayout(defaultLayout);
+      const saved = await backend.layouts.save(defaultLayout);
       layoutManager._setLayouts(saved.layouts ?? [defaultLayout]);
       layoutManager._setDefaultLayoutId(saved.defaultLayoutId ?? defaultLayoutId);
     }
 
     if (defaultLayoutId !== defaultLayout.id) {
-      const config = await bridge.setLayoutAsDefault(defaultLayout.id);
+      const config = await backend.layouts.setAsDefault(defaultLayout.id);
       layoutManager._setLayouts(config.layouts ?? layouts);
       layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? defaultLayout.id);
     }
@@ -579,6 +630,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     layoutManager.setWindowLayoutId(targetLayout.id);
     paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
+    focusController.syncMru();
+    focusController.recordPaneVisit(paneState.getFocusedPaneId());
     paneRenderer?.ensurePaneNodes();
 
     layoutManager.updateLayoutsIndicator();
@@ -594,7 +647,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 window.addEventListener('beforeunload', () => {
   layoutManager.flushWindowLayoutSave();
   settingsManager.flushSettingsSave();
-  clearLayoutWindowBinding(layoutManager.getWindowLayoutId() ?? undefined, bridge.currentWindowLabel);
+  clearLayoutWindowBinding(layoutManager.getWindowLayoutId() ?? undefined, backend.currentWindowLabel);
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();

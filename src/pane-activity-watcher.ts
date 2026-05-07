@@ -98,6 +98,10 @@ export interface PaneActivityWatcher {
    * preserved so re-enabling globally restores their previous behavior.
    */
   setGlobalEnabled: (enabled: boolean) => void;
+  /** Register a callback invoked when a pane becomes alerted. */
+  onAlert: (cb: (paneId: string) => void) => void;
+  /** Register a callback invoked when a pane's alert clears. */
+  onClear: (cb: (paneId: string) => void) => void;
 }
 
 export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = {}): PaneActivityWatcher {
@@ -155,6 +159,9 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
     }, resizeSettleMs);
   }
 
+  const alertCbs: Array<(paneId: string) => void> = [];
+  const clearCbs: Array<(paneId: string) => void> = [];
+
   return {
     /** Update which pane is currently focused (or null if none). */
     setFocus(paneId: string | null): void {
@@ -185,6 +192,7 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
       if (s.alerted) {
         s.alerted = false;
         onClear?.(paneId);
+        for (const cb of clearCbs) cb(paneId);
       }
       if (s.timer !== null) clearTimeout(s.timer);
       s.timer = setTimeout(() => {
@@ -193,6 +201,7 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
         if (!isActive(paneId, s)) return;
         s.alerted = true;
         onAlert?.(paneId);
+        for (const cb of alertCbs) cb(paneId);
       }, settleMs);
     },
 
@@ -228,6 +237,14 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
       if (!next) {
         for (const [paneId, s] of states) clearState(paneId, s);
       }
+    },
+
+    onAlert(cb: (paneId: string) => void): void {
+      alertCbs.push(cb);
+    },
+
+    onClear(cb: (paneId: string) => void): void {
+      clearCbs.push(cb);
     },
   };
 }

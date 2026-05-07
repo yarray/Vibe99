@@ -1,5 +1,5 @@
 import * as ShortcutsRegistry from './shortcuts-registry';
-import type { Bridge } from './bridge';
+import type { Backend } from './backend';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -15,7 +15,7 @@ export interface AppSettings {
 }
 
 export interface SettingsManagerDeps {
-  bridge: Bridge;
+  backend: Backend;
   reportError: (error: unknown) => void;
   applyCallback: () => void;
   paneActivityWatcher: {
@@ -64,7 +64,7 @@ export function getDefaultFontFamily(platform: string): string {
 
 export function createSettingsManager(deps: SettingsManagerDeps): SettingsManager {
   const {
-    bridge,
+    backend,
     reportError,
     applyCallback,
     paneActivityWatcher,
@@ -84,7 +84,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   const settings: AppSettings = {
     fontSize: 13,
-    fontFamily: getDefaultFontFamily(bridge.platform),
+    fontFamily: getDefaultFontFamily(backend.platform),
     paneOpacity: 0.8,
     paneMaskOpacity: 0.75,
     paneWidth: 720,
@@ -182,7 +182,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
     pendingSettingsSave = window.setTimeout(() => {
       pendingSettingsSave = null;
-      bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
+      void backend.settings.save(buildSettingsPayloadForCurrentWindow() as unknown as import('./backend').SettingsData).catch(reportError);
     }, 150);
   }
 
@@ -191,7 +191,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       window.clearTimeout(pendingSettingsSave);
       pendingSettingsSave = null;
     }
-    void bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
+    // bridge.ts was removed; backend.ts now exports SettingsData
+    void backend.settings.save(buildSettingsPayloadForCurrentWindow() as unknown as import('./backend').SettingsData).catch(reportError);
   }
 
   // Font size
@@ -210,7 +211,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   // Font family
   fontFamilyInput.addEventListener('change', () => {
-    settings.fontFamily = fontFamilyInput.value.trim() || getDefaultFontFamily(bridge.platform);
+    settings.fontFamily = fontFamilyInput.value.trim() || getDefaultFontFamily(backend.platform);
     applySettings();
     applyCallback();
     scheduleSettingsSave();

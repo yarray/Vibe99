@@ -62,18 +62,20 @@ export interface ShellProfilePanel {
   shellProfileId: string | null;
 }
 
-/** Bridge surface consumed by the shell profile manager. */
-export interface ShellProfileBridge {
-  listShellProfiles: () => Promise<ShellProfileConfigResult>;
-  detectShellProfiles: () => Promise<ShellProfile[]>;
-  addShellProfile: (profile: ShellProfile) => Promise<ShellProfileConfigResult>;
-  removeShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
-  setDefaultShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
+/** Backend surface consumed by the shell profile manager. */
+export interface ShellProfileBackend {
+  shell: {
+    list: () => Promise<ShellProfileConfigResult>;
+    detect: () => Promise<ShellProfile[]>;
+    add: (profile: ShellProfile) => Promise<ShellProfileConfigResult>;
+    remove: (profileId: string) => Promise<ShellProfileConfigResult>;
+    setDefault: (profileId: string) => Promise<ShellProfileConfigResult>;
+  };
 }
 
 /** Dependencies injected into createShellProfileManager. */
 export interface ShellProfileManagerDeps {
-  bridge: ShellProfileBridge;
+  backend: ShellProfileBackend;
   state: ShellProfileState;
   reportError: (error: unknown) => void;
   scheduleSave: () => void;
@@ -136,7 +138,7 @@ function formatArgs(args: string[]): string {
  * Create a shell profile manager.
  */
 export function createShellProfileManager({
-  bridge,
+  backend,
   state,
   reportError,
   scheduleSave,
@@ -153,8 +155,8 @@ export function createShellProfileManager({
 
   function loadShellProfiles(): Promise<void> {
     return Promise.all([
-      bridge.listShellProfiles(),
-      bridge.detectShellProfiles().catch((): ShellProfile[] => []),
+      backend.shell.list(),
+      backend.shell.detect().catch((): ShellProfile[] => []),
     ]).then(([config, detected]) => {
       detectedShellProfiles = detected;
       const userProfiles = config.profiles ?? [];
@@ -352,11 +354,11 @@ export function createShellProfileManager({
         if (profile.id !== defaultShellProfileId) {
           actions.appendChild(createProfileActionButton('star', 'Set as default', () => {
             if (isDetected) {
-              bridge.addShellProfile(profile).then(() => {
-                bridge.setDefaultShellProfile(profile.id).then(applyConfigRefresh).catch(reportError);
+              backend.shell.add(profile).then(() => {
+                backend.shell.setDefault(profile.id).then(applyConfigRefresh).catch(reportError);
               }).catch(reportError);
             } else {
-              bridge.setDefaultShellProfile(profile.id).then(applyConfigRefresh).catch(reportError);
+              backend.shell.setDefault(profile.id).then(applyConfigRefresh).catch(reportError);
             }
           }));
         }
@@ -371,7 +373,7 @@ export function createShellProfileManager({
               state.setSelectedShellProfileId(null);
               state.setEditingShellProfile(null);
             }
-            bridge.removeShellProfile(profile.id).then(applyConfigRefresh).catch(reportError);
+            backend.shell.remove(profile.id).then(applyConfigRefresh).catch(reportError);
           }));
         }
 
@@ -545,7 +547,7 @@ export function createShellProfileManager({
         return;
       }
 
-      bridge.addShellProfile(profile).then((config) => {
+      backend.shell.add(profile).then((config) => {
         const userIds = new Set((config.profiles ?? []).map((p) => p.id));
         state.setShellProfiles([...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))]);
         state.setDefaultShellProfileId(config.defaultProfile ?? '');
@@ -585,7 +587,7 @@ export function createShellProfileManager({
       args: profile.args ? [...profile.args] : [],
     };
 
-    bridge.addShellProfile(clonedProfile).then((config) => {
+    backend.shell.add(clonedProfile).then((config) => {
       const userIds = new Set((config.profiles ?? []).map((p) => p.id));
       state.setShellProfiles([...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))]);
       state.setDefaultShellProfileId(config.defaultProfile ?? '');
@@ -618,7 +620,7 @@ export function createShellProfileManager({
 
     // Save the new order (add all profiles to persist order)
     const userProfiles = newProfiles.filter(p => !detectedShellProfiles.some(dp => dp.id === p.id));
-    const savePromises = userProfiles.map(p => bridge.addShellProfile(p));
+    const savePromises = userProfiles.map(p => backend.shell.add(p));
 
     Promise.all(savePromises).then(() => {
       renderModalShellProfiles();

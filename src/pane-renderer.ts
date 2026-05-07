@@ -5,30 +5,17 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { getDefaultFontFamily } from './settings';
-import type { Bridge } from './bridge';
+import type { Backend } from './backend';
 import type { Pane, PaneState } from './pane-state';
 import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
 import type { SettingsManager } from './settings';
 import type { TabBar } from './tab-bar';
 
-// ---------------------------------------------------------------------------
-// Exported types
-// ---------------------------------------------------------------------------
+// Re-export shared types for backward compatibility
+export type * from './pane/types';
 
-export interface PaneNode {
-  paneId: string;
-  cwd: string;
-  root: HTMLElement;
-  terminalHost: HTMLElement & { _xterm?: Terminal };
-  terminal: Terminal;
-  fitAddon: FitAddon;
-  sessionReady: boolean;
-  sizeKey: string;
-  needsFit: boolean;
-  accent: string;
-  _shellChanging?: boolean;
-  _shellChangeTime?: number;
-}
+// Import locally so types are available within this file
+import type { PaneNode, PaneRendererDeps, PaneRenderer } from './pane/types';
 
 interface TerminalTheme {
   background: string;
@@ -38,60 +25,6 @@ interface TerminalTheme {
   selectionBackground: string;
   [colorName: string]: string;
 }
-
-export interface PaneRendererDeps {
-  bridge: Bridge;
-  paneState: PaneState;
-  settingsManager: SettingsManager;
-  paneAlert: PaneAlertStrategy;
-  paneActivityWatcher: {
-    noteResize: (paneId: string) => void;
-    noteData: (paneId: string) => void;
-    setFocus: (paneId: string | null) => void;
-    forget: (paneId: string) => void;
-    setPaneEnabled: (paneId: string, enabled: boolean) => void;
-  };
-  reportError: (error: unknown) => void;
-  stageEl: HTMLElement;
-  getMode: () => string;
-  onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
-  onTerminalTitleChange: (paneId: string, title: string) => void;
-  onTerminalContextMenu: (node: PaneNode, event: MouseEvent) => Promise<void> | void;
-  scheduleWindowLayoutSave: () => void;
-  tabBar: TabBar;
-  getPaneLabel: (pane: Pane) => string;
-  onPaneCwdChanged: (paneId: string, cwd: string) => void;
-}
-
-export interface PaneRenderer {
-  ensurePaneNodes: () => void;
-  renderPanes: (refit?: boolean) => void;
-  fitTerminal: (paneId: string, force?: boolean) => void;
-  getNode: (paneId: string) => PaneNode | null;
-  write: (paneId: string, data: string) => void;
-  copySelection: (paneId: string) => boolean;
-  pasteInto: (paneId: string, options?: { clipboardSnapshot?: { text: string; hasImage: boolean } }) => Promise<boolean>;
-  selectAll: (paneId: string) => boolean;
-  focusTerminal: (paneId: string) => void;
-  blurTerminal: (paneId: string) => void;
-  clearTerminal: (paneId: string) => void;
-  writeln: (paneId: string, text: string) => void;
-  changePaneShell: (paneId: string, profileId: string, previousProfileId?: string | null) => void;
-  entryNeedsTabRefresh: (paneId: string) => boolean;
-  setAlerted: (paneId: string, alerted: boolean) => void;
-  rootContains: (paneId: string, el: Node) => boolean;
-  hasSelection: (paneId: string) => boolean;
-  isSessionReady: (paneId: string) => boolean;
-  setSessionReady: (paneId: string, ready: boolean) => void;
-  getShellChangeTime: (paneId: string) => number | null;
-  isShellChanging: (paneId: string) => boolean;
-  initializePaneTerminal: (node: PaneNode) => Promise<void>;
-  destroyPane: (paneId: string) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function extractPathFromOsc7(data: string): string | null {
   const prefix = 'file://';
@@ -123,7 +56,7 @@ export function getTextColorForBackground(hexColor: string): string {
 }
 
 export function createPaneRenderer({
-  bridge,
+  backend,
   paneState,
   settingsManager,
   paneAlert,
@@ -143,7 +76,7 @@ export function createPaneRenderer({
 
   function isWindowsCtrlVPasteHotkey(event: KeyboardEvent): boolean {
     return (
-      bridge.platform === 'win32' &&
+      backend.platform === 'win32' &&
       event.ctrlKey &&
       !event.metaKey &&
       !event.altKey &&
@@ -191,7 +124,7 @@ export function createPaneRenderer({
   }
 
   function isLinkOpenModifierPressed(event: MouseEvent | KeyboardEvent): boolean {
-    return event.ctrlKey || (bridge.platform === 'darwin' && event.metaKey);
+    return event.ctrlKey || (backend.platform === 'darwin' && event.metaKey);
   }
 
   function handleTerminalLinkActivation(event: MouseEvent, uri: string): void {
@@ -201,7 +134,7 @@ export function createPaneRenderer({
 
     event.preventDefault();
     event.stopPropagation();
-    void Promise.resolve(bridge.openExternalUrl(uri)).catch(reportError);
+    void Promise.resolve(backend.window.openUrl(uri)).catch(reportError);
   }
 
   function getPaneLeft(index: number, previewWidth: number, focusedIndex: number): number {
@@ -256,7 +189,7 @@ export function createPaneRenderer({
       cursorBlink: true,
       disableStdin: false,
       drawBoldTextInBrightColors: false,
-      fontFamily: settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform),
+      fontFamily: settingsManager.settings.fontFamily || getDefaultFontFamily(backend.platform),
       fontSize: settingsManager.settings.fontSize,
       lineHeight: 1.2,
       scrollback: 5000,
@@ -327,7 +260,7 @@ export function createPaneRenderer({
 
     terminal.onData((data) => {
       if (node.sessionReady) {
-        bridge.writeTerminal({ paneId: node.paneId, data });
+        void backend.terminal.write({ paneId: node.paneId, data });
       }
     });
 
@@ -345,7 +278,7 @@ export function createPaneRenderer({
     terminal.onSelectionChange(() => {
       const selection = terminal.getSelection();
       if (selection) {
-        bridge.writeClipboardText(selection);
+        void backend.clipboard.write(selection);
       }
     });
 
@@ -363,7 +296,7 @@ export function createPaneRenderer({
         const text = new TextDecoder().decode(
           Uint8Array.from(bytes, (c) => c.charCodeAt(0))
         );
-        bridge.writeClipboardText(text);
+        void backend.clipboard.write(text);
       } catch {}
       return true;
     });
@@ -386,7 +319,7 @@ export function createPaneRenderer({
 
   function fitTerminal(node: PaneNode, force = false): void {
     node.terminal.options.fontSize = settingsManager.settings.fontSize;
-    node.terminal.options.fontFamily = settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform);
+    node.terminal.options.fontFamily = settingsManager.settings.fontFamily || getDefaultFontFamily(backend.platform);
     node.fitAddon.fit();
 
     const cols = Math.max(20, node.terminal.cols || 80);
@@ -394,7 +327,7 @@ export function createPaneRenderer({
     const nextSizeKey = `${cols}x${rows}`;
 
     if (node.sessionReady && (force || nextSizeKey !== node.sizeKey)) {
-      bridge.resizeTerminal({
+      void backend.terminal.resize({
         paneId: node.paneId,
         cols,
         rows,
@@ -411,7 +344,7 @@ export function createPaneRenderer({
     const pane = paneState.getPaneById(node.paneId);
     const profileId = pane?.shellProfileId ?? null;
     try {
-      await bridge.createTerminal({
+      await void backend.terminal.create({
         paneId: node.paneId,
         cols: node.terminal.cols,
         rows: node.terminal.rows,
@@ -433,7 +366,7 @@ export function createPaneRenderer({
     for (const [paneId, node] of paneNodeMap.entries()) {
       if (!activeIds.has(paneId)) {
         paneActivityWatcher.forget(paneId);
-        bridge.destroyTerminal({ paneId });
+        void backend.terminal.destroy({ paneId });
         node.terminal.dispose();
         node.root.remove();
         paneNodeMap.delete(paneId);
@@ -493,11 +426,20 @@ export function createPaneRenderer({
   }
 
   async function getClipboardSnapshot(): Promise<{ text: string; hasImage: boolean }> {
+    // Bridge has been replaced by backend in VIB-183. Use backend.clipboard snapshot when available.
     try {
-      return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
+      // If backend.clipboard exposes getClipboardSnapshot, use it; otherwise fall back safely
+      const cb: any = (backend as any).clipboard;
+      if (cb && typeof cb.getClipboardSnapshot === 'function') {
+        const snap = await cb.getClipboardSnapshot();
+        if (snap && typeof snap.text === 'string' && typeof snap.hasImage === 'boolean') {
+          return snap as { text: string; hasImage: boolean };
+        }
+      }
     } catch {
-      return { text: '', hasImage: false };
+      // fall through to safe default
     }
+    return { text: '', hasImage: false };
   }
 
   function copyTerminalSelection(paneId: string): boolean {
@@ -511,7 +453,7 @@ export function createPaneRenderer({
       return false;
     }
 
-    bridge.writeClipboardText(selection);
+    void backend.clipboard.write(selection);
     return true;
   }
 
@@ -521,15 +463,15 @@ export function createPaneRenderer({
       return false;
     }
 
-    const text = options.clipboardSnapshot?.text ?? (await bridge.readClipboardText());
+    const text = options.clipboardSnapshot?.text ?? (await backend.clipboard.read());
     if (!text) {
       return false;
     }
 
-    if (bridge.platform === 'win32') {
+    if (backend.platform === 'win32') {
       node.terminal.paste(text);
     } else {
-      bridge.writeTerminal({ paneId: node.paneId, data: text });
+      void backend.terminal.write({ paneId: node.paneId, data: text });
     }
     return true;
   }
@@ -555,7 +497,7 @@ export function createPaneRenderer({
       return false;
     }
 
-    bridge.writeTerminal({ paneId: node.paneId, data: '\u0016' });
+    void backend.terminal.write({ paneId: node.paneId, data: '\u0016' });
     return true;
   }
 
@@ -585,7 +527,7 @@ export function createPaneRenderer({
     const node = getNode(paneId);
     if (!node) return;
     paneActivityWatcher.forget(paneId);
-    bridge.destroyTerminal({ paneId });
+    void backend.terminal.destroy({ paneId });
     node.terminal.dispose();
     node.root.remove();
     paneNodeMap.delete(paneId);
