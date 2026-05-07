@@ -1,6 +1,5 @@
 import { openCommandPalette, type PaletteItem } from './command-palette';
-import type { PaneState } from './pane-state';
-import type { PaneRenderer } from './pane-renderer';
+import type { PaneManager } from './manager/create-pane-manager.js';
 import type { TabBar } from './tab-bar';
 import type { Backend } from './backend';
 import type { SettingsManager } from './settings';
@@ -36,8 +35,7 @@ export interface ContextMenusForPalette {
 
 /** Dependencies injected into createCommandPaletteEntries. */
 export interface CommandPaletteEntriesDeps {
-  paneState: PaneState;
-  paneRenderer: PaneRenderer | null;
+  paneManager: PaneManager;
   tabBar: TabBar;
   layoutManager: LayoutManagerForPalette;
   layoutModal: LayoutModalForPalette;
@@ -71,8 +69,7 @@ export interface CommandPaletteEntries {
 // ---------------------------------------------------------------------------
 
 export function createCommandPaletteEntries({
-  paneState,
-  paneRenderer,
+  paneManager,
   tabBar,
   layoutManager,
   layoutModal,
@@ -99,11 +96,17 @@ export function createCommandPaletteEntries({
       closeSettingsPanel();
     }
 
-    const items: PaletteItem[] = paneState.getPanes().map((pane) => ({
-      id: pane.id,
-      label: (pane.title ?? pane.terminalTitle ?? '') || pane.id,
-      accent: pane.customColor || pane.accent,
-    }));
+    const items: PaletteItem[] = paneManager.getAll().map((pane) => {
+      const title = pane.getState<string>('title');
+      const terminalTitle = pane.getState<string>('terminalTitle');
+      const customColor = pane.getState<string>('customColor');
+      const accent = pane.getState<string>('accent') || '#61afef';
+      return {
+        id: pane.id,
+        label: (title ?? terminalTitle ?? '') || pane.id,
+        accent: customColor || accent,
+      };
+    });
 
     openCommandPalette(items, focusPane, {
       placeholder: 'Switch tab by title…',
@@ -138,9 +141,9 @@ export function createCommandPaletteEntries({
       } else if (commandId === 'change-profile') {
         openProfileSwitcher();
       } else if (commandId === 'change-color') {
-        contextMenus?.showColorPicker(paneState.getFocusedPaneId());
+        contextMenus?.showColorPicker(paneManager.getActiveId());
       } else if (commandId === 'rename-pane') {
-        const index = paneState.getPaneIndex(paneState.getFocusedPaneId() ?? '');
+        const index = paneManager.getPaneIndex(paneManager.getActiveId() ?? '');
         if (index !== -1) tabBar.beginRenamePane(index);
       } else if (commandId === 'profile-settings') {
         shellProfileManager?.openShellProfilesModal();
@@ -170,9 +173,10 @@ export function createCommandPaletteEntries({
     }
 
     const items: PaletteItem[] = profiles.map((p) => ({ id: p.id, label: p.name || p.id }));
+    const paneId = paneManager.getActiveId() ?? '';
     openCommandPalette(items, (profileId: string) => {
-      paneRenderer?.changePaneShell(paneState.getFocusedPaneId() ?? '', profileId);
-      focusPane(paneState.getFocusedPaneId());
+      void paneManager.changePaneShell(paneId, profileId);
+      focusPane(paneId);
     }, {
       placeholder: 'Select a profile…',
       emptyText: 'No matching profiles',
@@ -195,7 +199,7 @@ export function createCommandPaletteEntries({
       const items: PaletteItem[] = profiles.map((p) => ({ id: p.id, label: p.name || p.id }));
       openCommandPalette(items, (profileId: string) => {
         addPane(profileId);
-        focusPane(paneState.getFocusedPaneId());
+        focusPane(paneManager.getActiveId());
       }, {
         placeholder: 'Select a profile for new pane…',
         emptyText: 'No matching profiles',

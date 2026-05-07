@@ -5,7 +5,8 @@
  * and inline renaming for the terminal pane tabs.
  */
 
-import type { Pane, PaneState } from './pane-state';
+import type { Pane } from './pane/create-pane.js';
+import type { PaneManager } from './manager/create-pane-manager.js';
 import type { IconName } from './icons';
 
 // ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ interface DragMeta {
 }
 
 export interface TabBarDeps {
-  paneState: PaneState;
+  paneManager: PaneManager;
   state: TabBarLocalState;
   getPaneLabel: (pane: Pane) => string;
   getTextColorForBackground: (hexColor: string) => string;
@@ -68,7 +69,7 @@ export interface TabBar {
 // ---------------------------------------------------------------------------
 
 export function createTabBar({
-  paneState,
+  paneManager,
   state,
   getPaneLabel,
   getTextColorForBackground,
@@ -84,7 +85,7 @@ export function createTabBar({
   let isRenderingTabs = false;
 
   function beginRenamePane(index: number): void {
-    const panes = paneState.getPanes();
+    const panes = paneManager.getAll();
     const pane = panes[index];
     if (!pane) {
       return;
@@ -138,7 +139,7 @@ export function createTabBar({
   function activateTabPointerUp(paneId: string): void {
     if (state.pendingTabFocus?.paneId === paneId) {
       clearPendingTabFocus();
-      const paneIndex = paneState.getPaneIndex(paneId);
+      const paneIndex = paneManager.getPaneIndex(paneId);
       if (paneIndex !== -1) {
         beginRenamePane(paneIndex);
       }
@@ -153,7 +154,7 @@ export function createTabBar({
       return;
     }
 
-    const panes = paneState.getPanes();
+    const panes = paneManager.getAll();
     const pane = panes[index];
     if (!pane) {
       return;
@@ -207,7 +208,7 @@ export function createTabBar({
     }
 
     // Call the drag callback with from and to indices
-    const panes = paneState.getPanes();
+    const panes = paneManager.getAll();
     const fromIndex = panes.findIndex((entry) => entry.id === paneId);
     if (fromIndex !== -1) {
       onTabDrag(fromIndex, dropIndex);
@@ -249,7 +250,7 @@ export function createTabBar({
     if (dragMeta?.insertBefore) {
       tab.classList.add('insert-before');
     }
-    const accentColor = pane.customColor || pane.accent;
+    const accentColor = pane.getState<string>('customColor') || pane.getState<string>('accent') || '#61afef';
     tab.style.setProperty('--pane-accent', accentColor);
     tab.style.setProperty('--tab-text-color', getTextColorForBackground(accentColor));
     tab.dataset.paneId = pane.id;
@@ -326,7 +327,7 @@ export function createTabBar({
     setIcon(close, 'x', 14);
     close.setAttribute('aria-label', `Close tab ${pane.id}`);
 
-    const panes = paneState.getPanes();
+    const panes = paneManager.getAll();
     close.disabled = panes.length === 1;
 
     // Show pending close state
@@ -350,8 +351,8 @@ export function createTabBar({
       return;
     }
     isRenderingTabs = true;
-    const panes = paneState.getPanes();
-    const focusedIndex = paneState.getFocusedIndex();
+    const panes = paneManager.getAll();
+    const focusedIndex = paneManager.getFocusedIndex();
     const draggedPaneId = state.dragState?.paneId ?? null;
     const ds = state.dragState;
     let slot = 0;
