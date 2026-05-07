@@ -6,13 +6,13 @@
  */
 
 import * as ShortcutsRegistry from './shortcuts-registry';
+import { formatChord, parseChord } from './input/keymap';
 import { icon, setIcon } from './icons';
 
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
 
-/** Bridge surface consumed by the shortcuts modal. */
 export interface ShortcutsBridge {
   platform: string;
 }
@@ -21,7 +21,6 @@ export interface ShortcutsBridge {
 // Internal types
 // ---------------------------------------------------------------------------
 
-/** Augmented overlay element that carries modal DOM references. */
 interface ShortcutsModalOverlay extends HTMLDivElement {
   _modalShortcutsList: HTMLDivElement;
 }
@@ -30,9 +29,6 @@ interface ShortcutsModalOverlay extends HTMLDivElement {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Get human-readable names for shortcut actions
- */
 function getShortcutActionName(actionId: string): string {
   const names: Record<string, string> = {
     'new-tab': 'New Tab',
@@ -54,9 +50,6 @@ function getShortcutActionName(actionId: string): string {
   return names[actionId] || actionId;
 }
 
-/**
- * Get description for shortcut actions
- */
 function getShortcutActionDescription(actionId: string): string {
   const descriptions: Record<string, string> = {
     'new-tab': 'Create a new terminal pane',
@@ -78,9 +71,6 @@ function getShortcutActionDescription(actionId: string): string {
   return descriptions[actionId] || '';
 }
 
-/**
- * Show a custom confirmation dialog. Returns a Promise that resolves to true/false.
- */
 function showConfirmDialog(message: string): Promise<boolean> {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -126,8 +116,22 @@ function showConfirmDialog(message: string): Promise<boolean> {
 }
 
 /**
- * Open the keyboard shortcuts modal dialog
+ * Build a chord string from a keyboard event.
+ * Maps Cmd/Meta to Ctrl so the chord matches keymap format.
  */
+function chordFromEvent(event: KeyboardEvent): string {
+  const tokens: string[] = [];
+  if (event.ctrlKey || event.metaKey) tokens.push('Ctrl');
+  if (event.shiftKey) tokens.push('Shift');
+  if (event.altKey) tokens.push('Alt');
+  tokens.push(event.key.length === 1 ? event.key.toLowerCase() : event.key);
+  return tokens.join('+');
+}
+
+// ---------------------------------------------------------------------------
+// Modal
+// ---------------------------------------------------------------------------
+
 export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSettingsSave: (() => void) | undefined): void {
   const overlay = document.createElement('div') as ShortcutsModalOverlay;
   overlay.className = 'settings-modal-overlay';
@@ -159,7 +163,6 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
   overlay.querySelector('.settings-modal-close')!.addEventListener('click', closeModal);
   overlay.querySelector('.close-btn')!.addEventListener('click', closeModal);
 
-  // Reset shortcuts button
   overlay.querySelector('#modal-shortcuts-reset')!.addEventListener('click', async () => {
     const confirmed = await showConfirmDialog('Reset all keyboard shortcuts to their default values?');
     if (confirmed) {
@@ -171,23 +174,19 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
 
   document.body.appendChild(overlay);
 
-  // Store reference to modal list for rendering
   overlay._modalShortcutsList = overlay.querySelector('#modal-shortcuts-list') as HTMLDivElement;
 
   renderModalShortcuts();
 
-  /**
-   * Render the shortcuts list in the modal
-   */
   function renderModalShortcuts(): void {
     const listEl = overlay._modalShortcutsList;
     if (!listEl) return;
 
     listEl.replaceChildren();
 
-    const shortcuts = ShortcutsRegistry.getKeyboardShortcuts();
+    const shortcuts = ShortcutsRegistry.getAllShortcuts();
 
-    for (const [id, shortcut] of Object.entries(shortcuts)) {
+    for (const [id, entry] of Object.entries(shortcuts)) {
       const item = document.createElement('div');
       item.className = 'shortcut-item';
 
@@ -197,7 +196,7 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
       const name = document.createElement('div');
       name.className = 'shortcut-name';
       name.textContent = getShortcutActionName(id);
-      if (shortcut.mode === 'nav') {
+      if (entry.mode === 'nav') {
         const badge = document.createElement('span');
         badge.className = 'shortcut-mode-badge';
         badge.textContent = 'Nav';
@@ -215,7 +214,7 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
 
       const keys = document.createElement('div');
       keys.className = 'shortcut-keys';
-      keys.textContent = ShortcutsRegistry.formatShortcut(shortcut);
+      keys.textContent = formatChord(entry.chord, bridge.platform);
       keys.addEventListener('click', () => {
         startShortcutRecording(id, () => renderModalShortcuts());
       });
@@ -235,19 +234,11 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
     }
   }
 
-  /**
-   * Start recording a new keyboard shortcut
-   */
   function startShortcutRecording(shortcutId: string, onRecordComplete: () => void): void {
-    const shortcuts = ShortcutsRegistry.getKeyboardShortcuts();
-    const shortcut = shortcuts[shortcutId];
-    if (!shortcut) return;
-
-    // Create recording overlay
     const recorderOverlay = document.createElement('div');
     recorderOverlay.className = 'shortcut-recorder-overlay';
     recorderOverlay.id = 'shortcut-recorder-overlay';
-    recorderOverlay.tabIndex = -1; // Make it focusable
+    recorderOverlay.tabIndex = -1;
 
     recorderOverlay.innerHTML = `
       <div class="shortcut-recorder-dialog">
@@ -265,7 +256,7 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
 
     document.body.appendChild(recorderOverlay);
 
-    let recordedShortcut: ShortcutsRegistry.ShortcutOverride | null = null;
+    let recordedChord: string | null = null;
     const keysDisplay = recorderOverlay.querySelector('#shortcut-recorder-keys') as HTMLDivElement;
     const saveBtn = recorderOverlay.querySelector('#shortcut-recorder-save') as HTMLButtonElement;
     const cancelBtn = recorderOverlay.querySelector('#shortcut-recorder-cancel') as HTMLButtonElement;
@@ -274,36 +265,44 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
       event.preventDefault();
       event.stopPropagation();
 
-      // Handle escape key
       if (event.key === 'Escape') {
         closeShortcutRecorder();
         return;
       }
 
-      // Ignore modifier-only keypresses
       if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
         return;
       }
 
-      // Parse the shortcut
-      const parsed = ShortcutsRegistry.parseShortcutEvent(event);
+      const chord = chordFromEvent(event);
+      const [parsed] = parseChord(chord);
 
-      // Update display
       keysDisplay.innerHTML = '';
-      const modifiers = [...parsed.modifiers, parsed.key];
-      for (const mod of modifiers) {
-        const keyEl = document.createElement('div');
-        keyEl.className = 'shortcut-recorder-key';
-        keyEl.textContent = mod === 'ctrl' ? (navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl') :
-                           mod === 'shift' ? (navigator.platform.toLowerCase().includes('mac') ? '⇧' : 'Shift') :
-                           mod === 'alt' ? (navigator.platform.toLowerCase().includes('mac') ? '⌥' : 'Alt') :
-                           mod === ' ' ? 'Space' : mod;
-        keysDisplay.appendChild(keyEl);
+      const isMac = navigator.platform.toLowerCase().includes('mac');
+      if (parsed.ctrl) {
+        const el = document.createElement('div');
+        el.className = 'shortcut-recorder-key';
+        el.textContent = isMac ? '⌘' : 'Ctrl';
+        keysDisplay.appendChild(el);
       }
+      if (parsed.shift) {
+        const el = document.createElement('div');
+        el.className = 'shortcut-recorder-key';
+        el.textContent = isMac ? '⇧' : 'Shift';
+        keysDisplay.appendChild(el);
+      }
+      if (parsed.alt) {
+        const el = document.createElement('div');
+        el.className = 'shortcut-recorder-key';
+        el.textContent = isMac ? '⌥' : 'Alt';
+        keysDisplay.appendChild(el);
+      }
+      const keyEl = document.createElement('div');
+      keyEl.className = 'shortcut-recorder-key';
+      keyEl.textContent = parsed.key === ' ' ? 'Space' : parsed.key;
+      keysDisplay.appendChild(keyEl);
 
-      // Check for conflicts
-      const newShortcut: ShortcutsRegistry.ShortcutOverride = { key: parsed.key, modifiers: parsed.modifiers };
-      const conflictId = ShortcutsRegistry.findConflict(newShortcut, shortcutId);
+      const conflictId = ShortcutsRegistry.findConflict(chord, shortcutId);
 
       if (conflictId) {
         const conflictWarning = document.createElement('div');
@@ -313,11 +312,10 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
         saveBtn.disabled = true;
       } else {
         saveBtn.disabled = false;
-        recordedShortcut = newShortcut;
+        recordedChord = chord;
       }
     };
 
-    // Use window for event capture to ensure we get all keyboard events
     window.addEventListener('keydown', keydownHandler, true);
 
     const closeShortcutRecorder = (): void => {
@@ -328,19 +326,13 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
     cancelBtn.addEventListener('click', closeShortcutRecorder);
 
     saveBtn.addEventListener('click', () => {
-      if (recordedShortcut) {
-        // Update the shortcut
-        ShortcutsRegistry.updateKeyboardShortcut(shortcutId, {
-          key: recordedShortcut.key,
-          modifiers: recordedShortcut.modifiers,
-        });
+      if (recordedChord) {
+        ShortcutsRegistry.setShortcutOverride(shortcutId, recordedChord);
 
-        // Persist to settings
         if (scheduleSettingsSave) {
           scheduleSettingsSave();
         }
 
-        // Update UI
         onRecordComplete();
         closeShortcutRecorder();
       }
@@ -352,7 +344,6 @@ export function openKeyboardShortcutsModal(bridge: ShortcutsBridge, scheduleSett
       }
     });
 
-    // Make overlay focusable and focus it
     recorderOverlay.style.outline = 'none';
     recorderOverlay.focus();
   }

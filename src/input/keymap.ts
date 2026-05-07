@@ -92,8 +92,7 @@ export const KEYMAP: KeymapEntry[] = [
 // A chord like "Ctrl+Shift+C" is split into one or more *alternatives* (joined
 // by `|`) and each alternative is split on `+`. The last token is the key,
 // the rest are modifiers. We treat `Cmd`/`Meta` as `Ctrl` so a chord written
-// `Ctrl+B` fires for both `Ctrl+B` on Linux/Windows and `Cmd+B` on macOS —
-// matching the legacy behavior of `shortcuts-registry.js`.
+// `Ctrl+B` fires for both `Ctrl+B` on Linux/Windows and `Cmd+B` on macOS.
 // ---------------------------------------------------------------------------
 
 const MOD_TOKENS = new Set(['ctrl', 'cmd', 'meta', 'shift', 'alt', 'option']);

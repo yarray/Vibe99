@@ -34,7 +34,7 @@ export interface SettingsManager {
 interface PersistedSettings {
   version: number;
   ui: AppSettings & {
-    shortcuts: Record<string, ShortcutsRegistry.ShortcutOverride>;
+    shortcuts: Record<string, string>;
   };
 }
 

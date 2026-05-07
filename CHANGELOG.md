@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Remove legacy shortcut format compatibility layer (VIB-45):** Refactored `shortcuts-registry.ts` to store overrides as chord strings (`"Ctrl+N"`) instead of legacy `{ key, modifiers }` objects. Removed all legacy format conversion functions (`chordToLegacy`, `legacyToChord`, `normalizeLegacyKey`, `legacyShortcut`). `shortcuts-ui.ts` now uses `parseChord`/`formatChord` from `input/keymap.ts` directly for recording and display. Settings persistence format changed to `{ id: chordString }` with backward-compatible reading of the old format. No dispatcher or hint bar behavior change.
+
 ### Removed
 
 - **Remove pane-state.ts and pane-renderer.ts (VIB-194):** Deleted the legacy `src/pane-state.ts` (488 lines) and `src/pane-renderer.ts` (616 lines). All consumers have been migrated to the new PaneManager-based architecture. Fixed last remaining import in `shell-profiles.ts` (PaneNode now imported from `./pane/types`) and removed stale `import('../pane-state')` references in `pane/types.ts`. `tsc --noEmit` passes with zero errors.
