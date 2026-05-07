@@ -35,7 +35,7 @@ export interface PaneNode {
 
 export interface PaneRendererDeps {
   backend: Backend;
-  paneState: import('../pane-state').PaneState;
+  paneState: PaneState;
   settingsManager: SettingsManager;
   paneAlert: PaneAlertStrategy;
   paneActivityWatcher: {
@@ -53,7 +53,7 @@ export interface PaneRendererDeps {
   onTerminalContextMenu: (node: PaneNode, event: MouseEvent) => Promise<void> | void;
   scheduleWindowLayoutSave: () => void;
   tabBar: TabBar;
-  getPaneLabel: (pane: import('../pane-state').Pane) => string;
+  getPaneLabel: (pane: Pane) => string;
   onPaneCwdChanged: (paneId: string, cwd: string) => void;
 }
 
