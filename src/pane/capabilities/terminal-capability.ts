@@ -63,7 +63,7 @@ export function createTerminalBehavior(deps: TerminalBehaviorDeps) {
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
 
-  function open(ctx: { id: string; capability: (name: string) => unknown; emit?: (event: string, payload: unknown) => void }): TerminalCapability {
+  function open(ctx: { id: string; capability: <T>(name: string) => T | undefined; emit?: (event: string, payload: unknown) => void }): TerminalCapability {
     const dom = ctx.capability<{ terminalHost: HTMLElement }>('dom');
     if (!dom?.terminalHost) throw new Error('dom capability with terminalHost is required');
 
@@ -76,7 +76,7 @@ export function createTerminalBehavior(deps: TerminalBehaviorDeps) {
 
     fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new WebLinksAddon((uri, e) => {
+    terminal.loadAddon(new WebLinksAddon((e: MouseEvent, uri: string) => {
       if (e.ctrlKey || (window.navigator.platform === 'Darwin' && e.metaKey)) {
         e.preventDefault();
         e.stopPropagation();
