@@ -1,6 +1,5 @@
 import { icon, setIcon } from './icons';
 import type { Backend, LayoutData, LayoutsListResult } from './backend';
-import type { PaneState } from './pane-state';
 import type { ModalStack } from './modal-stack';
 import type { LayoutManager } from './layout-manager';
 
@@ -11,7 +10,6 @@ import type { LayoutManager } from './layout-manager';
 /** Dependencies injected into createLayoutModal. */
 export interface LayoutModalDeps {
   backend: Backend;
-  paneState: PaneState;
   modalStack: ModalStack;
   reportError: (error: unknown) => void;
   layoutManager: LayoutManager;
@@ -40,7 +38,6 @@ const LAYOUT_MODAL_POLL_INTERVAL: number = 3000; // 3 seconds
 
 export function createLayoutModal({
   backend,
-  paneState,
   modalStack,
   reportError,
   layoutManager,

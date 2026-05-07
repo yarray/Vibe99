@@ -8,7 +8,7 @@ import {
   writeLayoutWindowBindings,
   clearLayoutWindowBinding,
 } from './backend';
-import type { PaneState, SessionData } from './pane-state';
+import type { PaneManager, SessionPaneEntry } from './manager/create-pane-manager.js';
 import type { ModalStack, CloseFn } from './modal-stack';
 
 // ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@ import type { ModalStack, CloseFn } from './modal-stack';
 /** Dependencies injected into createLayoutManager. */
 export interface LayoutManagerDeps {
   backend: Backend;
-  paneState: PaneState;
+  paneManager: PaneManager;
   modalStack: ModalStack;
   reportError: (error: unknown) => void;
   layoutsButtonEl: HTMLElement;
@@ -53,7 +53,7 @@ export interface LayoutManager {
   _setLayouts: (newLayouts: LayoutData[]) => void;
   _setDefaultLayoutId: (id: string) => void;
   createLayoutFromCurrentWindow: (layoutId: string, name: string) => LayoutData;
-  restoreSession: (session: { panes?: SessionData['panes']; focusedPaneIndex?: number }) => boolean;
+  restoreSession: (session: { panes?: SessionPaneEntry[]; focusedPaneIndex?: number }) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ export interface LayoutManager {
 
 export function createLayoutManager({
   backend,
-  paneState,
+  paneManager,
   modalStack,
   reportError,
   layoutsButtonEl,
@@ -91,37 +91,40 @@ export function createLayoutManager({
     }
   }
 
-  function buildSessionData(): SessionData {
-    return paneState.buildSessionData();
+  function buildSessionData(): SessionPaneEntry[] {
+    return paneManager.serializeAll();
   }
 
-  function restoreSession(session: { panes?: SessionData['panes']; focusedPaneIndex?: number }): boolean {
-    return paneState.restoreSession(session);
+  function restoreSession(session: { panes?: SessionPaneEntry[]; focusedPaneIndex?: number }): void {
+    if (session.panes && session.focusedPaneIndex !== undefined) {
+      paneManager.restoreSession(session.panes, session.focusedPaneIndex);
+    }
   }
 
   function createLayoutFromCurrentWindow(layoutId: string, name: string): LayoutData {
-    const session: SessionData = buildSessionData();
+    const session: SessionPaneEntry[] = buildSessionData();
+    const focusedPaneIndex = paneManager.getFocusedIndex();
     return {
       id: layoutId,
       name,
-      panes: session.panes as unknown as LayoutData['panes'],
-      focusedPaneIndex: session.focusedPaneIndex,
+      panes: session as unknown as LayoutData['panes'],
+      focusedPaneIndex,
     };
   }
 
   function createDefaultLayout(): LayoutData {
-    const currentPanes = paneState.getPanes();
+    const currentPanes = paneManager.getAll();
     return {
       id: 'default',
       name: 'Default',
       panes: currentPanes.map((p) => ({
         paneId: p.id,
-        title: p.title,
-        cwd: p.cwd,
-        accent: p.accent,
-        customColor: p.customColor,
-        shellProfileId: p.shellProfileId,
-        breathingMonitor: p.breathingMonitor !== false,
+        title: p.getState<string>('title'),
+        cwd: p.getState<string>('cwd'),
+        accent: p.getState<string>('accent'),
+        customColor: p.getState<string>('customColor'),
+        shellProfileId: p.getState<string>('shellProfileId'),
+        breathingMonitor: p.getState<boolean>('breathingMonitor') !== false,
       })) as unknown as LayoutData['panes'],
       focusedPaneIndex: 0,
     };
@@ -160,7 +163,7 @@ export function createLayoutManager({
   async function switchLayout(layoutId: string): Promise<void> {
     const layout = layouts.find((l) => l.id === layoutId);
     if (!layout) return;
-    restoreSession({ panes: layout.panes as unknown as SessionData['panes'], focusedPaneIndex: layout.focusedPaneIndex });
+    restoreSession({ panes: layout.panes as unknown as SessionPaneEntry[], focusedPaneIndex: layout.focusedPaneIndex });
     setWindowLayoutId(layoutId);
     flushWindowLayoutSave();
     updateLayoutsIndicator();

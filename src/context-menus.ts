@@ -10,8 +10,9 @@
 
 import { icon } from './icons';
 import * as ColorsRegistry from './colors-registry';
-import type { PaneNode } from './pane-renderer';
-import type { Pane } from './pane-state';
+import type { PaneManager } from './manager/create-pane-manager.js';
+import type { TerminalCapability } from './pane/capabilities/terminal-capability.js';
+import type { ClipboardCapability } from './pane/capabilities/clipboard-capability.js';
 import type { Backend, ClipboardSnapshot } from './backend';
 import type { ShellProfile } from './shell-profiles';
 
@@ -21,17 +22,12 @@ import type { ShellProfile } from './shell-profiles';
 
 /** Adapter interface for the shared state consumed by context menus. */
 export interface ContextMenuState {
-  getPaneIndex: (paneId: string) => number;
-  getFocusedPaneId: () => string | null;
-  getPanels: () => Pane[];
-  setPanels: (panes: Pane[]) => void;
-  setFocusedPaneId: (id: string) => void;
+  paneManager: PaneManager;
   recordPaneVisit: (paneId: string) => void;
-  getPaneNode: (paneId: string) => PaneNode | null;
+  clearPaneCycleState: () => void;
   render: () => void;
   registerModal: (closeFn: () => void) => void;
   unregisterModal: (closeFn: () => void) => void;
-  clearPaneCycleState: () => void;
   scheduleSave: () => void;
 }
 
@@ -89,7 +85,7 @@ export interface ContextMenusDeps {
 export interface ContextMenus {
   showContextMenu: (items: MenuItem[], x: number, y: number, paneId: string) => void;
   hideContextMenu: () => void;
-  showTerminalContextMenu: (node: PaneNode, event: MouseEvent) => void;
+  showTerminalContextMenu: (paneId: string, event: MouseEvent) => void;
   showTabContextMenu: (paneId: string, event: MouseEvent) => void;
   showColorPicker: (paneId: string) => void;
   setPaneColor: (paneId: string, color: string) => void;
@@ -124,15 +120,16 @@ async function getClipboardSnapshot(backend: Backend): Promise<ClipboardSnapshot
 
 function copyTerminalSelection(
   paneId: string,
-  state: ContextMenuState,
+  paneManager: PaneManager,
   backend: Backend,
 ): boolean {
-  const node = state.getPaneNode(paneId);
-  if (!node) {
+  const pane = paneManager.get(paneId);
+  const terminal = pane?.capability<TerminalCapability>('terminal');
+  if (!terminal) {
     return false;
   }
 
-  const selection = node.terminal.getSelection();
+  const selection = terminal.getSelection();
   if (!selection) {
     return false;
   }
@@ -143,12 +140,14 @@ function copyTerminalSelection(
 
 async function pasteIntoTerminal(
   paneId: string,
-  state: ContextMenuState,
+  paneManager: PaneManager,
   backend: Backend,
   options: { clipboardSnapshot?: ClipboardSnapshot } = {},
 ): Promise<boolean> {
-  const node = state.getPaneNode(paneId);
-  if (!node?.sessionReady) {
+  const pane = paneManager.get(paneId);
+  const terminal = pane?.capability<TerminalCapability>('terminal');
+  const clipboard = pane?.capability<ClipboardCapability>('clipboard');
+  if (!terminal || !clipboard) {
     return false;
   }
 
@@ -158,31 +157,33 @@ async function pasteIntoTerminal(
   }
 
   if (backend.platform === 'win32') {
-    node.terminal.paste(text);
+    return clipboard.paste(text);
   } else {
-    void backend.terminal.write({ paneId: node.paneId, data: text });
+    void backend.terminal.write({ paneId, data: text });
+    return true;
   }
-  return true;
 }
 
-function selectAllInTerminal(paneId: string, state: ContextMenuState): boolean {
-  const node = state.getPaneNode(paneId);
-  if (!node) {
+function selectAllInTerminal(paneId: string, paneManager: PaneManager): boolean {
+  const pane = paneManager.get(paneId);
+  const terminal = pane?.capability<TerminalCapability>('terminal');
+  if (!terminal) {
     return false;
   }
 
-  node.terminal.selectAll();
+  terminal.selectAll();
   return true;
 }
 
 async function pasteImageIntoTerminal(
   paneId: string,
-  state: ContextMenuState,
+  paneManager: PaneManager,
   backend: Backend,
   options: PasteImageOptions = {},
 ): Promise<boolean> {
-  const node = state.getPaneNode(paneId);
-  if (!node?.sessionReady) {
+  const pane = paneManager.get(paneId);
+  const terminal = pane?.capability<TerminalCapability>('terminal');
+  if (!terminal) {
     return false;
   }
 
@@ -191,7 +192,7 @@ async function pasteImageIntoTerminal(
     return false;
   }
 
-  void backend.terminal.write({ paneId: node.paneId, data: '' });
+  void backend.terminal.write({ paneId, data: '' });
   return true;
 }
 
@@ -343,13 +344,14 @@ function showContextMenu(
 }
 
 function showTerminalContextMenu(
-  node: PaneNode,
+  paneId: string,
   event: MouseEvent,
   state: ContextMenuState,
   backend: Backend,
   shellProfileManager: ShellProfileManagerLike,
   handleMenuAction: HandleMenuActionFn,
 ): void {
+  const { paneManager } = state;
   getClipboardSnapshot(backend).then((clipboardSnapshot) => {
 
     const shellProfiles = shellProfileManager.getShellProfiles();
@@ -361,12 +363,12 @@ function showTerminalContextMenu(
       isDefault: p.id === defaultShellProfileId,
     }));
 
-    const panes = state.getPanels();
-    const pane = panes[state.getPaneIndex(node.paneId)];
-    const breathingOn = pane && pane.breathingMonitor !== false;
+    const pane = paneManager.get(paneId);
+    const breathingOn = pane?.getState<boolean>('breathingMonitor') ?? false;
+    const terminal = pane?.capability<TerminalCapability>('terminal');
 
     const items: MenuItem[] = [
-      { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
+      { label: 'Copy', action: 'terminal-copy', disabled: !terminal?.hasSelection(), shortcut: '⇧⌘C' },
       { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
       { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
       { type: 'separator' },
@@ -386,7 +388,7 @@ function showTerminalContextMenu(
       );
     }
 
-    showContextMenu(items, event.clientX, event.clientY, node.paneId, state, backend, handleMenuAction);
+    showContextMenu(items, event.clientX, event.clientY, paneId, state, backend, handleMenuAction);
   });
 }
 
@@ -397,19 +399,20 @@ function showTabContextMenu(
   backend: Backend,
   handleMenuAction: HandleMenuActionFn,
 ): void {
-  const paneIndex = state.getPaneIndex(paneId);
+  const { paneManager } = state;
+  const paneIndex = paneManager.getPaneIndex(paneId);
   if (paneIndex === -1) {
     return;
   }
 
   state.clearPaneCycleState();
-  state.setFocusedPaneId(paneId);
+  paneManager.setActive(paneId);
   state.recordPaneVisit(paneId);
   state.render();
 
-  const panes = state.getPanels();
-  const pane = panes[paneIndex];
-  const hasCustomColor = pane && pane.customColor !== undefined;
+  const panes = paneManager.getAll();
+  const pane = paneManager.get(paneId);
+  const hasCustomColor = pane?.getState<string>('customColor') !== undefined;
 
   const items: MenuItem[] = [
     { label: 'Change Color...', action: 'tab-change-color' },
@@ -431,14 +434,13 @@ function showColorPicker(
   focusPane: (paneId: string) => void,
   handleMenuAction: HandleMenuActionFn,
 ): void {
+  const { paneManager } = state;
   hideContextMenu(state);
 
-  const paneIndex = state.getPaneIndex(paneId);
-  if (paneIndex === -1) return;
+  const pane = paneManager.get(paneId);
+  if (!pane) return;
 
-  const panes = state.getPanels();
-  const pane = panes[paneIndex];
-  const currentColor = pane.customColor || pane.accent;
+  const currentColor = pane.getState<string>('customColor') || pane.getState<string>('accent') || '#61afef';
   const presetColors = ColorsRegistry.PRESET_PANE_COLORS;
 
   // Find the index of the currently selected color for initial keyboard focus
@@ -599,25 +601,21 @@ function showColorPicker(
 }
 
 function setPaneColor(paneId: string, color: string, state: ContextMenuState): void {
-  const paneIndex = state.getPaneIndex(paneId);
-  if (paneIndex === -1) return;
+  const { paneManager } = state;
+  const pane = paneManager.get(paneId);
+  if (!pane) return;
 
-  const panes = state.getPanels();
-  state.setPanels(panes.map((p, i) =>
-    i === paneIndex ? { ...p, customColor: color } : p
-  ));
+  paneManager.setPaneCustomColor(paneId, color);
   state.scheduleSave();
   state.render();
 }
 
 function clearPaneColor(paneId: string, state: ContextMenuState): void {
-  const paneIndex = state.getPaneIndex(paneId);
-  if (paneIndex === -1) return;
+  const { paneManager } = state;
+  const pane = paneManager.get(paneId);
+  if (!pane) return;
 
-  const panes = state.getPanels();
-  state.setPanels(panes.map((p, i) =>
-    i === paneIndex ? { ...p, customColor: undefined } : p
-  ));
+  paneManager.clearPaneCustomColor(paneId);
   state.scheduleSave();
   state.render();
 }
@@ -643,24 +641,25 @@ function handleMenuAction(
   deps: HandleMenuActionDeps,
 ): void {
   const { state, backend, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
+  const { paneManager } = state;
 
   if (action === 'terminal-copy') {
-    copyTerminalSelection(paneId, state, backend);
+    copyTerminalSelection(paneId, paneManager, backend);
     return;
   }
 
   if (action === 'terminal-paste') {
-    pasteIntoTerminal(paneId, state, backend);
+    pasteIntoTerminal(paneId, paneManager, backend);
     return;
   }
 
   if (action === 'terminal-paste-image') {
-    pasteImageIntoTerminal(paneId, state, backend);
+    pasteImageIntoTerminal(paneId, paneManager, backend);
     return;
   }
 
   if (action === 'terminal-select-all') {
-    selectAllInTerminal(paneId, state);
+    selectAllInTerminal(paneId, paneManager);
     return;
   }
 
@@ -670,7 +669,7 @@ function handleMenuAction(
   }
 
   if (action === 'tab-rename') {
-    const paneIndex = state.getPaneIndex(paneId);
+    const paneIndex = paneManager.getPaneIndex(paneId);
     if (paneIndex !== -1) {
       beginRenamePane(paneIndex);
     }
@@ -678,7 +677,7 @@ function handleMenuAction(
   }
 
   if (action === 'tab-close') {
-    const paneIndex = state.getPaneIndex(paneId);
+    const paneIndex = paneManager.getPaneIndex(paneId);
     if (paneIndex !== -1) {
       closePane(paneIndex);
     }
@@ -741,8 +740,8 @@ export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
     showContextMenu: (items: MenuItem[], x: number, y: number, paneId: string): void =>
       showContextMenu(items, x, y, paneId, state, backend, boundHandleMenuAction),
     hideContextMenu: (): void => hideContextMenu(state),
-    showTerminalContextMenu: (node: PaneNode, event: MouseEvent): void =>
-      showTerminalContextMenu(node, event, state, backend, shellProfileManager, boundHandleMenuAction),
+    showTerminalContextMenu: (paneId: string, event: MouseEvent): void =>
+      showTerminalContextMenu(paneId, event, state, backend, shellProfileManager, boundHandleMenuAction),
     showTabContextMenu: (paneId: string, event: MouseEvent): void =>
       showTabContextMenu(paneId, event, state, backend, boundHandleMenuAction),
     showColorPicker: (paneId: string): void =>
@@ -750,7 +749,7 @@ export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
     setPaneColor: (paneId: string, color: string): void => setPaneColor(paneId, color, state),
     clearPaneColor: (paneId: string): void => clearPaneColor(paneId, state),
     pasteImageIntoTerminal: (paneId: string, options?: PasteImageOptions): void => {
-      void pasteImageIntoTerminal(paneId, state, backend, options);
+      void pasteImageIntoTerminal(paneId, state.paneManager, backend, options);
     },
     handleMenuAction: boundHandleMenuAction,
   };
