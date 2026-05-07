@@ -8,7 +8,7 @@
 // Dependencies injected at creation time to keep the module testable
 // and decoupled from the renderer.
 
-import { icon, setIcon } from './icons';
+import { icon } from './icons';
 import type { PaneNode } from './pane/types';
 
 // ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ export function createShellProfileManager({
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'settings-btn';
-    setIcon(btn, iconName, 16);
+    btn.innerHTML = icon(iconName, 16);
     btn.title = title;
     btn.addEventListener('click', (event) => {
       event.stopPropagation();

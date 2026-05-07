@@ -65,6 +65,19 @@ export function createTerminalBehavior(deps: TerminalBehaviorDeps) {
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
 
+  // Read font settings from CSS variables (set by settings manager)
+  function getTerminalFontFamily(): string {
+    const style = getComputedStyle(document.documentElement);
+    return style.getPropertyValue('--term-font-family').trim() || getFontFamily();
+  }
+
+  function getTerminalFontSize(): number {
+    const style = getComputedStyle(document.documentElement);
+    const value = style.getPropertyValue('--term-font-size').trim();
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : getFontSize();
+  }
+
   function open(ctx: PaneHandle): TerminalCapability {
     const dom = ctx.capability<DomCapabilityApi>('dom');
     if (!dom?.terminalHost) throw new Error('dom capability with terminalHost is required');
@@ -72,7 +85,7 @@ export function createTerminalBehavior(deps: TerminalBehaviorDeps) {
     terminal = new Terminal({
       allowProposedApi: true, allowTransparency: true, convertEol: false, customGlyphs: true,
       cursorBlink: true, disableStdin: false, drawBoldTextInBrightColors: false,
-      fontFamily: getFontFamily(), fontSize: getFontSize(), lineHeight: 1.2, scrollback: 5000,
+      fontFamily: getTerminalFontFamily(), fontSize: getTerminalFontSize(), lineHeight: 1.2, scrollback: 5000,
       theme: createTerminalTheme(getAccent()),
     });
 
@@ -102,7 +115,7 @@ export function createTerminalBehavior(deps: TerminalBehaviorDeps) {
       write: (d) => terminal?.write(d),
       focus: () => requestAnimationFrame(() => terminal?.focus()),
       blur: () => terminal?.blur(),
-      fit: () => { if (terminal && fitAddon) { terminal.options.fontSize = getFontSize(); terminal.options.fontFamily = getFontFamily(); fitAddon.fit(); } },
+      fit: () => { if (terminal && fitAddon) { terminal.options.fontSize = getTerminalFontSize(); terminal.options.fontFamily = getTerminalFontFamily(); fitAddon.fit(); } },
       resize: (c, r) => terminal?.resize(c, r),
       setTheme: (t) => { if (terminal) terminal.options.theme = t; },
       hasSelection: () => terminal?.hasSelection() ?? false,

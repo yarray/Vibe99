@@ -11,6 +11,8 @@
   --text: #f4f1e8;
   --status-highlight: #ffd166;
   --app-font-size: 13px;
+  --term-font-size: 13px;
+  --term-font-family: Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --pane-opacity: 0.8;
   --pane-bg-mask-opacity: 0.25;
   --pane-width: 720px;

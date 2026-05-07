@@ -94,8 +94,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   let pendingSettingsSave: number | null = null;
 
   function applySettings(): void {
-    document.documentElement.style.setProperty('--app-font-size', `${settings.fontSize}px`);
-    document.documentElement.style.setProperty('--app-font-family', settings.fontFamily);
+    document.documentElement.style.setProperty('--term-font-size', `${settings.fontSize}px`);
+    document.documentElement.style.setProperty('--term-font-family', settings.fontFamily);
     document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
     document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
     document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
