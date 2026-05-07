@@ -20,7 +20,7 @@ export interface SettingsManagerDeps {
   applyCallback: () => void;
   paneActivityWatcher: {
     setGlobalEnabled: (enabled: boolean) => void;
-  };
+  } | null;
 }
 
 export interface SettingsManager {
@@ -109,7 +109,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneMaskOpacityInput.value = settings.paneMaskOpacity.toFixed(2);
     breathingToggle.checked = settings.breathingAlertEnabled;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    paneActivityWatcher?.setGlobalEnabled(settings.breathingAlertEnabled);
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -286,7 +286,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     breathingToggle.checked = !breathingToggle.checked;
     settings.breathingAlertEnabled = breathingToggle.checked;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    paneActivityWatcher?.setGlobalEnabled(settings.breathingAlertEnabled);
     scheduleSettingsSave();
   }
 
@@ -297,7 +297,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   breathingToggle.addEventListener('change', () => {
     settings.breathingAlertEnabled = breathingToggle.checked;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    paneActivityWatcher?.setGlobalEnabled(settings.breathingAlertEnabled);
     scheduleSettingsSave();
   });
 
