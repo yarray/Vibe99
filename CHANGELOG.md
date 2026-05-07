@@ -6,6 +6,7 @@
 
 ### Changed
 
+- **renderer.ts PaneManager integration +瘦身到 ≤250 行 (VIB-193):** Migrated `renderer.ts` to use `PaneManager` directly, removing all dependencies on `pane-state` and `pane-renderer`. Created `shell-profile-adapter.ts` to bridge `PaneManager` to the `ShellProfileState` interface required by `shell-profiles` module. Inlined `getTextColorForBackground` utility function. File size reduced from 662 lines to 225 lines (66% reduction). All pane operations now go through `paneManager` API; `focusController` receives `paneManager` directly instead of adapter. `tsc --noEmit` passes with zero errors.
 - **Pane types extraction (VIB-189):** Extracted shared types (`PaneNode`, `Pane`, `PaneState`, `PaneRenderer`, `PaneRendererDeps`, `SessionData`, `SessionPaneEntry`, `PaneStateDeps`) from `pane-renderer.ts` and `pane-state.ts` into `src/pane/types.ts`. Both files re-export from `pane/types.ts` for backward compatibility. No runtime behavior change.
 - **pane-operations.ts migration to PaneManager (VIB-191):** Replaced all `paneState`/`paneRenderer` dependencies with `paneManager` + capability API. `PaneOperationsDeps` now takes `paneManager: PaneManager` instead of `paneState`/`paneRenderer`. All pane CRUD goes through `paneManager.getAll()`/`create()`/`destroy()`. All terminal/DOM/activity/PTY operations go through `pane.capability('terminal'|'dom'|'activity'|'pty')`. `getPaneLabel` accepts structural type `{ title, terminalTitle }` for compatibility with both old and new Pane types. No imports from `pane-state` or `pane-renderer` remain.
 
