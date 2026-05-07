@@ -10,7 +10,7 @@
 
 ### Changed
 
-- **Layout 编辑界面按钮改用文字标签 (VIB-196):** 将 Layout 编辑界面左侧 item 的操作按钮从 12px SVG 图标改为文字标签 (`link`/`edit`/`x`)，与 Profile 编辑面板的 `createProfileActionButton` 文字标签风格保持一致。CSS 无需变动，两者使用相同的 `.settings-btn` 样式（20x20px, font-size: 12px）。
+- **操作按钮统一改用 SVG 图标 (VIB-196):** Profile 编辑面板的 `createProfileActionButton` 从 `textContent` 改为 `setIcon`（16px SVG 图标）；Layout 编辑界面左侧 item 操作按钮也用 `setIcon` 改为 16px 图标（`external-link`/`pencil`/`x`）。参考界面右上角图标（18px），16px 适合 20x20 的 `.settings-btn` 容器。
 
 - **renderer.ts PaneManager integration +瘦身到 ≤250 行 (VIB-193):** Migrated `renderer.ts` to use `PaneManager` directly, removing all dependencies on `pane-state` and `pane-renderer`. Created `shell-profile-adapter.ts` to bridge `PaneManager` to the `ShellProfileState` interface required by `shell-profiles` module. Inlined `getTextColorForBackground` utility function. File size reduced from 662 lines to 225 lines (66% reduction). All pane operations now go through `paneManager` API; `focusController` receives `paneManager` directly instead of adapter. `tsc --noEmit` passes with zero errors.
 - **Pane types extraction (VIB-189):** Extracted shared types (`PaneNode`, `Pane`, `PaneState`, `PaneRenderer`, `PaneRendererDeps`, `SessionData`, `SessionPaneEntry`, `PaneStateDeps`) from `pane-renderer.ts` and `pane-state.ts` into `src/pane/types.ts`. Both files re-export from `pane/types.ts` for backward compatibility. No runtime behavior change.

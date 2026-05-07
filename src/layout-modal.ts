@@ -265,7 +265,7 @@ export function createLayoutModal({
         const switchBtn = document.createElement('button');
         switchBtn.type = 'button';
         switchBtn.className = 'settings-btn';
-        switchBtn.textContent = 'link';
+        setIcon(switchBtn, 'external-link', 16);
         switchBtn.title = 'Open in new window';
         switchBtn.addEventListener('click', (e: MouseEvent) => {
           e.stopPropagation();
@@ -277,7 +277,7 @@ export function createLayoutModal({
         const renameBtn = document.createElement('button');
         renameBtn.type = 'button';
         renameBtn.className = 'settings-btn';
-        renameBtn.textContent = 'edit';
+        setIcon(renameBtn, 'pencil', 16);
         renameBtn.title = 'Rename layout';
         renameBtn.addEventListener('click', async (e: MouseEvent) => {
           e.stopPropagation();
@@ -294,7 +294,7 @@ export function createLayoutModal({
           const deleteBtn = document.createElement('button');
           deleteBtn.type = 'button';
           deleteBtn.className = 'settings-btn';
-          deleteBtn.textContent = 'x';
+          setIcon(deleteBtn, 'x', 16);
           deleteBtn.title = 'Delete layout';
           deleteBtn.addEventListener('click', (e: MouseEvent) => {
             e.stopPropagation();

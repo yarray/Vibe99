@@ -8,7 +8,7 @@
 // Dependencies injected at creation time to keep the module testable
 // and decoupled from the renderer.
 
-import { icon } from './icons';
+import { icon, setIcon } from './icons';
 import type { PaneNode } from './pane/types';
 
 // ---------------------------------------------------------------------------
@@ -167,11 +167,11 @@ export function createShellProfileManager({
     }).catch(reportError) as Promise<void>;
   }
 
-  function createProfileActionButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
+  function createProfileActionButton(iconName: string, title: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'settings-btn';
-    btn.textContent = label;
+    setIcon(btn, iconName, 16);
     btn.title = title;
     btn.addEventListener('click', (event) => {
       event.stopPropagation();
