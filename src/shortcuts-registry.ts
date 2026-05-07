@@ -97,31 +97,29 @@ export function resetShortcutsToDefaults(): void {
 }
 
 /**
- * Load overrides from persisted settings. Expects `{ id: chordString }`.
- * Skips entries that match the current default (so stale saved defaults
- * don't block keymap updates).
+ * Load overrides from persisted settings. `shortcutsMap` is the `shortcuts`
+ * field from the persisted UI settings — a flat `{ id: value }` map where
+ * `value` is either a chord string (new format) or `{ key, modifiers }`
+ * (legacy format).
  *
- * For backward compatibility, also accepts the legacy `{ id: { key, modifiers } }`
- * format and converts it to chord strings on the fly.
+ * Skips entries that match the current default so stale saved defaults
+ * don't block keymap updates.
  */
-export function loadShortcutsFromSettings(settings: Record<string, unknown>): void {
+export function loadShortcutsFromSettings(shortcutsMap: Record<string, unknown>): void {
   overrides = {};
-  if (!settings || typeof settings.shortcuts !== 'object' || settings.shortcuts === null) {
+  if (!shortcutsMap || typeof shortcutsMap !== 'object') {
     refreshActiveKeymap();
     return;
   }
 
-  const map = settings.shortcuts as Record<string, unknown>;
-  for (const [id, value] of Object.entries(map)) {
+  for (const [id, value] of Object.entries(shortcutsMap)) {
     if (!(id in DEFAULT_CHORDS)) continue;
 
     let chord: string | undefined;
 
     if (typeof value === 'string') {
-      // New format: chord string
       chord = value;
     } else if (value && typeof value === 'object') {
-      // Legacy format: { key, modifiers }
       const legacy = value as { key?: string; modifiers?: string[] };
       if (typeof legacy.key === 'string' && Array.isArray(legacy.modifiers)) {
         const tokens: string[] = [];
@@ -136,7 +134,6 @@ export function loadShortcutsFromSettings(settings: Record<string, unknown>): vo
 
     if (!chord) continue;
 
-    // Skip entries that match the current default
     if (chord === DEFAULT_CHORDS[id]) continue;
 
     overrides[id] = chord;
