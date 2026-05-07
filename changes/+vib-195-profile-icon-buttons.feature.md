@@ -1,0 +1,1 @@
+Replace Profile edit panel action buttons (star/copy/delete) with inline SVG icons. Changed `createProfileActionButton` in `shell-profiles.ts` from text labels to icon rendering using the existing `icon()` function. Tooltip text preserved for accessibility.
