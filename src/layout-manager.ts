@@ -1,14 +1,14 @@
 import { setIcon } from './icons';
 import {
-  type Bridge,
+  type Backend,
   type LayoutData,
   type LayoutsListResult,
   type LayoutSaveResult,
   readLayoutWindowBindings,
   writeLayoutWindowBindings,
   clearLayoutWindowBinding,
-} from './bridge';
-import type { PaneState, SessionData } from './pane-state';
+} from './backend';
+import type { PaneManager, SessionPaneEntry } from './manager/create-pane-manager.js';
 import type { ModalStack, CloseFn } from './modal-stack';
 
 // ---------------------------------------------------------------------------
@@ -17,8 +17,8 @@ import type { ModalStack, CloseFn } from './modal-stack';
 
 /** Dependencies injected into createLayoutManager. */
 export interface LayoutManagerDeps {
-  bridge: Bridge;
-  paneState: PaneState;
+  backend: Backend;
+  paneManager: PaneManager;
   modalStack: ModalStack;
   reportError: (error: unknown) => void;
   layoutsButtonEl: HTMLElement;
@@ -53,7 +53,7 @@ export interface LayoutManager {
   _setLayouts: (newLayouts: LayoutData[]) => void;
   _setDefaultLayoutId: (id: string) => void;
   createLayoutFromCurrentWindow: (layoutId: string, name: string) => LayoutData;
-  restoreSession: (session: { panes?: SessionData['panes']; focusedPaneIndex?: number }) => boolean;
+  restoreSession: (session: { panes?: SessionPaneEntry[]; focusedPaneIndex?: number }) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,8 +61,8 @@ export interface LayoutManager {
 // ---------------------------------------------------------------------------
 
 export function createLayoutManager({
-  bridge,
-  paneState,
+  backend,
+  paneManager,
   modalStack,
   reportError,
   layoutsButtonEl,
@@ -81,54 +81,57 @@ export function createLayoutManager({
   function setWindowLayoutId(layoutId: string | null): void {
     if (windowLayoutId === layoutId) return;
     if (windowLayoutId) {
-      clearLayoutWindowBinding(windowLayoutId, bridge.currentWindowLabel);
+      clearLayoutWindowBinding(windowLayoutId, backend.currentWindowLabel);
     }
     windowLayoutId = layoutId;
     if (layoutId) {
       const bindings = readLayoutWindowBindings();
-      bindings[layoutId] = bridge.currentWindowLabel;
+      bindings[layoutId] = backend.currentWindowLabel;
       writeLayoutWindowBindings(bindings);
     }
   }
 
-  function buildSessionData(): SessionData {
-    return paneState.buildSessionData();
+  function buildSessionData(): SessionPaneEntry[] {
+    return paneManager.serializeAll();
   }
 
-  function restoreSession(session: { panes?: SessionData['panes']; focusedPaneIndex?: number }): boolean {
-    return paneState.restoreSession(session);
+  function restoreSession(session: { panes?: SessionPaneEntry[]; focusedPaneIndex?: number }): void {
+    if (session.panes && session.focusedPaneIndex !== undefined) {
+      paneManager.restoreSession(session.panes, session.focusedPaneIndex);
+    }
   }
 
   function createLayoutFromCurrentWindow(layoutId: string, name: string): LayoutData {
-    const session: SessionData = buildSessionData();
+    const session: SessionPaneEntry[] = buildSessionData();
+    const focusedPaneIndex = paneManager.getFocusedIndex();
     return {
       id: layoutId,
       name,
-      panes: session.panes as unknown as LayoutData['panes'],
-      focusedPaneIndex: session.focusedPaneIndex,
+      panes: session as unknown as LayoutData['panes'],
+      focusedPaneIndex,
     };
   }
 
   function createDefaultLayout(): LayoutData {
-    const currentPanes = paneState.getPanes();
+    const currentPanes = paneManager.getAll();
     return {
       id: 'default',
       name: 'Default',
       panes: currentPanes.map((p) => ({
         paneId: p.id,
-        title: p.title,
-        cwd: p.cwd,
-        accent: p.accent,
-        customColor: p.customColor,
-        shellProfileId: p.shellProfileId,
-        breathingMonitor: p.breathingMonitor !== false,
+        title: p.getState<string>('title'),
+        cwd: p.getState<string>('cwd'),
+        accent: p.getState<string>('accent'),
+        customColor: p.getState<string>('customColor'),
+        shellProfileId: p.getState<string>('shellProfileId'),
+        breathingMonitor: p.getState<boolean>('breathingMonitor') !== false,
       })) as unknown as LayoutData['panes'],
       focusedPaneIndex: 0,
     };
   }
 
   async function refreshLayouts(): Promise<LayoutsListResult> {
-    const config = await bridge.listLayouts();
+    const config = await backend.layouts.list();
     layouts = config.layouts ?? [];
     defaultLayoutId = config.defaultLayoutId ?? '';
     return config;
@@ -140,7 +143,7 @@ export function createLayoutManager({
     }
     const existing = layouts.find((l) => l.id === windowLayoutId);
     const layout = createLayoutFromCurrentWindow(windowLayoutId, existing?.name || windowLayoutId);
-    const config = await bridge.saveLayout(layout);
+    const config = await backend.layouts.save(layout);
     layouts = config.layouts ?? layouts;
     defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
     updateLayoutsIndicator();
@@ -150,7 +153,7 @@ export function createLayoutManager({
     if (!name || typeof name !== 'string' || !name.trim()) return;
     name = name.trim();
     const layout = createLayoutFromCurrentWindow(name.toLowerCase().replace(/\s+/g, '-'), name);
-    const config = await bridge.saveLayout(layout);
+    const config = await backend.layouts.save(layout);
     layouts = config.layouts ?? [];
     defaultLayoutId = config.defaultLayoutId ?? '';
     setWindowLayoutId(layout.id);
@@ -160,7 +163,7 @@ export function createLayoutManager({
   async function switchLayout(layoutId: string): Promise<void> {
     const layout = layouts.find((l) => l.id === layoutId);
     if (!layout) return;
-    restoreSession({ panes: layout.panes as unknown as SessionData['panes'], focusedPaneIndex: layout.focusedPaneIndex });
+    restoreSession({ panes: layout.panes as unknown as SessionPaneEntry[], focusedPaneIndex: layout.focusedPaneIndex });
     setWindowLayoutId(layoutId);
     flushWindowLayoutSave();
     updateLayoutsIndicator();
@@ -178,8 +181,8 @@ export function createLayoutManager({
       reportError(new Error('Cannot delete the layout used by this window'));
       return Promise.resolve();
     }
-    return bridge.deleteLayout(layoutId)
-      .then(() => bridge.listLayouts())
+    return backend.layouts.delete(layoutId)
+      .then(() => backend.layouts.list())
       .then((config: LayoutsListResult) => {
         layouts = config.layouts ?? [];
         defaultLayoutId = config.defaultLayoutId ?? '';
@@ -189,8 +192,8 @@ export function createLayoutManager({
   }
 
   function renameLayoutById(layoutId: string, newName: string): void {
-    bridge.renameLayout(layoutId, newName)
-      .then(() => bridge.listLayouts())
+    backend.layouts.rename(layoutId, newName)
+      .then(() => backend.layouts.list())
       .then((config: LayoutsListResult) => {
         layouts = config.layouts ?? [];
       })
@@ -255,7 +258,7 @@ export function createLayoutManager({
         item.append(label, checkmark);
         item.addEventListener('click', (event: MouseEvent) => {
           event.stopPropagation();
-          bridge.openLayoutWindow(layout.id).catch(reportError);
+          backend.layouts.openWindow(layout.id).catch(reportError);
           closeLayoutsDropdown();
         });
         layoutsDropdownEl.appendChild(item);

@@ -1,9 +1,11 @@
 import { setIcon } from './icons';
 
 export interface FullscreenManagerDeps {
-  bridge: {
-    isWindowFullscreen: (() => Promise<boolean>) | undefined;
-    setWindowFullscreen: ((fullscreen: boolean) => Promise<void>) | undefined;
+  backend: {
+    layouts: {
+      isFullscreen: (() => Promise<boolean>) | undefined;
+      setFullscreen: ((fullscreen: boolean) => Promise<void>) | undefined;
+    };
   };
   fullscreenButtonEl: HTMLElement;
   reportError: (error: unknown) => void;
@@ -26,11 +28,11 @@ interface FullscreenDocument extends Document {
   webkitExitFullscreen?: () => Promise<void>;
 }
 
-export function createFullscreenManager({ bridge, fullscreenButtonEl, reportError }: FullscreenManagerDeps): FullscreenManager {
+export function createFullscreenManager({ backend, fullscreenButtonEl, reportError }: FullscreenManagerDeps): FullscreenManager {
   function isNativeFullscreenSupported(): boolean {
     return (
-      typeof bridge.isWindowFullscreen === 'function' &&
-      typeof bridge.setWindowFullscreen === 'function'
+      typeof backend.layouts.isFullscreen === 'function' &&
+      typeof backend.layouts.setFullscreen === 'function'
     );
   }
 
@@ -57,7 +59,7 @@ export function createFullscreenManager({ bridge, fullscreenButtonEl, reportErro
 
   async function getIsFullscreen(): Promise<boolean> {
     if (isNativeFullscreenSupported()) {
-      return bridge.isWindowFullscreen!();
+      return backend.layouts.isFullscreen!();
     }
     return Boolean(getDomFullscreenElement());
   }
@@ -75,8 +77,8 @@ export function createFullscreenManager({ bridge, fullscreenButtonEl, reportErro
     }
 
     if (isNativeFullscreenSupported()) {
-      const isFs = await bridge.isWindowFullscreen!();
-      await bridge.setWindowFullscreen!(!isFs);
+      const isFs = await backend.layouts.isFullscreen!();
+      await backend.layouts.setFullscreen!(!isFs);
       await updateFullscreenButton();
       return;
     }

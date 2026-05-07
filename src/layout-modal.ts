@@ -1,6 +1,5 @@
 import { icon, setIcon } from './icons';
-import type { Bridge, LayoutData, LayoutsListResult } from './bridge';
-import type { PaneState } from './pane-state';
+import type { Backend, LayoutData, LayoutsListResult } from './backend';
 import type { ModalStack } from './modal-stack';
 import type { LayoutManager } from './layout-manager';
 
@@ -10,8 +9,7 @@ import type { LayoutManager } from './layout-manager';
 
 /** Dependencies injected into createLayoutModal. */
 export interface LayoutModalDeps {
-  bridge: Bridge;
-  paneState: PaneState;
+  backend: Backend;
   modalStack: ModalStack;
   reportError: (error: unknown) => void;
   layoutManager: LayoutManager;
@@ -39,8 +37,7 @@ interface LayoutModalOverlay extends HTMLDivElement {
 const LAYOUT_MODAL_POLL_INTERVAL: number = 3000; // 3 seconds
 
 export function createLayoutModal({
-  bridge,
-  paneState,
+  backend,
   modalStack,
   reportError,
   layoutManager,
@@ -48,7 +45,7 @@ export function createLayoutModal({
   let layoutModalPollTimer: ReturnType<typeof setInterval> | null = null;
 
   function openLayoutsModal(): void {
-    bridge.listLayouts()
+    backend.layouts.list()
       .then((config: LayoutsListResult) => {
         layoutManager._setLayouts(config.layouts ?? []);
         layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
@@ -114,8 +111,8 @@ export function createLayoutModal({
             cleanup();
             if (!trimmed) return;
             const layout = layoutManager.createLayoutFromCurrentWindow(trimmed.toLowerCase().replace(/\s+/g, '-'), trimmed);
-            bridge.saveLayout(layout)
-              .then(() => bridge.listLayouts())
+            backend.layouts.save(layout)
+              .then(() => backend.layouts.list())
               .then((config: LayoutsListResult) => {
                 layoutManager._setLayouts(config.layouts ?? []);
                 layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
@@ -143,7 +140,7 @@ export function createLayoutModal({
 
         layoutModalPollTimer = setInterval(async () => {
           try {
-            const config = await bridge.listLayouts();
+            const config = await backend.layouts.list();
             const newLayouts = config.layouts ?? [];
             const newDefaultLayoutId = config.defaultLayoutId ?? '';
             const oldLayouts = layoutManager.getLayouts();
@@ -214,8 +211,8 @@ export function createLayoutModal({
               const newName = inputEl.value.trim();
               layoutManager._setRenamingLayoutId(null);
               if (newName) {
-                bridge.renameLayout(layout.id, newName)
-                  .then(() => bridge.listLayouts())
+                backend.layouts.rename(layout.id, newName)
+                  .then(() => backend.layouts.list())
                   .then((config: LayoutsListResult) => {
                     layoutManager._setLayouts(config.layouts ?? []);
                     layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
@@ -236,8 +233,8 @@ export function createLayoutModal({
             const newName = inputEl.value.trim();
             layoutManager._setRenamingLayoutId(null);
             if (newName) {
-              bridge.renameLayout(layout.id, newName)
-                .then(() => bridge.listLayouts())
+              backend.layouts.rename(layout.id, newName)
+                .then(() => backend.layouts.list())
                 .then((config: LayoutsListResult) => {
                   layoutManager._setLayouts(config.layouts ?? []);
                   layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
@@ -268,11 +265,11 @@ export function createLayoutModal({
         const switchBtn = document.createElement('button');
         switchBtn.type = 'button';
         switchBtn.className = 'settings-btn';
-        setIcon(switchBtn, 'external-link', 12);
+        setIcon(switchBtn, 'external-link', 16);
         switchBtn.title = 'Open in new window';
         switchBtn.addEventListener('click', (e: MouseEvent) => {
           e.stopPropagation();
-          bridge.openLayoutWindow(layout.id).catch(reportError);
+          backend.layouts.openWindow(layout.id).catch(reportError);
           overlay?.remove();
         });
         actions.appendChild(switchBtn);
@@ -280,7 +277,7 @@ export function createLayoutModal({
         const renameBtn = document.createElement('button');
         renameBtn.type = 'button';
         renameBtn.className = 'settings-btn';
-        setIcon(renameBtn, 'pencil', 12);
+        setIcon(renameBtn, 'pencil', 16);
         renameBtn.title = 'Rename layout';
         renameBtn.addEventListener('click', async (e: MouseEvent) => {
           e.stopPropagation();
@@ -297,7 +294,7 @@ export function createLayoutModal({
           const deleteBtn = document.createElement('button');
           deleteBtn.type = 'button';
           deleteBtn.className = 'settings-btn';
-          setIcon(deleteBtn, 'x', 12);
+          setIcon(deleteBtn, 'x', 16);
           deleteBtn.title = 'Delete layout';
           deleteBtn.addEventListener('click', (e: MouseEvent) => {
             e.stopPropagation();
@@ -349,8 +346,8 @@ export function createLayoutModal({
       const doSave = () => {
         const newName = nameInput.value.trim();
         if (!newName) return;
-        bridge.renameLayout(selected.id, newName)
-          .then(() => bridge.listLayouts())
+        backend.layouts.rename(selected.id, newName)
+          .then(() => backend.layouts.list())
           .then((config: LayoutsListResult) => {
             layoutManager._setLayouts(config.layouts ?? []);
             layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? layoutManager.getDefaultLayoutId());
@@ -383,7 +380,7 @@ export function createLayoutModal({
       setDefaultBtn.disabled = isDefault;
       setDefaultBtn.title = isDefault ? 'This is the default layout' : 'Set this layout to restore on startup';
       setDefaultBtn.addEventListener('click', () => {
-        bridge.setLayoutAsDefault(selected.id)
+        backend.layouts.setAsDefault(selected.id)
           .then((config: LayoutsListResult) => {
             layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? selected.id);
             renderModalLayouts(overlay);
@@ -397,7 +394,7 @@ export function createLayoutModal({
       openInNewWindowBtn.className = 'settings-btn layout-info-btn';
       openInNewWindowBtn.textContent = 'Open in New Window';
       openInNewWindowBtn.addEventListener('click', async () => {
-        await bridge.openLayoutInNewWindow(selected.id).catch(reportError);
+        await backend.layouts.openInNewWindow(selected.id).catch(reportError);
         overlay?.remove();
       });
       actionsRow.appendChild(openInNewWindowBtn);

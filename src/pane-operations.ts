@@ -1,9 +1,13 @@
-// Pane operations — coordinates paneState, paneRenderer, tabBar, and layoutManager.
+// Pane operations — coordinates paneManager, tabBar, and layoutManager.
 
-import type { Pane, PaneState } from './pane-state';
-import type { PaneRenderer } from './pane-renderer';
+import type { PaneManager, PaneInitialState } from './manager/create-pane-manager.js';
+import type { TerminalCapability } from './pane/capabilities/terminal-capability.js';
+import type { DomCapabilityApi } from './pane/capabilities/dom-capability.js';
+import type { ActivityCapability } from './pane/capabilities/activity-capability.js';
+import type { PtyCapability } from './pane/capabilities/pty-capability.js';
 import type { TabBar, TabBarLocalState } from './tab-bar';
-import type { Bridge, ClipboardSnapshot } from './bridge';
+import type { Backend, ClipboardSnapshot } from './backend';
+import type { FocusController } from './manager/create-focus-controller.js';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -16,13 +20,11 @@ export interface LayoutManagerHandle {
 
 /** Dependencies injected into `createPaneOperations`. */
 export interface PaneOperationsDeps {
-  paneState: PaneState;
-  paneRenderer: PaneRenderer;
+  paneManager: PaneManager;
   tabBar: TabBar;
   layoutManager: LayoutManagerHandle;
   render: (refit?: boolean) => void;
-  setMode: (mode: string) => void;
-  getCurrentMode: () => string;
+  focusController: FocusController;
   state: TabBarLocalState;
 }
 
@@ -47,8 +49,8 @@ export interface PaneOperations {
   togglePaneBreathingMonitor: (paneId: string) => boolean;
   getFocusedPaneAccent: () => string;
   isEditableTarget: () => boolean;
-  getClipboardSnapshot: (bridge: Bridge) => Promise<ClipboardSnapshot>;
-  getPaneLabel: (pane: Pane) => string;
+  getClipboardSnapshot: (backend: Backend) => Promise<ClipboardSnapshot>;
+  getPaneLabel: (pane: { title: string | null; terminalTitle: string }) => string;
   handleTerminalExit: (event: { paneId: string; exitCode: number; reason: string }) => boolean;
 }
 
@@ -57,162 +59,148 @@ export interface PaneOperations {
 // ---------------------------------------------------------------------------
 
 export function createPaneOperations({
-  paneState,
-  paneRenderer,
+  paneManager,
   tabBar,
   layoutManager,
   render,
-  setMode,
-  getCurrentMode,
+  focusController,
   state,
 }: PaneOperationsDeps): PaneOperations {
   function focusPane(paneId: string, options: { focusTerminal?: boolean } = {}): void {
     const { focusTerminal = true } = options;
-    paneState.focusPane(paneId);
-    setMode('terminal');
-    render();
-    paneRenderer?.setAlerted(paneId, false);
+    if (!focusController.focusPane(paneId)) return;
+    const pane = paneManager.get(paneId);
+    const domApi = pane?.capability<DomCapabilityApi>('dom');
+    const activityApi = pane?.capability<ActivityCapability>('activity');
+    if (domApi && activityApi) activityApi.setAlerted(domApi.root, false);
     if (focusTerminal) {
-      paneRenderer?.focusTerminal(paneId);
+      pane?.capability<TerminalCapability>('terminal')?.focus();
     }
   }
 
   function refocusCurrentPaneTerminal(): void {
-    const paneId = paneState.getFocusedPaneId();
+    const paneId = focusController.getActiveId();
     if (!paneId) return;
-    setMode('terminal');
-    paneRenderer?.focusTerminal(paneId);
+    focusController.setMode('terminal');
+    paneManager.get(paneId)?.capability<TerminalCapability>('terminal')?.focus();
   }
 
   function blurFocusedTerminal(): void {
-    const paneId = paneState.getFocusedPaneId();
-    if (paneId) paneRenderer?.blurTerminal(paneId);
+    const paneId = focusController.getActiveId();
+    if (paneId) paneManager.get(paneId)?.capability<TerminalCapability>('terminal')?.blur();
   }
 
   function addPane(shellProfileId: string | null = null): string {
-    const newPaneId = paneState.addPane(shellProfileId);
-    setMode('terminal');
+    const focusedPane = paneManager.getActive();
+    const initialState: PaneInitialState = {
+      title: null,
+      cwd: focusedPane?.getState<string>('cwd') ?? '',
+      accent: '',
+      shellProfileId: shellProfileId ?? null,
+    };
+    const newPane = paneManager.create(initialState);
+    const newPaneId = newPane.id;
+    focusController.recordPaneVisit(newPaneId);
+    focusController.setMode('terminal');
     document.body.classList.remove('is-navigation-mode');
     render(true);
     return newPaneId;
   }
 
   function closePane(index: number, options: { destroyTerminal?: boolean } = {}): void {
-    const { destroyTerminal = true } = options;
-    const currentPanes = paneState.getPanes();
+    const currentPanes = paneManager.getAll();
     if (currentPanes.length === 1) return;
 
     const closingPane = currentPanes[index];
     if (!closingPane) return;
 
-    if (closingPane.id === state.renamingPaneId) state.renamingPaneId = null;
-    if (closingPane.id === state.dragState?.paneId) {
+    const closingId = closingPane.id;
+    if (closingId === state.renamingPaneId) state.renamingPaneId = null;
+    if (closingId === state.dragState?.paneId) {
       state.dragState = null;
       document.body.classList.remove('is-dragging-tabs');
     }
-    if (closingPane.id === state.pendingTabFocus?.paneId) {
+    if (closingId === state.pendingTabFocus?.paneId) {
       window.clearTimeout(state.pendingTabFocus.timerId);
       state.pendingTabFocus = null;
     }
 
-    if (destroyTerminal) {
-      paneRenderer?.destroyPane(closingPane.id);
-    }
+    focusController.commitPaneCycle();
+    const wasFocused = closingId === paneManager.getActiveId();
 
-    const wasFocused = closingPane.id === paneState.getFocusedPaneId();
-    paneState.closePane(index);
+    paneManager.destroy(closingId);
     render(true);
 
     if (wasFocused) {
-      const newFocusedPaneId = paneState.getFocusedPaneId();
+      const newFocusedPaneId = paneManager.getActiveId();
+      focusController.recordPaneVisit(newFocusedPaneId);
       if (newFocusedPaneId) {
         requestAnimationFrame(() => {
-          setMode('terminal');
-          paneRenderer?.focusTerminal(newFocusedPaneId);
+          focusController.setMode('terminal');
+          paneManager.get(newFocusedPaneId)?.capability<TerminalCapability>('terminal')?.focus();
         });
       }
     }
   }
 
   function moveFocus(delta: number): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0) return;
-    paneState.moveFocus(delta);
-    render();
+    focusController.moveFocus(delta);
   }
 
   function navigateLeft(): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0) return;
-    const focusedIndex = paneState.getFocusedIndex();
-    const nextIndex = focusedIndex - 1;
-    if (nextIndex >= 0) {
-      focusPane(currentPanes[nextIndex].id);
-    }
+    focusController.navigateLeft();
   }
 
   function navigateRight(): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0) return;
-    const focusedIndex = paneState.getFocusedIndex();
-    const nextIndex = focusedIndex + 1;
-    if (nextIndex < currentPanes.length) {
-      focusPane(currentPanes[nextIndex].id);
-    }
+    focusController.navigateRight();
   }
 
   function cycleToRecentPane({ reverse = false }: { reverse?: boolean } = {}): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length < 2) return;
-    const targetId = paneState.cycleToRecentPane({ reverse });
+    if (focusController.getMode() !== 'terminal') {
+      focusController.setMode('terminal');
+    }
+    const targetId = focusController.cycleToRecentPane({ reverse });
     if (!targetId) return;
-    setMode('terminal');
-    render();
-    paneRenderer?.focusTerminal(targetId);
+    paneManager.get(targetId)?.capability<TerminalCapability>('terminal')?.focus();
   }
 
   function commitPaneCycle(): void {
-    paneState.commitPaneCycle();
+    focusController.commitPaneCycle();
   }
 
   function cycleToNextLitPane(): void {
-    const currentPanes = paneState.getPanes();
+    const currentPanes = paneManager.getAll();
     const litIds = currentPanes
       .map((p) => p.id)
-      .filter((id) => paneRenderer?.getNode(id)?.root.classList.contains('has-pending-activity'));
+      .filter((id) => paneManager.get(id)?.capability<DomCapabilityApi>('dom')?.root.classList.contains('has-pending-activity'));
     if (litIds.length === 0) return;
-    const focusedId = paneState.getFocusedPaneId();
+    const focusedId = paneManager.getActiveId();
     const focusedIndex = focusedId !== null ? litIds.indexOf(focusedId) : -1;
     const nextIndex = focusedIndex >= 0 ? (focusedIndex + 1) % litIds.length : 0;
     focusPane(litIds[nextIndex]);
   }
 
   function focusPaneAt(index: number): void {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0 || index < 0 || index >= currentPanes.length) return;
-    paneState.focusPane(currentPanes[index].id);
-    render();
+    focusController.focusPaneAt(index);
   }
 
   function getPaneCount(): number {
-    return paneState.getPanes().length;
+    return focusController.getPaneCount();
   }
 
   function getPaneIdAt(index: number): string | null {
-    const currentPanes = paneState.getPanes();
-    if (currentPanes.length === 0 || index < 0 || index >= currentPanes.length) return null;
-    return currentPanes[index].id;
+    return focusController.getPaneIdAt(index);
   }
 
   function requestClosePane(paneId: string): void {
     if (state.pendingClosePaneId === paneId) {
-      const index = paneState.getPaneIndex(paneId);
+      const index = paneManager.getPaneIndex(paneId);
       if (index !== -1) {
         state.pendingClosePaneId = null;
         closePane(index);
-        const currentPanes = paneState.getPanes();
-        if (getCurrentMode() === 'nav' && currentPanes.length > 0) {
-          const focusedId = paneState.getFocusedPaneId();
+        const currentPanes = paneManager.getAll();
+        if (focusController.getMode() === 'nav' && currentPanes.length > 0) {
+          const focusedId = focusController.getActiveId();
           if (focusedId) focusPane(focusedId, { focusTerminal: true });
         }
       }
@@ -223,22 +211,22 @@ export function createPaneOperations({
   }
 
   function startInlineRename(paneId: string): void {
-    const index = paneState.getPaneIndex(paneId);
+    const index = paneManager.getPaneIndex(paneId);
     if (index !== -1) {
-      if (getCurrentMode() === 'nav') setMode('terminal');
+      if (focusController.getMode() === 'nav') focusController.setMode('terminal');
       tabBar.beginRenamePane(index);
     }
   }
 
   function togglePaneBreathingMonitor(paneId: string): boolean {
-    const next = paneState.togglePaneBreathingMonitor(paneId);
+    const next = paneManager.togglePaneBreathingMonitor(paneId);
     layoutManager.scheduleWindowLayoutSave();
     return next;
   }
 
   function getFocusedPaneAccent(): string {
-    const pane = paneState.getPanes()[paneState.getFocusedIndex()];
-    return pane?.customColor || pane?.accent || '#ffd166';
+    const pane = paneManager.getActive();
+    return pane?.getState<string>('customColor') || pane?.getState<string>('accent') || '#ffd166';
   }
 
   function isEditableTarget(): boolean {
@@ -249,44 +237,44 @@ export function createPaneOperations({
     );
   }
 
-  async function getClipboardSnapshot(bridge: Bridge): Promise<ClipboardSnapshot> {
-    try {
-      return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
-    } catch {
-      return { text: '', hasImage: false };
-    }
+  async function getClipboardSnapshot(backend: Backend): Promise<ClipboardSnapshot> {
+    return await backend.clipboard.snapshot();
   }
 
-  function getPaneLabel(pane: Pane): string {
+  function getPaneLabel(pane: { title: string | null; terminalTitle: string }): string {
     return pane.title ?? pane.terminalTitle ?? '';
   }
 
   function handleTerminalExit({ paneId, exitCode, reason }: { paneId: string; exitCode: number; reason: string }): boolean {
-    const node = paneRenderer?.getNode(paneId);
-    if (!node) return false;
+    const pane = paneManager.get(paneId);
+    if (!pane) return false;
+
+    const pty = pane.capability<PtyCapability>('pty');
+    const term = pane.capability<TerminalCapability>('terminal');
 
     if (reason === 'killed') {
-      paneRenderer.setSessionReady(paneId, false);
+      pty?.destroy();
       return true;
     }
 
     const graceMs = 3000;
-    const recentShellChange = paneRenderer.getShellChangeTime(paneId) && (Date.now() - paneRenderer.getShellChangeTime(paneId)! < graceMs);
-    if (paneRenderer.isShellChanging(paneId) || recentShellChange) {
-      paneRenderer.setSessionReady(paneId, false);
-      paneRenderer.writeln(paneId, '');
-      paneRenderer.writeln(paneId, `\x1b[38;5;204m[shell exited with code ${exitCode}]\x1b[0m`);
+    const shellChangeTime = pty?.recentShellChange ?? null;
+    const recentShellChange = shellChangeTime !== null && (Date.now() - shellChangeTime < graceMs);
+    if (pty?.isShellChanging || recentShellChange) {
+      pty?.destroy();
+      term?.writeln('');
+      term?.writeln(`\x1b[38;5;204m[shell exited with code ${exitCode}]\x1b[0m`);
       return true;
     }
 
-    paneRenderer.setSessionReady(paneId, false);
-    paneRenderer.writeln(paneId, '');
-    paneRenderer.writeln(paneId, `\x1b[38;5;244m[process exited with code ${exitCode}]\x1b[0m`);
+    pty?.destroy();
+    term?.writeln('');
+    term?.writeln(`\x1b[38;5;244m[process exited with code ${exitCode}]\x1b[0m`);
 
-    const paneIndex = paneState.getPaneIndex(paneId);
+    const paneIndex = paneManager.getPaneIndex(paneId);
     if (paneIndex === -1) return true;
 
-    if (paneState.getPanes().length === 1) {
+    if (paneManager.getAll().length === 1) {
       return false; // signal caller to close window
     }
 

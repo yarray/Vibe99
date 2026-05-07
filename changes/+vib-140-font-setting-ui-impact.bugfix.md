@@ -1,0 +1,1 @@
+Fixed font settings affecting UI elements (toolbar, dropdown, settings modal, tabs). Separated font settings into two CSS variables: `--app-font-size` for UI elements (fixed at 13px) and `--term-font-size`/`--term-font-family` for terminal/xterm display. The terminal now reads font settings from CSS variables, which are set by the settings manager.
