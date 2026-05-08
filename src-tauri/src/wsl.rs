@@ -6,10 +6,17 @@
 //!
 //! ## Design decisions
 //!
-//! - **`wsl.exe` is the sole detection mechanism.** We run `wsl.exe --list
-//!   --quiet` and check for a zero exit code. This matches how VS Code and
-//!   other tools detect WSL availability — no registry scraping or path
-//!   probing (P1: minimal primitives).
+//! - **WSL availability is detected via the registry.** We read
+//!   `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` and check for
+//!   subkeys (each GUID represents an installed distribution). This is
+//!   microsecond-fast and avoids the multi-second hang of `wsl.exe` on
+//!   machines where WSL is not installed (P1: minimal primitives).
+//!
+//! - **Unavailable state is cached.** `list_distributions` and
+//!   `detect_wsl_default_shell` persist an in-memory flag once they
+//!   determine WSL is unavailable, so subsequent calls return instantly.
+//!   `clear_wsl_unavailable_flag` resets the cache so users can re-detect
+//!   after installing WSL.
 //!
 //! - **Path conversion is pure-string.** `C:\Users\foo → /mnt/c/Users/foo`.
 //!   UNC paths (`\\server\share`) and drive-relative paths (`C:bar`) are
@@ -22,27 +29,41 @@
 
 #[cfg(target_os = "windows")]
 use std::{os::windows::process::CommandExt, process::Command};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // ----------------------------------------------------------------
 // Detection
 // ----------------------------------------------------------------
 
+/// In-memory flag: once `list_distributions` or `detect_wsl_default_shell`
+/// determines WSL is unavailable, they set this to `true` so subsequent
+/// calls return instantly without touching the registry or `wsl.exe`.
+static WSL_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
+/// Clear the cached "WSL unavailable" flag.
+///
+/// Call this when the user explicitly requests a re-detection (e.g. after
+/// installing WSL while the application is running).
+pub fn clear_wsl_unavailable_flag() {
+    WSL_UNAVAILABLE.store(false, Ordering::Relaxed);
+}
+
 /// Whether WSL is available on this system.
 ///
 /// On non-Windows platforms this always returns `false`.
-/// On Windows it probes for `wsl.exe` by running `wsl.exe --list --quiet`
-/// with a short timeout, so the check is fast even when WSL is not installed.
+/// On Windows it probes the registry key
+/// `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` for subkeys
+/// (each subkey is a GUID representing an installed distribution).
+/// This check completes in microseconds, avoiding the multi-second hang
+/// that can occur when invoking `wsl.exe` on a machine without WSL.
 pub fn is_wsl_available() -> bool {
     #[cfg(target_os = "windows")]
     {
-        Command::new("wsl.exe")
-            .args(["--list", "--quiet"])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
+        match hkcu.open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Lxss") {
+            Ok(key) => key.enum_keys().filter_map(|r| r.ok()).next().is_some(),
+            Err(_) => false,
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -54,9 +75,22 @@ pub fn is_wsl_available() -> bool {
 ///
 /// Returns distribution names (e.g. `["Ubuntu", "Debian"]`). Returns an
 /// empty vec if WSL is not available or no distributions are installed.
+///
+/// If WSL has previously been determined to be unavailable during this
+/// process lifetime, the function returns immediately without invoking
+/// `wsl.exe`. Call [`clear_wsl_unavailable_flag`] to force a fresh check.
 pub fn list_distributions() -> Vec<String> {
+    if WSL_UNAVAILABLE.load(Ordering::Relaxed) {
+        return Vec::new();
+    }
+
     #[cfg(target_os = "windows")]
     {
+        if !is_wsl_available() {
+            WSL_UNAVAILABLE.store(true, Ordering::Relaxed);
+            return Vec::new();
+        }
+
         let output = Command::new("wsl.exe")
             .args(["--list", "--quiet"])
             .stdout(std::process::Stdio::piped())
@@ -245,9 +279,22 @@ pub fn wsl_shell_args(distro: Option<&str>, shell_cmd: &str, shell_args: &[Strin
 /// 'echo $SHELL'`.
 ///
 /// Returns the shell path (e.g. `/bin/bash`) or `None` if detection fails.
+///
+/// If WSL has previously been determined to be unavailable during this
+/// process lifetime, the function returns immediately without invoking
+/// `wsl.exe`. Call [`clear_wsl_unavailable_flag`] to force a fresh check.
 pub fn detect_wsl_default_shell() -> Option<String> {
+    if WSL_UNAVAILABLE.load(Ordering::Relaxed) {
+        return None;
+    }
+
     #[cfg(target_os = "windows")]
     {
+        if !is_wsl_available() {
+            WSL_UNAVAILABLE.store(true, Ordering::Relaxed);
+            return None;
+        }
+
         let output = Command::new("wsl.exe")
             .args(["--", "sh", "-c", "echo $SHELL"])
             .stdout(std::process::Stdio::piped())

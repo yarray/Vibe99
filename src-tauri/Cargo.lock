@@ -4864,6 +4864,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-opener",
  "tauri-plugin-shell",
+ "winreg 0.55.0",
 ]
 
 [[package]]

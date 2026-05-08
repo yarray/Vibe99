@@ -34,6 +34,16 @@ pub fn wsl_status() -> WslStatus {
     }
 }
 
+/// Clear the cached "WSL unavailable" flag and re-run detection.
+///
+/// Use this when the user wants to re-detect WSL after installing it
+/// while the application is already running. Returns the fresh status.
+#[tauri::command]
+pub fn wsl_redetect() -> WslStatus {
+    wsl::clear_wsl_unavailable_flag();
+    wsl_status()
+}
+
 /// Convert a Windows path to its WSL equivalent.
 ///
 /// Returns the converted path or the original input unchanged if it

@@ -198,6 +198,7 @@ export interface ShellApi {
   remove: (profileId: string) => Promise<void>;
   setDefault: (profileId: string) => Promise<void>;
   detect: () => Promise<string[]>;
+  redetectWsl: () => Promise<{ available: boolean; distributions: string[]; defaultShell: string | null }>;
 }
 
 export interface WindowApi {
@@ -269,6 +270,7 @@ export interface Bridge {
   removeShellProfile: ShellApi['remove'];
   setDefaultShellProfile: ShellApi['setDefault'];
   detectShellProfiles: ShellApi['detect'];
+  redetectWsl: ShellApi['redetectWsl'];
 
   closeWindow: WindowApi['close'];
   openExternalUrl: WindowApi['openUrl'];
@@ -420,6 +422,7 @@ type FlatAliases = {
   removeShellProfile: unknown;
   setDefaultShellProfile: unknown;
   detectShellProfiles: unknown;
+  redetectWsl: unknown;
   closeWindow: unknown;
   openExternalUrl: unknown;
   showContextMenu: unknown;
@@ -473,6 +476,7 @@ function createUnavailableBridge(): Bridge {
       remove: fail,
       setDefault: fail,
       detect: () => Promise.resolve([]),
+      redetectWsl: () => Promise.resolve({ available: false, distributions: [], defaultShell: null }),
     },
     window: {
       close: fail,
@@ -511,6 +515,7 @@ function createUnavailableBridge(): Bridge {
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
+    redetectWsl: () => Promise.resolve({ available: false, distributions: [], defaultShell: null }),
     closeWindow: fail,
     openExternalUrl: fail,
     showContextMenu: () => {},
@@ -662,6 +667,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       remove: (profileId: string) => invoke('shell_profile_remove', { profileId }),
       setDefault: (profileId: string) => invoke('shell_profile_set', { profileId }),
       detect: () => invoke('shell_profiles_detect'),
+      redetectWsl: () => invoke('wsl_redetect'),
     },
     window: {
       close: () => getCurrentWindow().close(),
@@ -735,6 +741,7 @@ export function createBridge(
       removeShellProfile: partial.shell.remove,
       setDefaultShellProfile: partial.shell.setDefault,
       detectShellProfiles: partial.shell.detect,
+      redetectWsl: partial.shell.redetectWsl,
       closeWindow: partial.window.close,
       openExternalUrl: partial.window.openUrl,
       showContextMenu: partial.window.showMenu,
