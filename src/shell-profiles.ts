@@ -165,19 +165,26 @@ export function createShellProfileManager({
     }).catch(reportError) as Promise<void>;
   }
 
-  function createProfileActionButton(labelOrIcon: string, title: string, onClick: () => void): HTMLButtonElement {
+  function createProfileActionButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'settings-btn';
+    btn.textContent = label;
     btn.title = title;
-    // Use icon() for known icon names, otherwise use text content
-    const iconNames = new Set(['star', 'copy', 'x', 'plus', 'columns', 'layout-grid', 'maximize', 'minimize', 'settings', 'pencil', 'check', 'external-link']);
-    if (iconNames.has(labelOrIcon)) {
-      btn.innerHTML = icon(labelOrIcon, 14);
-      btn.setAttribute('aria-label', title);
-    } else {
-      btn.textContent = labelOrIcon;
-    }
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onClick();
+    });
+    return btn;
+  }
+
+  function createProfileActionButtonIcon(iconName: string, title: string, onClick: () => void): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'settings-btn';
+    btn.innerHTML = icon(iconName, 14);
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
     btn.addEventListener('click', (event) => {
       event.stopPropagation();
       onClick();
@@ -357,7 +364,7 @@ export function createShellProfileManager({
 
         // Quick actions: set default, clone, delete
         if (profile.id !== defaultShellProfileId) {
-          actions.appendChild(createProfileActionButton('star', 'Set as default', () => {
+          actions.appendChild(createProfileActionButtonIcon('star', 'Set as default', () => {
             if (isDetected) {
               bridge.addShellProfile(profile).then(() => {
                 bridge.setDefaultShellProfile(profile.id).then(applyConfigRefresh).catch(reportError);
@@ -368,12 +375,12 @@ export function createShellProfileManager({
           }));
         }
 
-        actions.appendChild(createProfileActionButton('copy', 'Clone profile', () => {
+        actions.appendChild(createProfileActionButtonIcon('copy', 'Clone profile', () => {
           cloneProfile(profile);
         }));
 
         if (!isDetected) {
-          actions.appendChild(createProfileActionButton('x', 'Delete', () => {
+          actions.appendChild(createProfileActionButtonIcon('x', 'Delete', () => {
             if (selectedShellProfileId === profile.id) {
               state.setSelectedShellProfileId(null);
               state.setEditingShellProfile(null);
