@@ -113,7 +113,15 @@ export function createLayoutModal({
             const trimmed = input.value.trim();
             cleanup();
             if (!trimmed) return;
-            const layout = layoutManager.createLayoutFromCurrentWindow(trimmed.toLowerCase().replace(/\s+/g, '-'), trimmed);
+            const layoutId = trimmed.toLowerCase().replace(/\s+/g, '-');
+
+            // Prevent overwriting the default layout ID to avoid confusion.
+            if (layoutId === 'default') {
+              reportError(new Error('Cannot save a layout with the name "Default" or "default". This name is reserved for the default layout.'));
+              return;
+            }
+
+            const layout = layoutManager.createLayoutFromCurrentWindow(layoutId, trimmed);
             bridge.saveLayout(layout)
               .then(() => bridge.listLayouts())
               .then((config: LayoutsListResult) => {
