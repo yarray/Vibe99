@@ -80,7 +80,7 @@
 
 .pane-surface {
   position: absolute;
-  inset: 0;
+  inset: 0 6px;
   background: rgba(0, 0, 0, 0.08);
 }
 
