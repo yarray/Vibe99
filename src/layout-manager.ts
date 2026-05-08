@@ -149,7 +149,15 @@ export function createLayoutManager({
   async function saveLayoutAs(name: string): Promise<void> {
     if (!name || typeof name !== 'string' || !name.trim()) return;
     name = name.trim();
-    const layout = createLayoutFromCurrentWindow(name.toLowerCase().replace(/\s+/g, '-'), name);
+    const layoutId = name.toLowerCase().replace(/\s+/g, '-');
+
+    // Prevent overwriting the default layout ID to avoid confusion.
+    // Users can still edit the default layout through the "Manage Layouts" UI.
+    if (layoutId === 'default') {
+      throw new Error('Cannot save a layout with the name "Default" or "default". This name is reserved for the default layout.');
+    }
+
+    const layout = createLayoutFromCurrentWindow(layoutId, name);
     const config = await bridge.saveLayout(layout);
     layouts = config.layouts ?? [];
     defaultLayoutId = config.defaultLayoutId ?? '';
