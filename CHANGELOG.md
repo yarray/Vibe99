@@ -6,6 +6,8 @@
 
 ### Changed
 
+- **Docker e2e workflow fix (VIB-198):** `Dockerfile.e2e` now builds a slim environment-only image (`vibe99-builder:slim`) with no pre-compiled Vibe99 code. The correct workflow is to mount source via `-v`, compile, and run tests in a single step — ensuring tests always run against the latest code. Updated `e2e/README.md` accordingly.
+
 - **CSS architecture (VIB-146):** Split `src/styles.css` (2344 lines) into 8 purpose-oriented files under `src/styles/`: `base.css` (CSS variables, resets, app-shell), `tabs.css` (tabs panel & actions), `panes.css` (stage, pane, terminal, status bar), `settings-modal.css` (settings panel, keyboard shortcuts), `shell-profiles.css` (shell profiles list & editor), `overlays.css` (context menu, color picker), `layouts.css` (layout manager modal, layouts dropdown), `animations.css` (keyframes, reduced-motion). All rules preserved; no behavior change.
 - **Rust pty.rs module split (VIB-147):**
   - Split `src-tauri/src/pty.rs` (1005 lines) into `src-tauri/src/pty/mod.rs` (574 lines) and `src-tauri/src/pty/shell_resolver.rs` (433 lines).

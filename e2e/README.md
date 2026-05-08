@@ -2,75 +2,69 @@
 
 This directory contains end-to-end tests for Vibe99, powered by [WebdriverIO](https://webdriver.io/) and [`tauri-driver`](https://github.com/tauri-apps/tauri/tree/dev/tooling/webdriver).
 
-The `Dockerfile.e2e` builds a self-contained image that clones and pre-compiles Vibe99, so you can run e2e tests immediately without any local toolchain setup.
+The `Dockerfile.e2e` builds a **build-environment-only** image (`vibe99-builder:slim`) that provides Rust, Node.js, webkit2gtk, Xvfb, and tauri-driver — but no Vibe99 source or pre-compiled binary. Every test run mounts the latest source code, compiles it, and runs e2e against the fresh build.
 
 ## Quick Start
 
-### 1. Build the Docker image
+### 1. Build the Docker image (one-time)
 
 From the **project root**:
 
 ```bash
-docker build -f e2e/Dockerfile.e2e -t vibe99-builder .
+docker build -f e2e/Dockerfile.e2e -t vibe99-builder:slim .
 ```
 
-The image (~2–3 GB) contains Ubuntu 22.04, Node.js 22, Rust stable, `tauri-driver`, a pre-built Vibe99 binary, and all e2e dependencies.
+The image contains Ubuntu 22.04, Node.js 22, Rust stable, `tauri-driver`, and all system dependencies — no Vibe99 code.
 
-### 2. Run e2e tests
+### 2. Run e2e tests (mount + compile + test)
 
-The image already has a compiled binary. Start a container and run the test suite:
+Mount your local source, compile, and run tests in a single step:
 
 ```bash
-docker run --rm --privileged vibe99-builder \
-  bash -c "npm run test:e2e"
+docker run --rm --privileged \
+  -v $(pwd):/app/Vibe99 \
+  vibe99-builder:slim \
+  bash -c "npm ci && npm run tauri:build && npm run test:e2e"
 ```
 
 > **Note:** `--privileged` is required because WebKitWebDriver needs access to file descriptor operations that Docker's default seccomp profile blocks.
 
 The WDIO config (`wdio.conf.js`) automatically starts Xvfb (virtual display) and `tauri-driver` before running specs.
 
-#### Run a specific test
+#### Faster rebuilds with Cargo cache
 
-```bash
-docker run --rm --privileged vibe99-builder \
-  bash -c "npm run test:e2e -- layout"
-```
-
-See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
-
-### 3. Incremental compilation with mounted source
-
-To build from your local source (e.g. after making changes), mount it over the image's built-in repo and recompile:
-
-```bash
-docker run --rm --privileged -v $(pwd):/app/Vibe99 vibe99-builder \
-  bash -c "npm ci && npm run tauri:build"
-```
-
-For faster incremental builds, persist the Cargo target directory with a named volume:
+Persist the Cargo target directory with a named volume to speed up incremental builds:
 
 ```bash
 docker run --rm --privileged \
   -v $(pwd):/app/Vibe99 \
   -v vibe99-cargo-target:/app/Vibe99/src-tauri/target \
-  vibe99-builder \
-  bash -c "npm ci && npm run tauri:build"
+  vibe99-builder:slim \
+  bash -c "npm ci && npm run tauri:build && npm run test:e2e"
 ```
 
-Then run e2e against the freshly compiled binary:
+#### Run a specific test
 
 ```bash
-docker run --rm --privileged -v $(pwd):/app/Vibe99 vibe99-builder \
-  bash -c "cd e2e && npm ci && cd .. && npm run test:e2e"
+docker run --rm --privileged \
+  -v $(pwd):/app/Vibe99 \
+  -v vibe99-cargo-target:/app/Vibe99/src-tauri/target \
+  vibe99-builder:slim \
+  bash -c "npm ci && npm run tauri:build && npm run test:e2e -- layout"
 ```
+
+See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
+
+## Key principle
+
+The image is **only a compilation environment** — it does not contain test code or Vibe99 binaries. Every run fetches the latest source (via mount), recompiles, and tests against the fresh build. This ensures tests always run against the current code, not stale pre-compiled artifacts.
 
 ## How it works
 
 | Component | Role |
 |-----------|------|
-| `Dockerfile.e2e` | Self-contained builder image: deps + pre-built binary + e2e deps |
+| `Dockerfile.e2e` | Build-environment-only image: system deps + Rust + Node + tauri-driver |
 | `wdio.conf.js` | WebdriverIO config; auto-starts Xvfb and tauri-driver |
-| `run-e2e.mjs` | CLI wrapper with spec/grep/verbosity shortcuts |
 | `tests/*.spec.js` | Test specs |
 
 On Linux, `wdio.conf.js` spins up an Xvfb display (`:98`) and launches `tauri-driver` (the WebDriver bridge) before any tests execute. Both are cleaned up on exit.

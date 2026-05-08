@@ -1,6 +1,7 @@
-# Vibe99 E2E Builder Image
-# 包含完整编译环境 + e2e 测试所需依赖
-# 用法见 README
+# Vibe99 E2E Builder Image (slim)
+# 纯编译环境：Rust / Node.js / webkit2gtk / xvfb / tauri-driver
+# 不包含任何 Vibe99 源码或预编译产物。
+# 用法：挂载本地代码 → 编译 → 跑测试，详见 README。
 
 FROM ubuntu:22.04
 
@@ -32,17 +33,6 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --pr
 # 4. tauri-driver（e2e WebDriver bridge）
 RUN cargo install tauri-driver
 
-# 5. 克隆 Vibe99 并预编译
-WORKDIR /app
-RUN git clone https://github.com/yarray/Vibe99.git
-
-WORKDIR /app/Vibe99
-RUN npm ci \
-    && npm run tauri:build
-
-# 6. 安装 e2e 依赖
-WORKDIR /app/Vibe99/e2e
-RUN npm ci
-
+# 默认工作目录，运行时通过 -v 挂载代码到此处
 WORKDIR /app/Vibe99
 CMD ["/bin/bash"]
