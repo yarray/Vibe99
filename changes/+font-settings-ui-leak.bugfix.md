@@ -1,0 +1,1 @@
+Fixed font settings (family & size) leaking from terminal to UI menus, toolbar, and settings panel. Font settings now only affect the xterm terminal display.
