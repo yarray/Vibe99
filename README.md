@@ -196,6 +196,10 @@ Vibe99/
 | Backend | Rust, [portable-pty](https://docs.rs/portable-pty) |
 | Build | [Vite](https://vitejs.dev/) |
 
+## E2E Testing
+
+For end-to-end test setup (Docker-based Linux testing, WebdriverIO configuration, etc.), see [e2e/README.md](./e2e/README.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, changelog rules, and the release workflow.

@@ -6,6 +6,8 @@
 
 ### Changed
 
+- **Docker e2e workflow (VIB-198):** Updated `e2e/README.md` to document the correct workflow — use `git fetch` inside the container for incremental builds (not volume mounts, which bypass the pre-compiled Cargo cache). Added e2e testing reference in main `README.md`.
+
 - **CSS architecture (VIB-146):** Split `src/styles.css` (2344 lines) into 8 purpose-oriented files under `src/styles/`: `base.css` (CSS variables, resets, app-shell), `tabs.css` (tabs panel & actions), `panes.css` (stage, pane, terminal, status bar), `settings-modal.css` (settings panel, keyboard shortcuts), `shell-profiles.css` (shell profiles list & editor), `overlays.css` (context menu, color picker), `layouts.css` (layout manager modal, layouts dropdown), `animations.css` (keyframes, reduced-motion). All rules preserved; no behavior change.
 - **Rust pty.rs module split (VIB-147):**
   - Split `src-tauri/src/pty.rs` (1005 lines) into `src-tauri/src/pty/mod.rs` (574 lines) and `src-tauri/src/pty/shell_resolver.rs` (433 lines).
