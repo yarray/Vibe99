@@ -593,11 +593,15 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     }
 
     const label = getLayoutWindowLabel(layoutId);
-    const existing = layoutId === 'default'
-      ? await WebviewWindow.getByLabel('main')
-      : await WebviewWindow.getByLabel(label);
-    if (existing) {
-      return focusWindow(existing);
+
+    // For non-default layouts, try to find an existing layout window.
+    // For the default layout, if there's no bound window, always create a new one
+    // instead of reusing the main window (which may have been bound to a different layout).
+    if (layoutId !== 'default') {
+      const existing = await WebviewWindow.getByLabel(label);
+      if (existing) {
+        return focusWindow(existing);
+      }
     }
 
     const url = `index.html?layoutId=${encodeURIComponent(layoutId)}`;
