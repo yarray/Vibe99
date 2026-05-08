@@ -334,4 +334,44 @@ describe('Layout', () => {
     const items = await getDropdownItems();
     expect(items.length).toBeGreaterThanOrEqual(1);
   });
+
+  // ================================================================
+  // Save As Layout behavior (VIB-205)
+  // ================================================================
+
+  it('opens default layout in new window after Save Layout As', async () => {
+    // 1. Start with default layout (app shows default layout on startup)
+    const beforePaneCount = await getPaneCount();
+    expect(beforePaneCount).toBeGreaterThanOrEqual(1);
+
+    // 2. Save current layout as "Test Layout"
+    await saveLayoutAs('Test Layout');
+
+    // Verify the layout was saved and is now active
+    await openLayoutsDropdown();
+    let active = await getActiveDropdownLayout();
+    expect(active).toBe('Test Layout');
+    await closeLayoutsDropdown();
+
+    // 3. Get current window handles
+    const beforeHandles = await browser.getWindowHandles();
+    expect(beforeHandles.length).toBe(1);
+
+    // 4. Click "default" in the dropdown - should open a new window
+    await openLayoutsDropdown();
+    await clickDropdownLayout('default');
+
+    // 5. Verify a new window opened
+    const newWindowHandle = await waitForNewWindow(beforeHandles);
+    expect(newWindowHandle).not.toBeNull();
+
+    // 6. Verify the new window shows the default layout
+    await browser.switchToWindow(newWindowHandle);
+    await waitForAppReady(1);
+    const newPaneCount = await getPaneCount();
+    expect(newPaneCount).toBeGreaterThanOrEqual(1);
+
+    // 7. Close the new window and return to main window
+    await closeExtraWindows(mainWindowHandle);
+  });
 });
