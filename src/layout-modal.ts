@@ -268,8 +268,9 @@ export function createLayoutModal({
         const switchBtn = document.createElement('button');
         switchBtn.type = 'button';
         switchBtn.className = 'settings-btn';
-        setIcon(switchBtn, 'external-link', 12);
+        switchBtn.innerHTML = icon('external-link', 14);
         switchBtn.title = 'Open in new window';
+        switchBtn.setAttribute('aria-label', 'Open in new window');
         switchBtn.addEventListener('click', (e: MouseEvent) => {
           e.stopPropagation();
           bridge.openLayoutWindow(layout.id).catch(reportError);
@@ -280,8 +281,9 @@ export function createLayoutModal({
         const renameBtn = document.createElement('button');
         renameBtn.type = 'button';
         renameBtn.className = 'settings-btn';
-        setIcon(renameBtn, 'pencil', 12);
+        renameBtn.innerHTML = icon('pencil', 14);
         renameBtn.title = 'Rename layout';
+        renameBtn.setAttribute('aria-label', 'Rename layout');
         renameBtn.addEventListener('click', async (e: MouseEvent) => {
           e.stopPropagation();
           layoutManager._setRenamingLayoutId(layout.id);
@@ -297,8 +299,9 @@ export function createLayoutModal({
           const deleteBtn = document.createElement('button');
           deleteBtn.type = 'button';
           deleteBtn.className = 'settings-btn';
-          setIcon(deleteBtn, 'x', 12);
+          deleteBtn.innerHTML = icon('x', 14);
           deleteBtn.title = 'Delete layout';
+          deleteBtn.setAttribute('aria-label', 'Delete layout');
           deleteBtn.addEventListener('click', (e: MouseEvent) => {
             e.stopPropagation();
             if (selectedLayoutId === layout.id) layoutManager._setSelectedLayoutId(null);
