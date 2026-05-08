@@ -106,18 +106,19 @@ async function getProfileItemName(item) {
   return nameEl ? await getTextSafe(nameEl) : '';
 }
 
-/** Click an action button (★, ⧉, ✕) on a profile item by label or title. */
+/** Click an action button on a profile item by aria-label or title. */
 async function clickProfileAction(profileId, label) {
   const item = await findProfileItem(profileId);
   if (!item) throw new Error(`Profile item not found: ${profileId}`);
   const buttons = await item.$$('.shell-profile-actions .settings-btn');
   for (const btn of buttons) {
+    const ariaLabel = await btn.getAttribute('aria-label');
     const title = await btn.getAttribute('title');
-    const text = await getTextSafe(btn);
-    if (text.trim() === label || (title && title.includes(label)) ||
-        (label === '✕' && title && title.toLowerCase().includes('delete')) ||
-        (label === '⧉' && title && title.toLowerCase().includes('clone')) ||
-        (label === '★' && title && title.toLowerCase().includes('default'))) {
+    const matchLabel = ariaLabel || title || '';
+    if (matchLabel.includes(label) ||
+        (label.toLowerCase() === 'delete' && matchLabel.toLowerCase().includes('delete')) ||
+        (label.toLowerCase() === 'clone' && matchLabel.toLowerCase().includes('clone')) ||
+        (label.toLowerCase().includes('default') && matchLabel.toLowerCase().includes('default'))) {
       try {
         await btn.click();
       } catch (e) {
@@ -395,11 +396,11 @@ describe('Shell Profile', () => {
 
       const detectedItem = detectedItems[0];
       const actionBtns = await detectedItem.$$('.shell-profile-actions .settings-btn');
-      const labels = [];
+      const ariaLabels = [];
       for (const btn of actionBtns) {
-        labels.push(await getTextSafe(btn));
+        ariaLabels.push(await btn.getAttribute('aria-label') || '');
       }
-      expect(labels).not.toContain('✕');
+      expect(ariaLabels.some(l => l.toLowerCase().includes('delete'))).toBe(false);
     });
 
     it('shows detected profiles alongside user profiles', async () => {
