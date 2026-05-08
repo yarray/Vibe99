@@ -39,7 +39,7 @@
 
 ### Fixed
 
-- Shell profile e2e test "switches terminal shell from context menu" no longer times out in Docker+Xvfb. Replaced unreliable `moveTo()` hover (CSS `:hover` doesn't fire in headless WebKitGTK) with direct JS submenu display (VIB-167).
+- Shell profile action buttons (star, copy, delete) now render as icons instead of text labels. Tooltip preserved via `title` attribute, accessibility via `aria-label` (VIB-200).
 - Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).
 - Status bar overflow when terminal titles are too long (VIB-163):
   - `.status-bar` now has `overflow: hidden` to prevent content overflow

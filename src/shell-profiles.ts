@@ -165,12 +165,19 @@ export function createShellProfileManager({
     }).catch(reportError) as Promise<void>;
   }
 
-  function createProfileActionButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
+  function createProfileActionButton(labelOrIcon: string, title: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'settings-btn';
-    btn.textContent = label;
     btn.title = title;
+    // Use icon() for known icon names, otherwise use text content
+    const iconNames = new Set(['star', 'copy', 'x', 'plus', 'columns', 'layout-grid', 'maximize', 'minimize', 'settings', 'pencil', 'check', 'external-link']);
+    if (iconNames.has(labelOrIcon)) {
+      btn.innerHTML = icon(labelOrIcon, 14);
+      btn.setAttribute('aria-label', title);
+    } else {
+      btn.textContent = labelOrIcon;
+    }
     btn.addEventListener('click', (event) => {
       event.stopPropagation();
       onClick();
