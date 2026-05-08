@@ -57,6 +57,7 @@ fn main() {
             context_menu::show_context_menu,
             context_menu::emit_menu_action,
             wsl_cmd::wsl_status,
+            wsl_cmd::wsl_redetect,
             wsl_cmd::wsl_convert_path,
             wsl_cmd::wsl_cwd,
         ])

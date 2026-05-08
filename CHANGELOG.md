@@ -39,6 +39,9 @@
 
 ### Fixed
 
+- **WSL detection no longer hangs on Windows without WSL (VIB-170):**
+  - `is_wsl_available()` now reads `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` via the registry (microsecond-fast) instead of invoking `wsl.exe --list --quiet`, which could hang for seconds or fail to return on machines without WSL installed.
+  - `list_distributions()` and `detect_wsl_default_shell()` cache an in-process "unavailable" flag after their first failed detection, so subsequent calls return instantly without touching `wsl.exe`.
 - Shell profile e2e test "switches terminal shell from context menu" no longer times out in Docker+Xvfb. Replaced unreliable `moveTo()` hover (CSS `:hover` doesn't fire in headless WebKitGTK) with direct JS submenu display (VIB-167).
 - Layout "Open in New Window" (⎆ button) no longer causes the new window to white-screen and freeze. PTY events (`terminal-data`, `terminal-exit`) are now scoped to the owning window, and closing a secondary layout window no longer kills terminals in other windows (VIB-96).
 - Status bar overflow when terminal titles are too long (VIB-163):
@@ -48,6 +51,9 @@
 
 ### Added
 
+- **WSL re-detect button in Shell Profiles modal (VIB-170):**
+  - Added a refresh button (↻) next to the "Add Profile" button in the Shell Profiles modal.
+  - Clicking it clears the cached WSL-unavailable flag and re-runs profile auto-detection, allowing users who install WSL after launching Vibe99 to discover WSL shells without restarting the app.
 - E2E tests for Settings panel (VIB-113):
   - Settings panel toggle tests (open/close via button, click outside to close)
   - Font settings tests (font size with limits 10-24, font family)
