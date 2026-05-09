@@ -1,0 +1,1 @@
+Create PaneManager module for pane collection CRUD, focus management, and session serialization: `src/manager/create-pane-manager.ts` provides `createPaneManager()` factory with injected capability mounting (no stubs), deterministic focus-after-close, FocusController-compatible interface, and `serializeAll()` for session persistence. (VIB-216)
