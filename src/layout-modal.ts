@@ -1,6 +1,6 @@
 import { icon, setIcon } from './icons';
-import type { Bridge, LayoutData, LayoutsListResult } from './bridge';
-import type { PaneState } from './pane-state';
+import type { Bridge, LayoutData, LayoutsListResult } from './compat/bridge-compat';
+import type { PaneState } from './compat/pane-state-compat';
 import type { ModalStack } from './modal-stack';
 import type { LayoutManager } from './layout-manager';
 

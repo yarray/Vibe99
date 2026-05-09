@@ -4,14 +4,14 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
-import { getDefaultFontFamily } from './settings';
-import type { Bridge } from './bridge';
-import type { Pane, PaneState } from './pane-state';
-import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
-import type { SettingsManager } from './settings';
-import type { TabBar } from './tab-bar';
-import { createDomApi } from './pane/capabilities/dom-capability';
-import type { DomBehaviorDeps } from './pane/capabilities/dom-capability';
+import { getDefaultFontFamily } from '../settings';
+import type { Bridge } from './bridge-compat';
+import type { Pane, PaneState } from './pane-state-compat';
+import type { PaneAlertStrategy } from '../pane-alert-breathing-mask';
+import type { SettingsManager } from '../settings';
+import type { TabBar } from '../tab-bar';
+import { createDomApi } from '../pane/capabilities/dom-capability';
+import type { DomBehaviorDeps } from '../pane/capabilities/dom-capability';
 
 // ---------------------------------------------------------------------------
 // Exported types

@@ -1,9 +1,9 @@
 // Pane operations — coordinates paneState, paneRenderer, tabBar, and layoutManager.
 
-import type { Pane, PaneState } from './pane-state';
-import type { PaneRenderer } from './pane-renderer';
+import type { Pane, PaneState } from './compat/pane-state-compat';
+import type { PaneRenderer } from './compat/pane-renderer-compat';
 import type { TabBar, TabBarLocalState } from './tab-bar';
-import type { Bridge, ClipboardSnapshot } from './bridge';
+import type { Bridge, ClipboardSnapshot } from './compat/bridge-compat';
 
 // ---------------------------------------------------------------------------
 // Exported types

@@ -5,7 +5,7 @@
  * and inline renaming for the terminal pane tabs.
  */
 
-import type { Pane, PaneState } from './pane-state';
+import type { Pane, PaneState } from './compat/pane-state-compat';
 import type { IconName } from './icons';
 
 // ---------------------------------------------------------------------------
