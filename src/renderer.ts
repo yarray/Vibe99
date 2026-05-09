@@ -167,8 +167,11 @@ paneRenderer = createPaneRenderer({
   getMode: () => currentMode,
   onPaneClick: (...args) => paneOps?.focusPane(...args),
   onTerminalTitleChange: (paneId, title) => paneState.setPaneTerminalTitle(paneId, title),
-  onTerminalContextMenu: (node, event) => {
-    void contextMenus?.showTerminalContextMenu(node, event);
+  onTerminalContextMenu: (paneId, event) => {
+    const node = paneRenderer?.getNode(paneId);
+    if (node) {
+      void contextMenus?.showTerminalContextMenu(node, event);
+    }
   },
   scheduleWindowLayoutSave: () => layoutManager.scheduleWindowLayoutSave(),
   tabBar,
