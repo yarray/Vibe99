@@ -5,43 +5,96 @@
  * This is the new public API that capability modules depend on.
  */
 
-import type {
-  Platform,
-  TerminalCreatePayload,
-  TerminalWritePayload,
-  TerminalResizePayload,
-  TerminalDestroyPayload,
-  TerminalDataEvent,
-  TerminalExitEvent,
-  ShellProfileData,
-  ShellProfilesListResult,
-  SettingsData,
-  ClipboardSnapshot,
-  TerminalApi,
-  ClipboardApi,
-  SettingsApi,
-  ShellApi,
-  WindowApi,
-} from './bridge';
+export type Platform = 'win32' | 'darwin' | 'linux';
 
-export type {
-  Platform,
-  TerminalCreatePayload,
-  TerminalWritePayload,
-  TerminalResizePayload,
-  TerminalDestroyPayload,
-  TerminalDataEvent,
-  TerminalExitEvent,
-  ShellProfileData,
-  ShellProfilesListResult,
-  SettingsData,
-  ClipboardSnapshot,
-  TerminalApi,
-  ClipboardApi,
-  SettingsApi,
-  ShellApi,
-  WindowApi,
-};
+export interface TerminalCreatePayload {
+  paneId: string;
+  cols: number;
+  rows: number;
+  cwd: string;
+  shellProfileId?: string | null;
+}
+
+export interface TerminalWritePayload {
+  paneId: string;
+  data: string;
+}
+
+export interface TerminalResizePayload {
+  paneId: string;
+  cols: number;
+  rows: number;
+}
+
+export interface TerminalDestroyPayload {
+  paneId: string;
+}
+
+export interface TerminalDataEvent {
+  paneId: string;
+  data: string;
+}
+
+export interface TerminalExitEvent {
+  paneId: string;
+  exitCode: number;
+  reason: string;
+}
+
+export interface ShellProfilesListResult {
+  profiles: ShellProfileData[];
+  defaultProfile: string;
+}
+
+export interface ShellProfileData {
+  id: string;
+  name?: string;
+  path?: string;
+  args?: string;
+  [key: string]: unknown;
+}
+
+export interface ClipboardSnapshot {
+  text: string;
+  hasImage: boolean;
+}
+
+export type SettingsData = Record<string, unknown>;
+
+export interface TerminalApi {
+  create: (payload: TerminalCreatePayload) => Promise<void>;
+  write: (payload: TerminalWritePayload) => Promise<void>;
+  resize: (payload: TerminalResizePayload) => Promise<void>;
+  destroy: (payload: TerminalDestroyPayload) => Promise<void>;
+  onData: (handler: (event: TerminalDataEvent) => void) => () => void;
+  onExit: (handler: (event: TerminalExitEvent) => void) => () => void;
+}
+
+export interface ClipboardApi {
+  read: () => Promise<string>;
+  write: (text: string) => Promise<void>;
+  snapshot: () => Promise<ClipboardSnapshot>;
+}
+
+export interface SettingsApi {
+  load: () => Promise<SettingsData>;
+  save: (payload: SettingsData) => Promise<SettingsData>;
+}
+
+export interface ShellApi {
+  list: () => Promise<ShellProfilesListResult>;
+  add: (profile: ShellProfileData) => Promise<void>;
+  remove: (profileId: string) => Promise<void>;
+  setDefault: (profileId: string) => Promise<void>;
+  detect: () => Promise<string[]>;
+  redetectWsl: () => Promise<{ available: boolean; distributions: string[]; defaultShell: string | null }>;
+}
+
+export interface WindowApi {
+  close: () => Promise<void>;
+  openUrl: (url: string) => void;
+  showMenu: () => void;
+}
 
 /**
  * Backend interface — domain-grouped Tauri capabilities.
@@ -64,13 +117,6 @@ export interface Backend {
   cwdReady: Promise<void>;
 }
 
-// ============================================================================
-// Internal Types
-// ============================================================================
-
-/**
- * Minimal shape of `window.__TAURI__` — the global Tauri API object.
- */
 interface TauriGlobal {
   core: {
     invoke: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
@@ -102,10 +148,6 @@ interface TauriWebview {
   ) => Promise<() => void>;
 }
 
-// ============================================================================
-// Platform Utilities
-// ============================================================================
-
 function getRuntimePlatform(): Platform {
   const platform = navigator.platform.toLowerCase();
   if (platform.includes('win')) {
@@ -126,21 +168,8 @@ function base64Encode(str: string): string {
   return btoa(binary);
 }
 
-// ============================================================================
-// Backend Factory
-// ============================================================================
-
 /**
  * Creates a Backend instance for Tauri.
- *
- * @param tauri - The Tauri API object from `window.__TAURI__`.
- * @returns A Backend object with domain-grouped IPC methods.
- *
- * Example:
- * ```ts
- * const backend = createBackend(window.__TAURI__);
- * await backend.terminal.create({ paneId: '1', cols: 80, rows: 24, cwd: '/' });
- * ```
  */
 export function createBackend(tauri: TauriGlobal): Backend {
   const { invoke } = tauri.core;

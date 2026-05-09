@@ -1,6 +1,6 @@
 import type { IDisposable } from '@xterm/xterm';
 import type { PaneCapability, PaneContext } from '../types';
-import type { Bridge } from '../../bridge';
+import type { Bridge } from '../../compat/bridge-compat';
 import type { TerminalCapabilityApi } from './terminal-capability';
 
 export interface ClipboardBehaviorDeps {

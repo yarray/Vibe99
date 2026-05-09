@@ -1,5 +1,5 @@
 import * as ShortcutsRegistry from './shortcuts-registry';
-import type { Bridge } from './bridge';
+import type { Bridge } from './compat/bridge-compat';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -180,7 +180,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
     pendingSettingsSave = window.setTimeout(() => {
       pendingSettingsSave = null;
-      bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
+      bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./compat/bridge-compat').SettingsData).catch(reportError);
     }, 150);
   }
 
@@ -189,7 +189,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       window.clearTimeout(pendingSettingsSave);
       pendingSettingsSave = null;
     }
-    void bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
+    void bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./compat/bridge-compat').SettingsData).catch(reportError);
   }
 
   // Font size

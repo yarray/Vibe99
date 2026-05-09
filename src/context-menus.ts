@@ -10,9 +10,9 @@
 
 import { icon } from './icons';
 import * as ColorsRegistry from './colors-registry';
-import type { PaneNode } from './pane-renderer';
-import type { Pane } from './pane-state';
-import type { Bridge, ClipboardSnapshot } from './bridge';
+import type { PaneNode } from './compat/pane-renderer-compat';
+import type { Pane } from './compat/pane-state-compat';
+import type { Bridge, ClipboardSnapshot } from './compat/bridge-compat';
 import type { ShellProfile } from './shell-profiles';
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,15 @@
 
 ### Changed
 
+- **Cleanup: remove pane-renderer.ts + pane-state.ts + bridge.ts (VIB-219):** Removed the three legacy monoliths (`src/pane-renderer.ts`, `src/pane-state.ts`, `src/bridge.ts`). All types and implementations migrated to compat layers or `backend.ts`:
+  - `src/backend.ts` (259 lines) is now self-contained with all core IPC types (`Platform`, terminal payloads/events, `ShellProfileData`, `ClipboardSnapshot`, API interfaces, etc.). No longer imports from `bridge.ts`.
+  - `src/compat/bridge-compat.ts` absorbed the `Bridge` interface, `createBridge()` factory, layout window binding utilities (`readLayoutWindowBindings`, `writeLayoutWindowBindings`, `getBoundLayoutWindowLabel`, `clearLayoutWindowBinding`), and all bridge-specific types (`LayoutsApi`, `LayoutData`, etc.).
+  - `src/compat/pane-state-compat.ts` inlined the `Pane`, `PaneState`, `SessionData`, `SessionPaneEntry`, `PaneStateDeps` type definitions.
+  - `src/compat/pane-renderer-compat.ts` (new) holds `PaneNode`, `PaneRenderer`, `createPaneRenderer()`, and `getTextColorForBackground()`.
+  - Updated all 10 consumer files (`create-renderer-app.ts`, `layout-modal.ts`, `tab-bar.ts`, `command-palette-entries.ts`, `context-menus.ts`, `pane-operations.ts`, `layout-manager.ts`, `settings.ts`, `shell-profiles.ts`, `pane/capabilities/clipboard-capability.ts`) to import from compat files.
+  - `renderer.ts` remains 77 lines. All core new-architecture files stay ≤300 lines.
+  - `npx tsc --noEmit` and `npm run vite:build` pass.
+
 - **Renderer integration with PaneManager + FocusController (VIB-218):** Integrated `renderer.ts` with the new `PaneManager`, `FocusController`, and `Backend` modules from Phase 2. Created compatibility facades (`src/compat/pane-state-compat.ts` and `src/compat/bridge-compat.ts`) that wrap the new modules while exposing the legacy `PaneState` and `Bridge` interfaces. Extracted all module initialization and wiring into `src/create-renderer-app.ts` composition root. `renderer.ts` reduced from 612 to 77 lines (only global event binding). PaneManager handles pane CRUD, FocusController handles MRU/cycling/navigation, Backend handles IPC. All existing consumers unchanged — they receive compat instances at runtime. `npx tsc --noEmit` and `npm run vite:build` pass.
 
 ### Fixed

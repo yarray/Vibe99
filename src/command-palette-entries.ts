@@ -1,8 +1,8 @@
 import { openCommandPalette, type PaletteItem } from './command-palette';
-import type { PaneState } from './pane-state';
-import type { PaneRenderer } from './pane-renderer';
+import type { PaneState } from './compat/pane-state-compat';
+import type { PaneRenderer } from './compat/pane-renderer-compat';
 import type { TabBar } from './tab-bar';
-import type { Bridge } from './bridge';
+import type { Bridge } from './compat/bridge-compat';
 import type { SettingsManager } from './settings';
 import type { ModalStack } from './modal-stack';
 import type { ShellProfileManager, ShellProfile } from './shell-profiles';

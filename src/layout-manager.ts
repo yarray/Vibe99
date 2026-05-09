@@ -7,8 +7,8 @@ import {
   readLayoutWindowBindings,
   writeLayoutWindowBindings,
   clearLayoutWindowBinding,
-} from './bridge';
-import type { PaneState, SessionData } from './pane-state';
+} from './compat/bridge-compat';
+import type { PaneState, SessionData } from './compat/pane-state-compat';
 import type { ModalStack, CloseFn } from './modal-stack';
 
 // ---------------------------------------------------------------------------
