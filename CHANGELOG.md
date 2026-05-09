@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Renderer integration with PaneManager + FocusController (VIB-218):** Integrated `renderer.ts` with the new `PaneManager`, `FocusController`, and `Backend` modules from Phase 2. Created compatibility facades (`src/compat/pane-state-compat.ts` and `src/compat/bridge-compat.ts`) that wrap the new modules while exposing the legacy `PaneState` and `Bridge` interfaces. Extracted all module initialization and wiring into `src/create-renderer-app.ts` composition root. `renderer.ts` reduced from 612 to 77 lines (only global event binding). PaneManager handles pane CRUD, FocusController handles MRU/cycling/navigation, Backend handles IPC. All existing consumers unchanged — they receive compat instances at runtime. `npx tsc --noEmit` and `npm run vite:build` pass.
+
 ### Fixed
 
 - **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.
