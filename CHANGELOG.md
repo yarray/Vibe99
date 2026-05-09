@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.
+
 ### Changed
 
 - **Docker e2e workflow (VIB-198):** Updated `e2e/README.md` to document the correct workflow — use `git fetch` inside the container for incremental builds (not volume mounts, which bypass the pre-compiled Cargo cache). Added e2e testing reference in main `README.md`.
