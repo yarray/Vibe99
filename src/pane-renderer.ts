@@ -10,6 +10,8 @@ import type { Pane, PaneState } from './pane-state';
 import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
 import type { SettingsManager } from './settings';
 import type { TabBar } from './tab-bar';
+import { createDomApi } from './pane/capabilities/dom-capability';
+import type { DomBehaviorDeps } from './pane/capabilities/dom-capability';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -56,7 +58,7 @@ export interface PaneRendererDeps {
   getMode: () => string;
   onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
   onTerminalTitleChange: (paneId: string, title: string) => void;
-  onTerminalContextMenu: (node: PaneNode, event: MouseEvent) => Promise<void> | void;
+  onTerminalContextMenu: (paneId: string, event: MouseEvent) => Promise<void> | void;
   scheduleWindowLayoutSave: () => void;
   tabBar: TabBar;
   getPaneLabel: (pane: Pane) => string;
@@ -223,30 +225,14 @@ export function createPaneRenderer({
   }
 
   function createPane(pane: Pane): PaneNode {
-    const paneEl = document.createElement('article');
-    paneEl.className = 'pane';
     const accentColor = pane.customColor || pane.accent;
-    paneEl.style.setProperty('--pane-accent', accentColor);
-    paneEl.addEventListener('click', () => {
-      onPaneClick(pane.id);
-    });
-
-    const shell = document.createElement('div');
-    shell.className = 'pane-shell';
-
-    const body = document.createElement('div');
-    body.className = 'pane-body';
-
-    const surface = document.createElement('div');
-    surface.className = 'pane-surface';
-
-    const terminalHost = document.createElement('div');
-    terminalHost.className = 'terminal-host';
-    surface.append(terminalHost);
-    body.append(surface);
-    paneAlert.attach();
-    shell.append(body);
-    paneEl.append(shell);
+    const domDeps: DomBehaviorDeps = {
+      onPaneClick,
+      onTerminalContextMenu,
+      paneAlert,
+    };
+    const domApi = createDomApi(domDeps, pane.id, accentColor);
+    const terminalHost = domApi.terminalHost as HTMLDivElement & { _xterm?: Terminal };
 
     const terminal = new Terminal({
       allowProposedApi: true,
@@ -306,10 +292,10 @@ export function createPaneRenderer({
       return false;
     });
 
-    const node = {
+    const node: PaneNode = {
       paneId: pane.id,
       cwd: pane.cwd,
-      root: paneEl,
+      root: domApi.root,
       terminalHost,
       terminal,
       fitAddon,
@@ -318,12 +304,6 @@ export function createPaneRenderer({
       needsFit: true,
       accent: pane.accent,
     };
-
-    terminalHost.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-      onPaneClick(node.paneId, { focusTerminal: false });
-      void onTerminalContextMenu(node, event);
-    });
 
     terminal.onData((data) => {
       if (node.sessionReady) {

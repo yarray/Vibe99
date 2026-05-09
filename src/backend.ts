@@ -5,7 +5,25 @@
  * This is the new public API that capability modules depend on.
  */
 
-// Re-export core types from bridge
+import type {
+  Platform,
+  TerminalCreatePayload,
+  TerminalWritePayload,
+  TerminalResizePayload,
+  TerminalDestroyPayload,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  ShellProfileData,
+  ShellProfilesListResult,
+  SettingsData,
+  ClipboardSnapshot,
+  TerminalApi,
+  ClipboardApi,
+  SettingsApi,
+  ShellApi,
+  WindowApi,
+} from './bridge';
+
 export type {
   Platform,
   TerminalCreatePayload,
@@ -18,16 +36,12 @@ export type {
   ShellProfilesListResult,
   SettingsData,
   ClipboardSnapshot,
-} from './bridge';
-
-// Re-export grouped API interfaces from bridge
-export type {
   TerminalApi,
   ClipboardApi,
   SettingsApi,
   ShellApi,
   WindowApi,
-} from './bridge';
+};
 
 /**
  * Backend interface — domain-grouped Tauri capabilities.
@@ -202,6 +216,7 @@ export function createBackend(tauri: TauriGlobal): Backend {
       remove: (profileId: string) => invoke('shell_profile_remove', { profileId }),
       setDefault: (profileId: string) => invoke('shell_profile_set', { profileId }),
       detect: () => invoke('shell_profiles_detect'),
+      redetectWsl: () => invoke('wsl_redetect'),
     },
 
     window: {
