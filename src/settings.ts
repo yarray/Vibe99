@@ -1,5 +1,7 @@
 import * as ShortcutsRegistry from './shortcuts-registry';
 import type { Bridge } from './bridge';
+import type { AlertMode, AlertModeConfig } from './pane-alert-modes';
+import { DEFAULT_ALERT_CONFIG } from './pane-alert-modes';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -12,6 +14,8 @@ export interface AppSettings {
   paneMaskOpacity: number;
   paneWidth: number;
   breathingAlertEnabled: boolean;
+  alertModeEnabled: boolean;
+  alertModeConfig: AlertModeConfig;
 }
 
 export interface SettingsManagerDeps {
@@ -21,6 +25,8 @@ export interface SettingsManagerDeps {
   paneActivityWatcher: {
     setGlobalEnabled: (enabled: boolean) => void;
   };
+  onAlertConfigChange?: () => void;
+  getShellProfiles: () => Array<{ id: string; name: string }>;
 }
 
 export interface SettingsManager {
@@ -41,7 +47,14 @@ interface PersistedSettings {
 /** Shape expected from the persistence layer (all fields optional). */
 interface PersistedSettingsRaw {
   version?: number;
-  ui?: Partial<AppSettings & { shortcuts: Record<string, unknown>; paneMaskAlpha?: number }>;
+  ui?: Partial<AppSettings & {
+    shortcuts: Record<string, unknown>;
+    paneMaskAlpha?: number;
+    alertMode?: AlertMode;
+    alertHookShellProfileId?: string;
+    alertHookOnStartCommand?: string;
+    alertHookOnStopCommand?: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +81,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     reportError,
     applyCallback,
     paneActivityWatcher,
+    onAlertConfigChange,
+    getShellProfiles,
   } = deps;
 
   const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement;
@@ -81,6 +96,12 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const breathingToggle = document.getElementById('breathing-alert-toggle') as HTMLInputElement;
   const breathingDot = document.getElementById('breathing-alert-dot') as HTMLElement;
   const breathingRow = document.getElementById('breathing-alert-row') as HTMLElement;
+  const alertModeSection = document.getElementById('alert-mode-section') as HTMLElement;
+  const alertModeSelect = document.getElementById('alert-mode-select') as HTMLSelectElement;
+  const alertHookConfig = document.getElementById('alert-hook-config') as HTMLElement;
+  const alertHookProfileSelect = document.getElementById('alert-hook-profile-select') as HTMLSelectElement;
+  const alertHookStartCommand = document.getElementById('alert-hook-start-command') as HTMLInputElement;
+  const alertHookStopCommand = document.getElementById('alert-hook-stop-command') as HTMLInputElement;
 
   const settings: AppSettings = {
     fontSize: 13,
@@ -89,6 +110,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneMaskOpacity: 0.75,
     paneWidth: 720,
     breathingAlertEnabled: true,
+    alertModeEnabled: true,
+    alertModeConfig: { ...DEFAULT_ALERT_CONFIG },
   };
 
   let pendingSettingsSave: number | null = null;
@@ -105,9 +128,46 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneOpacityInput.value = settings.paneOpacity.toFixed(2);
     paneMaskOpacityRange.value = settings.paneMaskOpacity.toFixed(2);
     paneMaskOpacityInput.value = settings.paneMaskOpacity.toFixed(2);
-    breathingToggle.checked = settings.breathingAlertEnabled;
-    breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    breathingToggle.checked = settings.alertModeEnabled;
+    breathingDot.classList.toggle('is-active', settings.alertModeEnabled);
+    paneActivityWatcher.setGlobalEnabled(settings.alertModeEnabled);
+
+    if (alertModeSection) {
+      alertModeSection.style.display = settings.alertModeEnabled ? '' : 'none';
+    }
+    if (alertModeSelect) {
+      alertModeSelect.value = settings.alertModeConfig.mode;
+    }
+    if (alertHookConfig) {
+      alertHookConfig.style.display = settings.alertModeConfig.mode === 'hook-script' ? '' : 'none';
+    }
+    if (alertHookProfileSelect) {
+      populateProfileSelect();
+      const hookConfig = settings.alertModeConfig.mode === 'hook-script' ? settings.alertModeConfig : null;
+      alertHookProfileSelect.value = hookConfig?.shellProfileId ?? '';
+    }
+    if (alertHookStartCommand && settings.alertModeConfig.mode === 'hook-script') {
+      alertHookStartCommand.value = settings.alertModeConfig.onStartCommand;
+    }
+    if (alertHookStopCommand && settings.alertModeConfig.mode === 'hook-script') {
+      alertHookStopCommand.value = settings.alertModeConfig.onStopCommand;
+    }
+  }
+
+  function populateProfileSelect(): void {
+    if (!alertHookProfileSelect) return;
+    const profiles = getShellProfiles();
+    alertHookProfileSelect.replaceChildren();
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'Default shell';
+    alertHookProfileSelect.appendChild(defaultOpt);
+    for (const profile of profiles) {
+      const opt = document.createElement('option');
+      opt.value = profile.id;
+      opt.textContent = profile.name || profile.id;
+      alertHookProfileSelect.appendChild(opt);
+    }
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -153,6 +213,26 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
     if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
       settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
+      // Migrate legacy: breathingAlertEnabled → alertModeEnabled
+      if (typeof uiSettings.alertModeEnabled !== 'boolean') {
+        settings.alertModeEnabled = uiSettings.breathingAlertEnabled;
+      }
+    }
+
+    if (typeof uiSettings.alertModeEnabled === 'boolean') {
+      settings.alertModeEnabled = uiSettings.alertModeEnabled;
+    }
+
+    const persistedMode = uiSettings.alertMode;
+    if (persistedMode === 'hook-script') {
+      settings.alertModeConfig = {
+        mode: 'hook-script',
+        shellProfileId: uiSettings.alertHookShellProfileId ?? null,
+        onStartCommand: uiSettings.alertHookOnStartCommand ?? '',
+        onStopCommand: uiSettings.alertHookOnStopCommand ?? '',
+      };
+    } else {
+      settings.alertModeConfig = { mode: 'css-animation' };
     }
 
     // Load keyboard shortcuts
@@ -164,10 +244,15 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   }
 
   function buildSettingsPayloadForCurrentWindow(): PersistedSettings {
+    const config = settings.alertModeConfig;
     return {
-      version: 6,
+      version: 7,
       ui: {
         ...settings,
+        alertMode: config.mode,
+        alertHookShellProfileId: config.mode === 'hook-script' ? config.shellProfileId : undefined,
+        alertHookOnStartCommand: config.mode === 'hook-script' ? config.onStartCommand : undefined,
+        alertHookOnStopCommand: config.mode === 'hook-script' ? config.onStopCommand : undefined,
         shortcuts: ShortcutsRegistry.getShortcutsForSave(),
       },
     };
@@ -278,25 +363,81 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     updatePaneMaskOpacity(paneMaskOpacityInput.value);
   });
 
-  // Breathing alert
-  function toggleBreathingAlert(): void {
+  // Alert toggle (on/off)
+  function toggleAlertEnabled(): void {
     breathingToggle.checked = !breathingToggle.checked;
-    settings.breathingAlertEnabled = breathingToggle.checked;
-    breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    settings.alertModeEnabled = breathingToggle.checked;
+    breathingDot.classList.toggle('is-active', settings.alertModeEnabled);
+    paneActivityWatcher.setGlobalEnabled(settings.alertModeEnabled);
+    onAlertConfigChange?.();
+    applySettings();
     scheduleSettingsSave();
   }
 
   breathingRow.addEventListener('click', () => {
-    toggleBreathingAlert();
+    toggleAlertEnabled();
   });
 
   breathingToggle.addEventListener('change', () => {
-    settings.breathingAlertEnabled = breathingToggle.checked;
-    breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    settings.alertModeEnabled = breathingToggle.checked;
+    breathingDot.classList.toggle('is-active', settings.alertModeEnabled);
+    paneActivityWatcher.setGlobalEnabled(settings.alertModeEnabled);
+    onAlertConfigChange?.();
+    applySettings();
     scheduleSettingsSave();
   });
+
+  // Alert mode selector
+  if (alertModeSelect) {
+    alertModeSelect.addEventListener('change', () => {
+      const mode = alertModeSelect.value as AlertMode;
+      if (mode === 'hook-script') {
+        settings.alertModeConfig = {
+          mode: 'hook-script',
+          shellProfileId: null,
+          onStartCommand: '',
+          onStopCommand: '',
+        };
+      } else {
+        settings.alertModeConfig = { mode: 'css-animation' };
+      }
+      onAlertConfigChange?.();
+      applySettings();
+      scheduleSettingsSave();
+    });
+  }
+
+  // Hook script config
+  if (alertHookProfileSelect) {
+    alertHookProfileSelect.addEventListener('change', () => {
+      if (settings.alertModeConfig.mode === 'hook-script') {
+        const val = alertHookProfileSelect.value;
+        settings.alertModeConfig.shellProfileId = val || null;
+        onAlertConfigChange?.();
+        scheduleSettingsSave();
+      }
+    });
+  }
+
+  if (alertHookStartCommand) {
+    alertHookStartCommand.addEventListener('change', () => {
+      if (settings.alertModeConfig.mode === 'hook-script') {
+        settings.alertModeConfig.onStartCommand = alertHookStartCommand.value;
+        onAlertConfigChange?.();
+        scheduleSettingsSave();
+      }
+    });
+  }
+
+  if (alertHookStopCommand) {
+    alertHookStopCommand.addEventListener('change', () => {
+      if (settings.alertModeConfig.mode === 'hook-script') {
+        settings.alertModeConfig.onStopCommand = alertHookStopCommand.value;
+        onAlertConfigChange?.();
+        scheduleSettingsSave();
+      }
+    });
+  }
 
   return {
     get settings() {

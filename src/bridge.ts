@@ -201,6 +201,10 @@ export interface ShellApi {
   redetectWsl: () => Promise<{ available: boolean; distributions: string[]; defaultShell: string | null }>;
 }
 
+export interface AlertApi {
+  hookRun: (payload: { command: string; shellProfileId: string | null }) => Promise<void>;
+}
+
 export interface WindowApi {
   close: () => Promise<void>;
   openUrl: (url: string) => void;
@@ -240,6 +244,7 @@ export interface Bridge {
   clipboard: ClipboardApi;
   settings: SettingsApi;
   shell: ShellApi;
+  alert: AlertApi;
   window: WindowApi;
   layouts: LayoutsApi;
 
@@ -271,6 +276,8 @@ export interface Bridge {
   setDefaultShellProfile: ShellApi['setDefault'];
   detectShellProfiles: ShellApi['detect'];
   redetectWsl: ShellApi['redetectWsl'];
+
+  alertHookRun: AlertApi['hookRun'];
 
   closeWindow: WindowApi['close'];
   openExternalUrl: WindowApi['openUrl'];
@@ -423,6 +430,7 @@ type FlatAliases = {
   setDefaultShellProfile: unknown;
   detectShellProfiles: unknown;
   redetectWsl: unknown;
+  alertHookRun: unknown;
   closeWindow: unknown;
   openExternalUrl: unknown;
   showContextMenu: unknown;
@@ -478,6 +486,9 @@ function createUnavailableBridge(): Bridge {
       detect: () => Promise.resolve([]),
       redetectWsl: () => Promise.resolve({ available: false, distributions: [], defaultShell: null }),
     },
+    alert: {
+      hookRun: () => Promise.resolve(),
+    },
     window: {
       close: fail,
       openUrl: fail,
@@ -516,6 +527,7 @@ function createUnavailableBridge(): Bridge {
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
     redetectWsl: () => Promise.resolve({ available: false, distributions: [], defaultShell: null }),
+    alertHookRun: () => Promise.resolve(),
     closeWindow: fail,
     openExternalUrl: fail,
     showContextMenu: () => {},
@@ -673,6 +685,10 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       detect: () => invoke('shell_profiles_detect'),
       redetectWsl: () => invoke('wsl_redetect'),
     },
+    alert: {
+      hookRun: (payload: { command: string; shellProfileId: string | null }) =>
+        invoke('alert_hook_run', { command: payload.command, shellProfileId: payload.shellProfileId }),
+    },
     window: {
       close: () => getCurrentWindow().close(),
       openUrl: (url: string) => openUrl(url),
@@ -746,6 +762,7 @@ export function createBridge(
       setDefaultShellProfile: partial.shell.setDefault,
       detectShellProfiles: partial.shell.detect,
       redetectWsl: partial.shell.redetectWsl,
+      alertHookRun: partial.alert.hookRun,
       closeWindow: partial.window.close,
       openExternalUrl: partial.window.openUrl,
       showContextMenu: partial.window.showMenu,

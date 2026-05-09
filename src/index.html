@@ -71,6 +71,35 @@
             </div>
             <input id="breathing-alert-toggle" type="checkbox" checked style="display:none" />
 
+            <div id="alert-mode-section">
+              <label class="settings-row" for="alert-mode-select">
+                <span>Alert mode</span>
+              </label>
+              <select id="alert-mode-select" class="settings-select">
+                <option value="css-animation">CSS Animation</option>
+                <option value="hook-script">Hook Script</option>
+              </select>
+
+              <div id="alert-hook-config" style="display:none">
+                <label class="settings-row" for="alert-hook-profile-select">
+                  <span>Shell profile</span>
+                </label>
+                <select id="alert-hook-profile-select" class="settings-select">
+                  <option value="">Default shell</option>
+                </select>
+
+                <label class="settings-row" for="alert-hook-start-command">
+                  <span>On alert start</span>
+                </label>
+                <input id="alert-hook-start-command" type="text" class="settings-number" placeholder="e.g. paplay /usr/share/sounds/freedesktop/stereo/bell.oga" value="" />
+
+                <label class="settings-row" for="alert-hook-stop-command">
+                  <span>On alert stop</span>
+                </label>
+                <input id="alert-hook-stop-command" type="text" class="settings-number" placeholder="e.g. notify-send 'Activity cleared'" value="" />
+              </div>
+            </div>
+
           </div>
 
           <div class="settings-divider"></div>

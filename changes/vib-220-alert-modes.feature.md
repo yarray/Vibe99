@@ -1,0 +1,1 @@
+Add configurable alert modes: CSS Animation (existing breathing mask) and Hook Script (execute shell commands on alert start/stop). Hook mode uses the existing Shell Profile system for shell selection. Settings UI includes mode selector and hook command configuration.

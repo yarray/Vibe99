@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use tauri::Manager;
+use vibe99_lib::commands::alert_hook;
 use vibe99_lib::commands::context_menu;
 use vibe99_lib::commands::layout;
 use vibe99_lib::commands::settings;
@@ -37,6 +38,7 @@ fn main() {
             lock: std::sync::Mutex::new(()),
         })
         .invoke_handler(tauri::generate_handler![
+            alert_hook::alert_hook_run,
             terminal::terminal_create,
             terminal::terminal_write,
             terminal::terminal_resize,

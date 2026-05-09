@@ -1,3 +1,4 @@
+pub mod alert_hook;
 pub mod context_menu;
 pub mod layout;
 pub mod settings;

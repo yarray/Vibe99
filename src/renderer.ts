@@ -4,6 +4,8 @@ import {
 } from './command-palette';
 import { createPaneActivityWatcher } from './pane-activity-watcher';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask';
+import { createAlertFromConfig, createNoOpAlert } from './pane-alert-factory';
+import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
 import {
   createBridge,
   clearLayoutWindowBinding,
@@ -117,7 +119,16 @@ const layoutModal = createLayoutModal({
   layoutManager,
 });
 
-const paneAlert = createBreathingMaskAlert();
+function buildAlertStrategy(): PaneAlertStrategy {
+  if (!settingsManager.settings.alertModeEnabled) {
+    return createNoOpAlert();
+  }
+  return createAlertFromConfig(settingsManager.settings.alertModeConfig, {
+    runHook: bridge.alertHookRun,
+  });
+}
+
+let paneAlert: PaneAlertStrategy = createBreathingMaskAlert();
 const paneActivityWatcher = createPaneActivityWatcher({
   onAlert: (paneId) => paneRenderer?.setAlerted(paneId, true),
   onClear: (paneId) => paneRenderer?.setAlerted(paneId, false),
@@ -128,6 +139,12 @@ const settingsManager = createSettingsManager({
   reportError,
   applyCallback: () => render(true),
   paneActivityWatcher,
+  onAlertConfigChange: () => {
+    paneAlert = buildAlertStrategy();
+    paneAlert.attach();
+    paneRenderer?.setAlertStrategy(paneAlert);
+  },
+  getShellProfiles: () => shellProfiles.map((p) => ({ id: p.id, name: p.name })),
 });
 
 // paneOps is created after tabBar and paneRenderer, but closures capture the binding.

@@ -79,6 +79,7 @@ export interface PaneRenderer {
   changePaneShell: (paneId: string, profileId: string, previousProfileId?: string | null) => void;
   entryNeedsTabRefresh: (paneId: string) => boolean;
   setAlerted: (paneId: string, alerted: boolean) => void;
+  setAlertStrategy: (strategy: PaneAlertStrategy) => void;
   rootContains: (paneId: string, el: Node) => boolean;
   hasSelection: (paneId: string) => boolean;
   isSessionReady: (paneId: string) => boolean;
@@ -126,7 +127,7 @@ export function createPaneRenderer({
   bridge,
   paneState,
   settingsManager,
-  paneAlert,
+  paneAlert: initialAlert,
   paneActivityWatcher,
   reportError,
   stageEl,
@@ -139,6 +140,7 @@ export function createPaneRenderer({
   getPaneLabel,
   onPaneCwdChanged,
 }: PaneRendererDeps): PaneRenderer {
+  let paneAlert = initialAlert;
   const paneNodeMap = new Map<string, PaneNode>();
 
   function isWindowsCtrlVPasteHotkey(event: KeyboardEvent): boolean {
@@ -637,6 +639,9 @@ export function createPaneRenderer({
       const node = getNode(paneId);
       if (!node) return;
       paneAlert.setAlerted(node.root, alerted);
+    },
+    setAlertStrategy: (strategy) => {
+      paneAlert = strategy;
     },
     rootContains: (paneId, el) => {
       const node = getNode(paneId);

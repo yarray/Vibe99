@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-const CURRENT_CONFIG_VERSION: u8 = 6;
+const CURRENT_CONFIG_VERSION: u8 = 7;
 
 /// Global lock for all settings file operations.
 ///
@@ -373,6 +373,38 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
+    // alertModeEnabled supersedes breathingAlertEnabled (migration)
+    let alert_mode_enabled = ui
+        .get("alertModeEnabled")
+        .and_then(|v| v.as_bool())
+        .or_else(|| Some(breathing_alert_enabled))
+        .unwrap_or(true);
+
+    let alert_mode = ui
+        .get("alertMode")
+        .and_then(|v| v.as_str())
+        .filter(|s| ["css-animation", "hook-script"].contains(&s.to_string().as_str()))
+        .unwrap_or("css-animation");
+
+    let alert_hook_shell_profile_id = ui
+        .get("alertHookShellProfileId")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("");
+
+    let alert_hook_on_start_command = ui
+        .get("alertHookOnStartCommand")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let alert_hook_on_stop_command = ui
+        .get("alertHookOnStopCommand")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
     let font_family = ui
         .get("fontFamily")
         .and_then(|v| v.as_str())
@@ -386,7 +418,18 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         "paneMaskOpacity": pane_mask_opacity,
         "paneWidth": pane_width,
         "breathingAlertEnabled": breathing_alert_enabled,
+        "alertModeEnabled": alert_mode_enabled,
+        "alertMode": alert_mode,
+        "alertHookOnStartCommand": alert_hook_on_start_command,
+        "alertHookOnStopCommand": alert_hook_on_stop_command,
     });
+
+    if !alert_hook_shell_profile_id.is_empty() {
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("alertHookShellProfileId".into(), Value::String(alert_hook_shell_profile_id.to_string()));
+    }
 
     if !font_family.is_empty() {
         result
