@@ -1,0 +1,1 @@
+Create FocusController module for pane focus management: extracts MRU order, Ctrl+`/Ctrl+Shift+` pane cycling, and Navigation mode (Ctrl+B) logic into `src/manager/create-focus-controller.ts`. Provides APIs for pane visit tracking, cycling through recent panes, navigation mode state, and in-mode navigation actions (h/l/←/→, 1-9 jump, Home/End). (VIB-217)
