@@ -3,6 +3,7 @@ import { waitForAppReady, getPaneByIndex } from '../helpers/app-launch.js';
 import { waitForCondition } from '../helpers/wait-for.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import { writeToTerminal, waitForTerminalReady, clearCapturedOutput, waitForTerminalOutput } from '../helpers/terminal-helpers.js';
+import { resetSettings } from '../helpers/settings-helpers.js';
 
 const isWindows = os.platform() === 'win32';
 
@@ -151,6 +152,7 @@ describe('Activity Alert', () => {
 
   before(async () => {
     await waitForAppReady();
+    await resetSettings();
   });
 
   afterEach(async () => {

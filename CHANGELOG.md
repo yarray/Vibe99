@@ -61,6 +61,11 @@
 
 ### Added
 
+- **Restart Terminal context menu item (VIB-233):**
+  - Added "Restart Terminal" option to the pane right-click context menu.
+  - Kills the current PTY process and recreates it in the same pane with the same shell profile.
+  - Clears the terminal and starts a fresh shell session, useful when a terminal hangs or becomes unresponsive.
+  - Added `restartPaneTerminal` function to `pane-renderer.ts` that follows the same pattern as `changePaneShell` but preserves the current shell profile.
 - **WSL re-detect button in Shell Profiles modal (VIB-170):**
   - Added a refresh button (↻) next to the "Add Profile" button in the Shell Profiles modal.
   - Clicking it clears the cached WSL-unavailable flag and re-runs profile auto-detection, allowing users who install WSL after launching Vibe99 to discover WSL shells without restarting the app.

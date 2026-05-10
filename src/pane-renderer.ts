@@ -77,6 +77,7 @@ export interface PaneRenderer {
   clearTerminal: (paneId: string) => void;
   writeln: (paneId: string, text: string) => void;
   changePaneShell: (paneId: string, profileId: string, previousProfileId?: string | null) => void;
+  restartPaneTerminal: (paneId: string) => void;
   entryNeedsTabRefresh: (paneId: string) => boolean;
   setAlerted: (paneId: string, alerted: boolean) => void;
   rootContains: (paneId: string, el: Node) => boolean;
@@ -581,6 +582,21 @@ export function createPaneRenderer({
     });
   }
 
+  function restartPaneTerminal(paneId: string): void {
+    const node = getNode(paneId);
+    if (!node) return;
+
+    const currentProfileId = paneState.getPaneById(paneId)?.shellProfileId ?? null;
+
+    node._shellChanging = true;
+    node._shellChangeTime = Date.now();
+    node.sessionReady = false;
+    node.terminal.clear();
+    initializePaneTerminal(node).finally(() => {
+      node._shellChanging = false;
+    });
+  }
+
   function destroyPane(paneId: string): void {
     const node = getNode(paneId);
     if (!node) return;
@@ -632,6 +648,7 @@ export function createPaneRenderer({
       node.terminal.writeln(text);
     },
     changePaneShell,
+    restartPaneTerminal,
     entryNeedsTabRefresh,
     setAlerted: (paneId, alerted) => {
       const node = getNode(paneId);
