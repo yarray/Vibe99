@@ -20,7 +20,16 @@ const appDataDir = isWindows
 const runAppShim = path.join(__dirname, 'run-app.sh');
 const linuxbrewGlibc = '/home/linuxbrew/.linuxbrew/Cellar/glibc/2.39/lib/ld-linux-x86-64.so.2';
 const jammyWebKit = '/opt/webkit-jammy/usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc';
-const needsRuntimeShim = !isWindows && (fs.existsSync(linuxbrewGlibc) || fs.existsSync(jammyWebKit));
+function commandExists(cmd) {
+  try {
+    execSync(`which ${cmd}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const hasDbusRunSession = !isWindows && commandExists("dbus-run-session");
+const needsRuntimeShim = !isWindows && (fs.existsSync(linuxbrewGlibc) || fs.existsSync(jammyWebKit) || hasDbusRunSession);
 const applicationPath = needsRuntimeShim && fs.existsSync(runAppShim) ? runAppShim : binaryPath;
 
 // On Linux with custom library paths (jammy webkit / glib), we need to keep

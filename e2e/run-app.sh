@@ -25,12 +25,20 @@ GLIB_LIB="/opt/glib-2.72/lib/x86_64-linux-gnu:/opt/glib-2.72/lib"
 SYS_LIB="/usr/lib/x86_64-linux-gnu"
 AUGMENTED_LD="$JAMMY_LIB:$GLIB_LIB:$SYS_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+run_with_dbus() {
+    if command -v dbus-run-session >/dev/null 2>&1; then
+        exec dbus-run-session "$@"
+    else
+        exec "$@"
+    fi
+}
+
 if [ -x "$LINUXBREW_LD" ]; then
     export LD_LIBRARY_PATH="/home/linuxbrew/.linuxbrew/Cellar/glibc/2.39/lib:$AUGMENTED_LD"
     export LIBGL_ALWAYS_SOFTWARE=1
-    exec "$LINUXBREW_LD" "$BINARY" "$@"
+    run_with_dbus "$LINUXBREW_LD" "$BINARY" "$@"
 else
     export LD_LIBRARY_PATH="$AUGMENTED_LD"
     export LIBGL_ALWAYS_SOFTWARE=1
-    exec "$BINARY" "$@"
+    run_with_dbus "$BINARY" "$@"
 fi
