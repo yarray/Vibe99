@@ -318,18 +318,19 @@ describe('Layout', () => {
   // Default layout migration
   // ================================================================
 
-  it('keeps the current window usable when no layouts exist', async () => {
-    // Clear all layouts first
+  it('keeps the current window usable when only default layout remains', async () => {
+    // Clear all user-created layouts; default is preserved
     await clearAllLayouts();
     await browser.pause(500);
 
-    // Verify no layouts exist
-    const empty = await listLayoutsViaBridge();
-    expect(empty.layouts.length).toBe(0);
+    // Verify only the default layout remains
+    const remaining = await listLayoutsViaBridge();
+    expect(remaining.layouts.length).toBe(1);
+    expect(remaining.layouts[0].id).toBe('default');
 
     await waitForAppReady();
 
-    // Verify the dropdown remains usable in the empty-layout state
+    // Verify the dropdown remains usable with the default layout
     await openLayoutsDropdown();
     const items = await getDropdownItems();
     expect(items.length).toBeGreaterThanOrEqual(1);

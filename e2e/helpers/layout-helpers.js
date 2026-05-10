@@ -430,6 +430,8 @@ export async function clearAllLayouts() {
     const config = await core.invoke('layouts_list');
     const layouts = config.layouts ?? [];
     for (const layout of layouts) {
+      // Preserve the default layout; it should never be deleted.
+      if (layout.id === 'default') continue;
       try {
         await core.invoke('layout_delete', { layoutId: layout.id });
       } catch {
