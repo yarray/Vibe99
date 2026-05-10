@@ -54,6 +54,7 @@ export interface MenuEntryItem {
   action?: string;
   disabled?: boolean;
   shortcut?: string;
+  toggleActive?: boolean;
   children?: MenuChildItem[];
 }
 
@@ -255,7 +256,11 @@ function showContextMenu(
     label.textContent = item.label;
     row.appendChild(label);
 
-    if (item.shortcut) {
+    if (item.toggleActive) {
+      const dot = document.createElement('span');
+      dot.className = 'context-menu-toggle-dot' + (item.toggleActive ? ' is-active' : '');
+      row.appendChild(dot);
+    } else if (item.shortcut) {
       const shortcut = document.createElement('span');
       shortcut.className = 'context-menu-shortcut';
       shortcut.textContent = item.shortcut;
@@ -366,7 +371,7 @@ function showTerminalContextMenu(
       {
         label: 'Background activity alert',
         action: 'pane-toggle-breathing',
-        shortcut: breathingOn ? icon('check', 12) : '',
+        toggleActive: breathingOn,
       },
       { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
     ];
