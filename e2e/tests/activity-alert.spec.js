@@ -1,4 +1,5 @@
 import os from 'os';
+import path from 'path';
 import { waitForAppReady, getPaneByIndex } from '../helpers/app-launch.js';
 import { waitForCondition } from '../helpers/wait-for.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
@@ -316,5 +317,178 @@ describe('Activity Alert', () => {
     const tabMain = await tabs[1].$('.tab-main');
     await tabMain.click();
     await browser.pause(300);
+  });
+
+  // ------------------------------------------------------------------------
+  // Script Hook Alert Tests (VIB-229, VIB-230, VIB-231)
+  // ------------------------------------------------------------------------
+
+  describe('Script hook alert', () => {
+    const tmpDir = os.tmpdir();
+    const testMarkerFile = path.join(tmpDir, 'vibe99-e2e-alert-test.txt');
+
+    // Clean up the test marker file before and after tests
+    beforeEach(async () => {
+      const fs = await import('fs');
+      if (fs.existsSync(testMarkerFile)) {
+        fs.unlinkSync(testMarkerFile);
+      }
+    });
+
+    afterEach(async () => {
+      const fs = await import('fs');
+      if (fs.existsSync(testMarkerFile)) {
+        fs.unlinkSync(testMarkerFile);
+      }
+    });
+
+    /**
+     * Read the test marker file to check if the script was executed.
+     * The file should contain the pane ID and title that triggered the alert.
+     */
+    async function readTestMarkerFile() {
+      const fs = await import('fs');
+      if (fs.existsSync(testMarkerFile)) {
+        return fs.readFileSync(testMarkerFile, 'utf-8');
+      }
+      return null;
+    }
+
+    /**
+     * Create a test script that writes the pane ID and title to the marker file.
+     * The script is shell-escaped for safety.
+     */
+    function createTestScript() {
+      // Use echo with redirection to write to the marker file
+      // Include environment variables for pane ID and title
+      const escapedPath = testMarkerFile.replace(/'/g, "'\\''");
+      return `echo "PANE_ID: $VIBE99_PANE_ID, PANE_TITLE: $VIBE99_PANE_TITLE" > '${escapedPath}'`;
+    }
+
+    it('should execute script when alert is triggered', async () => {
+      const { setScriptHookAlert } = await import('../helpers/settings-helpers.js');
+
+      // Configure the script hook alert with a test script
+      const testScript = createTestScript();
+      await setScriptHookAlert(testScript);
+
+      // Trigger an alert on pane 1
+      await ensurePaneHasAlert(1);
+
+      // Wait for the script to execute (it should be nearly instantaneous)
+      await browser.pause(1000);
+
+      // Verify the script was executed by checking the marker file
+      const content = await readTestMarkerFile();
+      expect(content).not.toBeNull();
+
+      // The file should contain the pane ID (format may vary, but should include PANE_ID)
+      expect(content).toContain('PANE_ID:');
+      expect(content).toContain('PANE_TITLE:');
+    });
+
+    it('should not execute script when alert is not triggered', async () => {
+      const { setScriptHookAlert } = await import('../helpers/settings-helpers.js');
+
+      // Configure the script hook alert
+      const testScript = createTestScript();
+      await setScriptHookAlert(testScript);
+
+      // Don't trigger any alert, just wait
+      await browser.pause(2000);
+
+      // Verify the script was NOT executed
+      const content = await readTestMarkerFile();
+      expect(content).toBeNull();
+    });
+
+    it('should not execute script when script hook is disabled', async () => {
+      const { setScriptHookAlert, setScriptHookAlertEnabled } = await import('../helpers/settings-helpers.js');
+
+      // Configure the script hook alert but disable it
+      const testScript = createTestScript();
+      await setScriptHookAlert(testScript);
+      await setScriptHookAlertEnabled(false);
+
+      // Trigger an alert
+      await ensurePaneHasAlert(1);
+      await browser.pause(1000);
+
+      // Verify the script was NOT executed (because it's disabled)
+      const content = await readTestMarkerFile();
+      expect(content).toBeNull();
+    });
+
+    it('should work alongside breathing alert (both strategies enabled)', async () => {
+      const { setScriptHookAlert } = await import('../helpers/settings-helpers.js');
+
+      // Configure the script hook alert
+      const testScript = createTestScript();
+      await setScriptHookAlert(testScript);
+
+      // Ensure breathing alert is enabled (it should be by default after resetSettings)
+      const breathingToggle = await openSettingsAndGetBreathingToggle();
+      const isChecked = await browser.execute(() => document.getElementById('breathing-alert-toggle')?.checked);
+      if (!isChecked) {
+        await browser.execute(() => document.getElementById('breathing-alert-toggle')?.click());
+        await browser.pause(300);
+      }
+      await closeSettings();
+
+      // Trigger an alert
+      await ensurePaneHasAlert(1);
+
+      // Wait for the script to execute
+      await browser.pause(1000);
+
+      // Verify BOTH alerts are active:
+      // 1. Breathing mask (visual indicator)
+      expect(await paneHasAlert(1)).toBe(true);
+
+      // 2. Script hook (marker file created)
+      const content = await readTestMarkerFile();
+      expect(content).not.toBeNull();
+      expect(content).toContain('PANE_ID:');
+    });
+
+    it('should include correct pane context in environment variables', async () => {
+      const { setScriptHookAlert } = await import('../helpers/settings-helpers.js');
+
+      // Configure the script hook alert
+      const testScript = createTestScript();
+      await setScriptHookAlert(testScript);
+
+      // Get the pane ID for pane 1
+      const pane1Id = await browser.execute(() => {
+        const panes = document.querySelectorAll('.pane');
+        return panes[1]?.dataset?.paneId || '';
+      });
+
+      // Trigger an alert on pane 1
+      await ensurePaneHasAlert(1);
+      await browser.pause(1000);
+
+      // Verify the environment variables were passed correctly
+      const content = await readTestMarkerFile();
+      expect(content).not.toBeNull();
+
+      // The content should include the pane ID
+      // Note: The exact format depends on the shell, but it should contain the pane ID
+      expect(content).toContain(pane1Id);
+    });
+
+    it('should handle empty script gracefully (no crash)', async () => {
+      const { setScriptHookAlert } = await import('../helpers/settings-helpers.js');
+
+      // Configure with an empty script
+      await setScriptHookAlert('');
+
+      // Trigger an alert - should not crash
+      await ensurePaneHasAlert(1);
+      await browser.pause(500);
+
+      // Breathing alert should still work
+      expect(await paneHasAlert(1)).toBe(true);
+    });
   });
 });

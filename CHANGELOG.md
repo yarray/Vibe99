@@ -8,6 +8,8 @@
 
 - **Custom alert strategies backend (VIB-230):** Extended settings config schema to version 7 with new `alerts.strategies` array supporting multiple alert strategies (breathing, script-hook) that can coexist independently. Added `execute_alert_script` Tauri command for non-blocking script execution with `VIBE99_PANE_ID` and `VIBE99_PANE_TITLE` environment variables. Backward-compatible migration from `breathingAlertEnabled` to the new alerts schema. Added `bridge.alert.executeScript()` frontend API.
 
+- **E2E tests for script hook alert (VIB-229):** Added comprehensive e2e tests for the new script hook alert feature in `e2e/tests/activity-alert.spec.js`. Tests cover: script execution on alert trigger, no execution when alert is not triggered, disabled state handling, coexistence with breathing alert, environment variable context passing, and empty script handling. Updated `e2e/helpers/settings-helpers.js` to use settings schema version 7 and added helper functions `setScriptHookAlert()` and `setScriptHookAlertEnabled()` for test configuration.
+
 ### Fixed
 
 - **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.
