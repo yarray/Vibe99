@@ -60,10 +60,13 @@ describe('Settings Panel', () => {
       });
       await browser.pause(300);
 
-      const computedStyle = await browser.execute(() => {
-        return getComputedStyle(document.documentElement).getPropertyValue('--app-font-size');
+      // Font settings are applied to the xterm terminal via pane-renderer, not via CSS vars
+      const fontSize = await browser.execute(() => {
+        const el = document.querySelector('.terminal-host');
+        const term = el ? (el)._xterm : null;
+        return term ? (term).options.fontSize : null;
       });
-      expect(computedStyle).toBe('16px');
+      expect(fontSize).toBe(16);
     });
 
     it('enforces font size limits (10-24)', async () => {
@@ -86,10 +89,13 @@ describe('Settings Panel', () => {
       await browser.keys('Tab');
       await browser.pause(300);
 
-      const computedStyle = await browser.execute(() => {
-        return getComputedStyle(document.documentElement).getPropertyValue('--app-font-family');
+      // Font settings are applied to the xterm terminal via pane-renderer, not via CSS vars
+      const fontFamily = await browser.execute(() => {
+        const el = document.querySelector('.terminal-host');
+        const term = el ? (el)._xterm : null;
+        return term ? (term).options.fontFamily : null;
       });
-      expect(computedStyle).toContain('monospace');
+      expect(fontFamily).toContain('monospace');
     });
   });
 
