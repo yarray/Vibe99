@@ -16,14 +16,23 @@ import './pane-alert-breathing-mask.css';
 const ALERTED_CLASS = 'has-pending-activity';
 
 export interface PaneAlertStrategy {
-  /** No-op: the animation targets `.pane::after` via CSS. */
+  /** Unique identifier for this strategy. */
+  readonly id: string;
+  /** Whether this strategy is currently active. */
+  enabled: boolean;
+  /** One-time setup (e.g. inject global CSS). Called by the registry on register. */
   attach(): void;
   /** Toggle the pulsing alert state on the given pane element. */
   setAlerted(paneEl: HTMLElement, alerted: boolean): void;
+  /** Tear down any resources held by this strategy. */
+  destroy(): void;
 }
 
 export function createBreathingMaskAlert(): PaneAlertStrategy {
   return {
+    id: 'breathing',
+    enabled: true,
+
     /** No-op: the animation targets `.pane::after` via CSS. */
     attach() {},
 
@@ -33,5 +42,7 @@ export function createBreathingMaskAlert(): PaneAlertStrategy {
     setAlerted(paneEl: HTMLElement, alerted: boolean): void {
       paneEl.classList.toggle(ALERTED_CLASS, alerted);
     },
+
+    destroy() {},
   };
 }

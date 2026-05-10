@@ -4,6 +4,8 @@ import {
 } from './command-palette';
 import { createPaneActivityWatcher } from './pane-activity-watcher';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask';
+import { createPaneAlertRegistry } from './pane-alert-registry';
+import { createScriptHookAlert } from './pane-alert-script-hook';
 import {
   createBridge,
   clearLayoutWindowBinding,
@@ -117,10 +119,22 @@ const layoutModal = createLayoutModal({
   layoutManager,
 });
 
-const paneAlert = createBreathingMaskAlert();
+const paneAlertRegistry = createPaneAlertRegistry();
+paneAlertRegistry.register(createBreathingMaskAlert());
+
 const paneActivityWatcher = createPaneActivityWatcher({
-  onAlert: (paneId) => paneRenderer?.setAlerted(paneId, true),
-  onClear: (paneId) => paneRenderer?.setAlerted(paneId, false),
+  onAlert: (paneId) => {
+    const node = paneRenderer?.getNode(paneId);
+    if (node) {
+      paneAlertRegistry.setAlerted(node.root, true);
+    }
+  },
+  onClear: (paneId) => {
+    const node = paneRenderer?.getNode(paneId);
+    if (node) {
+      paneAlertRegistry.setAlerted(node.root, false);
+    }
+  },
 });
 
 const settingsManager = createSettingsManager({
@@ -128,7 +142,22 @@ const settingsManager = createSettingsManager({
   reportError,
   applyCallback: () => render(true),
   paneActivityWatcher,
+  paneAlertRegistry,
 });
+
+// Register script hook after settingsManager exists so getScript can read settings.
+paneAlertRegistry.register(
+  createScriptHookAlert({
+    bridge,
+    getPaneTitle: (paneId) => {
+      const pane = paneState.getPaneById(paneId);
+      return pane?.title || pane?.terminalTitle || paneId;
+    },
+    getScript: () =>
+      settingsManager.settings.alerts?.strategies?.find((s) => s.id === 'script-hook')
+        ?.script || '',
+  }),
+);
 
 // paneOps is created after tabBar and paneRenderer, but closures capture the binding.
 let paneOps: ReturnType<typeof createPaneOperations> | null = null;
@@ -160,7 +189,7 @@ paneRenderer = createPaneRenderer({
   bridge,
   paneState,
   settingsManager,
-  paneAlert,
+  paneAlert: paneAlertRegistry,
   paneActivityWatcher,
   reportError,
   stageEl,

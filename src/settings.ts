@@ -5,6 +5,12 @@ import type { Bridge } from './bridge';
 // Exported types
 // ---------------------------------------------------------------------------
 
+export interface AlertStrategyConfig {
+  id: string;
+  enabled: boolean;
+  script?: string;
+}
+
 export interface AppSettings {
   fontSize: number;
   fontFamily: string;
@@ -12,6 +18,9 @@ export interface AppSettings {
   paneMaskOpacity: number;
   paneWidth: number;
   breathingAlertEnabled: boolean;
+  alerts: {
+    strategies: AlertStrategyConfig[];
+  };
 }
 
 export interface SettingsManagerDeps {
@@ -20,6 +29,9 @@ export interface SettingsManagerDeps {
   applyCallback: () => void;
   paneActivityWatcher: {
     setGlobalEnabled: (enabled: boolean) => void;
+  };
+  paneAlertRegistry?: {
+    setEnabled: (id: string, enabled: boolean) => void;
   };
 }
 
@@ -89,6 +101,12 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneMaskOpacity: 0.75,
     paneWidth: 720,
     breathingAlertEnabled: true,
+    alerts: {
+      strategies: [
+        { id: 'breathing', enabled: true },
+        { id: 'script-hook', enabled: false, script: '' },
+      ],
+    },
   };
 
   let pendingSettingsSave: number | null = null;
@@ -108,6 +126,13 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     breathingToggle.checked = settings.breathingAlertEnabled;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+
+    // Sync alert strategy enabled states with registry
+    if (deps.paneAlertRegistry) {
+      for (const strategy of settings.alerts.strategies) {
+        deps.paneAlertRegistry.setEnabled(strategy.id, strategy.enabled);
+      }
+    }
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -153,6 +178,24 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
     if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
       settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
+    }
+
+    // Migrate / load alert strategies
+    const rawAlerts = (uiSettings as any).alerts;
+    if (rawAlerts && typeof rawAlerts === 'object' && Array.isArray(rawAlerts.strategies)) {
+      settings.alerts.strategies = rawAlerts.strategies
+        .map((s: any) => ({
+          id: String(s.id ?? ''),
+          enabled: Boolean(s.enabled),
+          script: typeof s.script === 'string' ? s.script : undefined,
+        }))
+        .filter((s: AlertStrategyConfig) => s.id);
+    } else {
+      // Migrate from legacy breathingAlertEnabled
+      settings.alerts.strategies = [
+        { id: 'breathing', enabled: settings.breathingAlertEnabled },
+        { id: 'script-hook', enabled: false, script: '' },
+      ];
     }
 
     // Load keyboard shortcuts
@@ -279,9 +322,20 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // Breathing alert
+  function syncBreathingStrategyEnabled(): void {
+    const breathingStrategy = settings.alerts.strategies.find((s) => s.id === 'breathing');
+    if (breathingStrategy) {
+      breathingStrategy.enabled = settings.breathingAlertEnabled;
+    }
+    if (deps.paneAlertRegistry) {
+      deps.paneAlertRegistry.setEnabled('breathing', settings.breathingAlertEnabled);
+    }
+  }
+
   function toggleBreathingAlert(): void {
     breathingToggle.checked = !breathingToggle.checked;
     settings.breathingAlertEnabled = breathingToggle.checked;
+    syncBreathingStrategyEnabled();
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
     scheduleSettingsSave();
@@ -293,6 +347,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   breathingToggle.addEventListener('change', () => {
     settings.breathingAlertEnabled = breathingToggle.checked;
+    syncBreathingStrategyEnabled();
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
     scheduleSettingsSave();

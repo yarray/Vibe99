@@ -7,7 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { getDefaultFontFamily } from './settings';
 import type { Bridge } from './bridge';
 import type { Pane, PaneState } from './pane-state';
-import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
+import type { PaneAlertRegistry } from './pane-alert-registry';
 import type { SettingsManager } from './settings';
 import type { TabBar } from './tab-bar';
 
@@ -43,7 +43,7 @@ export interface PaneRendererDeps {
   bridge: Bridge;
   paneState: PaneState;
   settingsManager: SettingsManager;
-  paneAlert: PaneAlertStrategy;
+  paneAlert: PaneAlertRegistry;
   paneActivityWatcher: {
     noteResize: (paneId: string) => void;
     noteData: (paneId: string) => void;
@@ -244,7 +244,8 @@ export function createPaneRenderer({
     terminalHost.className = 'terminal-host';
     surface.append(terminalHost);
     body.append(surface);
-    paneAlert.attach();
+    paneEl.dataset.paneId = pane.id;
+    paneAlert.registerPane(pane.id, paneEl);
     shell.append(body);
     paneEl.append(shell);
 
@@ -433,6 +434,7 @@ export function createPaneRenderer({
     for (const [paneId, node] of paneNodeMap.entries()) {
       if (!activeIds.has(paneId)) {
         paneActivityWatcher.forget(paneId);
+        paneAlert.unregisterPane(paneId);
         bridge.destroyTerminal({ paneId });
         node.terminal.dispose();
         node.root.remove();
@@ -585,6 +587,7 @@ export function createPaneRenderer({
     const node = getNode(paneId);
     if (!node) return;
     paneActivityWatcher.forget(paneId);
+    paneAlert.unregisterPane(paneId);
     bridge.destroyTerminal({ paneId });
     node.terminal.dispose();
     node.root.remove();
