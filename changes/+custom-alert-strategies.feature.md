@@ -1,0 +1,1 @@
+Add extensible alert strategies with script-hook support. Settings config migrates from `breathingAlertEnabled` to `alerts.strategies`, and a new `execute_alert_script` backend command runs custom shell scripts with pane context.

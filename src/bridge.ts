@@ -192,6 +192,10 @@ export interface SettingsApi {
   save: (payload: SettingsData) => Promise<SettingsData>;
 }
 
+export interface AlertApi {
+  executeScript: (script: string, paneId: string, paneTitle: string) => Promise<void>;
+}
+
 export interface ShellApi {
   list: () => Promise<ShellProfilesListResult>;
   add: (profile: ShellProfileData) => Promise<void>;
@@ -239,6 +243,7 @@ export interface Bridge {
   terminal: TerminalApi;
   clipboard: ClipboardApi;
   settings: SettingsApi;
+  alert: AlertApi;
   shell: ShellApi;
   window: WindowApi;
   layouts: LayoutsApi;
@@ -264,6 +269,8 @@ export interface Bridge {
 
   loadSettings: SettingsApi['load'];
   saveSettings: SettingsApi['save'];
+
+  executeAlertScript: AlertApi['executeScript'];
 
   listShellProfiles: ShellApi['list'];
   addShellProfile: ShellApi['add'];
@@ -417,6 +424,7 @@ type FlatAliases = {
   getClipboardSnapshot: unknown;
   loadSettings: unknown;
   saveSettings: unknown;
+  executeAlertScript: unknown;
   listShellProfiles: unknown;
   addShellProfile: unknown;
   removeShellProfile: unknown;
@@ -470,6 +478,9 @@ function createUnavailableBridge(): Bridge {
       load: () => Promise.resolve({}),
       save: () => Promise.resolve({}),
     },
+    alert: {
+      executeScript: () => Promise.resolve(),
+    },
     shell: {
       list: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
       add: fail,
@@ -510,6 +521,7 @@ function createUnavailableBridge(): Bridge {
     getClipboardSnapshot: async () => ({ text: '', hasImage: false }),
     loadSettings: () => Promise.resolve({}),
     saveSettings: () => Promise.resolve({}),
+    executeAlertScript: () => Promise.resolve(),
     listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
     addShellProfile: fail,
     removeShellProfile: fail,
@@ -665,6 +677,10 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       load: () => invoke('settings_load'),
       save: (payload: SettingsData) => invoke('settings_save', { settings: payload }),
     },
+    alert: {
+      executeScript: (script: string, paneId: string, paneTitle: string) =>
+        invoke('execute_alert_script', { script, paneId, paneTitle }),
+    },
     shell: {
       list: () => invoke('shell_profiles_list'),
       add: (profile: ShellProfileData) => invoke('shell_profile_add', { profile }),
@@ -740,6 +756,7 @@ export function createBridge(
       getClipboardSnapshot: partial.clipboard.snapshot,
       loadSettings: partial.settings.load,
       saveSettings: partial.settings.save,
+      executeAlertScript: partial.alert.executeScript,
       listShellProfiles: partial.shell.list,
       addShellProfile: partial.shell.add,
       removeShellProfile: partial.shell.remove,

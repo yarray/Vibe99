@@ -44,6 +44,7 @@ fn main() {
             terminal::get_cwd,
             settings::settings_load,
             settings::settings_save,
+            settings::execute_alert_script,
             layout::layouts_list,
             layout::layout_save,
             layout::layout_delete,

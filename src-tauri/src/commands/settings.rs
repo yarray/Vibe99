@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-const CURRENT_CONFIG_VERSION: u8 = 6;
+const CURRENT_CONFIG_VERSION: u8 = 7;
 
 /// Global lock for all settings file operations.
 ///
@@ -406,10 +406,76 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
     result
 }
 
+fn default_alert_strategies() -> Vec<Value> {
+    vec![
+        serde_json::json!({ "id": "breathing", "enabled": true }),
+        serde_json::json!({ "id": "script-hook", "enabled": false, "script": "echo 'alert on pane {{paneId}}'" }),
+    ]
+}
+
+/// Sanitize the `alerts` block.
+///
+/// Migrates legacy `breathingAlertEnabled` from the `ui` block when the
+/// `alerts` section is absent.
+fn sanitize_alerts_config(alerts: Option<&Value>, ui: Option<&Value>) -> Value {
+    if let Some(alerts) = alerts.and_then(|v| v.as_object()) {
+        let strategies = alerts
+            .get("strategies")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|entry| {
+                        let obj = entry.as_object()?;
+                        let id = obj.get("id")?.as_str()?;
+                        let enabled = obj
+                            .get("enabled")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+
+                        let mut result = serde_json::json!({
+                            "id": id,
+                            "enabled": enabled,
+                        });
+
+                        if let Some(script) = obj.get("script").and_then(|v| v.as_str()) {
+                            result
+                                .as_object_mut()
+                                .unwrap()
+                                .insert("script".into(), Value::String(script.to_string()));
+                        }
+
+                        Some(result)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(default_alert_strategies);
+
+        serde_json::json!({ "strategies": strategies })
+    } else {
+        let breathing_enabled = ui
+            .and_then(|u| u.get("breathingAlertEnabled"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        let mut strategies = default_alert_strategies();
+        for strategy in &mut strategies {
+            if strategy.get("id").and_then(|v| v.as_str()) == Some("breathing") {
+                strategy
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("enabled".into(), Value::Bool(breathing_enabled));
+            }
+        }
+
+        serde_json::json!({ "strategies": strategies })
+    }
+}
+
 /// Sanitize an arbitrary config value into the current schema.
 ///
 /// Handles:
-/// - Current versioned format (`{ version: 6, ui: { ... }, shell: { ... } }`)
+/// - Current versioned format (`{ version: 7, ui: { ... }, shell: { ... }, alerts: { ... } }`)
+/// - Version 2–6 format → promoted to current (breathingAlertEnabled migrated to alerts)
 /// - Version 1 format (`{ version: 1, ui: { ... } }`) → promoted to current
 /// - Legacy flat format (`{ fontSize, paneOpacity, paneWidth }` without version/ui)
 /// - Null / invalid input → defaults
@@ -421,7 +487,6 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
 
     match version {
         Some(v) if v >= 2 => {
-            // Version 2+ format: sanitize ui, shell, layouts, and default layout.
             let obj = candidate.as_object().unwrap();
             let profiles =
                 sanitize_shell_profiles(obj.get("shell").and_then(|s| s.get("profiles")));
@@ -433,6 +498,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                 "version": CURRENT_CONFIG_VERSION,
                 "ui": sanitize_ui_config(obj.get("ui")),
                 "shell": sanitize_shell_config(obj.get("shell"), &profiles),
+                "alerts": sanitize_alerts_config(obj.get("alerts"), obj.get("ui")),
             });
 
             if !layouts.is_empty() {
@@ -450,7 +516,6 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
             result
         }
         Some(v) if v == 1 => {
-            // Version 1 → current migration: preserve ui, add empty shell block.
             let obj = candidate.as_object().unwrap();
             serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
@@ -459,11 +524,11 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "profiles": [],
                     "defaultProfile": "",
                 },
+                "alerts": sanitize_alerts_config(None, obj.get("ui")),
                 "defaultLayoutId": "",
             })
         }
         _ => {
-            // Check for legacy flat format (fields at top level, no version/ui nesting)
             if candidate.as_object().is_some_and(|obj| {
                 obj.keys()
                     .any(|k| ["fontSize", "paneOpacity", "paneWidth"].contains(&k.as_str()))
@@ -475,11 +540,11 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                         "profiles": [],
                         "defaultProfile": "",
                     },
+                    "alerts": sanitize_alerts_config(None, Some(candidate)),
                     "defaultLayoutId": "",
                 });
             }
 
-            // Null, non-object, or unrecognized format → defaults
             serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
                 "ui": {
@@ -492,6 +557,9 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                 "shell": {
                     "profiles": [],
                     "defaultProfile": "",
+                },
+                "alerts": {
+                    "strategies": default_alert_strategies(),
                 },
                 "defaultLayoutId": "",
             })
@@ -583,6 +651,17 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
         }
     }
 
+    // Preserve the existing `alerts` block from disk if the frontend does not send it.
+    if settings.get("alerts").is_none() && path.exists() {
+        let alerts = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .and_then(|v| v.get("alerts").cloned());
+        if let (Some(alerts), Some(obj)) = (alerts, settings.as_object_mut()) {
+            obj.insert("alerts".into(), alerts);
+        }
+    }
+
     let sanitized = sanitize_config(&settings);
     let serialized = serde_json::to_string_pretty(&sanitized)
         .map_err(|e| format!("failed to serialize settings: {e}"))?;
@@ -590,4 +669,39 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
     std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
 
     Ok(sanitized)
+}
+
+/// Execute an alert script in the background.
+///
+/// Spawns the given script string via the system shell and returns
+/// immediately. The script receives `VIBE99_PANE_ID` and
+/// `VIBE99_PANE_TITLE` as environment variables.
+#[tauri::command]
+pub fn execute_alert_script(script: String, pane_id: String, pane_title: String) {
+    let shell = if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "sh"
+    };
+    let flag = if cfg!(target_os = "windows") {
+        "/C"
+    } else {
+        "-c"
+    };
+
+    let result = std::process::Command::new(shell)
+        .arg(flag)
+        .arg(&script)
+        .env("VIBE99_PANE_ID", &pane_id)
+        .env("VIBE99_PANE_TITLE", &pane_title)
+        .spawn();
+
+    if let Err(e) = result {
+        tracing::warn!(
+            script = %script,
+            pane_id = %pane_id,
+            error = %e,
+            "failed to spawn alert script"
+        );
+    }
 }
