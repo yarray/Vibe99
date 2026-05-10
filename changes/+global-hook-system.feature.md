@@ -1,0 +1,1 @@
+Add global Hook system: configure command-line actions that fire on application events (alert.start, alert.stop). Hook configuration modal accessible from Settings panel, with CRUD operations and enable/disable toggle per hook. Hooks are persisted in settings.json alongside existing configuration.
