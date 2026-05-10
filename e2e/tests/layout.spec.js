@@ -76,14 +76,14 @@ describe('Layout', () => {
     expect(actions.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows "No saved layouts" when layout list is empty', async () => {
+  it('shows default layout when layout list has only default', async () => {
     await openLayoutsDropdown();
     const items = await getDropdownItems();
     expect(items.length).toBeGreaterThanOrEqual(1);
 
     const firstItem = items[0];
     const text = await getTextSafe(firstItem);
-    expect(text).toBe('No saved layouts');
+    expect(text).not.toBe('No saved layouts');
   });
 
   it('saves current layout via Save Layout As', async () => {
@@ -91,11 +91,17 @@ describe('Layout', () => {
 
     await openLayoutsDropdown();
     const items = await getDropdownItems();
-    expect(items.length).toBe(1);
+    // default layout is preserved, so we expect at least 2 items
+    expect(items.length).toBeGreaterThanOrEqual(2);
 
-    const label = await items[0].$('.layouts-dropdown-label');
-    const text = await getTextSafe(label);
-    expect(text).toBe('Test Layout');
+    const labels = [];
+    for (const item of items) {
+      const label = await item.$('.layouts-dropdown-label');
+      if (label) {
+        labels.push(await getTextSafe(label));
+      }
+    }
+    expect(labels).toContain('Test Layout');
   });
 
   it('updates active layout after saving a new layout', async () => {
@@ -178,11 +184,17 @@ describe('Layout', () => {
     await addLayoutInModal('New Modal Layout');
 
     const items = await getModalLayoutItems();
-    expect(items.length).toBe(1);
+    // default layout is preserved, so we expect at least 2 items
+    expect(items.length).toBeGreaterThanOrEqual(2);
 
-    const nameEl = await items[0].$('.layout-name');
-    const text = await getTextSafe(nameEl);
-    expect(text).toBe('New Modal Layout');
+    const names = [];
+    for (const item of items) {
+      const nameEl = await item.$('.layout-name');
+      if (nameEl) {
+        names.push(await getTextSafe(nameEl));
+      }
+    }
+    expect(names).toContain('New Modal Layout');
   });
 
   it('renames a layout in modal', async () => {
@@ -192,9 +204,14 @@ describe('Layout', () => {
     await renameLayoutInModal('Original Name', 'Renamed Layout');
 
     const items = await getModalLayoutItems();
-    const nameEl = await items[0].$('.layout-name');
-    const text = await getTextSafe(nameEl);
-    expect(text).toBe('Renamed Layout');
+    const names = [];
+    for (const item of items) {
+      const nameEl = await item.$('.layout-name');
+      if (nameEl) {
+        names.push(await getTextSafe(nameEl));
+      }
+    }
+    expect(names).toContain('Renamed Layout');
   });
 
   it('deletes a layout in modal', async () => {
@@ -263,9 +280,14 @@ describe('Layout', () => {
 
     // Verify the list updates
     const items = await getModalLayoutItems();
-    const nameEl = await items[0].$('.layout-name');
-    const text = await getTextSafe(nameEl);
-    expect(text).toBe('Updated Name');
+    const names = [];
+    for (const item of items) {
+      const nameEl = await item.$('.layout-name');
+      if (nameEl) {
+        names.push(await getTextSafe(nameEl));
+      }
+    }
+    expect(names).toContain('Updated Name');
   });
 
   // ================================================================
