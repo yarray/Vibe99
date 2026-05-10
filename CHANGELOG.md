@@ -10,6 +10,8 @@
 
 - **E2E settings.spec.js (VIB-225):** Removed TypeScript type assertions (`as HTMLElement`, `as {...}`) from `e2e/tests/settings.spec.js` browser.execute() callbacks — these are plain `.js` files with no TypeScript transpilation in the WebdriverIO test runner.
 
+- **Context menu Activity toggle (VIB-143):** Fixed "Background activity alert" context menu item displaying raw SVG text instead of a visual indicator. Replaced broken `icon('check', 12)` approach with `toggleActive` property that renders a yellow dot (using `--status-highlight`) consistent with the settings menu style (VIB-127). Added `MenuEntryItem.toggleActive` interface property and `.context-menu-toggle-dot` CSS class.
+
 ### Changed
 
 - **Docker e2e workflow (VIB-198):** Updated `e2e/README.md` to document the correct workflow — use `git fetch` inside the container for incremental builds (not volume mounts, which bypass the pre-compiled Cargo cache). Added e2e testing reference in main `README.md`.
