@@ -192,6 +192,10 @@ export interface SettingsApi {
   save: (payload: SettingsData) => Promise<SettingsData>;
 }
 
+export interface AlertApi {
+  executeScript: (script: string, paneId: string, paneTitle: string) => Promise<void>;
+}
+
 export interface ShellApi {
   list: () => Promise<ShellProfilesListResult>;
   add: (profile: ShellProfileData) => Promise<void>;
@@ -242,6 +246,7 @@ export interface Bridge {
   shell: ShellApi;
   window: WindowApi;
   layouts: LayoutsApi;
+  alert: AlertApi;
 
   // Event listeners
   onMenuAction: (handler: (event: MenuActionEvent) => void) => UnsubscribeFn;
@@ -285,6 +290,8 @@ export interface Bridge {
   isWindowFullscreen: LayoutsApi['isFullscreen'];
   setWindowFullscreen: LayoutsApi['setFullscreen'];
   setLayoutAsDefault: LayoutsApi['setAsDefault'];
+
+  executeAlertScript: AlertApi['executeScript'];
 }
 
 // ============================================================================
@@ -435,6 +442,7 @@ type FlatAliases = {
   isWindowFullscreen: unknown;
   setWindowFullscreen: unknown;
   setLayoutAsDefault: unknown;
+  executeAlertScript: unknown;
 };
 
 // ============================================================================
@@ -494,6 +502,9 @@ function createUnavailableBridge(): Bridge {
       setFullscreen: undefined,
       setAsDefault: fail,
     },
+    alert: {
+      executeScript: () => Promise.resolve(),
+    },
     onMenuAction: () => () => {},
     onLayoutFocusNotice: undefined,
     cwdReady: Promise.resolve(),
@@ -528,6 +539,7 @@ function createUnavailableBridge(): Bridge {
     isWindowFullscreen: undefined,
     setWindowFullscreen: undefined,
     setLayoutAsDefault: fail,
+    executeAlertScript: () => Promise.resolve(),
   };
 }
 
@@ -689,6 +701,10 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       setFullscreen: (fullscreen: boolean) => getCurrentWindow().setFullscreen(fullscreen),
       setAsDefault: (layoutId: string) => invoke('layout_set_default', { layoutId }),
     },
+    alert: {
+      executeScript: (script: string, paneId: string, paneTitle: string) =>
+        invoke('execute_alert_script', { script, paneId, paneTitle }),
+    },
     onMenuAction: (handler: (event: MenuActionEvent) => void) =>
       onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler),
     onLayoutFocusNotice: (handler: () => void) =>
@@ -758,6 +774,7 @@ export function createBridge(
       isWindowFullscreen: partial.layouts.isFullscreen,
       setWindowFullscreen: partial.layouts.setFullscreen,
       setLayoutAsDefault: partial.layouts.setAsDefault,
+      executeAlertScript: partial.alert.executeScript,
     };
   } else if (tauriOrFallback && typeof tauriOrFallback === 'object') {
     // Assume it's a pre-configured fallback bridge (e.g., from window.vibe99)

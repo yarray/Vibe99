@@ -165,7 +165,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   function buildSettingsPayloadForCurrentWindow(): PersistedSettings {
     return {
-      version: 6,
+      version: 7,
       ui: {
         ...settings,
         shortcuts: ShortcutsRegistry.getShortcutsForSave(),

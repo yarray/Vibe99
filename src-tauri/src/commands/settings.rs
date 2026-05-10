@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-const CURRENT_CONFIG_VERSION: u8 = 6;
+const CURRENT_CONFIG_VERSION: u8 = 7;
 
 /// Global lock for all settings file operations.
 ///
@@ -18,6 +18,116 @@ pub struct SettingsState {
 const DEFAULT_FONT_SIZE: u32 = 13;
 const DEFAULT_PANE_OPACITY: f64 = 0.8;
 const DEFAULT_PANE_WIDTH: u32 = 720;
+
+// ----------------------------------------------------------------
+// Alert strategy types
+// ----------------------------------------------------------------
+
+/// A single alert strategy configuration.
+///
+/// Each strategy has a unique `id` (e.g. "breathing", "script-hook"),
+/// an `enabled` flag, and an optional `script` field for script-hook type.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertStrategy {
+    /// Unique identifier: "breathing" or "script-hook".
+    pub id: String,
+    /// Whether this strategy is active.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Script content (only meaningful for "script-hook" strategy).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+}
+
+/// Sanitize the `alerts` config section.
+///
+/// Ensures "breathing" and "script-hook" entries always exist.
+/// Unknown strategy ids are preserved as-is.
+fn sanitize_alerts_config(alerts: Option<&Value>, ui: Option<&Value>) -> Value {
+    let existing = alerts.and_then(|v| v.as_object());
+
+    // When migrating from version < 7, extract breathingAlertEnabled from ui.
+    let breathing_enabled_from_ui = ui
+        .and_then(|u| u.get("breathingAlertEnabled"))
+        .and_then(|v| v.as_bool());
+
+    let strategies_arr = existing
+        .and_then(|o| o.get("strategies"))
+        .and_then(|v| v.as_array());
+
+    let mut strategies: Vec<Value> = Vec::new();
+    let mut has_breathing = false;
+    let mut has_script_hook = false;
+
+    if let Some(arr) = strategies_arr {
+        for item in arr {
+            let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            match id {
+                "breathing" => {
+                    has_breathing = true;
+                    let enabled = item
+                        .get("enabled")
+                        .and_then(|v| v.as_bool())
+                        .or(breathing_enabled_from_ui)
+                        .unwrap_or(true);
+                    strategies.push(serde_json::json!({
+                        "id": "breathing",
+                        "enabled": enabled,
+                    }));
+                }
+                "script-hook" => {
+                    has_script_hook = true;
+                    let enabled = item
+                        .get("enabled")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let script = item
+                        .get("script")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
+                    let mut obj = serde_json::json!({
+                        "id": "script-hook",
+                        "enabled": enabled,
+                    });
+                    if let Some(script) = script {
+                        obj.as_object_mut()
+                            .unwrap()
+                            .insert("script".into(), Value::String(script));
+                    }
+                    strategies.push(obj);
+                }
+                    _ => {
+                        strategies.push(item.clone());
+                    }
+            }
+        }
+    }
+
+    // Ensure breathing strategy exists
+    if !has_breathing {
+        let enabled = breathing_enabled_from_ui.unwrap_or(true);
+        strategies.insert(
+            0,
+            serde_json::json!({
+                "id": "breathing",
+                "enabled": enabled,
+            }),
+        );
+    }
+
+    // Ensure script-hook strategy exists
+    if !has_script_hook {
+        strategies.push(serde_json::json!({
+            "id": "script-hook",
+            "enabled": false,
+        }));
+    }
+
+    serde_json::json!({
+        "strategies": strategies,
+    })
+}
 
 // ----------------------------------------------------------------
 // Shell profile types
@@ -395,7 +505,6 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
             .insert("fontFamily".into(), Value::String(font_family.to_string()));
     }
 
-    // Preserve keyboard shortcuts if present
     if let Some(shortcuts) = ui.get("shortcuts").and_then(|v| v.as_object()) {
         result
             .as_object_mut()
@@ -421,7 +530,6 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
 
     match version {
         Some(v) if v >= 2 => {
-            // Version 2+ format: sanitize ui, shell, layouts, and default layout.
             let obj = candidate.as_object().unwrap();
             let profiles =
                 sanitize_shell_profiles(obj.get("shell").and_then(|s| s.get("profiles")));
@@ -429,10 +537,14 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
             let default_layout_id =
                 sanitize_default_layout_id(obj.get("defaultLayoutId"), &layouts);
 
+            let ui = sanitize_ui_config(obj.get("ui"));
+            let alerts = sanitize_alerts_config(obj.get("alerts"), obj.get("ui"));
+
             let mut result = serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
-                "ui": sanitize_ui_config(obj.get("ui")),
+                "ui": ui,
                 "shell": sanitize_shell_config(obj.get("shell"), &profiles),
+                "alerts": alerts,
             });
 
             if !layouts.is_empty() {
@@ -450,36 +562,39 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
             result
         }
         Some(v) if v == 1 => {
-            // Version 1 → current migration: preserve ui, add empty shell block.
             let obj = candidate.as_object().unwrap();
+            let ui = sanitize_ui_config(obj.get("ui"));
+            let alerts = sanitize_alerts_config(None, obj.get("ui"));
             serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
-                "ui": sanitize_ui_config(obj.get("ui")),
+                "ui": ui,
                 "shell": {
                     "profiles": [],
                     "defaultProfile": "",
                 },
+                "alerts": alerts,
                 "defaultLayoutId": "",
             })
         }
         _ => {
-            // Check for legacy flat format (fields at top level, no version/ui nesting)
             if candidate.as_object().is_some_and(|obj| {
                 obj.keys()
                     .any(|k| ["fontSize", "paneOpacity", "paneWidth"].contains(&k.as_str()))
             }) {
+                let ui = sanitize_ui_config(Some(candidate));
+                let alerts = sanitize_alerts_config(None, Some(candidate));
                 return serde_json::json!({
                     "version": CURRENT_CONFIG_VERSION,
-                    "ui": sanitize_ui_config(Some(candidate)),
+                    "ui": ui,
                     "shell": {
                         "profiles": [],
                         "defaultProfile": "",
                     },
+                    "alerts": alerts,
                     "defaultLayoutId": "",
                 });
             }
 
-            // Null, non-object, or unrecognized format → defaults
             serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
                 "ui": {
@@ -492,6 +607,12 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                 "shell": {
                     "profiles": [],
                     "defaultProfile": "",
+                },
+                "alerts": {
+                    "strategies": [
+                        { "id": "breathing", "enabled": true },
+                        { "id": "script-hook", "enabled": false },
+                    ],
                 },
                 "defaultLayoutId": "",
             })
@@ -583,6 +704,17 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
         }
     }
 
+    // Preserve the existing `alerts` block from disk if the frontend does not send it.
+    if settings.get("alerts").is_none() && path.exists() {
+        let alerts = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .and_then(|v| v.get("alerts").cloned());
+        if let (Some(alerts), Some(obj)) = (alerts, settings.as_object_mut()) {
+            obj.insert("alerts".into(), alerts);
+        }
+    }
+
     let sanitized = sanitize_config(&settings);
     let serialized = serde_json::to_string_pretty(&sanitized)
         .map_err(|e| format!("failed to serialize settings: {e}"))?;
@@ -590,4 +722,35 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
     std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
 
     Ok(sanitized)
+}
+
+/// Execute a script for the script-hook alert strategy.
+///
+/// Spawns the script in the background (non-blocking) with context
+/// available as environment variables:
+/// - `VIBE99_PANE_ID` — the pane that triggered the alert
+/// - `VIBE99_PANE_TITLE` — the pane title
+#[tauri::command]
+pub fn execute_alert_script(script: String, pane_id: String, pane_title: String) {
+    if script.trim().is_empty() {
+        return;
+    }
+
+    let script = script.trim().to_string();
+
+    std::thread::spawn(move || {
+        let result = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&script)
+            .env("VIBE99_PANE_ID", &pane_id)
+            .env("VIBE99_PANE_TITLE", &pane_title)
+            .spawn();
+
+        match result {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("alert script spawn failed: {e}");
+            }
+        }
+    });
 }
