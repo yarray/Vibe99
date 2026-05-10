@@ -39,6 +39,7 @@ export interface ActionsDeps {
   startInlineRename: (paneId: string) => void;
   openKeymapHelpModal: () => void;
   openLayoutsModal: () => void;
+  toggleFloatWindow: () => void;
 }
 
 export interface ActionsTable {
@@ -54,6 +55,7 @@ export interface ActionsTable {
   pasteIntoTerminal: () => void;
   toggleCommandPalette: () => void;
   toggleCommandList: () => void;
+  toggleFloatWindow: () => void;
   focusPrev: () => void;
   focusNext: () => void;
   commitFocus: () => void;
@@ -123,5 +125,8 @@ export function createActions(deps: ActionsDeps): ActionsTable {
 
     // Layouts
     openLayouts: () => deps.openLayoutsModal(),
+
+    // Float window
+    toggleFloatWindow: () => deps.toggleFloatWindow(),
   };
 }

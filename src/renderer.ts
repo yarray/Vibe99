@@ -8,6 +8,8 @@ import {
   createBridge,
   clearLayoutWindowBinding,
 } from './bridge';
+import { createFloatWindowManager } from './float-window';
+import type { FloatPaneSnapshot } from './float-window';
 import { createPaneRenderer, getTextColorForBackground } from './pane-renderer';
 import type { PaneRenderer } from './pane-renderer';
 import { createShellProfileManager } from './shell-profiles';
@@ -57,6 +59,7 @@ let enterNavSourcePaneId: string | null = null;
 let layoutRestoreComplete = false;
 let layoutFocusNotice: { layoutId: string } | null = null;
 let layoutFocusNoticeTimer: number | null = null;
+let alertedPaneIds = new Set<string>();
 
 
 // Shell-profile state (shared with shell-profiles module via adapter)
@@ -119,8 +122,16 @@ const layoutModal = createLayoutModal({
 
 const paneAlert = createBreathingMaskAlert();
 const paneActivityWatcher = createPaneActivityWatcher({
-  onAlert: (paneId) => paneRenderer?.setAlerted(paneId, true),
-  onClear: (paneId) => paneRenderer?.setAlerted(paneId, false),
+  onAlert: (paneId) => {
+    paneRenderer?.setAlerted(paneId, true);
+    alertedPaneIds.add(paneId);
+    syncFloatWindow();
+  },
+  onClear: (paneId) => {
+    paneRenderer?.setAlerted(paneId, false);
+    alertedPaneIds.delete(paneId);
+    syncFloatWindow();
+  },
 });
 
 const settingsManager = createSettingsManager({
@@ -267,6 +278,15 @@ paneOps = createPaneOperations({
   state: tabBarState,
 });
 
+const floatWindowManager = createFloatWindowManager({
+  tauri: (window as any).__TAURI__,
+  currentWindowLabel: bridge.currentWindowLabel,
+  onFocusPane: (paneId) => {
+    void bridge.focusWindow();
+    paneOps?.focusPane(paneId, { focusTerminal: true });
+  },
+});
+
 const commandPaletteEntries = createCommandPaletteEntries({
   paneState,
   paneRenderer,
@@ -288,6 +308,7 @@ const commandPaletteEntries = createCommandPaletteEntries({
   statusHintEl,
   getCurrentMode: () => currentMode,
   setMode,
+  toggleFloatWindow: () => { void floatWindowManager.toggle(); },
 });
 
 const fullscreenManager = createFullscreenManager({
@@ -349,10 +370,24 @@ function cancelNavigationMode(): void {
 }
 
 // ---------------------------------------------------------------------------
+function syncFloatWindow(): void {
+  if (!floatWindowManager.isOpen()) return;
+  const panes = paneState.getPanes();
+  const focusedPaneId = paneState.getFocusedPaneId();
+  const snapshot: FloatPaneSnapshot[] = panes.map((pane) => ({
+    id: pane.id,
+    accent: pane.customColor || pane.accent,
+    alerted: alertedPaneIds.has(pane.id),
+    focused: pane.id === focusedPaneId,
+  }));
+  floatWindowManager.syncPanes(snapshot);
+}
+
 function render(refit = false): void {
   tabBar.renderTabs();
   paneRenderer?.renderPanes(refit);
   updateStatus();
+  syncFloatWindow();
   if (layoutRestoreComplete) {
     layoutManager.scheduleWindowLayoutSave();
   }
@@ -441,6 +476,7 @@ const keyboardActions = createActions({
   startInlineRename: (...args) => paneOps?.startInlineRename(...args),
   openKeymapHelpModal,
   openLayoutsModal: () => layoutModal.openLayoutsModal(),
+  toggleFloatWindow: () => { void floatWindowManager.toggle(); },
 });
 
 const dispatchKeydown = createDispatcher({

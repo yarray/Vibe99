@@ -60,6 +60,7 @@ export const KEYMAP: KeymapEntry[] = [
   { id: 'new-tab',         mode: '*',   chord: 'Ctrl+N',          action: 'newPane',               hint: 'new pane' },
   { id: 'new-tab-profile', mode: '*',   chord: 'Ctrl+Shift+N',    action: 'newPaneWithProfile',    hint: 'new pane with profile', stopPropagation: true },
   { id: 'layout-dropdown', mode: '*',   chord: 'Ctrl+Shift+L',    action: 'openLayouts',           hint: 'layouts',          stopPropagation: true },
+  { id: 'float-window',    mode: '*',   chord: 'Ctrl+Shift+M',    action: 'toggleFloatWindow',     hint: 'float window',     stopPropagation: true },
   { id: 'navigate-left',   mode: '*',   chord: 'Ctrl+ArrowLeft',  action: 'navigateLeft',          hint: '← pane' },
   { id: 'navigate-right',  mode: '*',   chord: 'Ctrl+ArrowRight', action: 'navigateRight',         hint: '→ pane' },
   { id: 'copy',            mode: '*',   chord: 'Ctrl+Shift+C',    action: 'copyTerminalSelection', hint: 'copy',             skipInInput: true },
