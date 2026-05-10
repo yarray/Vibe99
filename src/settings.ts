@@ -12,6 +12,7 @@ export interface AppSettings {
   paneMaskOpacity: number;
   paneWidth: number;
   breathingAlertEnabled: boolean;
+  activityAlertDebounceMs: number;
 }
 
 export interface SettingsManagerDeps {
@@ -20,6 +21,7 @@ export interface SettingsManagerDeps {
   applyCallback: () => void;
   paneActivityWatcher: {
     setGlobalEnabled: (enabled: boolean) => void;
+    setSettleMs: (ms: number) => void;
   };
 }
 
@@ -81,6 +83,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const breathingToggle = document.getElementById('breathing-alert-toggle') as HTMLInputElement;
   const breathingDot = document.getElementById('breathing-alert-dot') as HTMLElement;
   const breathingRow = document.getElementById('breathing-alert-row') as HTMLElement;
+  const debounceSelect = document.getElementById('activity-alert-debounce-select') as HTMLSelectElement;
+  const debounceInput = document.getElementById('activity-alert-debounce-input') as HTMLInputElement;
 
   const settings: AppSettings = {
     fontSize: 13,
@@ -89,6 +93,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneMaskOpacity: 0.75,
     paneWidth: 720,
     breathingAlertEnabled: true,
+    activityAlertDebounceMs: 30000,
   };
 
   let pendingSettingsSave: number | null = null;
@@ -108,6 +113,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     breathingToggle.checked = settings.breathingAlertEnabled;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    // Apply debounce setting
+    debounceSelect.value = String(settings.activityAlertDebounceMs);
+    debounceInput.value = String(settings.activityAlertDebounceMs / 1000);
+    paneActivityWatcher.setSettleMs(settings.activityAlertDebounceMs);
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -153,6 +162,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
     if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
       settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
+    }
+
+    if (Number.isFinite(uiSettings.activityAlertDebounceMs)) {
+      settings.activityAlertDebounceMs = Math.max(10000, Math.min(300000, uiSettings.activityAlertDebounceMs!));
     }
 
     // Load keyboard shortcuts
@@ -296,6 +309,31 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
     scheduleSettingsSave();
+  });
+
+  // Activity alert debounce time
+  function updateDebounceMs(ms: number): void {
+    settings.activityAlertDebounceMs = Math.max(10000, Math.min(300000, ms));
+    applySettings();
+    scheduleSettingsSave();
+  }
+
+  debounceSelect.addEventListener('change', () => {
+    const ms = Number(debounceSelect.value);
+    if (!Number.isFinite(ms)) {
+      applySettings();
+      return;
+    }
+    updateDebounceMs(ms);
+  });
+
+  debounceInput.addEventListener('change', () => {
+    const seconds = Number(debounceInput.value);
+    if (!Number.isFinite(seconds)) {
+      applySettings();
+      return;
+    }
+    updateDebounceMs(seconds * 1000);
   });
 
   return {

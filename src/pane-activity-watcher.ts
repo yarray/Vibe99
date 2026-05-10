@@ -28,7 +28,7 @@
 // *ever* focused a pane is ignored, so newly-spawned panes don't pulse
 // from their own startup banner.
 
-const DEFAULT_SETTLE_MS = 1500;
+const DEFAULT_SETTLE_MS = 30000;
 // After a resize, ignore incoming chunks until the pane has been silent
 // for this long. Each chunk that arrives during the window is treated as
 // SIGWINCH redraw residue and extends the window — i.e. we wait for the
@@ -98,10 +98,15 @@ export interface PaneActivityWatcher {
    * preserved so re-enabling globally restores their previous behavior.
    */
   setGlobalEnabled: (enabled: boolean) => void;
+  /**
+   * Update the debounce time (quiet period before alerting in milliseconds).
+   * Restarting all pending timers with the new value.
+   */
+  setSettleMs: (ms: number) => void;
 }
 
 export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = {}): PaneActivityWatcher {
-  const settleMs: number = options.settleMs ?? DEFAULT_SETTLE_MS;
+  let settleMs: number = options.settleMs ?? DEFAULT_SETTLE_MS;
   const resizeSettleMs: number = options.resizeSettleMs ?? DEFAULT_RESIZE_SETTLE_MS;
   const onAlert = options.onAlert;
   const onClear = options.onClear;
@@ -227,6 +232,25 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
       globalEnabled = next;
       if (!next) {
         for (const [paneId, s] of states) clearState(paneId, s);
+      }
+    },
+
+    setSettleMs(ms: number): void {
+      const nextMs = Math.max(100, Math.min(300000, ms));
+      if (settleMs === nextMs) return;
+      settleMs = nextMs;
+      // Restart all pending timers with the new settle time
+      for (const [paneId, s] of states) {
+        if (s.timer !== null && !s.alerted) {
+          clearTimeout(s.timer);
+          s.timer = setTimeout(() => {
+            s.timer = null;
+            if (paneId === focusedPaneId) return;
+            if (!isActive(paneId, s)) return;
+            s.alerted = true;
+            onAlert?.(paneId);
+          }, settleMs);
+        }
       }
     },
   };
