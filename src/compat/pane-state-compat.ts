@@ -328,6 +328,8 @@ export function createPaneStateCompat(deps: PaneStateCompatDeps): PaneState {
     const idx = getPaneIndex(paneId);
     if (idx === -1) return false;
     panes[idx] = { ...panes[idx], customColor: undefined };
+    const handle = paneManager.get(paneId);
+    handle?.setState({ customColor: undefined });
     notify();
     return true;
   }
@@ -414,6 +416,8 @@ export function createPaneStateCompat(deps: PaneStateCompatDeps): PaneState {
       });
       paneManager.setActive(panes[0].id);
       nextPaneNumber = panes.length + 1;
+      // Initialize MRU order with all panes
+      panes.forEach((p) => focusController.recordPaneVisit(p.id));
       notify();
       return false;
     }
@@ -426,8 +430,14 @@ export function createPaneStateCompat(deps: PaneStateCompatDeps): PaneState {
       Number.isFinite(session.focusedPaneIndex) ? session.focusedPaneIndex! : 0,
       panes.length - 1,
     );
-    paneManager.setActive(panes[Math.max(0, focusedIndex)].id);
+    const focusedPaneId = panes[Math.max(0, focusedIndex)].id;
+    paneManager.setActive(focusedPaneId);
     nextPaneNumber = panes.length + 1;
+    // Initial MRU order: focused pane first, then remaining panes in tab order
+    focusController.recordPaneVisit(focusedPaneId);
+    panes.forEach((p) => {
+      if (p.id !== focusedPaneId) focusController.recordPaneVisit(p.id);
+    });
     notify();
     return true;
   }
