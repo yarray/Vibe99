@@ -1,0 +1,1 @@
+Ensure the default layout is recreated when `saveLayoutAs` is called and no default layout exists. This fixes the e2e test `opens default layout in new window after Save Layout As` which expects the "default" entry to remain available after clearing and re-saving layouts.

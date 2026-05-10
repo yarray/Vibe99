@@ -161,6 +161,19 @@ export function createLayoutManager({
     const config = await bridge.saveLayout(layout);
     layouts = config.layouts ?? [];
     defaultLayoutId = config.defaultLayoutId ?? '';
+
+    // Ensure a default layout always exists. After clearing all layouts
+    // (e.g. in e2e tests), saving a new layout should also restore the
+    // default so the dropdown still offers a 'Default' option (VIB-224).
+    if (!layouts.find((l) => l.id === 'default')) {
+      const defaultLayout = createDefaultLayout();
+      const saved = await bridge.saveLayout(defaultLayout);
+      layouts = saved.layouts ?? layouts;
+      if (!defaultLayoutId) {
+        defaultLayoutId = saved.defaultLayoutId ?? 'default';
+      }
+    }
+
     setWindowLayoutId(layout.id);
     updateLayoutsIndicator();
   }
