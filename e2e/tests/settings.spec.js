@@ -61,15 +61,11 @@ describe('Settings Panel', () => {
       await browser.pause(300);
 
       // Font settings are applied to the xterm terminal via pane-renderer, not via CSS vars
-      const terminalHost = await browser.execute(() => {
+      const fontSize = await browser.execute(() => {
         const el = document.querySelector('.terminal-host');
-        return el ? (el as HTMLElement & { _xterm?: unknown })._xterm : null;
+        const term = el ? (el)._xterm : null;
+        return term ? (term).options.fontSize : null;
       });
-      expect(terminalHost).not.toBeNull();
-
-      const fontSize = await browser.execute((term) => {
-        return (term as { options: { fontSize: number } }).options.fontSize;
-      }, terminalHost);
       expect(fontSize).toBe(16);
     });
 
@@ -94,15 +90,11 @@ describe('Settings Panel', () => {
       await browser.pause(300);
 
       // Font settings are applied to the xterm terminal via pane-renderer, not via CSS vars
-      const terminalHost = await browser.execute(() => {
+      const fontFamily = await browser.execute(() => {
         const el = document.querySelector('.terminal-host');
-        return el ? (el as HTMLElement & { _xterm?: unknown })._xterm : null;
+        const term = el ? (el)._xterm : null;
+        return term ? (term).options.fontFamily : null;
       });
-      expect(terminalHost).not.toBeNull();
-
-      const fontFamily = await browser.execute((term) => {
-        return (term as { options: { fontFamily: string } }).options.fontFamily;
-      }, terminalHost);
       expect(fontFamily).toContain('monospace');
     });
   });
