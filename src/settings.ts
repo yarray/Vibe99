@@ -5,6 +5,11 @@ import type { Bridge } from './bridge';
 // Exported types
 // ---------------------------------------------------------------------------
 
+export interface AlertStrategyConfig {
+  id: string;
+  enabled: boolean;
+}
+
 export interface AppSettings {
   fontSize: number;
   fontFamily: string;
@@ -12,6 +17,7 @@ export interface AppSettings {
   paneMaskOpacity: number;
   paneWidth: number;
   breathingAlertEnabled: boolean;
+  alertStrategies?: AlertStrategyConfig[];
 }
 
 export interface SettingsManagerDeps {
@@ -153,6 +159,13 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
     if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
       settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
+    }
+
+    if (Array.isArray(uiSettings.alertStrategies)) {
+      settings.alertStrategies = uiSettings.alertStrategies
+        .filter((s): s is AlertStrategyConfig =>
+          s && typeof s === 'object' && typeof s.id === 'string' && typeof s.enabled === 'boolean'
+        );
     }
 
     // Load keyboard shortcuts

@@ -4,6 +4,8 @@ import {
 } from './command-palette';
 import { createPaneActivityWatcher } from './pane-activity-watcher';
 import { createBreathingMaskAlert } from './pane-alert-breathing-mask';
+import { createPaneAlertRegistry } from './pane-alert-registry';
+import { createScriptHookAlert } from './pane-alert-script-hook';
 import {
   createBridge,
   clearLayoutWindowBinding,
@@ -117,7 +119,16 @@ const layoutModal = createLayoutModal({
   layoutManager,
 });
 
-const paneAlert = createBreathingMaskAlert();
+const paneAlertRegistry = createPaneAlertRegistry();
+
+function syncAlertStrategies(): void {
+  const configs = settingsManager?.settings.alertStrategies;
+  if (!configs) return;
+  for (const cfg of configs) {
+    paneAlertRegistry.setEnabled(cfg.id, cfg.enabled);
+  }
+}
+
 const paneActivityWatcher = createPaneActivityWatcher({
   onAlert: (paneId) => paneRenderer?.setAlerted(paneId, true),
   onClear: (paneId) => paneRenderer?.setAlerted(paneId, false),
@@ -126,7 +137,10 @@ const paneActivityWatcher = createPaneActivityWatcher({
 const settingsManager = createSettingsManager({
   bridge,
   reportError,
-  applyCallback: () => render(true),
+  applyCallback: () => {
+    syncAlertStrategies();
+    render(true);
+  },
   paneActivityWatcher,
 });
 
@@ -156,11 +170,20 @@ const tabBar = createTabBar({
   setIcon,
 });
 
+paneAlertRegistry.register(createBreathingMaskAlert());
+paneAlertRegistry.register(createScriptHookAlert({
+  bridge,
+  getPaneTitle: (paneId) => {
+    const pane = paneState.getPaneById(paneId);
+    return pane ? (pane.title ?? pane.terminalTitle ?? paneId) : paneId;
+  },
+}));
+
 paneRenderer = createPaneRenderer({
   bridge,
   paneState,
   settingsManager,
-  paneAlert,
+  paneAlertRegistry,
   paneActivityWatcher,
   reportError,
   stageEl,
@@ -547,6 +570,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const savedSettings = await bridge.loadSettings();
     settingsManager.applyPersistedSettings(savedSettings);
     settingsManager.applySettings();
+    syncAlertStrategies();
     shellProfileManager?.loadShellProfiles();
 
     await layoutManager.refreshLayouts();

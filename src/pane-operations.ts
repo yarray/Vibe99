@@ -179,7 +179,7 @@ export function createPaneOperations({
     const currentPanes = paneState.getPanes();
     const litIds = currentPanes
       .map((p) => p.id)
-      .filter((id) => paneRenderer?.getNode(id)?.root.classList.contains('has-pending-activity'));
+      .filter((id) => paneRenderer?.isAlerted(id));
     if (litIds.length === 0) return;
     const focusedId = paneState.getFocusedPaneId();
     const focusedIndex = focusedId !== null ? litIds.indexOf(focusedId) : -1;

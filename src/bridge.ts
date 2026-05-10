@@ -207,6 +207,11 @@ export interface WindowApi {
   showMenu: () => void;
 }
 
+export interface AlertScriptPayload {
+  paneId: string;
+  paneTitle: string;
+}
+
 export interface LayoutsApi {
   list: () => Promise<LayoutsListResult>;
   save: (layout: LayoutData) => Promise<LayoutSaveResult>;
@@ -246,6 +251,9 @@ export interface Bridge {
   // Event listeners
   onMenuAction: (handler: (event: MenuActionEvent) => void) => UnsubscribeFn;
   onLayoutFocusNotice: ((handler: () => void) => UnsubscribeFn) | undefined;
+
+  // Alert script hook (optional — backend may not yet implement it)
+  executeAlertScript?: (payload: AlertScriptPayload) => Promise<void>;
 
   // Lifecycle
   cwdReady: Promise<void>;
@@ -496,6 +504,7 @@ function createUnavailableBridge(): Bridge {
     },
     onMenuAction: () => () => {},
     onLayoutFocusNotice: undefined,
+    executeAlertScript: undefined,
     cwdReady: Promise.resolve(),
 
     // Flat aliases (all point to the same grouped methods)
@@ -693,6 +702,8 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler),
     onLayoutFocusNotice: (handler: () => void) =>
       onTauriEvent<void>(LAYOUT_FOCUS_NOTICE_EVENT, handler),
+    executeAlertScript: (payload: AlertScriptPayload) =>
+      invoke('execute_alert_script', payload as unknown as Record<string, unknown>),
     cwdReady: _cwdReady,
   };
 }

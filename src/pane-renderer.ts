@@ -7,7 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { getDefaultFontFamily } from './settings';
 import type { Bridge } from './bridge';
 import type { Pane, PaneState } from './pane-state';
-import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
+import type { PaneAlertRegistry } from './pane-alert-registry';
 import type { SettingsManager } from './settings';
 import type { TabBar } from './tab-bar';
 
@@ -43,7 +43,7 @@ export interface PaneRendererDeps {
   bridge: Bridge;
   paneState: PaneState;
   settingsManager: SettingsManager;
-  paneAlert: PaneAlertStrategy;
+  paneAlertRegistry: PaneAlertRegistry;
   paneActivityWatcher: {
     noteResize: (paneId: string) => void;
     noteData: (paneId: string) => void;
@@ -79,6 +79,7 @@ export interface PaneRenderer {
   changePaneShell: (paneId: string, profileId: string, previousProfileId?: string | null) => void;
   entryNeedsTabRefresh: (paneId: string) => boolean;
   setAlerted: (paneId: string, alerted: boolean) => void;
+  isAlerted: (paneId: string) => boolean;
   rootContains: (paneId: string, el: Node) => boolean;
   hasSelection: (paneId: string) => boolean;
   isSessionReady: (paneId: string) => boolean;
@@ -126,7 +127,7 @@ export function createPaneRenderer({
   bridge,
   paneState,
   settingsManager,
-  paneAlert,
+  paneAlertRegistry,
   paneActivityWatcher,
   reportError,
   stageEl,
@@ -140,6 +141,7 @@ export function createPaneRenderer({
   onPaneCwdChanged,
 }: PaneRendererDeps): PaneRenderer {
   const paneNodeMap = new Map<string, PaneNode>();
+  const alertedPaneIds = new Set<string>();
 
   function isWindowsCtrlVPasteHotkey(event: KeyboardEvent): boolean {
     return (
@@ -225,6 +227,7 @@ export function createPaneRenderer({
   function createPane(pane: Pane): PaneNode {
     const paneEl = document.createElement('article');
     paneEl.className = 'pane';
+    paneEl.dataset.paneId = pane.id;
     const accentColor = pane.customColor || pane.accent;
     paneEl.style.setProperty('--pane-accent', accentColor);
     paneEl.addEventListener('click', () => {
@@ -244,7 +247,6 @@ export function createPaneRenderer({
     terminalHost.className = 'terminal-host';
     surface.append(terminalHost);
     body.append(surface);
-    paneAlert.attach();
     shell.append(body);
     paneEl.append(shell);
 
@@ -436,6 +438,7 @@ export function createPaneRenderer({
         bridge.destroyTerminal({ paneId });
         node.terminal.dispose();
         node.root.remove();
+        alertedPaneIds.delete(paneId);
         paneNodeMap.delete(paneId);
       }
     }
@@ -588,6 +591,7 @@ export function createPaneRenderer({
     bridge.destroyTerminal({ paneId });
     node.terminal.dispose();
     node.root.remove();
+    alertedPaneIds.delete(paneId);
     paneNodeMap.delete(paneId);
   }
 
@@ -636,8 +640,14 @@ export function createPaneRenderer({
     setAlerted: (paneId, alerted) => {
       const node = getNode(paneId);
       if (!node) return;
-      paneAlert.setAlerted(node.root, alerted);
+      if (alerted) {
+        alertedPaneIds.add(paneId);
+      } else {
+        alertedPaneIds.delete(paneId);
+      }
+      paneAlertRegistry.setAlerted(node.root, alerted);
     },
+    isAlerted: (paneId) => alertedPaneIds.has(paneId),
     rootContains: (paneId, el) => {
       const node = getNode(paneId);
       if (!node) return false;
