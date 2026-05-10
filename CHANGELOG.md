@@ -16,6 +16,17 @@
 
 - **Context menu Activity toggle (VIB-143):** Fixed "Background activity alert" context menu item displaying raw SVG text instead of a visual indicator. Replaced broken `icon('check', 12)` approach with `toggleActive` property that renders a yellow dot (using `--status-highlight`) consistent with the settings menu style (VIB-127). Added `MenuEntryItem.toggleActive` interface property and `.context-menu-toggle-dot` CSS class.
 
+### Added
+
+- **Alert strategy registry (VIB-231):** Replaced single `PaneAlertStrategy` with `PaneAlertRegistry` supporting multiple concurrent alert strategies.
+  - New `src/pane-alert-registry.ts`: manages strategy registration, per-strategy enable/disable, pane element tracking, and error isolation (one failing strategy does not break others).
+  - New `src/pane-alert-script-hook.ts`: `PaneAlertStrategy` implementation that executes a user-configured shell script via `bridge.executeAlertScript()` when a pane is alerted. Includes debounce (no re-execution for already-alerted panes) and non-blocking fire-and-forget execution with local error handling.
+  - Extended `PaneAlertStrategy` interface (`src/pane-alert-breathing-mask.ts`): added `id`, `enabled`, and `destroy()` properties/methods.
+  - Updated `src/pane-renderer.ts`: uses `PaneAlertRegistry` instead of a single strategy; registers/unregisters pane elements on create/destroy.
+  - Updated `src/settings.ts`: added `alerts.strategies` config array with backward-compatible migration from legacy `breathingAlertEnabled`. Settings version bumped from 6 to 7. Global breathing toggle now syncs both the activity watcher master switch and the breathing strategy enabled state in the registry.
+  - Updated `src/renderer.ts`: initializes `PaneAlertRegistry`, registers both breathing and script-hook strategies, and wires `paneActivityWatcher` callbacks through the registry.
+  - Updated `src/bridge.ts`: added `executeAlertScript` IPC method (flat alias) that invokes the `execute_alert_script` Tauri command.
+
 ### Changed
 
 - **Docker e2e workflow (VIB-198):** Updated `e2e/README.md` to document the correct workflow — use `git fetch` inside the container for incremental builds (not volume mounts, which bypass the pre-compiled Cargo cache). Added e2e testing reference in main `README.md`.
