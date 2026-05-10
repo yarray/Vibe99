@@ -83,7 +83,6 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const breathingToggle = document.getElementById('breathing-alert-toggle') as HTMLInputElement;
   const breathingDot = document.getElementById('breathing-alert-dot') as HTMLElement;
   const breathingRow = document.getElementById('breathing-alert-row') as HTMLElement;
-  const debounceSelect = document.getElementById('activity-alert-debounce-select') as HTMLSelectElement;
   const debounceInput = document.getElementById('activity-alert-debounce-input') as HTMLInputElement;
 
   const settings: AppSettings = {
@@ -113,8 +112,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     breathingToggle.checked = settings.breathingAlertEnabled;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
-    // Apply debounce setting
-    debounceSelect.value = String(settings.activityAlertDebounceMs);
+    // Apply debounce setting (input is in seconds)
     debounceInput.value = String(settings.activityAlertDebounceMs / 1000);
     paneActivityWatcher.setSettleMs(settings.activityAlertDebounceMs);
   }
@@ -165,7 +163,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     }
 
     if (Number.isFinite(uiSettings.activityAlertDebounceMs)) {
-      settings.activityAlertDebounceMs = Math.max(10000, Math.min(300000, uiSettings.activityAlertDebounceMs!));
+      settings.activityAlertDebounceMs = Math.max(3000, Math.min(300000, uiSettings.activityAlertDebounceMs!));
     }
 
     // Load keyboard shortcuts
@@ -312,28 +310,15 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // Activity alert debounce time
-  function updateDebounceMs(ms: number): void {
-    settings.activityAlertDebounceMs = Math.max(10000, Math.min(300000, ms));
-    applySettings();
-    scheduleSettingsSave();
-  }
-
-  debounceSelect.addEventListener('change', () => {
-    const ms = Number(debounceSelect.value);
-    if (!Number.isFinite(ms)) {
-      applySettings();
-      return;
-    }
-    updateDebounceMs(ms);
-  });
-
   debounceInput.addEventListener('change', () => {
     const seconds = Number(debounceInput.value);
     if (!Number.isFinite(seconds)) {
       applySettings();
       return;
     }
-    updateDebounceMs(seconds * 1000);
+    settings.activityAlertDebounceMs = Math.max(3000, Math.min(300000, seconds * 1000));
+    applySettings();
+    scheduleSettingsSave();
   });
 
   return {
