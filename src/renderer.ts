@@ -253,6 +253,7 @@ contextMenus = createContextMenus({
     const next = paneOps?.togglePaneBreathingMonitor(paneId) ?? false;
     paneActivityWatcher.setPaneEnabled(paneId, next);
   },
+  restartPaneTerminal: (paneId) => paneRenderer?.restartPaneTerminal(paneId),
 });
 
 paneOps = createPaneOperations({

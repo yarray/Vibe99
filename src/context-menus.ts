@@ -83,6 +83,7 @@ export interface ContextMenusDeps {
   beginRenamePane: (paneIndex: number) => void;
   closePane: (paneIndex: number) => void;
   togglePaneBreathingMonitor: (paneId: string) => void;
+  restartPaneTerminal: (paneId: string) => void;
 }
 
 /** Public API surface returned by `createContextMenus`. */
@@ -390,6 +391,8 @@ function showTerminalContextMenu(
       { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: getPasteShortcut(bridge.platform) },
       { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
       { type: 'separator' },
+      { label: 'Restart Terminal', action: 'terminal-restart' },
+      { type: 'separator' },
       { label: 'Change Color...', action: 'terminal-change-color' },
       {
         label: 'Background activity alert',
@@ -655,6 +658,7 @@ interface HandleMenuActionDeps {
   beginRenamePane: (paneIndex: number) => void;
   closePane: (paneIndex: number) => void;
   togglePaneBreathingMonitor: (paneId: string) => void;
+  restartPaneTerminal: (paneId: string) => void;
 }
 
 function handleMenuAction(
@@ -662,7 +666,7 @@ function handleMenuAction(
   paneId: string,
   deps: HandleMenuActionDeps,
 ): void {
-  const { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
+  const { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor, restartPaneTerminal } = deps;
 
   if (action === 'terminal-copy') {
     copyTerminalSelection(paneId, state, bridge);
@@ -681,6 +685,11 @@ function handleMenuAction(
 
   if (action === 'terminal-select-all') {
     selectAllInTerminal(paneId, state);
+    return;
+  }
+
+  if (action === 'terminal-restart') {
+    restartPaneTerminal(paneId);
     return;
   }
 
@@ -748,14 +757,15 @@ function handleMenuAction(
  * @param deps.beginRenamePane - Begin renaming a pane
  * @param deps.closePane - Close a pane
  * @param deps.togglePaneBreathingMonitor - Toggle breathing monitor for a pane
+ * @param deps.restartPaneTerminal - Restart terminal in a pane
  * @returns Context menu manager API
  */
 export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
-  const { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor } = deps;
+  const { state, bridge, shellProfileManager, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor, restartPaneTerminal } = deps;
 
   // Bind handleMenuAction with all dependencies
   const boundHandleMenuAction = (action: string, paneId: string): void =>
-    handleMenuAction(action, paneId, { state, bridge, shellProfileManager, reportError: deps.reportError, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor });
+    handleMenuAction(action, paneId, { state, bridge, shellProfileManager, reportError: deps.reportError, focusPane, beginRenamePane, closePane, togglePaneBreathingMonitor, restartPaneTerminal });
 
   return {
     showContextMenu: (items: MenuItem[], x: number, y: number, paneId: string): void =>
