@@ -262,7 +262,7 @@ export function createLayoutModal({
           nameEl = document.createElement('div');
           nameEl.className = 'layout-name';
           const nameText = layout.name || layout.id;
-          nameEl.innerHTML = isDefault ? `${icon('star', 14)} ${nameText}` : nameText;
+          nameEl.innerHTML = isDefault ? `${icon('star')} ${nameText}` : nameText;
         }
 
         const info = document.createElement('div');
@@ -276,7 +276,7 @@ export function createLayoutModal({
         const switchBtn = document.createElement('button');
         switchBtn.type = 'button';
         switchBtn.className = 'settings-btn';
-        switchBtn.innerHTML = icon('external-link', 14);
+        switchBtn.innerHTML = icon('external-link');
         switchBtn.title = 'Open in new window';
         switchBtn.setAttribute('aria-label', 'Open in new window');
         switchBtn.addEventListener('click', (e: MouseEvent) => {
@@ -286,28 +286,11 @@ export function createLayoutModal({
         });
         actions.appendChild(switchBtn);
 
-        const renameBtn = document.createElement('button');
-        renameBtn.type = 'button';
-        renameBtn.className = 'settings-btn';
-        renameBtn.innerHTML = icon('pencil', 14);
-        renameBtn.title = 'Rename layout';
-        renameBtn.setAttribute('aria-label', 'Rename layout');
-        renameBtn.addEventListener('click', async (e: MouseEvent) => {
-          e.stopPropagation();
-          layoutManager._setRenamingLayoutId(layout.id);
-          renderModalLayouts(overlay);
-          queueMicrotask(() => {
-            const input = listEl.querySelector(`.layout-item[data-layout-id="${layout.id}"] .layout-name-input`) as HTMLInputElement | null;
-            if (input) { input.focus(); input.select(); }
-          });
-        });
-        actions.appendChild(renameBtn);
-
         if (layout.id !== 'default' && layout.id !== windowLayoutId) {
           const deleteBtn = document.createElement('button');
           deleteBtn.type = 'button';
           deleteBtn.className = 'settings-btn';
-          deleteBtn.innerHTML = icon('x', 14);
+          deleteBtn.innerHTML = icon('x');
           deleteBtn.title = 'Delete layout';
           deleteBtn.setAttribute('aria-label', 'Delete layout');
           deleteBtn.addEventListener('click', (e: MouseEvent) => {
@@ -349,12 +332,12 @@ export function createLayoutModal({
       const confirmBtn = document.createElement('button');
       confirmBtn.type = 'button';
       confirmBtn.className = 'settings-btn layout-name-btn layout-name-btn-confirm';
-      setIcon(confirmBtn, 'check', 14);
+      setIcon(confirmBtn, 'check');
       confirmBtn.title = 'Confirm (Enter)';
       const cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
       cancelBtn.className = 'settings-btn layout-name-btn layout-name-btn-cancel';
-      setIcon(cancelBtn, 'x', 14);
+      setIcon(cancelBtn, 'x');
       cancelBtn.title = 'Cancel (Esc)';
 
       const doSave = () => {
@@ -390,7 +373,7 @@ export function createLayoutModal({
       const setDefaultBtn = document.createElement('button');
       setDefaultBtn.type = 'button';
       setDefaultBtn.className = 'settings-btn layout-info-btn';
-      setDefaultBtn.innerHTML = isDefault ? `${icon('check', 14)} Default` : 'Set as Default';
+      setDefaultBtn.innerHTML = isDefault ? `${icon('check')} Default` : 'Set as Default';
       setDefaultBtn.disabled = isDefault;
       setDefaultBtn.title = isDefault ? 'This is the default layout' : 'Set this layout to restore on startup';
       setDefaultBtn.addEventListener('click', () => {

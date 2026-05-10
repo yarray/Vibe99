@@ -166,19 +166,19 @@
 }
 
 .layout-actions .settings-btn {
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
-  border-color: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  transition: all 0.15s ease;
+  width: auto;
+  height: auto;
+  border: none;
+  background: none;
+  padding: 2px;
+  color: rgba(255, 255, 255, 0.5);
+  transition: color 0.15s ease, transform 0.15s ease;
   pointer-events: auto;
 }
 
 .layout-actions .settings-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  transform: scale(1.1);
+  color: rgba(255, 255, 255, 0.9);
+  transform: scale(1.15);
 }
 
 .layout-empty {

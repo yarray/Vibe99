@@ -290,13 +290,13 @@ export function createLayoutManager({
       const confirmBtn = document.createElement('button');
       confirmBtn.type = 'button';
       confirmBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-confirm';
-      setIcon(confirmBtn, 'check', 14);
+      setIcon(confirmBtn, 'check');
       confirmBtn.title = 'Confirm (Enter)';
 
       const cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
       cancelBtn.className = 'layouts-dropdown-btn layouts-dropdown-btn-cancel';
-      setIcon(cancelBtn, 'x', 14);
+      setIcon(cancelBtn, 'x');
       cancelBtn.title = 'Cancel (Esc)';
 
       let confirmed = false;

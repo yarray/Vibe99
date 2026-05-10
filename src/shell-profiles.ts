@@ -170,7 +170,7 @@ export function createShellProfileManager({
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'settings-btn';
-    btn.innerHTML = icon(iconName, 14);
+    btn.innerHTML = icon(iconName);
     btn.title = title;
     btn.setAttribute('aria-label', title);
     btn.addEventListener('click', (event) => {
