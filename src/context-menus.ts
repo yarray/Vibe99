@@ -12,7 +12,7 @@ import { icon } from './icons';
 import * as ColorsRegistry from './colors-registry';
 import type { PaneNode } from './pane-renderer';
 import type { Pane } from './pane-state';
-import type { Bridge, ClipboardSnapshot } from './bridge';
+import type { Bridge, ClipboardSnapshot, Platform } from './bridge';
 import type { ShellProfile } from './shell-profiles';
 
 // ---------------------------------------------------------------------------
@@ -113,6 +113,29 @@ let _dismissContextMenuOnOutsideFn: ((event: PointerEvent) => void) | null = nul
 // ---------------------------------------------------------------------------
 // Utility functions for clipboard and terminal operations
 // ---------------------------------------------------------------------------
+
+/** Returns platform-specific Ctrl modifier symbol (matches hint-bar.ts formatting). */
+function getCtrlModifier(platform: Platform): '⌘' | '⌃' {
+  return platform === 'darwin' ? '⌘' : '⌃';
+}
+
+/** Returns platform-specific shortcut text for copy operation. */
+function getCopyShortcut(platform: Platform): string {
+  const ctrl = getCtrlModifier(platform);
+  return `⇧${ctrl}C`;
+}
+
+/** Returns platform-specific shortcut text for paste operation. */
+function getPasteShortcut(platform: Platform): string {
+  const ctrl = getCtrlModifier(platform);
+  return `⇧${ctrl}V`;
+}
+
+/** Returns platform-specific shortcut text for select all operation. */
+function getSelectAllShortcut(platform: Platform): string {
+  const ctrl = getCtrlModifier(platform);
+  return `${ctrl}A`;
+}
 
 async function getClipboardSnapshot(bridge: Bridge): Promise<ClipboardSnapshot> {
   try {
@@ -363,8 +386,8 @@ function showTerminalContextMenu(
     const breathingOn = pane && pane.breathingMonitor !== false;
 
     const items: MenuItem[] = [
-      { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: '⇧⌘C' },
-      { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: '⇧⌘V' },
+      { label: 'Copy', action: 'terminal-copy', disabled: !node.terminal.hasSelection(), shortcut: getCopyShortcut(bridge.platform) },
+      { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: getPasteShortcut(bridge.platform) },
       { label: 'Paste Image', action: 'terminal-paste-image', disabled: !clipboardSnapshot.hasImage },
       { type: 'separator' },
       { label: 'Change Color...', action: 'terminal-change-color' },
@@ -373,7 +396,7 @@ function showTerminalContextMenu(
         action: 'pane-toggle-breathing',
         toggleActive: breathingOn,
       },
-      { label: 'Select All', action: 'terminal-select-all', shortcut: '⌘A' },
+      { label: 'Select All', action: 'terminal-select-all', shortcut: getSelectAllShortcut(bridge.platform) },
     ];
 
     if (shellChildren.length > 0) {
