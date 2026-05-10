@@ -63,12 +63,12 @@ describe('Settings Panel', () => {
       // Font settings are applied to the xterm terminal via pane-renderer, not via CSS vars
       const terminalHost = await browser.execute(() => {
         const el = document.querySelector('.terminal-host');
-        return el ? (el as HTMLElement & { _xterm?: unknown })._xterm : null;
+        return el ? (el)._xterm : null;
       });
       expect(terminalHost).not.toBeNull();
 
       const fontSize = await browser.execute((term) => {
-        return (term as { options: { fontSize: number } }).options.fontSize;
+        return (term).options.fontSize;
       }, terminalHost);
       expect(fontSize).toBe(16);
     });
@@ -96,12 +96,12 @@ describe('Settings Panel', () => {
       // Font settings are applied to the xterm terminal via pane-renderer, not via CSS vars
       const terminalHost = await browser.execute(() => {
         const el = document.querySelector('.terminal-host');
-        return el ? (el as HTMLElement & { _xterm?: unknown })._xterm : null;
+        return el ? (el)._xterm : null;
       });
       expect(terminalHost).not.toBeNull();
 
       const fontFamily = await browser.execute((term) => {
-        return (term as { options: { fontFamily: string } }).options.fontFamily;
+        return (term).options.fontFamily;
       }, terminalHost);
       expect(fontFamily).toContain('monospace');
     });
