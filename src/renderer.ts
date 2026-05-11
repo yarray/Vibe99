@@ -139,6 +139,8 @@ const settingsManager = createSettingsManager({
   reportError,
   applyCallback: () => render(true),
   paneActivityWatcher,
+  onToggleFloatWindow: () => { void floatWindowManager.toggle(); },
+  getFloatWindowOpen: () => floatWindowManager.isOpen(),
 });
 
 // paneOps is created after tabBar and paneRenderer, but closures capture the binding.
@@ -285,6 +287,8 @@ const floatWindowManager = createFloatWindowManager({
     void bridge.focusWindow();
     paneOps?.focusPane(paneId, { focusTerminal: true });
   },
+  onOpen: () => paneActivityWatcher.setIgnoreFocus(true),
+  onClose: () => paneActivityWatcher.setIgnoreFocus(false),
 });
 
 const commandPaletteEntries = createCommandPaletteEntries({
@@ -378,7 +382,6 @@ function syncFloatWindow(): void {
     id: pane.id,
     accent: pane.customColor || pane.accent,
     alerted: alertedPaneIds.has(pane.id),
-    focused: pane.id === focusedPaneId,
   }));
   floatWindowManager.syncPanes(snapshot);
 }
@@ -476,7 +479,6 @@ const keyboardActions = createActions({
   startInlineRename: (...args) => paneOps?.startInlineRename(...args),
   openKeymapHelpModal,
   openLayoutsModal: () => layoutModal.openLayoutsModal(),
-  toggleFloatWindow: () => { void floatWindowManager.toggle(); },
 });
 
 const dispatchKeydown = createDispatcher({

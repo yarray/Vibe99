@@ -16,7 +16,6 @@ interface FloatPaneInfo {
   id: string;
   accent: string;
   alerted: boolean;
-  focused: boolean;
 }
 
 interface PanesUpdatePayload {
@@ -113,8 +112,8 @@ function render(panes: FloatPaneInfo[]): void {
       containerEl.append(block);
     }
     block.style.backgroundColor = pane.accent;
+    block.style.setProperty('--block-glow', pane.accent);
     block.classList.toggle('is-alerted', pane.alerted);
-    block.classList.toggle('is-focused', pane.focused);
     block.title = pane.id;
   }
 

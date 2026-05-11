@@ -40,13 +40,14 @@ export interface FloatPaneSnapshot {
   id: string;
   accent: string;
   alerted: boolean;
-  focused: boolean;
 }
 
 export interface FloatWindowDeps {
   tauri: TauriGlobal;
   currentWindowLabel: string;
   onFocusPane: (paneId: string) => void;
+  onOpen?: () => void;
+  onClose?: () => void;
 }
 
 export interface FloatWindowManager {
@@ -62,6 +63,10 @@ export interface FloatWindowManager {
   syncPanes: (panes: FloatPaneSnapshot[]) => void;
 }
 
+export interface FloatWindowState {
+  isOpen: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -74,7 +79,7 @@ const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
 // ---------------------------------------------------------------------------
 
 export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowManager {
-  const { tauri, currentWindowLabel, onFocusPane } = deps;
+  const { tauri, currentWindowLabel, onFocusPane, onOpen, onClose } = deps;
   const floatLabel = `float-${currentWindowLabel}`;
 
   let isOpenFlag = false;
@@ -130,6 +135,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       });
 
       isOpenFlag = true;
+      onOpen?.();
       emitPanes(lastSnapshot);
     },
 
@@ -140,6 +146,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
         await existing.close().catch(() => {});
       }
       isOpenFlag = false;
+      onClose?.();
     },
 
     async toggle(): Promise<void> {

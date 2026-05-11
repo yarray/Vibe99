@@ -103,6 +103,12 @@ export interface PaneActivityWatcher {
    * Restarting all pending timers with the new value.
    */
   setSettleMs: (ms: number) => void;
+  /**
+   * When true, the focused pane is treated as unfocused for activity
+   * detection — i.e. output on the focused pane will still trigger alerts.
+   * Used when the main window is minimized and the float window is showing.
+   */
+  setIgnoreFocus: (ignored: boolean) => void;
 }
 
 export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = {}): PaneActivityWatcher {
@@ -115,6 +121,7 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
   const states = new Map<string, PaneState>();
   let focusedPaneId: string | null = null;
   let globalEnabled: boolean = options.globalEnabled ?? true;
+  let ignoreFocus: boolean = false;
 
   function ensure(paneId: string): PaneState {
     let s = states.get(paneId);
@@ -175,7 +182,7 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
       const s = ensure(paneId);
       if (!isActive(paneId, s)) return;
       if (!s.hasBeenFocused) return;
-      if (paneId === focusedPaneId) return;
+      if (!ignoreFocus && paneId === focusedPaneId) return;
       // Inside the post-resize window: this chunk is almost certainly
       // SIGWINCH redraw residue. Don't fire an alert and don't even start
       // a settle timer — instead extend the resize window so we keep
@@ -194,7 +201,7 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
       if (s.timer !== null) clearTimeout(s.timer);
       s.timer = setTimeout(() => {
         s.timer = null;
-        if (paneId === focusedPaneId) return;
+        if (!ignoreFocus && paneId === focusedPaneId) return;
         if (!isActive(paneId, s)) return;
         s.alerted = true;
         onAlert?.(paneId);
@@ -245,13 +252,17 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
           clearTimeout(s.timer);
           s.timer = setTimeout(() => {
             s.timer = null;
-            if (paneId === focusedPaneId) return;
+            if (!ignoreFocus && paneId === focusedPaneId) return;
             if (!isActive(paneId, s)) return;
             s.alerted = true;
             onAlert?.(paneId);
           }, settleMs);
         }
       }
+    },
+
+    setIgnoreFocus(ignored: boolean): void {
+      ignoreFocus = ignored;
     },
   };
 }

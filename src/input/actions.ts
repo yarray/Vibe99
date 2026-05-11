@@ -39,7 +39,7 @@ export interface ActionsDeps {
   startInlineRename: (paneId: string) => void;
   openKeymapHelpModal: () => void;
   openLayoutsModal: () => void;
-  toggleFloatWindow: () => void;
+  toggleFloatWindow?: () => void;
 }
 
 export interface ActionsTable {
@@ -127,6 +127,6 @@ export function createActions(deps: ActionsDeps): ActionsTable {
     openLayouts: () => deps.openLayoutsModal(),
 
     // Float window
-    toggleFloatWindow: () => deps.toggleFloatWindow(),
+    toggleFloatWindow: () => deps.toggleFloatWindow?.(),
   };
 }
