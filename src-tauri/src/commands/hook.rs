@@ -295,10 +295,10 @@ pub async fn hook_execute(app: AppHandle, command: String) -> Result<(), String>
 
     // Use the platform-appropriate command interpreter.
     #[cfg(target_os = "windows")]
-    let result = shell.command("cmd", ["/C", &command]).spawn();
+    let result = shell.command("cmd").args(["/C", &command]).spawn();
 
     #[cfg(not(target_os = "windows"))]
-    let result = shell.command("sh", ["-c", &command]).spawn();
+    let result = shell.command("sh").args(["-c", &command]).spawn();
 
     result
         .map(|_| ())
