@@ -148,36 +148,6 @@
   transform: scale(1.1);
 }
 
-.hook-event-select {
-  width: 100%;
-  height: 28px;
-  padding: 0 28px 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 12px;
-}
-
-.hook-event-select:focus {
-  border-color: rgba(255, 255, 255, 0.35);
-  background-color: rgba(255, 255, 255, 0.08);
-  outline: none;
-}
-
-.hook-event-select option {
-  background: #1e1e1e;
-  color: var(--text);
-}
-
 .hook-editor {
   display: grid;
   gap: 12px;
@@ -194,7 +164,8 @@
   margin-bottom: 4px;
 }
 
-.hook-editor input {
+.hook-editor input,
+.hook-editor select {
   width: 100%;
   height: 28px;
   padding: 0 8px;
@@ -207,8 +178,26 @@
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.hook-editor input:focus {
+.hook-editor input:focus,
+.hook-editor select:focus {
   border-color: rgba(255, 255, 255, 0.35);
   background: rgba(255, 255, 255, 0.08);
   outline: none;
+}
+
+.hook-editor select {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+.hook-editor select option {
+  background: #1e1e1e;
+  color: var(--text);
+  padding: 4px 8px;
 }
