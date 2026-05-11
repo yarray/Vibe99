@@ -116,6 +116,20 @@ export interface ClipboardSnapshot {
 /** Arbitrary settings object */
 export type SettingsData = Record<string, unknown>;
 
+/** A single hook configuration */
+export interface HookData {
+  id: string;
+  name?: string;
+  event: string;
+  command: string;
+  enabled?: boolean;
+}
+
+/** Result of listing hooks */
+export interface HooksListResult {
+  hooks: HookData[];
+}
+
 /**
  * Minimal shape of `window.__TAURI__` — the global Tauri API object injected
  * when `app.withGlobalTauri` is enabled.  Only the surface used by
@@ -220,6 +234,14 @@ export interface LayoutsApi {
   setAsDefault: (layoutId: string) => Promise<LayoutsListResult>;
 }
 
+export interface HookApi {
+  list: () => Promise<HooksListResult>;
+  add: (hook: HookData) => Promise<HooksListResult>;
+  remove: (hookId: string) => Promise<HooksListResult>;
+  update: (hookId: string, updates: Partial<HookData>) => Promise<HooksListResult>;
+  execute: (command: string) => Promise<void>;
+}
+
 /** Event listener unsubscribes with void return */
 type UnsubscribeFn = () => void;
 
@@ -243,6 +265,7 @@ export interface Bridge {
   shell: ShellApi;
   window: WindowApi;
   layouts: LayoutsApi;
+  hooks: HookApi;
 
   // Event listeners
   onMenuAction: (handler: (event: MenuActionEvent) => void) => UnsubscribeFn;
@@ -287,6 +310,12 @@ export interface Bridge {
   isWindowFullscreen: LayoutsApi['isFullscreen'];
   setWindowFullscreen: LayoutsApi['setFullscreen'];
   setLayoutAsDefault: LayoutsApi['setAsDefault'];
+
+  listHooks: HookApi['list'];
+  addHook: HookApi['add'];
+  removeHook: HookApi['remove'];
+  updateHook: HookApi['update'];
+  executeHook: HookApi['execute'];
 }
 
 // ============================================================================
@@ -438,6 +467,11 @@ type FlatAliases = {
   isWindowFullscreen: unknown;
   setWindowFullscreen: unknown;
   setLayoutAsDefault: unknown;
+  listHooks: unknown;
+  addHook: unknown;
+  removeHook: unknown;
+  updateHook: unknown;
+  executeHook: unknown;
 };
 
 // ============================================================================
@@ -498,6 +532,13 @@ function createUnavailableBridge(): Bridge {
       setFullscreen: undefined,
       setAsDefault: fail,
     },
+    hooks: {
+      list: () => Promise.resolve({ hooks: [] }),
+      add: () => Promise.resolve({ hooks: [] }),
+      remove: () => Promise.resolve({ hooks: [] }),
+      update: () => Promise.resolve({ hooks: [] }),
+      execute: () => Promise.resolve(),
+    },
     onMenuAction: () => () => {},
     onLayoutFocusNotice: undefined,
     cwdReady: Promise.resolve(),
@@ -533,6 +574,11 @@ function createUnavailableBridge(): Bridge {
     isWindowFullscreen: undefined,
     setWindowFullscreen: undefined,
     setLayoutAsDefault: fail,
+    listHooks: () => Promise.resolve({ hooks: [] }),
+    addHook: () => Promise.resolve({ hooks: [] }),
+    removeHook: () => Promise.resolve({ hooks: [] }),
+    updateHook: () => Promise.resolve({ hooks: [] }),
+    executeHook: () => Promise.resolve(),
   };
 }
 
@@ -695,6 +741,14 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       setFullscreen: (fullscreen: boolean) => getCurrentWindow().setFullscreen(fullscreen),
       setAsDefault: (layoutId: string) => invoke('layout_set_default', { layoutId }),
     },
+    hooks: {
+      list: () => invoke<HooksListResult>('hooks_list'),
+      add: (hook: HookData) => invoke<HooksListResult>('hook_add', { hook }),
+      remove: (hookId: string) => invoke<HooksListResult>('hook_remove', { hookId }),
+      update: (hookId: string, updates: Partial<HookData>) =>
+        invoke<HooksListResult>('hook_update', { hookId, updates }),
+      execute: (command: string) => invoke('hook_execute', { command }),
+    },
     onMenuAction: (handler: (event: MenuActionEvent) => void) =>
       onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler),
     onLayoutFocusNotice: (handler: () => void) =>
@@ -765,6 +819,11 @@ export function createBridge(
       isWindowFullscreen: partial.layouts.isFullscreen,
       setWindowFullscreen: partial.layouts.setFullscreen,
       setLayoutAsDefault: partial.layouts.setAsDefault,
+      listHooks: partial.hooks.list,
+      addHook: partial.hooks.add,
+      removeHook: partial.hooks.remove,
+      updateHook: partial.hooks.update,
+      executeHook: partial.hooks.execute,
     };
   } else if (tauriOrFallback && typeof tauriOrFallback === 'object') {
     // Assume it's a pre-configured fallback bridge (e.g., from window.vibe99)

@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use tauri::Manager;
 use vibe99_lib::commands::context_menu;
+use vibe99_lib::commands::hook;
 use vibe99_lib::commands::layout;
 use vibe99_lib::commands::settings;
 use vibe99_lib::commands::shell_profile;
@@ -54,6 +55,11 @@ fn main() {
             shell_profile::shell_profile_add,
             shell_profile::shell_profile_remove,
             shell_profile::shell_profiles_detect,
+            hook::hooks_list,
+            hook::hook_add,
+            hook::hook_remove,
+            hook::hook_update,
+            hook::hook_execute,
             context_menu::show_context_menu,
             context_menu::emit_menu_action,
             wsl_cmd::wsl_status,

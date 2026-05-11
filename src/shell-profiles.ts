@@ -516,8 +516,8 @@ export function createShellProfileManager({
       if (field.key === 'name' && editingShellProfile.isNew) {
         input.addEventListener('input', () => {
           const idInput = inputs.id;
-          if (!idInput.value && input.value.trim()) {
-            idInput.value = input.value.trim().toLowerCase().replace(/\s+/g, '-');
+          if (input.value.trim()) {
+            idInput.value = input.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           }
         });
       }
