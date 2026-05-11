@@ -256,15 +256,22 @@ export function createHookManager({
     }
   }
 
+  function nameToSlug(name: string): string {
+    return name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
   function createHookEditor(): HTMLDivElement {
     const editor = document.createElement('div');
     editor.className = 'shell-profile-editor hook-editor';
 
     const eh = editingHook!;
 
-    const fields: { key: keyof EditingHook; label: string; placeholder: string; type?: string }[] = [
+    const fields: { key: 'name' | 'command'; label: string; placeholder: string }[] = [
       { key: 'name', label: 'Name', placeholder: 'e.g. Alert Sound' },
-      { key: 'id', label: 'ID', placeholder: 'e.g. alert-sound' },
       { key: 'command', label: 'Command', placeholder: 'paplay /usr/share/sounds/freedesktop/stereo/bell.oga' },
     ];
 
@@ -283,16 +290,13 @@ export function createHookManager({
       input.dataset.field = field.key;
       inputs[field.key] = input;
 
-      if (field.key === 'name' && eh.isNew) {
-        input.addEventListener('input', () => {
-          const idInput = inputs.id;
-          if (!idInput.value && input.value.trim()) {
-            idInput.value = input.value.trim().toLowerCase().replace(/\s+/g, '-');
-          }
-        });
-      }
-
       editor.append(label, input);
+    }
+
+    if (eh.isNew) {
+      inputs.name.addEventListener('input', () => {
+        editingHook = { ...editingHook!, id: nameToSlug(inputs.name.value) };
+      });
     }
 
     // Event type selector
@@ -332,16 +336,30 @@ export function createHookManager({
     save.className = 'settings-btn shell-profile-editor-btn is-primary';
     save.textContent = 'Save';
     save.addEventListener('click', () => {
+      const name = inputs.name.value.trim();
+      const slug = eh.isNew ? nameToSlug(name) : eh.id;
+
+      if (!name) {
+        reportError(new Error('Name is required'));
+        return;
+      }
+
+      const duplicate = hooks.find((h) => h.name === name && h.id !== slug);
+      if (duplicate) {
+        reportError(new Error(`A hook named "${name}" already exists`));
+        return;
+      }
+
       const hookData: HookData = {
-        id: inputs.id.value.trim(),
-        name: inputs.name.value.trim(),
+        id: slug || nameToSlug(name),
+        name,
         event: eventSelect.value,
         command: inputs.command.value.trim(),
         enabled: editingHook?.enabled ?? true,
       };
 
       if (!hookData.id || !hookData.command) {
-        reportError(new Error('ID and Command are required'));
+        reportError(new Error('Name and Command are required'));
         return;
       }
 
