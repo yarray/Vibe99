@@ -36,6 +36,13 @@ interface TauriGlobal {
   };
 }
 
+/** Lightweight pane descriptor consumed by the float window sync. */
+export interface FloatPaneDescriptor {
+  id: string;
+  accent: string;
+  customColor?: string;
+}
+
 export interface FloatPaneSnapshot {
   id: string;
   accent: string;
@@ -46,6 +53,7 @@ export interface FloatWindowDeps {
   tauri: TauriGlobal;
   currentWindowLabel: string;
   onFocusPane: (paneId: string) => void;
+  getPanes: () => FloatPaneDescriptor[];
   onOpen?: () => void;
   onClose?: () => void;
 }
@@ -59,12 +67,12 @@ export interface FloatWindowManager {
   toggle: () => Promise<void>;
   /** Whether the float window is currently open. */
   isOpen: () => boolean;
-  /** Push the latest pane snapshot to the float window. */
-  syncPanes: (panes: FloatPaneSnapshot[]) => void;
-}
-
-export interface FloatWindowState {
-  isOpen: boolean;
+  /** Record that a pane has triggered an alert. */
+  noteAlert: (paneId: string) => void;
+  /** Clear the alert state for a pane. */
+  noteClear: (paneId: string) => void;
+  /** Sync the current pane state to the float window. */
+  sync: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,12 +87,12 @@ const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
 // ---------------------------------------------------------------------------
 
 export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowManager {
-  const { tauri, currentWindowLabel, onFocusPane, onOpen, onClose } = deps;
+  const { tauri, currentWindowLabel, onFocusPane, getPanes, onOpen, onClose } = deps;
   const floatLabel = `float-${currentWindowLabel}`;
 
   let isOpenFlag = false;
   let unlistenFocusPane: (() => void) | null = null;
-  let lastSnapshot: FloatPaneSnapshot[] = [];
+  const alertedPaneIds = new Set<string>();
 
   function getFloatUrl(): string {
     return `float.html?label=${encodeURIComponent(currentWindowLabel)}`;
@@ -99,6 +107,14 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
     unlistenFocusPane = () => { unlisten(); };
   }
 
+  function buildSnapshot(): FloatPaneSnapshot[] {
+    return getPanes().map((pane) => ({
+      id: pane.id,
+      accent: pane.customColor || pane.accent,
+      alerted: alertedPaneIds.has(pane.id),
+    }));
+  }
+
   function emitPanes(panes: FloatPaneSnapshot[]): void {
     if (!isOpenFlag) return;
     void tauri.event?.emitTo?.(floatLabel, PANES_EVENT, { panes }).catch(() => {});
@@ -110,7 +126,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
         // Verify the window still exists (it may have been closed externally)
         const existing = await tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel);
         if (existing) {
-          emitPanes(lastSnapshot);
+          emitPanes(buildSnapshot());
           return;
         }
         isOpenFlag = false;
@@ -136,7 +152,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
       isOpenFlag = true;
       onOpen?.();
-      emitPanes(lastSnapshot);
+      emitPanes(buildSnapshot());
     },
 
     async close(): Promise<void> {
@@ -161,9 +177,19 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       return isOpenFlag;
     },
 
-    syncPanes(panes: FloatPaneSnapshot[]): void {
-      lastSnapshot = panes;
-      emitPanes(panes);
+    noteAlert(paneId: string): void {
+      alertedPaneIds.add(paneId);
+      emitPanes(buildSnapshot());
+    },
+
+    noteClear(paneId: string): void {
+      alertedPaneIds.delete(paneId);
+      emitPanes(buildSnapshot());
+    },
+
+    sync(): void {
+      if (!isOpenFlag) return;
+      emitPanes(buildSnapshot());
     },
   };
 }

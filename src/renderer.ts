@@ -9,7 +9,6 @@ import {
   clearLayoutWindowBinding,
 } from './bridge';
 import { createFloatWindowManager } from './float-window';
-import type { FloatPaneSnapshot } from './float-window';
 import { createPaneRenderer, getTextColorForBackground } from './pane-renderer';
 import type { PaneRenderer } from './pane-renderer';
 import { createShellProfileManager } from './shell-profiles';
@@ -59,7 +58,6 @@ let enterNavSourcePaneId: string | null = null;
 let layoutRestoreComplete = false;
 let layoutFocusNotice: { layoutId: string } | null = null;
 let layoutFocusNoticeTimer: number | null = null;
-let alertedPaneIds = new Set<string>();
 
 
 // Shell-profile state (shared with shell-profiles module via adapter)
@@ -124,13 +122,11 @@ const paneAlert = createBreathingMaskAlert();
 const paneActivityWatcher = createPaneActivityWatcher({
   onAlert: (paneId) => {
     paneRenderer?.setAlerted(paneId, true);
-    alertedPaneIds.add(paneId);
-    syncFloatWindow();
+    floatWindowManager.noteAlert(paneId);
   },
   onClear: (paneId) => {
     paneRenderer?.setAlerted(paneId, false);
-    alertedPaneIds.delete(paneId);
-    syncFloatWindow();
+    floatWindowManager.noteClear(paneId);
   },
 });
 
@@ -283,13 +279,14 @@ paneOps = createPaneOperations({
 const floatWindowManager = createFloatWindowManager({
   tauri: (window as any).__TAURI__,
   currentWindowLabel: bridge.currentWindowLabel,
+  getPanes: () => paneState.getPanes(),
   onFocusPane: (paneId) => {
     void bridge.focusWindow();
     paneOps?.focusPane(paneId, { focusTerminal: true });
   },
   onOpen: () => {
     paneActivityWatcher.setIgnoreFocus(true);
-    syncFloatWindow();
+    floatWindowManager.sync();
   },
   onClose: () => paneActivityWatcher.setIgnoreFocus(false),
 });
@@ -376,24 +373,11 @@ function cancelNavigationMode(): void {
   else { setMode('terminal'); render(); }
 }
 
-// ---------------------------------------------------------------------------
-function syncFloatWindow(): void {
-  if (!floatWindowManager.isOpen()) return;
-  const panes = paneState.getPanes();
-  const focusedPaneId = paneState.getFocusedPaneId();
-  const snapshot: FloatPaneSnapshot[] = panes.map((pane) => ({
-    id: pane.id,
-    accent: pane.customColor || pane.accent,
-    alerted: alertedPaneIds.has(pane.id),
-  }));
-  floatWindowManager.syncPanes(snapshot);
-}
-
 function render(refit = false): void {
   tabBar.renderTabs();
   paneRenderer?.renderPanes(refit);
   updateStatus();
-  syncFloatWindow();
+  floatWindowManager.sync();
   if (layoutRestoreComplete) {
     layoutManager.scheduleWindowLayoutSave();
   }
