@@ -23,6 +23,8 @@ export interface SettingsManagerDeps {
     setGlobalEnabled: (enabled: boolean) => void;
     setSettleMs: (ms: number) => void;
   };
+  onToggleFloatWindow?: () => Promise<void>;
+  getFloatWindowOpen?: () => boolean;
 }
 
 export interface SettingsManager {
@@ -83,6 +85,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const breathingToggle = document.getElementById('breathing-alert-toggle') as HTMLInputElement;
   const breathingDot = document.getElementById('breathing-alert-dot') as HTMLElement;
   const breathingRow = document.getElementById('breathing-alert-row') as HTMLElement;
+  const floatWindowToggle = document.getElementById('float-window-toggle') as HTMLInputElement;
+  const floatWindowDot = document.getElementById('float-window-dot') as HTMLElement;
+  const floatWindowRow = document.getElementById('float-window-row') as HTMLElement;
   const debounceInput = document.getElementById('activity-alert-debounce-input') as HTMLInputElement;
 
   const settings: AppSettings = {
@@ -112,6 +117,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     breathingToggle.checked = settings.breathingAlertEnabled;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    // Sync float window toggle dot with current runtime state
+    const floatOpen = deps.getFloatWindowOpen?.() ?? false;
+    floatWindowToggle.checked = floatOpen;
+    floatWindowDot.classList.toggle('is-active', floatOpen);
     // Apply debounce setting (input is in seconds)
     debounceInput.value = String(settings.activityAlertDebounceMs / 1000);
     paneActivityWatcher.setSettleMs(settings.activityAlertDebounceMs);
@@ -307,6 +316,16 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
     paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
     scheduleSettingsSave();
+  });
+
+  // Float window toggle
+  floatWindowRow.addEventListener('click', async () => {
+    if (deps.onToggleFloatWindow) {
+      await deps.onToggleFloatWindow();
+    }
+    const floatOpen = deps.getFloatWindowOpen?.() ?? false;
+    floatWindowToggle.checked = floatOpen;
+    floatWindowDot.classList.toggle('is-active', floatOpen);
   });
 
   // Activity alert debounce time

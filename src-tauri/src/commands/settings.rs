@@ -447,6 +447,15 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                 .unwrap()
                 .insert("defaultLayoutId".into(), Value::String(default_layout_id));
 
+            if let Some(hooks) = obj.get("hooks").and_then(|v| v.as_array()) {
+                if !hooks.is_empty() {
+                    result
+                        .as_object_mut()
+                        .unwrap()
+                        .insert("hooks".into(), Value::Array(hooks.clone()));
+                }
+            }
+
             result
         }
         Some(v) if v == 1 => {
@@ -580,6 +589,17 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
         if let (Some(default_layout_id), Some(obj)) = (default_layout_id, settings.as_object_mut())
         {
             obj.insert("defaultLayoutId".into(), default_layout_id);
+        }
+    }
+
+    // Preserve the existing `hooks` array from disk if the frontend does not send it.
+    if settings.get("hooks").is_none() && path.exists() {
+        let hooks = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .and_then(|v| v.get("hooks").cloned());
+        if let (Some(hooks), Some(obj)) = (hooks, settings.as_object_mut()) {
+            obj.insert("hooks".into(), hooks);
         }
     }
 

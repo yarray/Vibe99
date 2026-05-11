@@ -8,9 +8,11 @@ import {
   createBridge,
   clearLayoutWindowBinding,
 } from './bridge';
+import { createFloatWindowManager } from './float-window';
 import { createPaneRenderer, getTextColorForBackground } from './pane-renderer';
 import type { PaneRenderer } from './pane-renderer';
 import { createShellProfileManager } from './shell-profiles';
+import { createHookManager } from './hooks';
 import { createContextMenus } from './context-menus';
 import { createLayoutManager } from './layout-manager';
 import { createLayoutModal } from './layout-modal';
@@ -47,6 +49,7 @@ const settingsButtonEl = document.getElementById('tabs-settings')!;
 const fullscreenButtonEl = document.getElementById('tabs-fullscreen')!;
 const settingsPanelEl = document.getElementById('settings-panel')!;
 const shellProfilesSettingsBtn = document.getElementById('shell-profiles-settings-btn')!;
+const hooksSettingsBtn = document.getElementById('hooks-settings-btn')!;
 const layoutsSettingsBtn = document.getElementById('layouts-settings-btn')!;
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn')!;
 
@@ -117,10 +120,25 @@ const layoutModal = createLayoutModal({
   layoutManager,
 });
 
+const hookManager = createHookManager({
+  bridge: bridge as any,
+  reportError,
+  registerModal: (closeFn) => modalStack.register(closeFn),
+  unregisterModal: (closeFn) => modalStack.unregister(closeFn),
+});
+
 const paneAlert = createBreathingMaskAlert();
 const paneActivityWatcher = createPaneActivityWatcher({
-  onAlert: (paneId) => paneRenderer?.setAlerted(paneId, true),
-  onClear: (paneId) => paneRenderer?.setAlerted(paneId, false),
+  onAlert: (paneId) => {
+    paneRenderer?.setAlerted(paneId, true);
+    floatWindowManager.noteAlert(paneId);
+    hookManager.emitEvent('alert.start');
+  },
+  onClear: (paneId) => {
+    paneRenderer?.setAlerted(paneId, false);
+    floatWindowManager.noteClear(paneId);
+    hookManager.emitEvent('alert.stop');
+  },
 });
 
 const settingsManager = createSettingsManager({
@@ -128,6 +146,8 @@ const settingsManager = createSettingsManager({
   reportError,
   applyCallback: () => render(true),
   paneActivityWatcher,
+  onToggleFloatWindow: () => floatWindowManager.toggle(),
+  getFloatWindowOpen: () => floatWindowManager.isOpen(),
 });
 
 // paneOps is created after tabBar and paneRenderer, but closures capture the binding.
@@ -267,6 +287,21 @@ paneOps = createPaneOperations({
   state: tabBarState,
 });
 
+const floatWindowManager = createFloatWindowManager({
+  tauri: (window as any).__TAURI__,
+  currentWindowLabel: bridge.currentWindowLabel,
+  getPanes: () => paneState.getPanes(),
+  onFocusPane: (paneId) => {
+    void bridge.focusWindow();
+    paneOps?.focusPane(paneId, { focusTerminal: true });
+  },
+  onOpen: () => {
+    paneActivityWatcher.setIgnoreFocus(true);
+    floatWindowManager.sync();
+  },
+  onClose: () => paneActivityWatcher.setIgnoreFocus(false),
+});
+
 const commandPaletteEntries = createCommandPaletteEntries({
   paneState,
   paneRenderer,
@@ -288,6 +323,7 @@ const commandPaletteEntries = createCommandPaletteEntries({
   statusHintEl,
   getCurrentMode: () => currentMode,
   setMode,
+  toggleFloatWindow: () => { void floatWindowManager.toggle(); },
 });
 
 const fullscreenManager = createFullscreenManager({
@@ -348,11 +384,11 @@ function cancelNavigationMode(): void {
   else { setMode('terminal'); render(); }
 }
 
-// ---------------------------------------------------------------------------
 function render(refit = false): void {
   tabBar.renderTabs();
   paneRenderer?.renderPanes(refit);
   updateStatus();
+  floatWindowManager.sync();
   if (layoutRestoreComplete) {
     layoutManager.scheduleWindowLayoutSave();
   }
@@ -503,6 +539,11 @@ shellProfilesSettingsBtn.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); shellProfileManager?.openShellProfilesModal(); }
 });
 
+hooksSettingsBtn.addEventListener('click', () => hookManager.openHooksModal());
+hooksSettingsBtn.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hookManager.openHooksModal(); }
+});
+
 function openShortcutsModal(): void {
   closeKeyboardShortcutsModal();
   modalStack.register(closeKeyboardShortcutsModal);
@@ -549,6 +590,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     settingsManager.applyPersistedSettings(savedSettings);
     settingsManager.applySettings();
     shellProfileManager?.loadShellProfiles();
+    hookManager.loadHooks();
 
     await layoutManager.refreshLayouts();
     let layouts = layoutManager.getLayouts();
@@ -599,6 +641,7 @@ window.addEventListener('beforeunload', () => {
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();
+  void floatWindowManager.close();
 });
 
 window.addEventListener('error', (event) => {

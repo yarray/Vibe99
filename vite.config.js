@@ -7,7 +7,10 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: 'src/index.html',  // Vite resolves .ts imports automatically
+      input: {
+        main: 'src/index.html',
+        float: 'src/float.html',
+      },
     },
   },
   server: {
