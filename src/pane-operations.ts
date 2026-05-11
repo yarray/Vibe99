@@ -263,7 +263,7 @@ export function createPaneOperations({
 
   function handleTerminalExit({ paneId, exitCode, reason }: { paneId: string; exitCode: number; reason: string }): boolean {
     const node = paneRenderer?.getNode(paneId);
-    if (!node) return false;
+    if (!node) return true;
 
     if (reason === 'killed') {
       paneRenderer.setSessionReady(paneId, false);

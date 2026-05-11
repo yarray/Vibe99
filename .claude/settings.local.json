@@ -5,7 +5,8 @@
       "Bash(cargo check *)",
       "WebSearch",
       "Bash(rtk ls *)",
-      "Bash(rtk read *)"
+      "Bash(rtk read *)",
+      "Bash(rtk git *)"
     ]
   },
   "enabledPlugins": {

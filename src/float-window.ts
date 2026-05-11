@@ -121,12 +121,16 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
     if (!unlistenClose) {
       const unlisten = await webview.listen('tauri://close-requested', () => {
-        if (!isOpenFlag) return;
-        void tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel)
-          .then((existing) => existing?.close())
+        if (isOpenFlag) {
+          void tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel)
+            .then((existing) => existing?.close())
+            .catch(() => {});
+          isOpenFlag = false;
+          onClose?.();
+        }
+        void tauri.webviewWindow.WebviewWindow.getByLabel(currentWindowLabel)
+          .then((w) => w?.close())
           .catch(() => {});
-        isOpenFlag = false;
-        onClose?.();
       });
       unlistenClose = () => { unlisten(); };
     }
