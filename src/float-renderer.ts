@@ -158,6 +158,14 @@ window.addEventListener('mouseup', () => {
   dragStarted = false;
 });
 
+// Right-click anywhere on the float window to close it.
+containerEl.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  if (tauri) {
+    void tauri.window.getCurrentWindow().close();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Event listeners
 // ---------------------------------------------------------------------------
