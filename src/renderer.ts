@@ -139,7 +139,7 @@ const settingsManager = createSettingsManager({
   reportError,
   applyCallback: () => render(true),
   paneActivityWatcher,
-  onToggleFloatWindow: () => { void floatWindowManager.toggle(); },
+  onToggleFloatWindow: () => floatWindowManager.toggle(),
   getFloatWindowOpen: () => floatWindowManager.isOpen(),
 });
 
@@ -287,7 +287,10 @@ const floatWindowManager = createFloatWindowManager({
     void bridge.focusWindow();
     paneOps?.focusPane(paneId, { focusTerminal: true });
   },
-  onOpen: () => paneActivityWatcher.setIgnoreFocus(true),
+  onOpen: () => {
+    paneActivityWatcher.setIgnoreFocus(true);
+    syncFloatWindow();
+  },
   onClose: () => paneActivityWatcher.setIgnoreFocus(false),
 });
 

@@ -23,7 +23,7 @@ export interface SettingsManagerDeps {
     setGlobalEnabled: (enabled: boolean) => void;
     setSettleMs: (ms: number) => void;
   };
-  onToggleFloatWindow?: () => void;
+  onToggleFloatWindow?: () => Promise<void>;
   getFloatWindowOpen?: () => boolean;
 }
 
@@ -319,8 +319,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // Float window toggle
-  floatWindowRow.addEventListener('click', () => {
-    deps.onToggleFloatWindow?.();
+  floatWindowRow.addEventListener('click', async () => {
+    if (deps.onToggleFloatWindow) {
+      await deps.onToggleFloatWindow();
+    }
     const floatOpen = deps.getFloatWindowOpen?.() ?? false;
     floatWindowToggle.checked = floatOpen;
     floatWindowDot.classList.toggle('is-active', floatOpen);
