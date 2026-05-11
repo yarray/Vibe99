@@ -80,6 +80,7 @@ const PANES_EVENT = 'vibe99:float-panes';
 const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
 const READY_EVENT = 'vibe99:float-ready';
 const USER_CLOSED_EVENT = 'vibe99:float-user-closed';
+const MOVED_EVENT = 'vibe99:float-moved';
 
 // ---------------------------------------------------------------------------
 // State
@@ -168,7 +169,14 @@ wrapperEl.addEventListener('mousedown', (event) => {
   }
 });
 
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', async () => {
+  if (dragStarted && tauri) {
+    dragStarted = false;
+    try {
+      const pos = await tauri.window.getCurrentWindow().outerPosition();
+      emitToParent(MOVED_EVENT, { x: pos.x, y: pos.y });
+    } catch { /* best effort */ }
+  }
   dragStarted = false;
 });
 

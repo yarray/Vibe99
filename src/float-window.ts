@@ -9,8 +9,11 @@
  *   float window label = `float-{parentWindowLabel}`
  *
  * Persistence: float window open state and position are saved to localStorage
- * keyed by layout ID. On close, the reason (parent-closing vs user-action)
- * determines whether the float window will auto-reopen on next launch.
+ * keyed by layout ID.
+ *   - open:true is saved immediately when the float window opens (sync).
+ *   - Position is tracked via drag events from the float renderer.
+ *   - open:false is saved when the user explicitly closes (X button or toggle).
+ *   - Parent window close does NOT change the persisted state (open:true stays).
  */
 
 // ---------------------------------------------------------------------------
@@ -26,8 +29,6 @@ interface TauriWindow {
   label: string;
   close: () => Promise<void>;
   once: (event: string, handler: () => void) => Promise<() => void>;
-  outerPosition: () => Promise<PhysicalPosition>;
-  setPosition: (position: PhysicalPosition) => Promise<void>;
 }
 
 interface TauriGlobal {
@@ -74,8 +75,8 @@ export interface FloatWindowDeps {
 export interface FloatWindowManager {
   /** Open the float window (noop if already open). */
   open: () => Promise<void>;
-  /** Close the float window. reason='parent-closing' saves open:true, 'user-action' saves open:false. */
-  close: (options?: { reason?: 'parent-closing' | 'user-action' }) => Promise<void>;
+  /** Close the float window. No-op if not open. */
+  close: () => Promise<void>;
   /** Toggle the float window open/closed. */
   toggle: () => Promise<void>;
   /** Whether the float window is currently open. */
@@ -98,6 +99,7 @@ const PANES_EVENT = 'vibe99:float-panes';
 const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
 const READY_EVENT = 'vibe99:float-ready';
 const USER_CLOSED_EVENT = 'vibe99:float-user-closed';
+const MOVED_EVENT = 'vibe99:float-moved';
 
 const FLOAT_WINDOW_STATE_KEY = 'vibe99.floatWindowState';
 
@@ -153,24 +155,15 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
   let unlistenReady: (() => void) | null = null;
   let unlistenClose: (() => void) | null = null;
   let unlistenUserClosed: (() => void) | null = null;
+  let unlistenMoved: (() => void) | null = null;
   const alertedPaneIds = new Set<string>();
 
   function getFloatUrl(): string {
     return `float.html?label=${encodeURIComponent(currentWindowLabel)}`;
   }
 
-  async function getFloatPosition(): Promise<PhysicalPosition | null> {
-    try {
-      const existing = await tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel);
-      if (existing) {
-        return await existing.outerPosition();
-      }
-    } catch { /* ignore */ }
-    return null;
-  }
-
   async function ensureListeners(): Promise<void> {
-    if (unlistenFocusPane && unlistenReady && unlistenClose && unlistenUserClosed) return;
+    if (unlistenFocusPane && unlistenReady && unlistenClose && unlistenUserClosed && unlistenMoved) return;
     const webview = tauri.webview.getCurrentWebview();
 
     if (!unlistenFocusPane) {
@@ -203,8 +196,9 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       unlistenClose = () => { unlisten(); };
     }
 
+    // Float window X button closed by user → save open:false + position
     if (!unlistenUserClosed) {
-      const unlisten = await webview.listen<PhysicalPosition>(USER_CLOSED_EVENT, async (e) => {
+      const unlisten = await webview.listen<PhysicalPosition>(USER_CLOSED_EVENT, (e) => {
         const layoutId = getLayoutId();
         if (layoutId) {
           saveStateForLayout(layoutId, { open: false, x: e.payload.x, y: e.payload.y });
@@ -213,6 +207,17 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
         onClose?.();
       });
       unlistenUserClosed = () => { unlisten(); };
+    }
+
+    // Float window dragged → save new position
+    if (!unlistenMoved) {
+      const unlisten = await webview.listen<PhysicalPosition>(MOVED_EVENT, (e) => {
+        const layoutId = getLayoutId();
+        if (layoutId) {
+          saveStateForLayout(layoutId, { x: e.payload.x, y: e.payload.y });
+        }
+      });
+      unlistenMoved = () => { unlisten(); };
     }
   }
 
@@ -232,7 +237,6 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
   return {
     async open(): Promise<void> {
       if (isOpenFlag) {
-        // Verify the window still exists (it may have been closed externally)
         const existing = await tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel);
         if (existing) {
           emitPanes(buildSnapshot());
@@ -246,8 +250,12 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       const layoutId = getLayoutId();
       const savedState = layoutId ? readStateForLayout(layoutId) : null;
 
-      const { WebviewWindow } = tauri.webviewWindow;
-      const floatWin = new WebviewWindow(floatLabel, {
+      // Save open:true immediately (sync) so state survives parent close
+      if (layoutId) {
+        saveStateForLayout(layoutId, { open: true });
+      }
+
+      const windowOptions: Record<string, unknown> = {
         url: getFloatUrl(),
         title: 'Vibe99 Float',
         width: 56,
@@ -260,35 +268,29 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
         shadow: false,
         visible: true,
         center: false,
-      });
+      };
 
-      // Restore saved position after creation
+      // Pass saved position in constructor to avoid flash
       if (savedState && savedState.x != null && savedState.y != null) {
-        try {
-          await floatWin.setPosition({ x: savedState.x, y: savedState.y });
-        } catch { /* ignore if position is off-screen */ }
+        windowOptions.x = savedState.x;
+        windowOptions.y = savedState.y;
       }
+
+      const { WebviewWindow } = tauri.webviewWindow;
+      new WebviewWindow(floatLabel, windowOptions);
 
       isOpenFlag = true;
       onOpen?.();
       emitPanes(buildSnapshot());
     },
 
-    async close(options?: { reason?: 'parent-closing' | 'user-action' }): Promise<void> {
+    async close(): Promise<void> {
       if (!isOpenFlag) return;
 
-      const reason = options?.reason ?? 'user-action';
       const layoutId = getLayoutId();
-
-      // Save position before closing
-      const pos = await getFloatPosition();
-
+      // Save open:false — user explicitly closed (toggle off)
       if (layoutId) {
-        if (reason === 'parent-closing') {
-          saveStateForLayout(layoutId, { open: true, x: pos?.x, y: pos?.y });
-        } else {
-          saveStateForLayout(layoutId, { open: false, x: pos?.x, y: pos?.y });
-        }
+        saveStateForLayout(layoutId, { open: false });
       }
 
       const existing = await tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel);
@@ -301,7 +303,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
     async toggle(): Promise<void> {
       if (isOpenFlag) {
-        await this.close({ reason: 'user-action' });
+        await this.close();
       } else {
         await this.open();
       }

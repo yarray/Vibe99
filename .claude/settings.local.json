@@ -8,7 +8,9 @@
       "Bash(rtk read *)",
       "Bash(rtk git *)",
       "Bash(rtk find *)",
-      "Bash(rtk tsc *)"
+      "Bash(rtk tsc *)",
+      "Bash(rtk npx *)",
+      "Bash(./node_modules/.bin/vite build *)"
     ]
   },
   "enabledPlugins": {
