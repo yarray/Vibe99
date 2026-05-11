@@ -26,11 +26,17 @@ interface PanesUpdatePayload {
 // Tauri shims (minimal surface, no heavy imports)
 // ---------------------------------------------------------------------------
 
+interface PhysicalPosition {
+  x: number;
+  y: number;
+}
+
 interface TauriWindow {
   label: string;
   setSize: (size: { type: string; width: number; height: number }) => Promise<void>;
   startDragging: () => Promise<void>;
   close: () => Promise<void>;
+  outerPosition: () => Promise<PhysicalPosition>;
 }
 
 interface TauriGlobal {
@@ -73,6 +79,7 @@ const HEIGHT = BLOCK_SIZE + PADDING_Y * 2 + WRAPPER_PAD_Y;
 const PANES_EVENT = 'vibe99:float-panes';
 const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
 const READY_EVENT = 'vibe99:float-ready';
+const USER_CLOSED_EVENT = 'vibe99:float-user-closed';
 
 // ---------------------------------------------------------------------------
 // State
@@ -169,10 +176,15 @@ window.addEventListener('mouseup', () => {
 // Close button
 // ---------------------------------------------------------------------------
 
-closeBtnEl.addEventListener('click', (event) => {
+closeBtnEl.addEventListener('click', async (event) => {
   event.stopPropagation();
   if (tauri) {
-    void tauri.window.getCurrentWindow().close();
+    const win = tauri.window.getCurrentWindow();
+    try {
+      const pos = await win.outerPosition();
+      emitToParent(USER_CLOSED_EVENT, { x: pos.x, y: pos.y });
+    } catch { /* best effort */ }
+    void win.close();
   }
 });
 

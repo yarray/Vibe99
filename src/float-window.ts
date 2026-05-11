@@ -7,16 +7,27 @@
  *
  * Design: one float window per layout window. Label convention:
  *   float window label = `float-{parentWindowLabel}`
+ *
+ * Persistence: float window open state and position are saved to localStorage
+ * keyed by layout ID. On close, the reason (parent-closing vs user-action)
+ * determines whether the float window will auto-reopen on next launch.
  */
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+interface PhysicalPosition {
+  x: number;
+  y: number;
+}
+
 interface TauriWindow {
   label: string;
   close: () => Promise<void>;
   once: (event: string, handler: () => void) => Promise<() => void>;
+  outerPosition: () => Promise<PhysicalPosition>;
+  setPosition: (position: PhysicalPosition) => Promise<void>;
 }
 
 interface TauriGlobal {
@@ -52,6 +63,8 @@ export interface FloatPaneSnapshot {
 export interface FloatWindowDeps {
   tauri: TauriGlobal;
   currentWindowLabel: string;
+  /** Layout ID for persisting float window state. */
+  getLayoutId: () => string | null;
   onFocusPane: (paneId: string) => void;
   getPanes: () => FloatPaneDescriptor[];
   onOpen?: () => void;
@@ -61,12 +74,14 @@ export interface FloatWindowDeps {
 export interface FloatWindowManager {
   /** Open the float window (noop if already open). */
   open: () => Promise<void>;
-  /** Close the float window (noop if not open). */
-  close: () => Promise<void>;
+  /** Close the float window. reason='parent-closing' saves open:true, 'user-action' saves open:false. */
+  close: (options?: { reason?: 'parent-closing' | 'user-action' }) => Promise<void>;
   /** Toggle the float window open/closed. */
   toggle: () => Promise<void>;
   /** Whether the float window is currently open. */
   isOpen: () => boolean;
+  /** Whether the float window should auto-open based on persisted state. */
+  shouldAutoOpen: () => boolean;
   /** Record that a pane has triggered an alert. */
   noteAlert: (paneId: string) => void;
   /** Clear the alert state for a pane. */
@@ -82,27 +97,80 @@ export interface FloatWindowManager {
 const PANES_EVENT = 'vibe99:float-panes';
 const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
 const READY_EVENT = 'vibe99:float-ready';
+const USER_CLOSED_EVENT = 'vibe99:float-user-closed';
+
+const FLOAT_WINDOW_STATE_KEY = 'vibe99.floatWindowState';
+
+// ---------------------------------------------------------------------------
+// Persistence helpers
+// ---------------------------------------------------------------------------
+
+interface FloatWindowState {
+  open: boolean;
+  x?: number;
+  y?: number;
+}
+
+type FloatWindowStateMap = Record<string, FloatWindowState>;
+
+function readFloatWindowState(): FloatWindowStateMap {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(FLOAT_WINDOW_STATE_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeFloatWindowState(state: FloatWindowStateMap): void {
+  try {
+    window.localStorage.setItem(FLOAT_WINDOW_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Best effort
+  }
+}
+
+function saveStateForLayout(layoutId: string, partial: FloatWindowState): void {
+  const all = readFloatWindowState();
+  all[layoutId] = { ...(all[layoutId] || {}), ...partial };
+  writeFloatWindowState(all);
+}
+
+function readStateForLayout(layoutId: string): FloatWindowState | null {
+  return readFloatWindowState()[layoutId] ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
 export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowManager {
-  const { tauri, currentWindowLabel, onFocusPane, getPanes, onOpen, onClose } = deps;
+  const { tauri, currentWindowLabel, getLayoutId, onFocusPane, getPanes, onOpen, onClose } = deps;
   const floatLabel = `float-${currentWindowLabel}`;
 
   let isOpenFlag = false;
   let unlistenFocusPane: (() => void) | null = null;
   let unlistenReady: (() => void) | null = null;
   let unlistenClose: (() => void) | null = null;
+  let unlistenUserClosed: (() => void) | null = null;
   const alertedPaneIds = new Set<string>();
 
   function getFloatUrl(): string {
     return `float.html?label=${encodeURIComponent(currentWindowLabel)}`;
   }
 
+  async function getFloatPosition(): Promise<PhysicalPosition | null> {
+    try {
+      const existing = await tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel);
+      if (existing) {
+        return await existing.outerPosition();
+      }
+    } catch { /* ignore */ }
+    return null;
+  }
+
   async function ensureListeners(): Promise<void> {
-    if (unlistenFocusPane && unlistenReady && unlistenClose) return;
+    if (unlistenFocusPane && unlistenReady && unlistenClose && unlistenUserClosed) return;
     const webview = tauri.webview.getCurrentWebview();
 
     if (!unlistenFocusPane) {
@@ -134,6 +202,18 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       });
       unlistenClose = () => { unlisten(); };
     }
+
+    if (!unlistenUserClosed) {
+      const unlisten = await webview.listen<PhysicalPosition>(USER_CLOSED_EVENT, async (e) => {
+        const layoutId = getLayoutId();
+        if (layoutId) {
+          saveStateForLayout(layoutId, { open: false, x: e.payload.x, y: e.payload.y });
+        }
+        isOpenFlag = false;
+        onClose?.();
+      });
+      unlistenUserClosed = () => { unlisten(); };
+    }
   }
 
   function buildSnapshot(): FloatPaneSnapshot[] {
@@ -163,8 +243,11 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
       await ensureListeners();
 
+      const layoutId = getLayoutId();
+      const savedState = layoutId ? readStateForLayout(layoutId) : null;
+
       const { WebviewWindow } = tauri.webviewWindow;
-      new WebviewWindow(floatLabel, {
+      const floatWin = new WebviewWindow(floatLabel, {
         url: getFloatUrl(),
         title: 'Vibe99 Float',
         width: 56,
@@ -179,13 +262,35 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
         center: false,
       });
 
+      // Restore saved position after creation
+      if (savedState && savedState.x != null && savedState.y != null) {
+        try {
+          await floatWin.setPosition({ x: savedState.x, y: savedState.y });
+        } catch { /* ignore if position is off-screen */ }
+      }
+
       isOpenFlag = true;
       onOpen?.();
       emitPanes(buildSnapshot());
     },
 
-    async close(): Promise<void> {
+    async close(options?: { reason?: 'parent-closing' | 'user-action' }): Promise<void> {
       if (!isOpenFlag) return;
+
+      const reason = options?.reason ?? 'user-action';
+      const layoutId = getLayoutId();
+
+      // Save position before closing
+      const pos = await getFloatPosition();
+
+      if (layoutId) {
+        if (reason === 'parent-closing') {
+          saveStateForLayout(layoutId, { open: true, x: pos?.x, y: pos?.y });
+        } else {
+          saveStateForLayout(layoutId, { open: false, x: pos?.x, y: pos?.y });
+        }
+      }
+
       const existing = await tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel);
       if (existing) {
         await existing.close().catch(() => {});
@@ -196,7 +301,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
     async toggle(): Promise<void> {
       if (isOpenFlag) {
-        await this.close();
+        await this.close({ reason: 'user-action' });
       } else {
         await this.open();
       }
@@ -204,6 +309,13 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
     isOpen(): boolean {
       return isOpenFlag;
+    },
+
+    shouldAutoOpen(): boolean {
+      const layoutId = getLayoutId();
+      if (!layoutId) return false;
+      const state = readStateForLayout(layoutId);
+      return state?.open === true;
     },
 
     noteAlert(paneId: string): void {

@@ -290,6 +290,7 @@ paneOps = createPaneOperations({
 const floatWindowManager = createFloatWindowManager({
   tauri: (window as any).__TAURI__,
   currentWindowLabel: bridge.currentWindowLabel,
+  getLayoutId: () => layoutManager.getWindowLayoutId(),
   getPanes: () => paneState.getPanes(),
   onFocusPane: (paneId) => {
     void bridge.focusWindow();
@@ -627,6 +628,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     layoutManager.updateLayoutsIndicator();
     render(true);
     layoutManager.setLayoutRestoreComplete(true);
+
+    // Auto-restore float window if it was open before the app was closed
+    if (floatWindowManager.shouldAutoOpen()) {
+      void floatWindowManager.open();
+    }
   } catch (error) {
     reportError(error);
     const msg = error instanceof Error ? error.message : String(error);
@@ -641,7 +647,7 @@ window.addEventListener('beforeunload', () => {
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();
-  void floatWindowManager.close();
+  void floatWindowManager.close({ reason: 'parent-closing' });
 });
 
 window.addEventListener('error', (event) => {

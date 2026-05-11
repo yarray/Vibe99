@@ -6,7 +6,9 @@
       "WebSearch",
       "Bash(rtk ls *)",
       "Bash(rtk read *)",
-      "Bash(rtk git *)"
+      "Bash(rtk git *)",
+      "Bash(rtk find *)",
+      "Bash(rtk tsc *)"
     ]
   },
   "enabledPlugins": {
