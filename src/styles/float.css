@@ -12,13 +12,22 @@ body {
   -webkit-user-select: none;
 }
 
+/* Outer transparent wrapper provides padding so the close button
+   sits outside the dark container and is never clipped. */
+.float-wrapper {
+  position: relative;
+  padding: 10px 10px 0 0;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
 .float-container {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 10px 12px;
-  height: 100vh;
+  height: 100%;
   box-sizing: border-box;
   /* Semi-transparent dark background so the blocks pop on any wallpaper */
   background: rgba(18, 18, 18, 0.72);
@@ -26,7 +35,6 @@ body {
   -webkit-backdrop-filter: blur(8px);
   border-radius: 10px;
   cursor: default;
-  position: relative;
 }
 
 .float-block {
@@ -88,7 +96,7 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   Close button — circular X, top-right, visible on hover
+   Close button — circular X, sits in the wrapper's transparent padding
    --------------------------------------------------------------------------- */
 
 .float-close-btn {
@@ -110,7 +118,7 @@ body {
   pointer-events: auto;
 }
 
-.float-container:hover .float-close-btn {
+.float-wrapper:hover .float-close-btn {
   opacity: 1;
 }
 

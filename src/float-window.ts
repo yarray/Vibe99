@@ -94,6 +94,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
   let isOpenFlag = false;
   let unlistenFocusPane: (() => void) | null = null;
   let unlistenReady: (() => void) | null = null;
+  let unlistenClose: (() => void) | null = null;
   const alertedPaneIds = new Set<string>();
 
   function getFloatUrl(): string {
@@ -101,7 +102,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
   }
 
   async function ensureListeners(): Promise<void> {
-    if (unlistenFocusPane && unlistenReady) return;
+    if (unlistenFocusPane && unlistenReady && unlistenClose) return;
     const webview = tauri.webview.getCurrentWebview();
 
     if (!unlistenFocusPane) {
@@ -116,6 +117,18 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
         emitPanes(buildSnapshot());
       });
       unlistenReady = () => { unlisten(); };
+    }
+
+    if (!unlistenClose) {
+      const unlisten = await webview.listen('tauri://close', () => {
+        if (!isOpenFlag) return;
+        void tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel)
+          .then((existing) => existing?.close())
+          .catch(() => {});
+        isOpenFlag = false;
+        onClose?.();
+      });
+      unlistenClose = () => { unlisten(); };
     }
   }
 

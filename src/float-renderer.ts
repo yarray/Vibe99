@@ -60,8 +60,10 @@ const BLOCK_SIZE = 32;
 const BLOCK_GAP = 6;
 const PADDING_X = 12;
 const PADDING_Y = 10;
-const MIN_WIDTH = 56;
-const HEIGHT = BLOCK_SIZE + PADDING_Y * 2;
+const WRAPPER_PAD_X = 10;
+const WRAPPER_PAD_Y = 10;
+const MIN_WIDTH = 56 + WRAPPER_PAD_X;
+const HEIGHT = BLOCK_SIZE + PADDING_Y * 2 + WRAPPER_PAD_Y;
 
 const PANES_EVENT = 'vibe99:float-panes';
 const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
@@ -71,6 +73,7 @@ const READY_EVENT = 'vibe99:float-ready';
 // State
 // ---------------------------------------------------------------------------
 
+const wrapperEl = document.getElementById('float-wrapper')!;
 const containerEl = document.getElementById('float-container')!;
 const closeBtnEl = document.getElementById('float-close-btn')!;
 const params = new URLSearchParams(window.location.search);
@@ -85,7 +88,7 @@ let dragStarted = false;
 
 function computeWidth(paneCount: number): number {
   if (paneCount === 0) return MIN_WIDTH;
-  return paneCount * BLOCK_SIZE + (paneCount - 1) * BLOCK_GAP + PADDING_X * 2;
+  return paneCount * BLOCK_SIZE + (paneCount - 1) * BLOCK_GAP + PADDING_X * 2 + WRAPPER_PAD_X;
 }
 
 function emitToParent(event: string, payload?: unknown): void {
@@ -101,9 +104,7 @@ function render(panes: FloatPaneInfo[]): void {
   currentPanes = panes;
 
   // Reconcile DOM: update existing blocks, add new ones, remove extras.
-  const existing = Array.from(containerEl.children).filter(
-    (el) => el !== closeBtnEl,
-  ) as HTMLElement[];
+  const existing = Array.from(containerEl.children) as HTMLElement[];
   const targetCount = panes.length;
 
   for (let i = 0; i < targetCount; i++) {
@@ -122,19 +123,8 @@ function render(panes: FloatPaneInfo[]): void {
   }
 
   // Remove excess blocks
-  while (containerEl.children.length > targetCount + 1) {
-    const last = containerEl.lastElementChild;
-    if (last && last !== closeBtnEl) {
-      last.remove();
-    } else if (last === closeBtnEl && containerEl.children.length > 2) {
-      // Move close button before removing the block, then put it back
-      const beforeClose = closeBtnEl.previousElementSibling;
-      if (beforeClose && beforeClose !== closeBtnEl) {
-        beforeClose.remove();
-      }
-    } else {
-      break;
-    }
+  while (containerEl.children.length > targetCount) {
+    containerEl.lastElementChild?.remove();
   }
 
   // Adjust window size
@@ -156,10 +146,9 @@ function handleBlockClick(paneId: string): void {
 // Drag support
 // ---------------------------------------------------------------------------
 
-containerEl.addEventListener('mousedown', (event) => {
-  // Only start drag on non-block areas or on the container padding.
-  // Clicks on blocks themselves are handled by block click handlers.
-  if (event.target === containerEl) {
+wrapperEl.addEventListener('mousedown', (event) => {
+  // Start drag on wrapper / container background only, not on blocks or close button.
+  if (event.target === wrapperEl || event.target === containerEl) {
     dragStarted = true;
     if (tauri) {
       void tauri.window.getCurrentWindow().startDragging();
