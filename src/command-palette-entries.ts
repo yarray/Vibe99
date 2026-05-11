@@ -56,6 +56,7 @@ export interface CommandPaletteEntriesDeps {
   statusHintEl: HTMLElement;
   getCurrentMode: () => string;
   setMode: (mode: string) => void;
+  toggleFloatWindow: () => void;
 }
 
 /** Public API surface returned by createCommandPaletteEntries. */
@@ -91,6 +92,7 @@ export function createCommandPaletteEntries({
   statusHintEl,
   getCurrentMode,
   setMode,
+  toggleFloatWindow,
 }: CommandPaletteEntriesDeps): CommandPaletteEntries {
   function openTabSwitcher(): void {
     contextMenus?.hideContextMenu();
@@ -123,6 +125,7 @@ export function createCommandPaletteEntries({
       { id: 'change-profile', label: 'Change profile' },
       { id: 'change-color', label: 'Change color' },
       { id: 'rename-pane', label: 'Rename pane' },
+      { id: 'toggle-float', label: 'Toggle float window' },
       { id: 'profile-settings', label: 'Profile settings' },
       { id: 'shortcuts-settings', label: 'Shortcuts settings' },
       { id: 'layout-default', label: 'Layout: Open Default' },
@@ -142,6 +145,8 @@ export function createCommandPaletteEntries({
       } else if (commandId === 'rename-pane') {
         const index = paneState.getPaneIndex(paneState.getFocusedPaneId() ?? '');
         if (index !== -1) tabBar.beginRenamePane(index);
+      } else if (commandId === 'toggle-float') {
+        toggleFloatWindow();
       } else if (commandId === 'profile-settings') {
         shellProfileManager?.openShellProfilesModal();
       } else if (commandId === 'shortcuts-settings') {

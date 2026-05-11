@@ -1,0 +1,128 @@
+/* ============================================================
+   float.css — Floating indicator window styles
+   ============================================================ */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Outer transparent wrapper provides padding so the close button
+   sits outside the dark container and is never clipped. */
+.float-wrapper {
+  position: relative;
+  padding: 10px 10px 0 0;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.float-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  height: 100%;
+  box-sizing: border-box;
+  /* Semi-transparent dark background so the blocks pop on any wallpaper */
+  background: rgba(18, 18, 18, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 10px;
+  cursor: default;
+}
+
+.float-block {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.float-block:hover {
+  transform: scale(1.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------------------------------------------------------------------------
+   Breathing alert animation — more pronounced glow and scale
+   --------------------------------------------------------------------------- */
+
+@keyframes float-breathing-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 2px 6px rgba(0, 0, 0, 0.35);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      0 0 18px 4px var(--block-glow, rgba(255, 255, 255, 0.35)),
+      0 6px 20px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.float-block.is-alerted {
+  animation: float-breathing-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-block.is-alerted {
+    animation: none;
+    opacity: 1;
+    transform: scale(1.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      0 0 12px 3px var(--block-glow, rgba(255, 255, 255, 0.3)),
+      0 4px 12px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Close button — circular X, sits in the wrapper's transparent padding
+   --------------------------------------------------------------------------- */
+
+.float-close-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(80, 80, 80, 0.6);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease, background 120ms ease, color 120ms ease;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.float-wrapper:hover .float-close-btn {
+  opacity: 1;
+}
+
+.float-close-btn:hover {
+  background: rgba(200, 60, 60, 0.85);
+  color: #fff;
+}
