@@ -45,6 +45,11 @@ interface TauriGlobal {
       listen: <T = unknown>(event: string, handler: (e: { payload: T }) => void) => Promise<() => void>;
     };
   };
+  webviewWindow: {
+    WebviewWindow: {
+      getByLabel: (label: string) => Promise<{ close: () => Promise<void> } | null>;
+    };
+  };
   event?: {
     emitTo?: (target: string, event: string, payload?: unknown) => Promise<void>;
   };
@@ -199,6 +204,26 @@ async function setupListeners(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 setupListeners().catch(() => {});
+
+// ---------------------------------------------------------------------------
+// Parent heartbeat — close self if parent window is gone
+// ---------------------------------------------------------------------------
+
+function startParentHeartbeat(): void {
+  if (!tauri || !parentLabel) return;
+  const interval = setInterval(() => {
+    tauri.webviewWindow.WebviewWindow.getByLabel(parentLabel)
+      .then((parent) => {
+        if (!parent) {
+          clearInterval(interval);
+          void tauri.window.getCurrentWindow().close();
+        }
+      })
+      .catch(() => {});
+  }, 1000);
+}
+
+startParentHeartbeat();
 
 // Initial empty render to set window size
 render([]);
