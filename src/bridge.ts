@@ -219,6 +219,7 @@ export interface WindowApi {
   close: () => Promise<void>;
   openUrl: (url: string) => void;
   showMenu: () => void;
+  focus: () => Promise<void>;
 }
 
 export interface LayoutsApi {
@@ -296,6 +297,7 @@ export interface Bridge {
   redetectWsl: ShellApi['redetectWsl'];
 
   closeWindow: WindowApi['close'];
+  focusWindow: WindowApi['focus'];
   openExternalUrl: WindowApi['openUrl'];
   showContextMenu: WindowApi['showMenu'];
 
@@ -453,6 +455,7 @@ type FlatAliases = {
   detectShellProfiles: unknown;
   redetectWsl: unknown;
   closeWindow: unknown;
+  focusWindow: unknown;
   openExternalUrl: unknown;
   showContextMenu: unknown;
   listLayouts: unknown;
@@ -514,6 +517,7 @@ function createUnavailableBridge(): Bridge {
     },
     window: {
       close: fail,
+      focus: fail,
       openUrl: fail,
       showMenu: () => {},
     },
@@ -558,6 +562,7 @@ function createUnavailableBridge(): Bridge {
     detectShellProfiles: () => Promise.resolve([]),
     redetectWsl: () => Promise.resolve({ available: false, distributions: [], defaultShell: null }),
     closeWindow: fail,
+    focusWindow: fail,
     openExternalUrl: fail,
     showContextMenu: () => {},
     listLayouts: () => Promise.resolve({ layouts: [], defaultLayoutId: '' }),
@@ -721,6 +726,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     },
     window: {
       close: () => getCurrentWindow().close(),
+      focus: () => focusWindow(currentWindow),
       openUrl: (url: string) => openUrl(url),
       showMenu: () => {},
     },
@@ -801,6 +807,7 @@ export function createBridge(
       detectShellProfiles: partial.shell.detect,
       redetectWsl: partial.shell.redetectWsl,
       closeWindow: partial.window.close,
+      focusWindow: partial.window.focus,
       openExternalUrl: partial.window.openUrl,
       showContextMenu: partial.window.showMenu,
       listLayouts: partial.layouts.list,

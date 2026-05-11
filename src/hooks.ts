@@ -299,24 +299,35 @@ export function createHookManager({
       });
     }
 
-    // Event type selector
+    // Event type selector — segment button group
     const eventLabel = document.createElement('label');
     eventLabel.textContent = 'Event';
-    eventLabel.setAttribute('for', 'modal-hook-edit-event');
 
-    const eventSelect = document.createElement('select');
-    eventSelect.id = 'modal-hook-edit-event';
-    eventSelect.className = 'hook-event-select';
+    const eventGroup = document.createElement('div');
+    eventGroup.className = 'hook-event-segments';
+
+    const eventSelect: { value: string } = { value: eh.event };
 
     for (const evt of KNOWN_EVENTS) {
-      const opt = document.createElement('option');
-      opt.value = evt;
-      opt.textContent = evt;
-      if (evt === eh.event) opt.selected = true;
-      eventSelect.appendChild(opt);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'hook-event-segment-btn';
+      btn.textContent = evt;
+      btn.dataset.value = evt;
+      if (evt === eh.event) btn.classList.add('is-active');
+
+      btn.addEventListener('click', () => {
+        eventGroup.querySelectorAll('.hook-event-segment-btn').forEach((b) => {
+          (b as HTMLElement).classList.remove('is-active');
+        });
+        btn.classList.add('is-active');
+        eventSelect.value = evt;
+      });
+
+      eventGroup.appendChild(btn);
     }
 
-    editor.append(eventLabel, eventSelect);
+    editor.append(eventLabel, eventGroup);
 
     const actions = document.createElement('div');
     actions.className = 'shell-profile-editor-actions';
