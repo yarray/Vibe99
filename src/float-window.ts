@@ -81,6 +81,7 @@ export interface FloatWindowManager {
 
 const PANES_EVENT = 'vibe99:float-panes';
 const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
+const READY_EVENT = 'vibe99:float-ready';
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -92,19 +93,30 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
   let isOpenFlag = false;
   let unlistenFocusPane: (() => void) | null = null;
+  let unlistenReady: (() => void) | null = null;
   const alertedPaneIds = new Set<string>();
 
   function getFloatUrl(): string {
     return `float.html?label=${encodeURIComponent(currentWindowLabel)}`;
   }
 
-  async function ensureListener(): Promise<void> {
-    if (unlistenFocusPane) return;
+  async function ensureListeners(): Promise<void> {
+    if (unlistenFocusPane && unlistenReady) return;
     const webview = tauri.webview.getCurrentWebview();
-    const unlisten = await webview.listen<{ paneId: string }>(FOCUS_PANE_EVENT, (e) => {
-      onFocusPane(e.payload.paneId);
-    });
-    unlistenFocusPane = () => { unlisten(); };
+
+    if (!unlistenFocusPane) {
+      const unlisten = await webview.listen<{ paneId: string }>(FOCUS_PANE_EVENT, (e) => {
+        onFocusPane(e.payload.paneId);
+      });
+      unlistenFocusPane = () => { unlisten(); };
+    }
+
+    if (!unlistenReady) {
+      const unlisten = await webview.listen<void>(READY_EVENT, () => {
+        emitPanes(buildSnapshot());
+      });
+      unlistenReady = () => { unlisten(); };
+    }
   }
 
   function buildSnapshot(): FloatPaneSnapshot[] {
@@ -132,7 +144,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
         isOpenFlag = false;
       }
 
-      await ensureListener();
+      await ensureListeners();
 
       const { WebviewWindow } = tauri.webviewWindow;
       new WebviewWindow(floatLabel, {

@@ -65,12 +65,14 @@ const HEIGHT = BLOCK_SIZE + PADDING_Y * 2;
 
 const PANES_EVENT = 'vibe99:float-panes';
 const FOCUS_PANE_EVENT = 'vibe99:float-focus-pane';
+const READY_EVENT = 'vibe99:float-ready';
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
 const containerEl = document.getElementById('float-container')!;
+const closeBtnEl = document.getElementById('float-close-btn')!;
 const params = new URLSearchParams(window.location.search);
 const parentLabel = params.get('label') ?? '';
 
@@ -99,7 +101,9 @@ function render(panes: FloatPaneInfo[]): void {
   currentPanes = panes;
 
   // Reconcile DOM: update existing blocks, add new ones, remove extras.
-  const existing = Array.from(containerEl.children) as HTMLElement[];
+  const existing = Array.from(containerEl.children).filter(
+    (el) => el !== closeBtnEl,
+  ) as HTMLElement[];
   const targetCount = panes.length;
 
   for (let i = 0; i < targetCount; i++) {
@@ -118,8 +122,19 @@ function render(panes: FloatPaneInfo[]): void {
   }
 
   // Remove excess blocks
-  while (containerEl.children.length > targetCount) {
-    containerEl.lastElementChild?.remove();
+  while (containerEl.children.length > targetCount + 1) {
+    const last = containerEl.lastElementChild;
+    if (last && last !== closeBtnEl) {
+      last.remove();
+    } else if (last === closeBtnEl && containerEl.children.length > 2) {
+      // Move close button before removing the block, then put it back
+      const beforeClose = closeBtnEl.previousElementSibling;
+      if (beforeClose && beforeClose !== closeBtnEl) {
+        beforeClose.remove();
+      }
+    } else {
+      break;
+    }
   }
 
   // Adjust window size
@@ -152,58 +167,18 @@ containerEl.addEventListener('mousedown', (event) => {
   }
 });
 
-// Also allow dragging from the gaps between blocks by handling pointerdown
-// on the container and letting blocks consume clicks.
 window.addEventListener('mouseup', () => {
   dragStarted = false;
 });
 
 // ---------------------------------------------------------------------------
-// Context menu
+// Close button
 // ---------------------------------------------------------------------------
 
-let contextMenuEl: HTMLElement | null = null;
-
-function createContextMenu(): HTMLElement {
-  const menu = document.createElement('div');
-  menu.className = 'float-context-menu';
-
-  const item = document.createElement('div');
-  item.className = 'float-context-menu-item';
-  item.textContent = 'Close panel';
-  item.addEventListener('click', () => {
-    hideContextMenu();
-    if (tauri) {
-      void tauri.window.getCurrentWindow().close();
-    }
-  });
-
-  menu.append(item);
-  document.body.append(menu);
-  return menu;
-}
-
-function showContextMenu(x: number, y: number): void {
-  if (!contextMenuEl) {
-    contextMenuEl = createContextMenu();
-  }
-  contextMenuEl.style.left = `${x}px`;
-  contextMenuEl.style.top = `${y}px`;
-  contextMenuEl.classList.add('is-visible');
-}
-
-function hideContextMenu(): void {
-  contextMenuEl?.classList.remove('is-visible');
-}
-
-containerEl.addEventListener('contextmenu', (event) => {
-  event.preventDefault();
-  showContextMenu(event.clientX, event.clientY);
-});
-
-window.addEventListener('click', (event) => {
-  if (contextMenuEl?.classList.contains('is-visible') && !contextMenuEl.contains(event.target as Node)) {
-    hideContextMenu();
+closeBtnEl.addEventListener('click', (event) => {
+  event.stopPropagation();
+  if (tauri) {
+    void tauri.window.getCurrentWindow().close();
   }
 });
 
@@ -220,6 +195,9 @@ async function setupListeners(): Promise<void> {
   const unlisten = await webview.listen<PanesUpdatePayload>(PANES_EVENT, (e) => {
     render(e.payload.panes);
   });
+
+  // Notify parent that we are ready to receive events
+  emitToParent(READY_EVENT);
 
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => {

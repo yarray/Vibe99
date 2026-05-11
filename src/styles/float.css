@@ -26,6 +26,7 @@ body {
   -webkit-backdrop-filter: blur(8px);
   border-radius: 10px;
   cursor: default;
+  position: relative;
 }
 
 .float-block {
@@ -87,37 +88,33 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   Context menu
+   Close button — circular X, top-right, visible on hover
    --------------------------------------------------------------------------- */
 
-.float-context-menu {
-  position: fixed;
-  z-index: 1000;
-  display: none;
-  min-width: 120px;
-  padding: 4px 0;
-  border-radius: 6px;
-  background: rgba(30, 30, 30, 0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  overflow: hidden;
-}
-
-.float-context-menu.is-visible {
-  display: block;
-}
-
-.float-context-menu-item {
-  padding: 8px 14px;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 13px;
+.float-close-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(80, 80, 80, 0.6);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
   cursor: pointer;
-  transition: background 120ms ease;
-  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 160ms ease, background 120ms ease, color 120ms ease;
+  z-index: 10;
+  pointer-events: auto;
 }
 
-.float-context-menu-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+.float-container:hover .float-close-btn {
+  opacity: 1;
+}
+
+.float-close-btn:hover {
+  background: rgba(200, 60, 60, 0.85);
+  color: #fff;
 }
