@@ -85,3 +85,39 @@ body {
       0 4px 12px rgba(0, 0, 0, 0.45);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Context menu
+   --------------------------------------------------------------------------- */
+
+.float-context-menu {
+  position: fixed;
+  z-index: 1000;
+  display: none;
+  min-width: 120px;
+  padding: 4px 0;
+  border-radius: 6px;
+  background: rgba(30, 30, 30, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.float-context-menu.is-visible {
+  display: block;
+}
+
+.float-context-menu-item {
+  padding: 8px 14px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease;
+  white-space: nowrap;
+}
+
+.float-context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}

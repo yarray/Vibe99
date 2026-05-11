@@ -158,11 +158,52 @@ window.addEventListener('mouseup', () => {
   dragStarted = false;
 });
 
-// Right-click anywhere on the float window to close it.
+// ---------------------------------------------------------------------------
+// Context menu
+// ---------------------------------------------------------------------------
+
+let contextMenuEl: HTMLElement | null = null;
+
+function createContextMenu(): HTMLElement {
+  const menu = document.createElement('div');
+  menu.className = 'float-context-menu';
+
+  const item = document.createElement('div');
+  item.className = 'float-context-menu-item';
+  item.textContent = 'Close panel';
+  item.addEventListener('click', () => {
+    hideContextMenu();
+    if (tauri) {
+      void tauri.window.getCurrentWindow().close();
+    }
+  });
+
+  menu.append(item);
+  document.body.append(menu);
+  return menu;
+}
+
+function showContextMenu(x: number, y: number): void {
+  if (!contextMenuEl) {
+    contextMenuEl = createContextMenu();
+  }
+  contextMenuEl.style.left = `${x}px`;
+  contextMenuEl.style.top = `${y}px`;
+  contextMenuEl.classList.add('is-visible');
+}
+
+function hideContextMenu(): void {
+  contextMenuEl?.classList.remove('is-visible');
+}
+
 containerEl.addEventListener('contextmenu', (event) => {
   event.preventDefault();
-  if (tauri) {
-    void tauri.window.getCurrentWindow().close();
+  showContextMenu(event.clientX, event.clientY);
+});
+
+window.addEventListener('click', (event) => {
+  if (contextMenuEl?.classList.contains('is-visible') && !contextMenuEl.contains(event.target as Node)) {
+    hideContextMenu();
   }
 });
 
