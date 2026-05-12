@@ -1,0 +1,1 @@
+Fix Layout modal "Add" button to create a new default three-pane layout instead of saving the current window state as a new layout. The new layout is no longer auto-selected; users must manually switch to it. (VIB-239)

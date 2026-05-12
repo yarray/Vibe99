@@ -45,6 +45,7 @@ export interface LayoutManager {
   getLayouts: () => LayoutData[];
   getDefaultLayoutId: () => string;
   setLayoutRestoreComplete: (value: boolean) => void;
+  createFreshDefaultLayout: (layoutId: string, name: string) => LayoutData;
   // Internal accessors for layout-modal
   _getSelectedLayoutId: () => string | null;
   _setSelectedLayoutId: (id: string | null) => void;
@@ -120,6 +121,24 @@ export function createLayoutManager({
         cwd: p.cwd,
         accent: p.accent,
         customColor: p.customColor,
+        shellProfileId: p.shellProfileId,
+        breathingMonitor: p.breathingMonitor !== false,
+      })) as unknown as LayoutData['panes'],
+      focusedPaneIndex: 0,
+    };
+  }
+
+  function createFreshDefaultLayout(layoutId: string, name: string): LayoutData {
+    // Use the getDefaultPanes() function from pane-state.ts to get the default three-pane layout
+    const defaultPanes = paneState.getDefaultPanes();
+    return {
+      id: layoutId,
+      name,
+      panes: defaultPanes.map((p) => ({
+        paneId: p.id,
+        title: p.title,
+        cwd: p.cwd,
+        accent: p.accent,
         shellProfileId: p.shellProfileId,
         breathingMonitor: p.breathingMonitor !== false,
       })) as unknown as LayoutData['panes'],
@@ -412,5 +431,6 @@ export function createLayoutManager({
     _setDefaultLayoutId,
     createLayoutFromCurrentWindow,
     restoreSession,
+    createFreshDefaultLayout,
   };
 }
