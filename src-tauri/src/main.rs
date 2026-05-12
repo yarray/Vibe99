@@ -10,6 +10,7 @@ use vibe99_lib::commands::shell_profile;
 use vibe99_lib::commands::terminal::{self, AppState};
 use vibe99_lib::commands::wsl as wsl_cmd;
 use vibe99_lib::pty::PtyManager;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
 /// Parse `--layout <id>` from the command-line arguments.
 fn parse_layout_arg() -> Option<String> {
@@ -73,8 +74,11 @@ fn main() {
             if let Some(layout_id) = &layout_id_arg {
                 if let Some(window) = app.get_webview_window("main") {
                     if let Ok(mut url) = window.url() {
-                        url.query_pairs_mut().append_pair("layoutId", layout_id);
-                        let _ = window.navigate(url);
+                        // Use set_query instead of query_pairs_mut to avoid origin issues.
+                        // Ensure proper encoding of the query parameter.
+                        let query = format!("layoutId={}", utf8_percent_encode(layout_id, NON_ALPHANUMERIC));
+                        url.set_query(Some(&query));
+                        let _ = window.navigate(url.as_str());
                     }
                 }
             }
