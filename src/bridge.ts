@@ -629,6 +629,19 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     return `layout-${safeLabel}`;
   }
 
+  function getLayoutWindowPosition(width: number, height: number): { x: number; y: number } {
+    const screenW = window.screen?.availWidth ?? 1920;
+    const screenH = window.screen?.availHeight ?? 1080;
+    const baseX = Math.floor((screenW - width) / 2);
+    const baseY = Math.floor((screenH - height) / 2);
+    const offsetX = 30 + Math.floor(Math.random() * 21); // 30–50 px
+    const offsetY = 30 + Math.floor(Math.random() * 21);
+    return {
+      x: Math.max(0, baseX + offsetX),
+      y: Math.max(0, baseY + offsetY),
+    };
+  }
+
   async function openLayoutWindow(layoutId: string): Promise<void> {
     if (layoutId === windowLayoutId) {
       return focusWindow(currentWindow);
@@ -656,6 +669,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     }
 
     const url = `index.html?layoutId=${encodeURIComponent(layoutId)}`;
+    const pos = getLayoutWindowPosition(1600, 920);
     const win = new WebviewWindow(label, {
       url,
       title: `Vibe99 - ${layoutId}`,
@@ -663,7 +677,9 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       height: 920,
       minWidth: 960,
       minHeight: 640,
-      center: true,
+      center: false,
+      x: pos.x,
+      y: pos.y,
     });
     return win.once('tauri://created', () => {}).then(() => {});
   }
