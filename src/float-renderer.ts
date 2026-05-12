@@ -37,6 +37,7 @@ interface TauriWindow {
   startDragging: () => Promise<void>;
   close: () => Promise<void>;
   outerPosition: () => Promise<PhysicalPosition>;
+  listen: <T>(event: string, handler: (e: { payload: T }) => void) => Promise<() => void>;
 }
 
 interface TauriGlobal {
@@ -93,7 +94,6 @@ const params = new URLSearchParams(window.location.search);
 const parentLabel = params.get('label') ?? '';
 
 let currentPanes: FloatPaneInfo[] = [];
-let dragStarted = false;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -162,22 +162,10 @@ function handleBlockClick(paneId: string): void {
 wrapperEl.addEventListener('mousedown', (event) => {
   // Start drag on wrapper / container background only, not on blocks or close button.
   if (event.target === wrapperEl || event.target === containerEl) {
-    dragStarted = true;
     if (tauri) {
       void tauri.window.getCurrentWindow().startDragging();
     }
   }
-});
-
-window.addEventListener('mouseup', async () => {
-  if (dragStarted && tauri) {
-    dragStarted = false;
-    try {
-      const pos = await tauri.window.getCurrentWindow().outerPosition();
-      emitToParent(MOVED_EVENT, { x: pos.x, y: pos.y });
-    } catch { /* best effort */ }
-  }
-  dragStarted = false;
 });
 
 // ---------------------------------------------------------------------------
@@ -204,10 +192,16 @@ async function setupListeners(): Promise<void> {
   if (!tauri) return;
 
   const webview = tauri.webview.getCurrentWebview();
+  const win = tauri.window.getCurrentWindow();
 
   // Listen for pane updates from parent window
   const unlisten = await webview.listen<PanesUpdatePayload>(PANES_EVENT, (e) => {
     render(e.payload.panes);
+  });
+
+  // Track window position changes and report to parent for persistence
+  const unlistenMoved = await win.listen<PhysicalPosition>('tauri://move', (e) => {
+    emitToParent(MOVED_EVENT, { x: e.payload.x, y: e.payload.y });
   });
 
   // Notify parent that we are ready to receive events
@@ -216,6 +210,7 @@ async function setupListeners(): Promise<void> {
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
     unlisten();
+    unlistenMoved();
   });
 }
 

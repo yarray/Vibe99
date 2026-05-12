@@ -647,7 +647,7 @@ window.addEventListener('beforeunload', () => {
   removeTerminalDataListener();
   removeTerminalExitListener();
   removeMenuActionListener();
-  void floatWindowManager.close();
+  void floatWindowManager.close({ parentClosing: true });
 });
 
 window.addEventListener('error', (event) => {

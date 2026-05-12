@@ -11,9 +11,9 @@
  * Persistence: float window open state and position are saved to localStorage
  * keyed by layout ID.
  *   - open:true is saved immediately when the float window opens (sync).
- *   - Position is tracked via drag events from the float renderer.
- *   - open:false is saved when the user explicitly closes (X button or toggle).
- *   - Parent window close does NOT change the persisted state (open:true stays).
+ *   - Position is tracked via tauri://move events from the float renderer.
+ *   - open:false is saved only when the USER explicitly closes (X or toggle).
+ *   - Parent window close skips the save so open:true is preserved.
  */
 
 // ---------------------------------------------------------------------------
@@ -75,8 +75,8 @@ export interface FloatWindowDeps {
 export interface FloatWindowManager {
   /** Open the float window (noop if already open). */
   open: () => Promise<void>;
-  /** Close the float window. No-op if not open. */
-  close: () => Promise<void>;
+  /** Close the float window. Pass parentClosing:true to skip saving open:false. */
+  close: (options?: { parentClosing?: boolean }) => Promise<void>;
   /** Toggle the float window open/closed. */
   toggle: () => Promise<void>;
   /** Whether the float window is currently open. */
@@ -209,7 +209,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       unlistenUserClosed = () => { unlisten(); };
     }
 
-    // Float window dragged → save new position
+    // Float window moved → save new position (sent from float-renderer via tauri://move)
     if (!unlistenMoved) {
       const unlisten = await webview.listen<PhysicalPosition>(MOVED_EVENT, (e) => {
         const layoutId = getLayoutId();
@@ -284,13 +284,17 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       emitPanes(buildSnapshot());
     },
 
-    async close(): Promise<void> {
+    async close(options?: { parentClosing?: boolean }): Promise<void> {
       if (!isOpenFlag) return;
 
-      const layoutId = getLayoutId();
-      // Save open:false — user explicitly closed (toggle off)
-      if (layoutId) {
-        saveStateForLayout(layoutId, { open: false });
+      // Only save open:false when the user explicitly closes, NOT when parent is closing.
+      // When parent closes, the open:true we saved in open() should remain so the float
+      // window reopens on next launch.
+      if (!options?.parentClosing) {
+        const layoutId = getLayoutId();
+        if (layoutId) {
+          saveStateForLayout(layoutId, { open: false });
+        }
       }
 
       const existing = await tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel);
