@@ -390,9 +390,7 @@ pub fn extract_wsl_inner_shell(args: &[String]) -> String {
 }
 
 /// Load and sanitize settings from disk.
-pub fn load_settings_config(
-    app: &tauri::AppHandle,
-) -> Result<serde_json::Value, String> {
+pub fn load_settings_config(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     let path = app
         .path()
         .app_data_dir()

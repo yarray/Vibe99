@@ -586,6 +586,7 @@ window.addEventListener('resize', () => {
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     await bridge.cwdReady;
+    paneState.setDefaultCwd(bridge.defaultCwd, bridge.defaultTabTitle);
 
     const savedSettings = await bridge.loadSettings();
     settingsManager.applyPersistedSettings(savedSettings);

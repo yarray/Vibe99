@@ -27,9 +27,9 @@
 //!   meaningful in WSL are forwarded, preventing Windows-specific noise from
 //!   polluting the Linux environment (P11: functional self-discipline).
 
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_os = "windows")]
 use std::{os::windows::process::CommandExt, process::Command};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 // ----------------------------------------------------------------
 // Detection

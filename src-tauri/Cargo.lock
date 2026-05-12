@@ -4552,6 +4552,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-opener",
  "tauri-plugin-shell",
+ "windows-sys 0.59.0",
  "winreg 0.55.0",
 ]
 

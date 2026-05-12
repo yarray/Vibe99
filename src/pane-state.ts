@@ -81,6 +81,7 @@ export interface PaneState {
   setPaneShellProfile: (paneId: string, profileId: string | null) => boolean;
   setPaneTerminalTitle: (paneId: string, terminalTitle: string) => boolean;
   togglePaneBreathingMonitor: (paneId: string) => boolean;
+  setDefaultCwd: (cwd: string, tabTitle: string) => void;
 
   // Session operations
   buildSessionData: () => SessionData;
@@ -112,11 +113,13 @@ interface PaneCycleState {
  * @returns Pane state manager interface
  */
 export function createPaneState({
-  defaultCwd,
-  defaultTabTitle,
+  defaultCwd: initialDefaultCwd,
+  defaultTabTitle: initialDefaultTabTitle,
   getAccentPalette,
   onStateChange,
 }: PaneStateDeps): PaneState {
+  let defaultCwd = initialDefaultCwd;
+  let defaultTabTitle = initialDefaultTabTitle;
   const palette: string[] = getAccentPalette();
   const initialPanes: Pane[] = [
     {
@@ -424,6 +427,24 @@ export function createPaneState({
     return next;
   };
 
+  const setDefaultCwd = (cwd: string, tabTitle: string): void => {
+    if (!cwd || cwd === defaultCwd) {
+      return;
+    }
+
+    const previousDefaultCwd = defaultCwd;
+    const previousDefaultTabTitle = defaultTabTitle;
+    defaultCwd = cwd;
+    defaultTabTitle = tabTitle || cwd;
+
+    panes = panes.map((pane: Pane) => ({
+      ...pane,
+      cwd: pane.cwd === previousDefaultCwd ? defaultCwd : pane.cwd,
+      terminalTitle: pane.terminalTitle === previousDefaultTabTitle ? defaultTabTitle : pane.terminalTitle,
+    }));
+    notifyChange();
+  };
+
   const reorderPane = (paneId: string, newIndex: number): boolean => {
     const paneIndex: number = getPaneIndex(paneId);
     if (paneIndex === -1) return false;
@@ -542,6 +563,7 @@ export function createPaneState({
     setPaneShellProfile,
     setPaneTerminalTitle,
     togglePaneBreathingMonitor,
+    setDefaultCwd,
 
     // Session operations
     buildSessionData,

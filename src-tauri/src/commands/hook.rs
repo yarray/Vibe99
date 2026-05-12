@@ -81,10 +81,7 @@ impl Hook {
             .and_then(|v| v.as_str())
             .map(str::trim)
             .filter(|s| !s.is_empty())?;
-        let enabled = obj
-            .get("enabled")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
+        let enabled = obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
 
         Some(Self {
             id: id.to_string(),
@@ -123,11 +120,7 @@ fn extract_hooks(config: &Value) -> Vec<Hook> {
     config
         .get("hooks")
         .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|item| Hook::sanitize(item))
-                .collect()
-        })
+        .map(|arr| arr.iter().filter_map(|item| Hook::sanitize(item)).collect())
         .unwrap_or_default()
 }
 

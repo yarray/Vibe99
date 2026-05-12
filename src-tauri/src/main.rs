@@ -23,6 +23,8 @@ fn parse_layout_arg() -> Option<String> {
 }
 
 fn main() {
+    vibe99_lib::windows::log_redirection_guard_status();
+
     let layout_id_arg = parse_layout_arg();
 
     tauri::Builder::default()
