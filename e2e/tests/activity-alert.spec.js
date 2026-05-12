@@ -249,7 +249,7 @@ describe('Activity Alert', () => {
     expect(await paneHasAlert(2)).toBe(false);
   });
 
-  it('should not trigger alert when per-pane "Background activity alert" is off', async () => {
+  it('should not trigger alert when per-pane alert is disabled', async () => {
     // Focus pane 1 via its tab
     const tabs = await $$('#tabs-list .tab');
     const tabMain1 = await tabs[1].$('.tab-main');
@@ -257,7 +257,7 @@ describe('Activity Alert', () => {
     await browser.pause(200);
 
     await openContextMenuForPane(1);
-    await clickContextMenuItem('Background activity alert');
+    await clickContextMenuItem('Disable Alert');
     await browser.pause(300);
 
     // Try to trigger output (may or may not succeed naturally)
@@ -276,11 +276,11 @@ describe('Activity Alert', () => {
 
     // Re-enable for other tests
     await openContextMenuForPane(1);
-    await clickContextMenuItem('Background activity alert');
+    await clickContextMenuItem('Enable Alert');
     await browser.pause(200);
   });
 
-  it('should disable all alerts when global "Background activity alert" is off', async () => {
+  it('should disable breathing mask when global activity alert is off', async () => {
     const toggle = await openSettingsAndGetBreathingToggle();
     const isChecked = await browser.execute(() => document.getElementById('breathing-alert-toggle')?.checked);
     if (isChecked) {
@@ -301,7 +301,7 @@ describe('Activity Alert', () => {
     expect(await paneHasAlert(1)).toBe(false);
   });
 
-  it('should restore alerts when global "Background activity alert" is re-enabled', async () => {
+  it('should restore breathing mask when global activity alert is re-enabled', async () => {
     const toggle = await openSettingsAndGetBreathingToggle();
     const isChecked = await browser.execute(() => document.getElementById('breathing-alert-toggle')?.checked);
     if (!isChecked) {

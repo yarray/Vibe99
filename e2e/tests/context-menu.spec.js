@@ -247,7 +247,7 @@ describe('Context Menu', () => {
       expect(labels.some((l) => l.includes('Paste'))).toBe(true);
       expect(labels.some((l) => l.includes('Paste Image'))).toBe(true);
       expect(labels.some((l) => l.includes('Change Color'))).toBe(true);
-      expect(labels.some((l) => l.includes('Background activity alert'))).toBe(true);
+      expect(labels.some((l) => l.includes('Disable Alert'))).toBe(true);
       expect(labels.some((l) => l.includes('Select All'))).toBe(true);
       expect(labels.some((l) => l.includes('Change Profile'))).toBe(true);
 
@@ -371,20 +371,19 @@ describe('Context Menu', () => {
       await rightClickTerminal(0);
       await waitForContextMenu();
 
-      // The menu item should exist
-      expect(await hasContextMenuItem('Background activity alert')).toBe(true);
+      // The menu item should exist (default is ON, so label is "Disable Alert")
+      expect(await hasContextMenuItem('Disable Alert')).toBe(true);
 
-      // Toggle it
-      await clickContextMenuItem('Background activity alert');
+      // Toggle it off
+      await clickContextMenuItem('Disable Alert');
       await browser.pause(300);
 
-      // Open menu again to verify the toggle state changed
+      // Open menu again to verify the label changed
       await rightClickTerminal(0);
       await waitForContextMenu();
 
-      // After toggling, the checkmark should be present or absent
-      // We just verify the item still exists
-      expect(await hasContextMenuItem('Background activity alert')).toBe(true);
+      // After toggling off, the label should be "Enable Alert"
+      expect(await hasContextMenuItem('Enable Alert')).toBe(true);
 
       await dismissContextMenu();
     });

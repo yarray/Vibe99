@@ -128,14 +128,20 @@ const hookManager = createHookManager({
 });
 
 const paneAlert = createBreathingMaskAlert();
+let globalBreathingEnabled = true;
+
 const paneActivityWatcher = createPaneActivityWatcher({
   onAlert: (paneId) => {
-    paneRenderer?.setAlerted(paneId, true);
+    if (globalBreathingEnabled) {
+      paneRenderer?.setAlerted(paneId, true);
+    }
     floatWindowManager.noteAlert(paneId);
     hookManager.emitEvent('alert.start');
   },
   onClear: (paneId) => {
-    paneRenderer?.setAlerted(paneId, false);
+    if (globalBreathingEnabled) {
+      paneRenderer?.setAlerted(paneId, false);
+    }
     floatWindowManager.noteClear(paneId);
     hookManager.emitEvent('alert.stop');
   },
@@ -146,6 +152,14 @@ const settingsManager = createSettingsManager({
   reportError,
   applyCallback: () => render(true),
   paneActivityWatcher,
+  onBreathingAlertToggle: (enabled) => {
+    globalBreathingEnabled = enabled;
+    if (!enabled) {
+      paneState.getPanes().forEach((pane) => {
+        paneRenderer?.setAlerted(pane.id, false);
+      });
+    }
+  },
   onToggleFloatWindow: () => floatWindowManager.toggle(),
   getFloatWindowOpen: () => floatWindowManager.isOpen(),
 });

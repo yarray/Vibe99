@@ -395,7 +395,7 @@ function showTerminalContextMenu(
       { type: 'separator' },
       { label: 'Change Color...', action: 'terminal-change-color' },
       {
-        label: 'Background activity alert',
+        label: breathingOn ? 'Disable Alert' : 'Enable Alert',
         action: 'pane-toggle-breathing',
         toggleActive: breathingOn,
       },
