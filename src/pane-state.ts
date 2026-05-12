@@ -421,7 +421,8 @@ export function createPaneState({
     const paneIndex: number = getPaneIndex(paneId);
     if (paneIndex === -1) return false;
 
-    const next: boolean = panes[paneIndex].breathingMonitor === false;
+    const current: boolean = panes[paneIndex].breathingMonitor !== false;
+    const next = !current;
     panes[paneIndex] = { ...panes[paneIndex], breathingMonitor: next };
     notifyChange();
     return next;

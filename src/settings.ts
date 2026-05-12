@@ -23,6 +23,7 @@ export interface SettingsManagerDeps {
     setGlobalEnabled: (enabled: boolean) => void;
     setSettleMs: (ms: number) => void;
   };
+  onBreathingAlertToggle?: (enabled: boolean) => void;
   onToggleFloatWindow?: () => Promise<void>;
   getFloatWindowOpen?: () => boolean;
 }
@@ -72,6 +73,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     reportError,
     applyCallback,
     paneActivityWatcher,
+    onBreathingAlertToggle,
   } = deps;
 
   const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement;
@@ -116,7 +118,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneMaskOpacityInput.value = settings.paneMaskOpacity.toFixed(2);
     breathingToggle.checked = settings.breathingAlertEnabled;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
     // Sync float window toggle dot with current runtime state
     const floatOpen = deps.getFloatWindowOpen?.() ?? false;
     floatWindowToggle.checked = floatOpen;
@@ -303,7 +305,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     breathingToggle.checked = !breathingToggle.checked;
     settings.breathingAlertEnabled = breathingToggle.checked;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
     scheduleSettingsSave();
   }
 
@@ -314,7 +316,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   breathingToggle.addEventListener('change', () => {
     settings.breathingAlertEnabled = breathingToggle.checked;
     breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    paneActivityWatcher.setGlobalEnabled(settings.breathingAlertEnabled);
+    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
     scheduleSettingsSave();
   });
 
