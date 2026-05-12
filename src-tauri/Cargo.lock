@@ -4541,6 +4541,7 @@ name = "vibe99"
 version = "0.12.6"
 dependencies = [
  "base64 0.22.1",
+ "percent-encoding",
  "portable-pty",
  "regex",
  "serde",

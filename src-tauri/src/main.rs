@@ -48,6 +48,7 @@ fn main() {
             terminal::get_cwd,
             settings::settings_load,
             settings::settings_save,
+            settings::float_window_state_save,
             layout::layouts_list,
             layout::layout_save,
             layout::layout_delete,
@@ -78,7 +79,7 @@ fn main() {
                         // Ensure proper encoding of the query parameter.
                         let query = format!("layoutId={}", utf8_percent_encode(layout_id, NON_ALPHANUMERIC));
                         url.set_query(Some(&query));
-                        let _ = window.navigate(url.as_str());
+                        let _ = window.navigate(url);
                     }
                 }
             }

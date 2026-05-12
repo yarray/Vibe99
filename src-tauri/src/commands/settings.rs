@@ -456,6 +456,14 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                 }
             }
 
+            // Pass through floatWindows state (object keyed by layout ID).
+            if let Some(fw) = obj.get("floatWindows") {
+                result
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("floatWindows".into(), fw.clone());
+            }
+
             result
         }
         Some(v) if v == 1 => {
@@ -610,4 +618,45 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
     std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
 
     Ok(sanitized)
+}
+
+/// Save only the `floatWindows` field into settings.json.
+/// Reads the full config from disk, updates the single field, and writes back.
+/// This avoids the partial-payload merge issues of `settings_save`.
+#[tauri::command]
+pub fn float_window_state_save(app: AppHandle, state: Value) -> Result<(), String> {
+    let s = app.state::<SettingsState>();
+    let _guard = s
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let path = settings_path(&app)?;
+
+    let mut config: Value = if path.exists() {
+        let contents =
+            std::fs::read_to_string(&path).map_err(|e| format!("failed to read settings: {e}"))?;
+        serde_json::from_str(&contents).unwrap_or(Value::Null)
+    } else {
+        Value::Null
+    };
+
+    if let Some(obj) = config.as_object_mut() {
+        obj.insert("floatWindows".into(), state);
+    } else {
+        config = serde_json::json!({ "floatWindows": state });
+    }
+
+    let sanitized = sanitize_config(&config);
+    let serialized = serde_json::to_string_pretty(&sanitized)
+        .map_err(|e| format!("failed to serialize settings: {e}"))?;
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create settings directory: {e}"))?;
+    }
+
+    std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
+
+    Ok(())
 }

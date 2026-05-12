@@ -301,6 +301,8 @@ paneOps = createPaneOperations({
   state: tabBarState,
 });
 
+let cachedFloatWindowState: Record<string, any> = {};
+
 const floatWindowManager = createFloatWindowManager({
   tauri: (window as any).__TAURI__,
   currentWindowLabel: bridge.currentWindowLabel,
@@ -315,6 +317,10 @@ const floatWindowManager = createFloatWindowManager({
     floatWindowManager.sync();
   },
   onClose: () => paneActivityWatcher.setIgnoreFocus(false),
+  persistFloatState: (state) => {
+    cachedFloatWindowState = state;
+    void bridge.saveFloatWindowState(state).catch(reportError);
+  },
 });
 
 const commandPaletteEntries = createCommandPaletteEntries({
@@ -605,6 +611,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     const savedSettings = await bridge.loadSettings();
     settingsManager.applyPersistedSettings(savedSettings);
     settingsManager.applySettings();
+    cachedFloatWindowState = (savedSettings as any).floatWindows || {};
+    floatWindowManager.setPersistedState(cachedFloatWindowState);
     shellProfileManager?.loadShellProfiles();
     hookManager.loadHooks();
 
@@ -643,6 +651,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     layoutManager.updateLayoutsIndicator();
     render(true);
     layoutManager.setLayoutRestoreComplete(true);
+    layoutRestoreComplete = true;
 
     // Auto-restore float window if it was open before the app was closed
     if (floatWindowManager.shouldAutoOpen()) {

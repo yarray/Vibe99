@@ -70,9 +70,13 @@ export interface FloatWindowDeps {
   getPanes: () => FloatPaneDescriptor[];
   onOpen?: () => void;
   onClose?: () => void;
+  /** Persist float window state map to settings. */
+  persistFloatState: (state: FloatWindowStateMap) => void;
 }
 
 export interface FloatWindowManager {
+  /** Seed cached state from persisted settings (call once after load). */
+  setPersistedState: (state: FloatWindowStateMap) => void;
   /** Open the float window (noop if already open). */
   open: () => Promise<void>;
   /** Close the float window. Pass parentClosing:true to skip saving open:false. */
@@ -101,8 +105,6 @@ const READY_EVENT = 'vibe99:float-ready';
 const USER_CLOSED_EVENT = 'vibe99:float-user-closed';
 const MOVED_EVENT = 'vibe99:float-moved';
 
-const FLOAT_WINDOW_STATE_KEY = 'vibe99.floatWindowState';
-
 // ---------------------------------------------------------------------------
 // Persistence helpers
 // ---------------------------------------------------------------------------
@@ -115,31 +117,19 @@ interface FloatWindowState {
 
 type FloatWindowStateMap = Record<string, FloatWindowState>;
 
+let cachedFloatState: FloatWindowStateMap = {};
+
 function readFloatWindowState(): FloatWindowStateMap {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(FLOAT_WINDOW_STATE_KEY) || '{}');
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
+  return cachedFloatState;
 }
 
-function writeFloatWindowState(state: FloatWindowStateMap): void {
-  try {
-    window.localStorage.setItem(FLOAT_WINDOW_STATE_KEY, JSON.stringify(state));
-  } catch {
-    // Best effort
-  }
-}
-
-function saveStateForLayout(layoutId: string, partial: FloatWindowState): void {
-  const all = readFloatWindowState();
-  all[layoutId] = { ...(all[layoutId] || {}), ...partial };
-  writeFloatWindowState(all);
+function saveStateForLayout(layoutId: string, partial: FloatWindowState, persist: (state: FloatWindowStateMap) => void): void {
+  cachedFloatState[layoutId] = { ...(cachedFloatState[layoutId] || {}), ...partial };
+  persist({ ...cachedFloatState });
 }
 
 function readStateForLayout(layoutId: string): FloatWindowState | null {
-  return readFloatWindowState()[layoutId] ?? null;
+  return cachedFloatState[layoutId] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +137,7 @@ function readStateForLayout(layoutId: string): FloatWindowState | null {
 // ---------------------------------------------------------------------------
 
 export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowManager {
-  const { tauri, currentWindowLabel, getLayoutId, onFocusPane, getPanes, onOpen, onClose } = deps;
+  const { tauri, currentWindowLabel, getLayoutId, onFocusPane, getPanes, onOpen, onClose, persistFloatState } = deps;
   const floatLabel = `float-${currentWindowLabel}`;
 
   let isOpenFlag = false;
@@ -201,7 +191,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       const unlisten = await webview.listen<PhysicalPosition>(USER_CLOSED_EVENT, (e) => {
         const layoutId = getLayoutId();
         if (layoutId) {
-          saveStateForLayout(layoutId, { open: false, x: e.payload.x, y: e.payload.y });
+          saveStateForLayout(layoutId, { open: false, x: e.payload.x, y: e.payload.y }, persistFloatState);
         }
         isOpenFlag = false;
         onClose?.();
@@ -214,7 +204,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       const unlisten = await webview.listen<PhysicalPosition>(MOVED_EVENT, (e) => {
         const layoutId = getLayoutId();
         if (layoutId) {
-          saveStateForLayout(layoutId, { x: e.payload.x, y: e.payload.y });
+          saveStateForLayout(layoutId, { x: e.payload.x, y: e.payload.y }, persistFloatState);
         }
       });
       unlistenMoved = () => { unlisten(); };
@@ -235,6 +225,10 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
   }
 
   return {
+    setPersistedState(state: FloatWindowStateMap): void {
+      cachedFloatState = state || {};
+    },
+
     async open(): Promise<void> {
       if (isOpenFlag) {
         const existing = await tauri.webviewWindow.WebviewWindow.getByLabel(floatLabel);
@@ -252,7 +246,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
       // Save open:true immediately (sync) so state survives parent close
       if (layoutId) {
-        saveStateForLayout(layoutId, { open: true });
+        saveStateForLayout(layoutId, { open: true }, persistFloatState);
       }
 
       const windowOptions: Record<string, unknown> = {
@@ -270,10 +264,13 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
         center: false,
       };
 
-      // Pass saved position in constructor to avoid flash
+      // Pass saved position in constructor to avoid flash.
+      // tauri://move reports physical pixels; WebviewWindow constructor
+      // expects logical pixels, so convert via devicePixelRatio.
       if (savedState && savedState.x != null && savedState.y != null) {
-        windowOptions.x = savedState.x;
-        windowOptions.y = savedState.y;
+        const dpr = window.devicePixelRatio || 1;
+        windowOptions.x = Math.round(savedState.x / dpr);
+        windowOptions.y = Math.round(savedState.y / dpr);
       }
 
       const { WebviewWindow } = tauri.webviewWindow;
@@ -293,7 +290,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       if (!options?.parentClosing) {
         const layoutId = getLayoutId();
         if (layoutId) {
-          saveStateForLayout(layoutId, { open: false });
+          saveStateForLayout(layoutId, { open: false }, persistFloatState);
         }
       }
 

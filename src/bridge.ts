@@ -288,6 +288,7 @@ export interface Bridge {
 
   loadSettings: SettingsApi['load'];
   saveSettings: SettingsApi['save'];
+  saveFloatWindowState: SettingsApi['saveFloatWindowState'];
 
   listShellProfiles: ShellApi['list'];
   addShellProfile: ShellApi['add'];
@@ -448,6 +449,7 @@ type FlatAliases = {
   getClipboardSnapshot: unknown;
   loadSettings: unknown;
   saveSettings: unknown;
+  saveFloatWindowState: unknown;
   listShellProfiles: unknown;
   addShellProfile: unknown;
   removeShellProfile: unknown;
@@ -555,6 +557,7 @@ function createUnavailableBridge(): Bridge {
     getClipboardSnapshot: async () => ({ text: '', hasImage: false }),
     loadSettings: () => Promise.resolve({}),
     saveSettings: () => Promise.resolve({}),
+    saveFloatWindowState: () => Promise.resolve(),
     listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
     addShellProfile: fail,
     removeShellProfile: fail,
@@ -715,6 +718,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     settings: {
       load: () => invoke('settings_load'),
       save: (payload: SettingsData) => invoke('settings_save', { settings: payload }),
+      saveFloatWindowState: (state: unknown) => invoke('float_window_state_save', { state }),
     },
     shell: {
       list: () => invoke('shell_profiles_list'),
@@ -800,6 +804,7 @@ export function createBridge(
       getClipboardSnapshot: partial.clipboard.snapshot,
       loadSettings: partial.settings.load,
       saveSettings: partial.settings.save,
+      saveFloatWindowState: partial.settings.saveFloatWindowState,
       listShellProfiles: partial.shell.list,
       addShellProfile: partial.shell.add,
       removeShellProfile: partial.shell.remove,
