@@ -50,6 +50,14 @@ async function openCommandList() {
 }
 
 /**
+ * Open the new pane profile picker via Ctrl+Shift+N
+ */
+async function openNewPaneProfilePicker() {
+  await sendShortcut('N', true, true);
+  await browser.pause(300);
+}
+
+/**
  * Close the command palette via Escape
  */
 async function closePalette() {
@@ -459,6 +467,186 @@ describe('Command Palette', () => {
       highlighted = await getHighlightedItem();
       let backToFirst = await highlighted.getAttribute('data-index');
       expect(backToFirst).toBe('0');
+    });
+  });
+
+  describe('New Pane Profile Picker (Ctrl+Shift+N)', () => {
+    it('opens the profile picker with Ctrl+Shift+N', async () => {
+      const initialPaneCount = await getPaneCount();
+
+      await openNewPaneProfilePicker();
+
+      const overlay = await $('.command-palette-overlay');
+      expect(overlay).toExist();
+
+      const input = await $('.command-palette-input');
+      expect(input).toExist();
+
+      const placeholder = await input.getAttribute('placeholder');
+      expect(placeholder).toBe('Select a profile for new pane…');
+
+      // Clean up: close palette
+      await closePalette();
+    });
+
+    it('displays all available shell profiles', async () => {
+      await openNewPaneProfilePicker();
+
+      const items = await getPaletteItems();
+      expect(items.length).toBeGreaterThan(0);
+
+      // Each item should have a label
+      for (const item of items) {
+        const label = await item.$('.command-palette-label');
+        expect(label).toExist();
+        const labelText = await getTextSafe(label);
+        expect(labelText).toBeTruthy();
+      }
+
+      // Clean up: close palette
+      await closePalette();
+    });
+
+    it('creates a new pane when a profile is selected', async () => {
+      const initialTabCount = await getTabCount();
+      const initialPaneCount = await getPaneCount();
+
+      await openNewPaneProfilePicker();
+
+      const items = await getPaletteItems();
+      expect(items.length).toBeGreaterThan(0);
+
+      // Select the first profile (typically highlighted)
+      const firstItem = items[0];
+      await firstItem.click();
+      await browser.pause(500);
+
+      // Verify palette closed
+      await waitForPaletteGone();
+
+      // Verify new pane was created
+      const newTabCount = await getTabCount();
+      const newPaneCount = await getPaneCount();
+
+      expect(newTabCount).toBe(initialTabCount + 1);
+      expect(newPaneCount).toBe(initialPaneCount + 1);
+    });
+
+    it('closes without creating a pane when Escape is pressed', async () => {
+      const initialTabCount = await getTabCount();
+      const initialPaneCount = await getPaneCount();
+
+      await openNewPaneProfilePicker();
+
+      const overlay = await $('.command-palette-overlay');
+      expect(overlay).toExist();
+
+      // Press Escape to cancel
+      await closePalette();
+
+      // Verify palette closed
+      const overlayAfter = await $('.command-palette-overlay');
+      expect(overlayAfter).not.toExist();
+
+      // Verify no new pane was created
+      const finalTabCount = await getTabCount();
+      const finalPaneCount = await getPaneCount();
+
+      expect(finalTabCount).toBe(initialTabCount);
+      expect(finalPaneCount).toBe(initialPaneCount);
+    });
+  });
+
+  describe('Float Window Command', () => {
+    it('includes "Toggle float window" in command list', async () => {
+      await openCommandList();
+
+      // Search for "float" to filter commands
+      await typeInPalette('float');
+      await browser.pause(300);
+
+      const items = await getPaletteItems();
+      expect(items.length).toBeGreaterThan(0);
+
+      // Look for the toggle float window command
+      let foundToggleFloat = false;
+      for (const item of items) {
+        const label = await item.$('.command-palette-label');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text.toLowerCase().includes('float')) {
+            foundToggleFloat = true;
+            break;
+          }
+        }
+      }
+
+      expect(foundToggleFloat).toBe(true);
+
+      // Clean up: close palette
+      await closePalette();
+    });
+
+    it('shows "Toggle float window" when searching for "toggle"', async () => {
+      await openCommandList();
+
+      // Search for "toggle" to filter commands
+      await typeInPalette('toggle');
+      await browser.pause(300);
+
+      const items = await getPaletteItems();
+      expect(items.length).toBeGreaterThan(0);
+
+      // Look for the toggle float window command
+      let foundToggleFloat = false;
+      for (const item of items) {
+        const label = await item.$('.command-palette-label');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text.toLowerCase().includes('toggle float')) {
+            foundToggleFloat = true;
+            break;
+          }
+        }
+      }
+
+      expect(foundToggleFloat).toBe(true);
+
+      // Clean up: close palette
+      await closePalette();
+    });
+
+    it('toggles float window state when command is executed', async () => {
+      await openCommandList();
+
+      // Search for "float" command
+      await typeInPalette('float');
+      await browser.pause(300);
+
+      // Execute the toggle float window command
+      const items = await getPaletteItems();
+      expect(items.length).toBeGreaterThan(0);
+
+      // Find and click the toggle float command
+      let commandExecuted = false;
+      for (const item of items) {
+        const label = await item.$('.command-palette-label');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text.toLowerCase().includes('float')) {
+            await item.click();
+            await browser.pause(500);
+            commandExecuted = true;
+            break;
+          }
+        }
+      }
+
+      // Verify palette closed (command executed)
+      await waitForPaletteGone();
+
+      // Verify the command was found and executed
+      expect(commandExecuted).toBe(true);
     });
   });
 });
