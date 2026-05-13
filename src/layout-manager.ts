@@ -53,7 +53,7 @@ export interface LayoutManager {
   _setRenamingLayoutId: (id: string | null) => void;
   _setLayouts: (newLayouts: LayoutData[]) => void;
   _setDefaultLayoutId: (id: string) => void;
-  createLayoutFromCurrentWindow: (layoutId: string, name: string) => LayoutData;
+  createLayoutFromCurrentWindow: (layoutId: string, name: string) => Promise<LayoutData>;
   restoreSession: (session: { panes?: SessionData['panes']; focusedPaneIndex?: number }) => boolean;
 }
 
@@ -100,13 +100,15 @@ export function createLayoutManager({
     return paneState.restoreSession(session);
   }
 
-  function createLayoutFromCurrentWindow(layoutId: string, name: string): LayoutData {
+  async function createLayoutFromCurrentWindow(layoutId: string, name: string): Promise<LayoutData> {
     const session: SessionData = buildSessionData();
+    const windowGeometry = await bridge.getWindowGeometry();
     return {
       id: layoutId,
       name,
       panes: session.panes as unknown as LayoutData['panes'],
       focusedPaneIndex: session.focusedPaneIndex,
+      windowGeometry,
     };
   }
 
@@ -158,7 +160,7 @@ export function createLayoutManager({
       throw new Error('Current window is not bound to a layout');
     }
     const existing = layouts.find((l) => l.id === windowLayoutId);
-    const layout = createLayoutFromCurrentWindow(windowLayoutId, existing?.name || windowLayoutId);
+    const layout = await createLayoutFromCurrentWindow(windowLayoutId, existing?.name || windowLayoutId);
     const config = await bridge.saveLayout(layout);
     layouts = config.layouts ?? layouts;
     defaultLayoutId = config.defaultLayoutId ?? defaultLayoutId;
@@ -176,7 +178,7 @@ export function createLayoutManager({
       throw new Error('Cannot save a layout with the name "Default" or "default". This name is reserved for the default layout.');
     }
 
-    const layout = createLayoutFromCurrentWindow(layoutId, name);
+    const layout = await createLayoutFromCurrentWindow(layoutId, name);
     const config = await bridge.saveLayout(layout);
     layouts = config.layouts ?? [];
     defaultLayoutId = config.defaultLayoutId ?? '';
