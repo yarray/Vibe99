@@ -240,7 +240,7 @@ export interface HookApi {
   add: (hook: HookData) => Promise<HooksListResult>;
   remove: (hookId: string) => Promise<HooksListResult>;
   update: (hookId: string, updates: Partial<HookData>) => Promise<HooksListResult>;
-  execute: (command: string, params?: Record<string, string>) => Promise<void>;
+  execute: (command: string, env?: Record<string, string>) => Promise<void>;
 }
 
 /** Event listener unsubscribes with void return */
@@ -755,7 +755,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       remove: (hookId: string) => invoke<HooksListResult>('hook_remove', { hookId }),
       update: (hookId: string, updates: Partial<HookData>) =>
         invoke<HooksListResult>('hook_update', { hookId, updates }),
-      execute: (command: string, params?: Record<string, string>) => invoke('hook_execute', { command, params }),
+      execute: (command: string, env?: Record<string, string>) => invoke('hook_execute', { command, env }),
     },
     onMenuAction: (handler: (event: MenuActionEvent) => void) =>
       onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler),

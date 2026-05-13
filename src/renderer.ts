@@ -126,7 +126,7 @@ const hookManager = createHookManager({
     addHook: (hook) => bridge.hooks.add(hook),
     removeHook: (hookId) => bridge.hooks.remove(hookId),
     updateHook: (hookId, updates) => bridge.hooks.update(hookId, updates),
-    executeHook: (command, params) => bridge.hooks.execute(command, params),
+    executeHook: (command, env) => bridge.hooks.execute(command, env),
     getRecentOutput: (paneId) => bridge.terminal.recentOutput(paneId),
     getPaneTitle: (paneId) => {
       const pane = paneState.getPaneById(paneId);
@@ -147,14 +147,14 @@ const paneActivityWatcher = createPaneActivityWatcher({
       paneRenderer?.setAlerted(paneId, true);
     }
     floatWindowManager.noteAlert(paneId);
-    hookManager.emitEvent('alert.start', { paneId });
+    hookManager.emitEvent({ event: 'alert.start', paneId });
   },
   onClear: (paneId) => {
     if (globalBreathingEnabled) {
       paneRenderer?.setAlerted(paneId, false);
     }
     floatWindowManager.noteClear(paneId);
-    hookManager.emitEvent('alert.stop', { paneId });
+    hookManager.emitEvent({ event: 'alert.stop', paneId });
   },
 });
 

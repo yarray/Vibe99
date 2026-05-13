@@ -1,0 +1,1 @@
+Hook commands now receive event context via `VIBE99_*` environment variables instead of template substitution. Available variables: `VIBE99_EVENT`, `VIBE99_PANE_ID`, `VIBE99_PANE_TITLE`, `VIBE99_RECENT_OUTPUT` (alert.start only).

@@ -2,12 +2,11 @@
 //
 // Exports a factory that creates a hook manager with:
 // - Hook CRUD (backed by settings.json via Tauri IPC)
-// - Event dispatch (match enabled hooks → execute commands)
+// - Event dispatch (match enabled hooks → execute commands with VIBE99_* env vars)
 // - Modal UI for hook configuration
 //
-// The event system is intentionally simple: `emitEvent(eventType)` scans
-// enabled hooks for matches and fire-and-forgets their commands. The
-// caller (renderer.ts) bridges alert start/stop into this emitter.
+// Context (event name, pane id, pane title, recent output) is passed to
+// hook commands as environment variables, not via template substitution.
 
 import { icon } from './icons';
 import type { HookData } from './bridge';
@@ -32,7 +31,7 @@ export interface HookBridge {
   addHook: (hook: HookData) => Promise<{ hooks: Hook[] }>;
   removeHook: (hookId: string) => Promise<{ hooks: Hook[] }>;
   updateHook: (hookId: string, updates: Partial<HookData>) => Promise<{ hooks: Hook[] }>;
-  executeHook: (command: string, params?: Record<string, string>) => Promise<void>;
+  executeHook: (command: string, env?: Record<string, string>) => Promise<void>;
   getRecentOutput: (paneId: string) => Promise<string>;
   getPaneTitle: (paneId: string) => string;
 }
@@ -44,13 +43,13 @@ export interface HookManagerDeps {
   unregisterModal: (closeFn: () => void) => void;
 }
 
-export interface HookEventContext {
-  paneId?: string;
-}
+export type HookEventPayload =
+  | { event: 'alert.start'; paneId: string }
+  | { event: 'alert.stop'; paneId: string };
 
 export interface HookManager {
   loadHooks: () => Promise<void>;
-  emitEvent: (eventType: string, context?: HookEventContext) => void;
+  emitEvent: (payload: HookEventPayload) => void;
   openHooksModal: () => void;
 }
 
@@ -94,39 +93,39 @@ export function createHookManager({
   // Event dispatch
   // ----------------------------------------------------------------
 
-  async function buildParams(eventType: string, ctx: HookEventContext): Promise<Record<string, string>> {
-    const params: Record<string, string> = { event: eventType };
+  async function buildEnv(payload: HookEventPayload): Promise<Record<string, string>> {
+    const paneTitle = bridge.getPaneTitle(payload.paneId);
+    const env: Record<string, string> = {
+      VIBE99_EVENT: payload.event,
+      VIBE99_PANE_ID: payload.paneId,
+      VIBE99_PANE_TITLE: paneTitle,
+    };
 
-    if (ctx.paneId) {
-      params.paneId = ctx.paneId;
-      params.paneTitle = bridge.getPaneTitle(ctx.paneId);
-
+    if (payload.event === 'alert.start') {
       try {
-        const output = await bridge.getRecentOutput(ctx.paneId);
+        const output = await bridge.getRecentOutput(payload.paneId);
         const lastNewline = output.lastIndexOf('\n', output.length - 2);
         const tail = lastNewline >= 0 ? output.slice(lastNewline + 1) : output;
-        params.recentOutput = tail.slice(-2048);
+        env.VIBE99_RECENT_OUTPUT = tail.slice(-2048);
       } catch {
-        params.recentOutput = '';
+        env.VIBE99_RECENT_OUTPUT = '';
       }
     }
 
-    return params;
+    return env;
   }
 
-  function emitEvent(eventType: string, context?: HookEventContext): void {
-    const ctx = context ?? {};
-    for (const hook of hooks) {
-      if (hook.enabled && hook.event === eventType) {
-        if (hook.command.includes('{')) {
-          buildParams(eventType, ctx)
-            .then((params) => bridge.executeHook(hook.command, params))
-            .catch(reportError);
-        } else {
-          bridge.executeHook(hook.command).catch(reportError);
+  function emitEvent(payload: HookEventPayload): void {
+    const matching = hooks.filter((h) => h.enabled && h.event === payload.event);
+    if (matching.length === 0) return;
+
+    buildEnv(payload)
+      .then((env) => {
+        for (const hook of matching) {
+          bridge.executeHook(hook.command, env).catch(reportError);
         }
-      }
-    }
+      })
+      .catch(reportError);
   }
 
   // ----------------------------------------------------------------
@@ -305,7 +304,7 @@ export function createHookManager({
 
     const fields: { key: 'name' | 'command'; label: string; placeholder: string }[] = [
       { key: 'name', label: 'Name', placeholder: 'e.g. Alert Sound' },
-      { key: 'command', label: 'Command', placeholder: 'notify-send "Alert" "Pane {paneTitle} stopped — {recentOutput}"' },
+      { key: 'command', label: 'Command', placeholder: 'notify-send "Alert" "$VIBE99_PANE_TITLE stopped"' },
     ];
 
     const inputs: Record<string, HTMLInputElement> = {};
