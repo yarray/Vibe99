@@ -357,9 +357,9 @@ describe('Layout', () => {
     const beforeHandles = await browser.getWindowHandles();
     expect(beforeHandles.length).toBe(1);
 
-    // 4. Click "default" in the dropdown - should open a new window
+    // 4. Click "Default" in the dropdown - should open a new window
     await openLayoutsDropdown();
-    await clickDropdownLayout('default');
+    await clickDropdownLayout('Default');
 
     // 5. Verify a new window opened
     const newWindowHandle = await waitForNewWindow(beforeHandles);

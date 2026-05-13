@@ -436,6 +436,24 @@ export async function clearAllLayouts() {
         // ignore errors
       }
     }
+    // Recreate the default layout so the app remains in a consistent state.
+    // The app expects a default layout to exist (id='default', name='Default').
+    // This is especially important for tests that interact with the layout
+    // dropdown or modal, as they may expect the default layout to be present.
+    try {
+      const defaultLayout = window.layoutManager?.createDefaultLayout();
+      if (defaultLayout) {
+        await core.invoke('layout_save', { layout: defaultLayout });
+        await core.invoke('layout_set_default', { layoutId: defaultLayout.id });
+      }
+    } catch {
+      // If creating the default layout fails, continue without it.
+      // The app will create it on the next startup.
+    }
+    // Refresh the frontend layout manager to pick up the recreated default layout.
+    if (window.layoutManager) {
+      await window.layoutManager.refreshLayouts();
+    }
   });
 }
 
