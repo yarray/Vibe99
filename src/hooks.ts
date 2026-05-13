@@ -2,15 +2,42 @@
 //
 // Exports a factory that creates a hook manager with:
 // - Hook CRUD (backed by settings.json via Tauri IPC)
-// - Event dispatch (match enabled hooks → execute commands)
+// - Typed event dispatch with safe mustache-style template rendering
 // - Modal UI for hook configuration
 //
-// The event system is intentionally simple: `emitEvent(eventType)` scans
-// enabled hooks for matches and fire-and-forgets their commands. The
-// caller (renderer.ts) bridges alert start/stop into this emitter.
+// Events carry typed payloads. The template engine replaces `{{var}}`
+// placeholders in hook commands with shell-escaped values from the payload,
+// preventing command injection from user data.
 
 import { icon } from './icons';
 import type { HookData } from './bridge';
+import { Shescape } from 'shescape';
+
+// ---------------------------------------------------------------------------
+// Event payload definitions — single source of truth
+// ---------------------------------------------------------------------------
+
+const EVENT_PAYLOAD_FIELDS = {
+  'alert.start': ['paneId', 'paneTitle', 'recentOutput'],
+  'alert.stop': ['paneId', 'paneTitle'],
+} as const;
+
+type PayloadOf<E extends keyof typeof EVENT_PAYLOAD_FIELDS> = {
+  [K in typeof EVENT_PAYLOAD_FIELDS[E][number]]: string;
+};
+
+export type AlertStartPayload = PayloadOf<'alert.start'>;
+export type AlertStopPayload = PayloadOf<'alert.stop'>;
+
+export type HookEventMap = { [E in keyof typeof EVENT_PAYLOAD_FIELDS]: PayloadOf<E> };
+export type HookEventType = keyof HookEventMap & string;
+
+function renderHint(eventType: string): string {
+  const fields = EVENT_PAYLOAD_FIELDS[eventType as HookEventType] ?? [];
+  return fields.length
+    ? `Variables: ${fields.map((f) => `<code>{{${f}}}</code>`).join(' ')}`
+    : '';
+}
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -44,7 +71,7 @@ export interface HookManagerDeps {
 
 export interface HookManager {
   loadHooks: () => Promise<void>;
-  emitEvent: (eventType: string) => void;
+  emitEvent: <E extends HookEventType>(eventType: E, payload: HookEventMap[E]) => void;
   openHooksModal: () => void;
 }
 
@@ -52,10 +79,33 @@ export interface HookManager {
 // Known event types (for the dropdown in the editor)
 // ---------------------------------------------------------------------------
 
-const KNOWN_EVENTS = [
+const KNOWN_EVENTS: HookEventType[] = [
   'alert.start',
   'alert.stop',
 ];
+
+// ---------------------------------------------------------------------------
+// Safe template rendering
+// ---------------------------------------------------------------------------
+
+const shescape = new Shescape({});
+
+function renderTemplate(template: string, context: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) => {
+    if (Object.prototype.hasOwnProperty.call(context, key)) {
+      return shescape.quote(context[key]);
+    }
+    return match;
+  });
+}
+
+function payloadToContext(payload: Record<string, unknown>): Record<string, string> {
+  const ctx: Record<string, string> = {};
+  for (const [key, val] of Object.entries(payload)) {
+    if (typeof val === 'string') ctx[key] = val;
+  }
+  return ctx;
+}
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -88,10 +138,12 @@ export function createHookManager({
   // Event dispatch
   // ----------------------------------------------------------------
 
-  function emitEvent(eventType: string): void {
+  function emitEvent<E extends HookEventType>(eventType: E, payload: HookEventMap[E]): void {
+    const context = payloadToContext(payload as unknown as Record<string, unknown>);
     for (const hook of hooks) {
       if (hook.enabled && hook.event === eventType) {
-        bridge.executeHook(hook.command).catch(reportError);
+        const command = renderTemplate(hook.command, context);
+        bridge.executeHook(command).catch(reportError);
       }
     }
   }
@@ -293,6 +345,11 @@ export function createHookManager({
       editor.append(label, input);
     }
 
+    const hint = document.createElement('div');
+    hint.className = 'hook-template-hint';
+    hint.innerHTML = renderHint(eh.event);
+    editor.appendChild(hint);
+
     if (eh.isNew) {
       inputs.name.addEventListener('input', () => {
         editingHook = { ...editingHook!, id: nameToSlug(inputs.name.value) };
@@ -322,6 +379,7 @@ export function createHookManager({
         });
         btn.classList.add('is-active');
         eventSelect.value = evt;
+        hint.innerHTML = renderHint(evt);
       });
 
       eventGroup.appendChild(btn);
