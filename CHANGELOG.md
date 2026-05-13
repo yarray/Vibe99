@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **E2E Pane Navigation / Tab Reorder (VIB-255):** Added 6 new tests to `e2e/tests/pane-management.spec.js` covering rename via navigation mode (title persistence, empty-title fallback, Escape cancel), Home/End focus jumps, and digit-key pane jumps (1–9, with out-of-bounds safety). Added 1 new test to `e2e/tests/tab-management.spec.js` covering tab drag reorder via synthetic pointer events, verifying tab order change and pane z-index alignment.
+
 ### Fixed
 
 - **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.

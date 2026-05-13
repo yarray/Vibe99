@@ -173,6 +173,97 @@ async function dismissContextMenu() {
 }
 
 /**
+ * Simulate dragging a tab from one position to another.
+ */
+async function dragTab(fromIndex, toIndex) {
+  const success = await browser.execute((fromIdx, toIdx) => {
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const fromTab = tabs[fromIdx];
+    if (!fromTab) return { error: 'from tab not found' };
+
+    const fromMain = fromTab.querySelector('.tab-main');
+    if (!fromMain) return { error: 'tab-main not found' };
+
+    const fromRect = fromMain.getBoundingClientRect();
+    const startX = fromRect.left + fromRect.width / 2;
+    const startY = fromRect.top + fromRect.height / 2;
+
+    let targetX;
+    if (toIdx >= tabs.length) {
+      const lastTab = tabs[tabs.length - 1];
+      const lastRect = lastTab.querySelector('.tab-main')?.getBoundingClientRect();
+      targetX = lastRect ? lastRect.right + 50 : startX + 200;
+    } else {
+      const toTab = tabs[toIdx];
+      const toMain = toTab.querySelector('.tab-main');
+      const toRect = toMain ? toMain.getBoundingClientRect() : fromRect;
+      targetX = toRect.left + toRect.width / 2;
+    }
+
+    const pointerId = 1;
+
+    fromMain.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: startX,
+      clientY: startY,
+      pointerId,
+      button: 0,
+    }));
+
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      clientX: targetX,
+      clientY: startY,
+      pointerId,
+    }));
+
+    window.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      cancelable: true,
+      clientX: targetX,
+      clientY: startY,
+      pointerId,
+      button: 0,
+    }));
+
+    return { success: true };
+  }, fromIndex, toIndex);
+
+  if (success && success.error) {
+    throw new Error(`Drag failed: ${success.error}`);
+  }
+  await browser.pause(500);
+}
+
+/**
+ * Get the current tab order as an array of pane IDs.
+ */
+async function getTabOrder() {
+  return browser.execute(() =>
+    Array.from(document.querySelectorAll('#tabs-list .tab')).map((t) => t.dataset.paneId),
+  );
+}
+
+/**
+ * Get pane z-index values mapped by pane ID.
+ */
+async function getPaneZIndices() {
+  return browser.execute(() => {
+    const result = {};
+    document.querySelectorAll('#stage .pane').forEach((pane) => {
+      // Use the data-pane-id on the corresponding tab to identify the pane
+      const focused = pane.classList.contains('is-focused');
+      if (focused) {
+        result._focusedZIndex = pane.style.zIndex;
+      }
+    });
+    return result;
+  });
+}
+
+/**
  * Ensure the app has exactly 3 panes.
  */
 async function ensureThreePanes() {
@@ -369,6 +460,44 @@ describe('Tab management', () => {
 
       const countAfterClose = await getTabCount();
       expect(countAfterClose).toBe(countAfterAdd - 1);
+    });
+  });
+
+  describe('Tab drag reorder', () => {
+    it('drags a tab to a new position and reorders panes', async () => {
+      await waitForAppReady(1);
+      await ensureThreePanes();
+
+      const beforeOrder = await getTabOrder();
+      expect(beforeOrder.length).toBe(3);
+
+      // Drag the first tab to after the last tab (index 0 -> index 3).
+      await dragTab(0, 2);
+
+      const afterOrder = await getTabOrder();
+      expect(afterOrder.length).toBe(3);
+
+      // The dragged pane should now be at the end.
+      expect(afterOrder[2]).toBe(beforeOrder[0]);
+      expect(afterOrder[0]).toBe(beforeOrder[1]);
+      expect(afterOrder[1]).toBe(beforeOrder[2]);
+
+      // Verify pane visual order aligns with tab order:
+      // the pane z-index should reflect the new tab index.
+      const zMap = await browser.execute(() => {
+        const tabOrder = Array.from(document.querySelectorAll('#tabs-list .tab')).map(
+          (t) => t.dataset.paneId,
+        );
+        const paneZ = {};
+        document.querySelectorAll('#stage .pane').forEach((pane) => {
+          paneZ[pane.style.zIndex] = pane.classList.contains('is-focused');
+        });
+        return { tabOrder, paneZ };
+      });
+
+      // The focused pane (which was dragged) should now have the highest z-index
+      // because it's at the last position (index 2 -> zIndex 3).
+      expect(zMap.paneZ['3']).toBe(true);
     });
   });
 
