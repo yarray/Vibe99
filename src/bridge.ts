@@ -692,16 +692,16 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     const layout = layoutsResult.layouts.find(l => l.id === layoutId);
     const geom = layout?.windowGeometry;
 
-    // Default window dimensions, with validation
-    const width = (geom && Number.isFinite(geom.width)) ? geom.width : 1600;
-    const height = (geom && Number.isFinite(geom.height)) ? geom.height : 920;
+    // Use saved geometry or defaults
+    // Note: Sanity validation will be handled by a separate Settings schema system
+    const width = geom?.width ?? 1600;
+    const height = geom?.height ?? 920;
     const minWidth = 960;
     const minHeight = 640;
 
-    // Determine window position with multi-monitor safety
-    // Use center as fallback for invalid or missing positions
+    // Determine window position
     let position: { x: number; y: number } | { center: true };
-    if (geom && Number.isFinite(geom.x) && Number.isFinite(geom.y)) {
+    if (geom?.x !== undefined && geom?.y !== undefined) {
       position = { x: geom.x, y: geom.y };
     } else {
       position = { center: true };
