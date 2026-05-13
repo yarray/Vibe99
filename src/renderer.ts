@@ -13,6 +13,7 @@ import { createPaneRenderer, getTextColorForBackground } from './pane-renderer';
 import type { PaneRenderer } from './pane-renderer';
 import { createShellProfileManager } from './shell-profiles';
 import { createHookManager } from './hooks';
+import type { AlertStartPayload, AlertStopPayload } from './hooks';
 import { createContextMenus } from './context-menus';
 import { createLayoutManager } from './layout-manager';
 import { createLayoutModal } from './layout-modal';
@@ -136,14 +137,23 @@ const paneActivityWatcher = createPaneActivityWatcher({
       paneRenderer?.setAlerted(paneId, true);
     }
     floatWindowManager.noteAlert(paneId);
-    hookManager.emitEvent('alert.start');
+    const payload: AlertStartPayload = {
+      paneId,
+      paneTitle: paneOps?.getPaneLabel(paneState.getPaneById(paneId)!) ?? '',
+      recentOutput: paneRenderer?.getRecentOutput(paneId, 20) ?? '',
+    };
+    hookManager.emitEvent('alert.start', payload);
   },
   onClear: (paneId) => {
     if (globalBreathingEnabled) {
       paneRenderer?.setAlerted(paneId, false);
     }
     floatWindowManager.noteClear(paneId);
-    hookManager.emitEvent('alert.stop');
+    const payload: AlertStopPayload = {
+      paneId,
+      paneTitle: paneOps?.getPaneLabel(paneState.getPaneById(paneId)!) ?? '',
+    };
+    hookManager.emitEvent('alert.stop', payload);
   },
 });
 

@@ -88,6 +88,7 @@ export interface PaneRenderer {
   isShellChanging: (paneId: string) => boolean;
   initializePaneTerminal: (node: PaneNode) => Promise<void>;
   destroyPane: (paneId: string) => void;
+  getRecentOutput: (paneId: string, maxLines?: number) => string;
 }
 
 // ---------------------------------------------------------------------------
@@ -687,5 +688,18 @@ export function createPaneRenderer({
     },
     initializePaneTerminal: (node) => initializePaneTerminal(node),
     destroyPane,
+    getRecentOutput: (paneId: string, maxLines = 20): string => {
+      const node = getNode(paneId);
+      if (!node) return '';
+      const buffer = node.terminal.buffer.active;
+      const totalLines = buffer.length;
+      const startY = Math.max(0, totalLines - maxLines);
+      const lines: string[] = [];
+      for (let y = startY; y < totalLines; y++) {
+        const line = buffer.getLine(y);
+        if (line) lines.push(line.translateToString(true));
+      }
+      return lines.join('\n');
+    },
   };
 }

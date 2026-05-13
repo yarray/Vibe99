@@ -1,0 +1,1 @@
+Hook parameter system refactor: typed event payloads, safe mustache-style template rendering with POSIX shell escaping, and on-demand terminal buffer reading via `PaneRenderer.getRecentOutput()`. Hook commands now support `{{paneId}}`, `{{paneTitle}}`, and `{{recentOutput}}` variables. The template engine uses single-quote strong quoting to prevent shell injection.
