@@ -114,8 +114,7 @@ export function createActions(deps: ActionsDeps): ActionsTable {
     jumpTo:        (e: KeyboardEvent) => {
       const n = parseInt(e.key, 10);
       if (n >= 1 && n <= deps.getPaneCount()) {
-        const paneId = deps.getPaneIdAt(n - 1);
-        if (paneId) deps.focusPane(paneId);
+        deps.focusPaneAt(n - 1);
       }
     },
 

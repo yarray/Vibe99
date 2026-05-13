@@ -173,6 +173,76 @@ async function dismissContextMenu() {
 }
 
 /**
+ * Simulate dragging a tab from one position to another.
+ */
+async function dragTab(fromIndex, toIndex) {
+  const tabs = await $$('#tabs-list .tab');
+  if (fromIndex >= tabs.length) {
+    throw new Error(`From index ${fromIndex} out of bounds (total ${tabs.length})`);
+  }
+
+  const fromTab = tabs[fromIndex];
+  const fromRect = await fromTab.getLocation();
+  const fromSize = await fromTab.getSize();
+  const fromCX = fromRect.x + fromSize.width / 2;
+  const fromCY = fromRect.y + fromSize.height / 2;
+
+  let targetCX, targetCY;
+  if (toIndex >= tabs.length) {
+    const lastTab = tabs[tabs.length - 1];
+    const lastRect = await lastTab.getLocation();
+    const lastSize = await lastTab.getSize();
+    targetCX = lastRect.x + lastSize.width + 50;
+    targetCY = lastRect.y + lastSize.height / 2;
+  } else {
+    const toTab = tabs[toIndex];
+    const toRect = await toTab.getLocation();
+    const toSize = await toTab.getSize();
+    targetCX = toRect.x + toSize.width / 2;
+    targetCY = toRect.y + toSize.height / 2;
+  }
+
+  const dx = Math.round(targetCX - fromCX);
+  const dy = Math.round(targetCY - fromCY);
+
+  await browser
+    .action('pointer', { parameters: { pointerType: 'mouse' } })
+    .move({ origin: fromTab })
+    .down({ button: 0 })
+    .move({ x: dx, y: dy, origin: 'pointer' })
+    .up({ button: 0 })
+    .perform();
+
+  await browser.pause(500);
+}
+
+/**
+ * Get the current tab order as an array of pane IDs.
+ */
+async function getTabOrder() {
+  return browser.execute(() =>
+    Array.from(document.querySelectorAll('#tabs-list .tab')).map((t) => t.dataset.paneId),
+  );
+}
+
+/**
+ * Get pane z-index values mapped by pane ID.
+ */
+async function getPaneZIndices() {
+  return browser.execute(() => {
+    const result = {};
+    document.querySelectorAll('#stage .pane').forEach((pane) => {
+      // Use the data-pane-id on the corresponding tab to identify the pane
+      const focused = pane.classList.contains('is-focused');
+      if (focused) {
+        result._focusedZIndex = pane.style.zIndex;
+      }
+    });
+    return result;
+  });
+}
+
+/**
  * Ensure the app has exactly 3 panes.
  */
 async function ensureThreePanes() {
@@ -369,6 +439,30 @@ describe('Tab management', () => {
 
       const countAfterClose = await getTabCount();
       expect(countAfterClose).toBe(countAfterAdd - 1);
+    });
+  });
+
+  describe('Tab drag reorder', () => {
+    it('drags a tab to a new position and reorders panes', async () => {
+      await waitForAppReady(1);
+      await ensureThreePanes();
+
+      const beforeOrder = await getTabOrder();
+      expect(beforeOrder.length).toBe(3);
+
+      // Drag the first tab to after the last tab (index 0 -> index 3).
+      await dragTab(0, 2);
+
+      const afterOrder = await getTabOrder();
+      expect(afterOrder.length).toBe(3);
+
+      // The dragged pane should now be at the end.
+      expect(afterOrder[2]).toBe(beforeOrder[0]);
+      expect(afterOrder[0]).toBe(beforeOrder[1]);
+      expect(afterOrder[1]).toBe(beforeOrder[2]);
+
+      // (Pane DOM order is not directly observable via data-pane-id,
+      // but tab order is the canonical source of pane order.)
     });
   });
 

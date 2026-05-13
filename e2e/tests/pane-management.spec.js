@@ -83,6 +83,40 @@ async function ensureThreePanes() {
   }
 }
 
+async function getTabLabelByIndex(index) {
+  return browser.execute((idx) => {
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const label = tabs[idx]?.querySelector('.tab-label');
+    return label ? label.textContent : '';
+  }, index);
+}
+
+async function sendKeysToRenameInput(tabIndex, value, key) {
+  const sent = await browser.execute((idx, nextValue, nextKey) => {
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const input = tabs[idx]?.querySelector('.tab-input');
+    if (!input) return false;
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (nativeSetter) {
+      nativeSetter.call(input, nextValue);
+    } else {
+      input.value = nextValue;
+    }
+
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      key: nextKey,
+      bubbles: true,
+      cancelable: true,
+    }));
+    return true;
+  }, tabIndex, value, key);
+
+  if (!sent) throw new Error(`Rename input not found on tab ${tabIndex}`);
+  await browser.pause(300);
+}
+
 describe('Pane management and navigation', () => {
   beforeEach(async () => {
     await waitForAppReady(1);
@@ -266,6 +300,92 @@ describe('Pane management and navigation', () => {
       const restoredId = await getFocusedPaneId();
       expect(restoredId).toBe(originalId);
     });
+
+    it('Home focuses the first pane in navigation mode', async () => {
+      const ids = await getPaneIds();
+      expect(ids.length).toBeGreaterThanOrEqual(2);
+
+      // Start from the last pane.
+      await clickTabByPaneId(ids[ids.length - 1]);
+      expect(await getFocusedPaneId()).toBe(ids[ids.length - 1]);
+
+      await browser.keys(['Control', 'b']);
+      await browser.pause(200);
+      expect(await isNavigationModeActive()).toBe(true);
+
+      await browser.keys('Home');
+      await browser.pause(200);
+
+      expect(await getFocusedPaneId()).toBe(ids[0]);
+
+      await browser.keys('Escape');
+      await browser.pause(200);
+    });
+
+    it('End focuses the last pane in navigation mode', async () => {
+      const ids = await getPaneIds();
+      expect(ids.length).toBeGreaterThanOrEqual(2);
+
+      // Start from the first pane.
+      await clickTabByPaneId(ids[0]);
+      expect(await getFocusedPaneId()).toBe(ids[0]);
+
+      await browser.keys(['Control', 'b']);
+      await browser.pause(200);
+      expect(await isNavigationModeActive()).toBe(true);
+
+      await browser.keys('End');
+      await browser.pause(200);
+
+      expect(await getFocusedPaneId()).toBe(ids[ids.length - 1]);
+
+      await browser.keys('Escape');
+      await browser.pause(200);
+    });
+
+    it('jumps to the corresponding pane with digit keys 1–9 in navigation mode', async () => {
+      const ids = await getPaneIds();
+      expect(ids.length).toBeGreaterThanOrEqual(3);
+
+      await clickTabByPaneId(ids[0]);
+
+      await browser.keys(['Control', 'b']);
+      await browser.pause(200);
+      expect(await isNavigationModeActive()).toBe(true);
+
+      // Press '2' to jump to the second pane.
+      await browser.keys('2');
+      await browser.pause(200);
+      expect(await getFocusedPaneId()).toBe(ids[1]);
+
+      // Press '3' to jump to the third pane.
+      await browser.keys('3');
+      await browser.pause(200);
+      expect(await getFocusedPaneId()).toBe(ids[2]);
+
+      await browser.keys('Escape');
+      await browser.pause(200);
+    });
+
+    it('ignores digit keys beyond pane count in navigation mode', async () => {
+      const ids = await getPaneIds();
+      expect(ids.length).toBeGreaterThanOrEqual(2);
+      expect(ids.length).toBeLessThan(9);
+
+      await clickTabByPaneId(ids[0]);
+
+      await browser.keys(['Control', 'b']);
+      await browser.pause(200);
+      expect(await isNavigationModeActive()).toBe(true);
+
+      // Press '9' which is beyond the pane count; focus should not change.
+      await browser.keys('9');
+      await browser.pause(200);
+      expect(await getFocusedPaneId()).toBe(ids[0]);
+
+      await browser.keys('Escape');
+      await browser.pause(200);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -421,6 +541,83 @@ describe('Pane management and navigation', () => {
 
       const inputAfter = await $('#tabs-list .tab-input');
       expect(await inputAfter.isExisting()).toBe(false);
+    });
+
+    it('rename confirms on Enter and title persists after switching panes', async () => {
+      const ids = await getPaneIds();
+      await clickTabByPaneId(ids[0]);
+      const originalLabel = await getTabLabelByIndex(0);
+
+      await browser.keys(['Control', 'b']);
+      await browser.pause(200);
+      expect(await isNavigationModeActive()).toBe(true);
+
+      await browser.keys('r');
+      await browser.pause(300);
+      expect(await isNavigationModeActive()).toBe(false);
+
+      await sendKeysToRenameInput(0, 'Renamed Pane', 'Enter');
+
+      // Verify tab label updated.
+      const newLabel = await getTabLabelByIndex(0);
+      expect(newLabel).toBe('Renamed Pane');
+
+      // Switch to another pane and back.
+      await clickTabByPaneId(ids[1]);
+      await browser.pause(200);
+      await clickTabByPaneId(ids[0]);
+      await browser.pause(200);
+
+      // Title should still be the renamed one.
+      const restoredLabel = await getTabLabelByIndex(0);
+      expect(restoredLabel).toBe('Renamed Pane');
+
+      // Restore original title.
+      await browser.keys(['Control', 'b']);
+      await browser.pause(200);
+      await browser.keys('r');
+      await browser.pause(300);
+      await sendKeysToRenameInput(0, originalLabel, 'Enter');
+      await browser.pause(200);
+    });
+
+    it('rename with empty title falls back to terminal title', async () => {
+      const ids = await getPaneIds();
+      await clickTabByPaneId(ids[0]);
+      const originalLabel = await getTabLabelByIndex(0);
+      expect(originalLabel.trim().length).toBeGreaterThan(0);
+
+      await browser.keys(['Control', 'b']);
+      await browser.pause(200);
+      expect(await isNavigationModeActive()).toBe(true);
+
+      await browser.keys('r');
+      await browser.pause(300);
+
+      await sendKeysToRenameInput(0, '', 'Enter');
+
+      // After clearing the title, it should fall back to something non-empty
+      // (the terminal-detected title / cwd basename).
+      const labelAfter = await getTabLabelByIndex(0);
+      expect(labelAfter.trim().length).toBeGreaterThan(0);
+    });
+
+    it('rename cancelled with Escape restores original title', async () => {
+      const ids = await getPaneIds();
+      await clickTabByPaneId(ids[0]);
+      const originalLabel = await getTabLabelByIndex(0);
+
+      await browser.keys(['Control', 'b']);
+      await browser.pause(200);
+      expect(await isNavigationModeActive()).toBe(true);
+
+      await browser.keys('r');
+      await browser.pause(300);
+
+      await sendKeysToRenameInput(0, 'Should Not Persist', 'Escape');
+
+      const restoredLabel = await getTabLabelByIndex(0);
+      expect(restoredLabel).toBe(originalLabel);
     });
   });
 
