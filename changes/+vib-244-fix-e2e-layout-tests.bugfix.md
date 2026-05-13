@@ -1,0 +1,1 @@
+Fix E2E layout tests by ensuring clearAllLayouts() recreates the default layout after deleting all layouts. The app expects a default layout to exist for consistent behavior across tests. Also fix test to use 'Default' (capitalized) instead of 'default' when clicking the default layout in the dropdown. (VIB-244)
