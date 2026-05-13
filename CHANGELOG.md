@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **E2E Hook system tests (VIB-249):** Added `e2e/tests/hooks.spec.js` with 22 test cases covering hook modal open/close (5), hook CRUD — create (4), edit (3), delete (2) — enable/disable toggle (3), `{{var}}` template rendering with variable hints (3), and event trigger integration (2).
+
 ### Fixed
 
 - **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.
