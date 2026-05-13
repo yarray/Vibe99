@@ -121,13 +121,13 @@ export function createLayoutModal({
               return;
             }
 
-            const layout = layoutManager.createLayoutFromCurrentWindow(layoutId, trimmed);
+            const layout = layoutManager.createFreshDefaultLayout(layoutId, trimmed);
             bridge.saveLayout(layout)
               .then(() => bridge.listLayouts())
               .then((config: LayoutsListResult) => {
                 layoutManager._setLayouts(config.layouts ?? []);
                 layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
-                layoutManager.setWindowLayoutId(layout.id);
+                // Don't auto-switch to the new layout - let user manually switch
                 layoutManager.updateLayoutsIndicator();
                 renderModalLayouts(overlay);
               })

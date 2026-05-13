@@ -52,6 +52,9 @@ export interface PaneStateDeps {
 /** The full public API surface returned by `createPaneState`. */
 export interface PaneState {
   // Read operations
+  /** Get the default three-pane layout for creating new layouts. */
+  getDefaultPanes: () => Pane[];
+  // Read operations
   getPanes: () => Pane[];
   getFocusedPaneId: () => string | null;
   getPaneById: (paneId: string) => Pane | null;
@@ -121,7 +124,9 @@ export function createPaneState({
   let defaultCwd = initialDefaultCwd;
   let defaultTabTitle = initialDefaultTabTitle;
   const palette: string[] = getAccentPalette();
-  const initialPanes: Pane[] = [
+
+  // Helper function to get the default three-pane layout - defined here so initialPanes can use it
+  const getDefaultPanes = (): Pane[] => [
     {
       id: 'p1',
       title: null,
@@ -149,7 +154,7 @@ export function createPaneState({
   ];
 
   // Core state
-  let panes: Pane[] = initialPanes.map((pane: Pane) => ({ ...pane }));
+  let panes: Pane[] = getDefaultPanes().map((pane: Pane) => ({ ...pane }));
   let focusedPaneId: string | null = panes[0].id;
   let nextPaneNumber: number = panes.length + 1;
 
@@ -502,7 +507,7 @@ export function createPaneState({
       }));
 
     if (validPanes.length === 0) {
-      panes = initialPanes.map((p: Pane) => ({
+      panes = getDefaultPanes().map((p: Pane) => ({
         ...p,
         cwd: defaultCwd,
         terminalTitle: defaultTabTitle,
@@ -540,6 +545,7 @@ export function createPaneState({
     getPaneById,
     getPaneIndex,
     getFocusedIndex,
+    getDefaultPanes,
 
     // Write operations
     addPane,
