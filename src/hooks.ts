@@ -14,31 +14,23 @@ import type { HookData } from './bridge';
 import { Shescape } from 'shescape';
 
 // ---------------------------------------------------------------------------
-// Event payload types
+// Event payload definitions — single source of truth
 // ---------------------------------------------------------------------------
 
-export interface AlertStartPayload {
-  paneId: string;
-  paneTitle: string;
-  recentOutput: string;
-}
-
-export interface AlertStopPayload {
-  paneId: string;
-  paneTitle: string;
-}
-
-export type HookEventMap = {
-  'alert.start': AlertStartPayload;
-  'alert.stop': AlertStopPayload;
-};
-
-export type HookEventType = keyof HookEventMap & string;
-
-const EVENT_PAYLOAD_FIELDS: Record<HookEventType, readonly string[]> = {
+const EVENT_PAYLOAD_FIELDS = {
   'alert.start': ['paneId', 'paneTitle', 'recentOutput'],
   'alert.stop': ['paneId', 'paneTitle'],
+} as const;
+
+type PayloadOf<E extends keyof typeof EVENT_PAYLOAD_FIELDS> = {
+  [K in typeof EVENT_PAYLOAD_FIELDS[E][number]]: string;
 };
+
+export type AlertStartPayload = PayloadOf<'alert.start'>;
+export type AlertStopPayload = PayloadOf<'alert.stop'>;
+
+export type HookEventMap = { [E in keyof typeof EVENT_PAYLOAD_FIELDS]: PayloadOf<E> };
+export type HookEventType = keyof HookEventMap & string;
 
 function renderHint(eventType: string): string {
   const fields = EVENT_PAYLOAD_FIELDS[eventType as HookEventType] ?? [];
