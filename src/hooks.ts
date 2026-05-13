@@ -11,6 +11,7 @@
 
 import { icon } from './icons';
 import type { HookData } from './bridge';
+import { Shescape } from 'shescape';
 
 // ---------------------------------------------------------------------------
 // Event payload types
@@ -83,43 +84,21 @@ const KNOWN_EVENTS: HookEventType[] = [
 // Safe template rendering
 // ---------------------------------------------------------------------------
 
-/**
- * Shell-escape a single argument using POSIX strong quoting (single quotes).
- * Every `'` becomes `'\''`. Safe against all injection vectors because
- * single-quoted strings in POSIX shells have no expansion whatsoever.
- */
-function shellEscape(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
+const shescape = new Shescape({});
 
-/**
- * Render a mustache-style template with shell-escaped values.
- *
- * Replaces `{{key}}` placeholders with the corresponding value from
- * `context`, each shell-escaped to prevent command injection.
- * Unknown placeholders are left as-is so partially-written templates
- * don't break.
- */
 function renderTemplate(template: string, context: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) => {
     if (Object.prototype.hasOwnProperty.call(context, key)) {
-      return shellEscape(context[key]);
+      return shescape.quote(context[key]);
     }
     return match;
   });
 }
 
-/**
- * Flatten a typed payload into a flat string record for template rendering.
- * Only includes own enumerable string keys.
- */
 function payloadToContext(payload: Record<string, unknown>): Record<string, string> {
   const ctx: Record<string, string> = {};
-  for (const key of Object.keys(payload)) {
-    const val = payload[key];
-    if (typeof val === 'string') {
-      ctx[key] = val;
-    }
+  for (const [key, val] of Object.entries(payload)) {
+    if (typeof val === 'string') ctx[key] = val;
   }
   return ctx;
 }

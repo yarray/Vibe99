@@ -691,15 +691,11 @@ export function createPaneRenderer({
     getRecentOutput: (paneId: string, maxLines = 20): string => {
       const node = getNode(paneId);
       if (!node) return '';
-      const buffer = node.terminal.buffer.active;
-      const totalLines = buffer.length;
-      const startY = Math.max(0, totalLines - maxLines);
-      const lines: string[] = [];
-      for (let y = startY; y < totalLines; y++) {
-        const line = buffer.getLine(y);
-        if (line) lines.push(line.translateToString(true));
-      }
-      return lines.join('\n');
+      const buf = node.terminal.buffer.active;
+      return Array.from(
+        { length: Math.min(maxLines, buf.length) },
+        (_, i) => buf.getLine(buf.length - maxLines + i)?.translateToString(true) ?? '',
+      ).join('\n');
     },
   };
 }
