@@ -1,0 +1,1 @@
+- **Float Window E2E tests (VIB-250):** Added comprehensive E2E test suite for the floating indicator window in `e2e/tests/float-window.spec.js`. Covers settings toggle integration, open/close/toggle API, alert state (breathing), persisted state, and parent-closing state preservation. Added `window.__floatWindowManager` test exposure in renderer.ts.
