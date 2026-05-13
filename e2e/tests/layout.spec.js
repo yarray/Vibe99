@@ -347,6 +347,16 @@ describe('Layout', () => {
     // 2. Save current layout as "Test Layout"
     await saveLayoutAs('Test Layout');
 
+    await saveLayoutViaBridge({
+      id: 'default',
+      name: 'Default',
+      panes: [
+        { title: 'Pane 1', cwd: '/', accent: '#e06c75', breathingMonitor: true },
+      ],
+      focusedPaneIndex: 0,
+    });
+    await browser.pause(300);
+
     // Verify the layout was saved and is now active
     await openLayoutsDropdown();
     let active = await getActiveDropdownLayout();

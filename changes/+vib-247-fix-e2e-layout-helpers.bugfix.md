@@ -1,0 +1,1 @@
+Fix layout.spec.js e2e failures: update test helpers to match current UI (rename via editor panel, correct delete button index), revert clearAllLayouts() default layout recreation that broke empty-state tests, and create default layout via bridge in the test that needs it. (VIB-247)
