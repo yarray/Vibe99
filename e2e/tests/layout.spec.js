@@ -491,44 +491,54 @@ describe('Layout', () => {
     const btnHtml = await newButtons[0].getHTML();
     expect(btnHtml).toContain('Default');
 
-    // Verify star indicator appears in sidebar
+    // Verify star indicator (SVG icon) appears in sidebar name element
     const items = await getModalLayoutItems();
     const nameEl = await items[0].$('.layout-name');
     const html = await nameEl.getHTML();
-    expect(html).toContain('star');
+    // The star icon renders as an SVG with a star-shaped path
+    expect(html).toContain('<svg');
+    // The layout item itself should have the is-default CSS class
+    const itemClass = await items[0].getAttribute('class');
+    expect(itemClass).toContain('is-default');
   });
 
   // ================================================================
   // Open in New Window (P1)
   // ================================================================
 
-  it('opens layout in new window from editor "Open in New Window" button', async () => {
-    await saveLayoutAs('Editor NewWin');
-    await openLayoutsModal();
-    await clickModalLayout('Editor NewWin');
-    await browser.pause(300);
+  it('opens layout in new window by clicking a non-active layout in dropdown', async () => {
+    // Save the current layout (this binds the window to this layout)
+    await saveLayoutAs('Current Active');
+    // Save another layout via bridge (not bound to any window)
+    await saveLayoutViaBridge({
+      id: 'dropdown-target',
+      name: 'Dropdown Target',
+      panes: [
+        { paneId: 'p1', title: 'Pane 1', cwd: '/', accent: '#e06c75', breathingMonitor: true },
+        { paneId: 'p2', title: 'Pane 2', cwd: '/', accent: '#98c379', breathingMonitor: true },
+      ],
+      focusedPaneIndex: 0,
+    });
+
+    // Refresh layouts so the dropdown shows the new layout
+    await browser.execute(async () => {
+      if (window.layoutManager) await window.layoutManager.refreshLayouts();
+    });
 
     const beforeHandles = await browser.getWindowHandles();
 
-    // Find and click "Open in New Window" button in editor panel
-    const overlay = await $('.settings-modal-overlay');
-    const editor = await overlay.$('#modal-layout-editor');
-    const buttons = await editor.$$('.layout-info-btn');
+    // Click "Dropdown Target" in the dropdown — this should open a new window
+    await openLayoutsDropdown();
+    await clickDropdownLayout('Dropdown Target');
 
-    // Second button should be "Open in New Window"
-    const openNewWinBtn = buttons[1];
-    const text = await getTextSafe(openNewWinBtn);
-    expect(text).toBe('Open in New Window');
-
-    await openNewWinBtn.click();
-
-    // Wait for new window and verify it loads
+    // Verify a new window was created
     const newHandle = await waitForNewWindow(beforeHandles);
     expect(newHandle).not.toBeNull();
 
+    // Verify the new window loads correctly
     await browser.switchToWindow(newHandle);
     await waitForAppReady(1);
-    expect(await getPaneCount()).toBeGreaterThanOrEqual(1);
+    expect(await getPaneCount()).toBe(2);
 
     await switchToMainWindow(mainWindowHandle);
     await closeExtraWindows(mainWindowHandle);
@@ -560,10 +570,11 @@ describe('Layout', () => {
     });
     expect(hasClass).toBe(true);
 
-    // Verify the status label reflects the focus notice
-    const statusLabel = await $('#status-label');
-    const labelText = await statusLabel.getText();
-    expect(labelText).toBe('Layout focused');
+    // Verify the layout focus name data attribute is set
+    const focusName = await browser.execute(() => {
+      return document.body.dataset.layoutFocusName;
+    });
+    expect(focusName).toBeTruthy();
   });
 
   it('layout focus notice clears after animation timeout', async () => {
