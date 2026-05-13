@@ -1,0 +1,1 @@
+Added E2E tests for Restart Terminal and Paste Image context menu actions: verifies Restart Terminal appears in the menu, triggers PTY session recreation while keeping the pane alive, and validates Paste Image enabled/disabled states with mocked clipboard snapshots and bridge call interception.

@@ -300,6 +300,13 @@ contextMenus = createContextMenus({
   restartPaneTerminal: (paneId) => paneRenderer?.restartPaneTerminal(paneId),
 });
 
+// Expose internals for E2E testing
+(window as any).__vibe99_test = {
+  bridge,
+  contextMenus,
+  paneRenderer,
+};
+
 paneOps = createPaneOperations({
   paneState,
   paneRenderer,

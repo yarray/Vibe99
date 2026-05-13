@@ -422,6 +422,186 @@ describe('Context Menu', () => {
       const menuAfter = await $('.context-menu');
       expect(await menuAfter.isExisting()).toBe(false);
     });
+
+    it('should show Restart Terminal in terminal context menu', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+
+      expect(await hasContextMenuItem('Restart Terminal')).toBe(true);
+
+      await dismissContextMenu();
+    });
+
+    it('should restart terminal and recreate PTY session', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      const before = await browser.execute((idx) => {
+        const tabs = document.querySelectorAll('#tabs-list .tab');
+        const paneId = tabs[idx]?.dataset?.paneId;
+        if (!paneId) return null;
+        const paneRenderer = window.__vibe99_test?.paneRenderer;
+        if (!paneRenderer) return null;
+        const node = paneRenderer.getNode(paneId);
+        if (!node) return null;
+        return {
+          sessionReady: node.sessionReady,
+          shellChangeTime: node._shellChangeTime || 0,
+        };
+      }, 0);
+
+      expect(before).not.toBeNull();
+      expect(before.sessionReady).toBe(true);
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+      await clickContextMenuItem('Restart Terminal');
+
+      // Wait for the restart to complete: sessionReady back to true and shellChanging cleared
+      await waitForCondition(async () => {
+        const state = await browser.execute((idx) => {
+          const tabs = document.querySelectorAll('#tabs-list .tab');
+          const paneId = tabs[idx]?.dataset?.paneId;
+          if (!paneId) return null;
+          const paneRenderer = window.__vibe99_test?.paneRenderer;
+          if (!paneRenderer) return null;
+          const node = paneRenderer.getNode(paneId);
+          if (!node) return null;
+          return {
+            sessionReady: node.sessionReady,
+            shellChanging: node._shellChanging ?? false,
+            shellChangeTime: node._shellChangeTime || 0,
+          };
+        }, 0);
+        return (
+          state !== null &&
+          state.sessionReady === true &&
+          state.shellChanging === false &&
+          state.shellChangeTime > before.shellChangeTime
+        );
+      }, 10000, 500);
+    });
+
+    it('should keep pane alive after terminal restart', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      const countBefore = await getPaneCount();
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+      await clickContextMenuItem('Restart Terminal');
+      await browser.pause(1000);
+
+      const countAfter = await getPaneCount();
+      expect(countAfter).toBe(countBefore);
+    });
+
+    it('should disable Paste Image when clipboard has no image', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+
+      expect(await hasContextMenuItem('Paste Image')).toBe(true);
+      expect(await isContextMenuItemDisabled('Paste Image')).toBe(true);
+
+      await dismissContextMenu();
+    });
+
+    it('should enable Paste Image when clipboard has image', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      // Mock clipboard snapshot to report an image
+      await browser.execute(() => {
+        const bridge = window.__vibe99_test?.bridge;
+        if (!bridge) return;
+        const orig = bridge.getClipboardSnapshot;
+        window.__vibe99_origGetClipboardSnapshot = orig;
+        bridge.getClipboardSnapshot = async () => ({ text: '', hasImage: true });
+      });
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+
+      expect(await hasContextMenuItem('Paste Image')).toBe(true);
+      expect(await isContextMenuItemDisabled('Paste Image')).toBe(false);
+
+      await dismissContextMenu();
+
+      // Restore mock
+      await browser.execute(() => {
+        const bridge = window.__vibe99_test?.bridge;
+        const orig = window.__vibe99_origGetClipboardSnapshot;
+        if (bridge && orig) {
+          bridge.getClipboardSnapshot = orig;
+        }
+        delete window.__vibe99_origGetClipboardSnapshot;
+      });
+    });
+
+    it('should execute Paste Image action via context menu', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      const paneId = await browser.execute((idx) => {
+        const tabs = document.querySelectorAll('#tabs-list .tab');
+        return tabs[idx]?.dataset?.paneId || null;
+      }, 0);
+      expect(paneId).not.toBeNull();
+
+      // Mock clipboard snapshot and capture writeTerminal calls
+      await browser.execute(() => {
+        const bridge = window.__vibe99_test?.bridge;
+        if (!bridge) return;
+        const origSnapshot = bridge.getClipboardSnapshot;
+        window.__vibe99_origGetClipboardSnapshot = origSnapshot;
+        bridge.getClipboardSnapshot = async () => ({ text: '', hasImage: true });
+
+        const origWrite = bridge.writeTerminal;
+        window.__vibe99_capturedWrites = [];
+        bridge.writeTerminal = (payload) => {
+          window.__vibe99_capturedWrites.push(payload);
+          return origWrite(payload);
+        };
+        window.__vibe99_origWriteTerminal = origWrite;
+      });
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+      await clickContextMenuItem('Paste Image');
+      await browser.pause(500);
+
+      const captured = await browser.execute((pid) => {
+        const writes = window.__vibe99_capturedWrites || [];
+        return writes.filter((w) => w.paneId === pid);
+      }, paneId);
+
+      expect(captured.length).toBeGreaterThanOrEqual(1);
+      // The paste image action writes \x16 (decimal 22) to the terminal
+      expect(captured[0].data).toBe('\u0016');
+
+      // Restore mocks
+      await browser.execute(() => {
+        const bridge = window.__vibe99_test?.bridge;
+        if (bridge) {
+          if (window.__vibe99_origGetClipboardSnapshot) {
+            bridge.getClipboardSnapshot = window.__vibe99_origGetClipboardSnapshot;
+          }
+          if (window.__vibe99_origWriteTerminal) {
+            bridge.writeTerminal = window.__vibe99_origWriteTerminal;
+          }
+        }
+        delete window.__vibe99_origGetClipboardSnapshot;
+        delete window.__vibe99_origWriteTerminal;
+        delete window.__vibe99_capturedWrites;
+      });
+    });
   });
 
   describe('Tab context menu', () => {
