@@ -651,42 +651,14 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
    * Returns position, size, and fullscreen state, or null if any property cannot be obtained.
    */
   async function getWindowGeometry(): Promise<WindowGeometry | null> {
-    let x: number | undefined;
-    let y: number | undefined;
-    let width: number | undefined;
-    let height: number | undefined;
-    let fullscreen: boolean | undefined;
-
     try {
       const pos = await currentWindow.outerPosition();
-      x = pos.x;
-      y = pos.y;
-    } catch {
-      // Position not available
-    }
-
-    try {
       const size = await currentWindow.innerSize();
-      width = size.width;
-      height = size.height;
+      const fullscreen = await currentWindow.isFullscreen();
+      return { x: pos.x, y: pos.y, width: size.width, height: size.height, fullscreen };
     } catch {
-      // Size not available
-    }
-
-    try {
-      fullscreen = await currentWindow.isFullscreen();
-    } catch {
-      // Fullscreen not available
-    }
-
-    // If any property is missing, return null
-    if (x === undefined || y === undefined ||
-        width === undefined || height === undefined ||
-        fullscreen === undefined) {
       return null;
     }
-
-    return { x, y, width, height, fullscreen };
   }
 
   async function openLayoutWindow(layoutId: string): Promise<void> {
@@ -720,26 +692,17 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     const layout = layoutsResult.layouts.find(l => l.id === layoutId);
     const geom = layout?.windowGeometry;
 
-    // Default window dimensions
-    const width = geom?.width ?? 1600;
-    const height = geom?.height ?? 920;
+    // Default window dimensions, with validation
+    const width = (geom && Number.isFinite(geom.width)) ? geom.width : 1600;
+    const height = (geom && Number.isFinite(geom.height)) ? geom.height : 920;
     const minWidth = 960;
     const minHeight = 640;
 
     // Determine window position with multi-monitor safety
     // Use center as fallback for invalid or missing positions
     let position: { x: number; y: number } | { center: true };
-    if (geom?.x !== undefined && geom?.y !== undefined) {
-      // Validate position is within reasonable bounds
-      // Negative coordinates or very large coordinates may indicate a disconnected monitor
-      // Tauri has built-in protection, but we add an extra layer of safety
-      const MAX_REASONABLE_COORD = 50000;
-      if (geom.x >= -MAX_REASONABLE_COORD && geom.y >= -MAX_REASONABLE_COORD &&
-          geom.x <= MAX_REASONABLE_COORD && geom.y <= MAX_REASONABLE_COORD) {
-        position = { x: geom.x, y: geom.y };
-      } else {
-        position = { center: true };
-      }
+    if (geom && Number.isFinite(geom.x) && Number.isFinite(geom.y)) {
+      position = { x: geom.x, y: geom.y };
     } else {
       position = { center: true };
     }
