@@ -1,0 +1,1 @@
+Fix session-persistence.spec.js hang in Docker/Xvfb by upgrading xkb-data to jammy-updates. The test was hanging with "Could not resolve keysym XF86NavInfo" after ~20s because xkb-data 2.33-1 (jammy) lacks modern keysyms that WebKitGTK requires. Upgrading to a newer version containing XF86NavInfo resolves the hang. (VIB-248)

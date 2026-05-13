@@ -19,6 +19,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb xauth webkit2gtk-driver \
     && rm -rf /var/lib/apt/lists/*
 
+# 2. xkb-data 包含 X11 keysym 数据库
+#    xkb-data 2.33-1 (jammy) 缺少 XF86NavInfo 等现代 keysym，
+#    导致 WebKitGTK 键盘子系统在 Xvfb 中挂起约 20s。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xkb-data/jammy-updates \
+    && rm -rf /var/lib/apt/lists/*
+
 # 2. Node.js 22
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
