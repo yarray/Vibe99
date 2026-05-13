@@ -297,3 +297,19 @@ pub async fn hook_execute(app: AppHandle, command: String) -> Result<(), String>
         .map(|_| ())
         .map_err(|e| format!("failed to execute hook command: {e}"))
 }
+
+/// Shell-escape a value for the current platform's default shell.
+#[tauri::command]
+pub fn shell_quote(value: String) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        let escaped = value.replace('"', "\\\"");
+        format!("\"{}\"", escaped)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let escaped = value.replace('\'', "'\\''");
+        format!("'{}'", escaped)
+    }
+}

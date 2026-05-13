@@ -11,7 +11,6 @@
 
 import { icon } from './icons';
 import type { HookData } from './bridge';
-import { Shescape } from 'shescape';
 
 // ---------------------------------------------------------------------------
 // Event payload definitions — single source of truth
@@ -60,6 +59,7 @@ export interface HookBridge {
   removeHook: (hookId: string) => Promise<{ hooks: Hook[] }>;
   updateHook: (hookId: string, updates: Partial<HookData>) => Promise<{ hooks: Hook[] }>;
   executeHook: (command: string) => Promise<void>;
+  shellQuote: (value: string) => Promise<string>;
 }
 
 export interface HookManagerDeps {
@@ -88,12 +88,20 @@ const KNOWN_EVENTS: HookEventType[] = [
 // Safe template rendering
 // ---------------------------------------------------------------------------
 
-const shescape = new Shescape({});
+async function renderTemplate(
+  template: string,
+  context: Record<string, string>,
+  quote: (v: string) => Promise<string>,
+): Promise<string> {
+  const escaped: Record<string, string> = {};
+  const promises = Object.entries(context).map(async ([k, v]) => {
+    escaped[k] = await quote(v);
+  });
+  await Promise.all(promises);
 
-function renderTemplate(template: string, context: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) => {
-    if (Object.prototype.hasOwnProperty.call(context, key)) {
-      return shescape.quote(context[key]);
+    if (Object.prototype.hasOwnProperty.call(escaped, key)) {
+      return escaped[key];
     }
     return match;
   });
@@ -138,11 +146,11 @@ export function createHookManager({
   // Event dispatch
   // ----------------------------------------------------------------
 
-  function emitEvent<E extends HookEventType>(eventType: E, payload: HookEventMap[E]): void {
+  async function emitEvent<E extends HookEventType>(eventType: E, payload: HookEventMap[E]): Promise<void> {
     const context = payloadToContext(payload as unknown as Record<string, unknown>);
     for (const hook of hooks) {
       if (hook.enabled && hook.event === eventType) {
-        const command = renderTemplate(hook.command, context);
+        const command = await renderTemplate(hook.command, context, bridge.shellQuote);
         bridge.executeHook(command).catch(reportError);
       }
     }

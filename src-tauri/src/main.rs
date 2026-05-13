@@ -64,6 +64,7 @@ fn main() {
             hook::hook_remove,
             hook::hook_update,
             hook::hook_execute,
+            hook::shell_quote,
             context_menu::show_context_menu,
             context_menu::emit_menu_action,
             wsl_cmd::wsl_status,

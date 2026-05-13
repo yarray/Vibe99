@@ -250,6 +250,7 @@ export interface HookApi {
   remove: (hookId: string) => Promise<HooksListResult>;
   update: (hookId: string, updates: Partial<HookData>) => Promise<HooksListResult>;
   execute: (command: string) => Promise<void>;
+  shellQuote: (value: string) => Promise<string>;
 }
 
 /** Event listener unsubscribes with void return */
@@ -553,6 +554,7 @@ function createUnavailableBridge(): Bridge {
       remove: () => Promise.resolve({ hooks: [] }),
       update: () => Promise.resolve({ hooks: [] }),
       execute: () => Promise.resolve(),
+      shellQuote: (v: string) => Promise.resolve(v),
     },
     onMenuAction: () => () => {},
     onLayoutFocusNotice: undefined,
@@ -814,6 +816,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       update: (hookId: string, updates: Partial<HookData>) =>
         invoke<HooksListResult>('hook_update', { hookId, updates }),
       execute: (command: string) => invoke('hook_execute', { command }),
+      shellQuote: (value: string) => invoke<string>('shell_quote', { value }),
     },
     onMenuAction: (handler: (event: MenuActionEvent) => void) =>
       onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler),
