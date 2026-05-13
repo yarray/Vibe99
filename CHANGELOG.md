@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **E2E Layout extended tests (VIB-254):** Added 8 new E2E test cases for Layout window geometry persistence, Set as Default UI, Open in New Window editor button, and Layout Focus Notice event handling. Covers geometry save/restore verification, default layout button interaction in editor panel, and focus notice CSS class / timeout behavior.
+
 ### Fixed
 
 - **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.

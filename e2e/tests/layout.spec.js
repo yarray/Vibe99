@@ -374,4 +374,229 @@ describe('Layout', () => {
     // 7. Close the new window and return to main window
     await closeExtraWindows(mainWindowHandle);
   });
+
+  // ================================================================
+  // Window Geometry persistence (P1)
+  // ================================================================
+
+  it('saves windowGeometry in layout data', async () => {
+    await saveLayoutViaBridge({
+      id: 'geo-test',
+      name: 'Geometry Test',
+      panes: [
+        { paneId: 'p1', title: 'Pane 1', cwd: '/', accent: '#e06c75', breathingMonitor: true },
+      ],
+      focusedPaneIndex: 0,
+      windowGeometry: { x: 100, y: 200, width: 1200, height: 800, fullscreen: false },
+    });
+
+    const config = await listLayoutsViaBridge();
+    const layout = config.layouts.find((l) => l.id === 'geo-test');
+    expect(layout).toBeTruthy();
+    expect(layout.windowGeometry).toBeTruthy();
+    expect(layout.windowGeometry.x).toBe(100);
+    expect(layout.windowGeometry.y).toBe(200);
+    expect(layout.windowGeometry.width).toBe(1200);
+    expect(layout.windowGeometry.height).toBe(800);
+    expect(layout.windowGeometry.fullscreen).toBe(false);
+  });
+
+  it('preserves windowGeometry after layout manager refresh', async () => {
+    await saveLayoutViaBridge({
+      id: 'geo-persist',
+      name: 'Geo Persist',
+      panes: [
+        { paneId: 'p1', title: 'Pane 1', cwd: '/', accent: '#e06c75', breathingMonitor: true },
+      ],
+      focusedPaneIndex: 0,
+      windowGeometry: { x: 50, y: 60, width: 1400, height: 900, fullscreen: false },
+    });
+
+    // Refresh the layout manager to simulate re-reading from backend
+    await browser.execute(async () => {
+      if (window.layoutManager) await window.layoutManager.refreshLayouts();
+    });
+
+    const layouts = await browser.execute(() => {
+      if (!window.layoutManager) return [];
+      return window.layoutManager.getLayouts();
+    });
+
+    const geoLayout = layouts.find((l) => l.id === 'geo-persist');
+    expect(geoLayout).toBeTruthy();
+    expect(geoLayout.windowGeometry).toBeTruthy();
+    expect(geoLayout.windowGeometry.width).toBe(1400);
+    expect(geoLayout.windowGeometry.height).toBe(900);
+  });
+
+  it('stores windowGeometry when saving via Save Layout As', async () => {
+    // Save a layout through the UI (which captures current window geometry)
+    await saveLayoutAs('Geo From UI');
+
+    // Check that the saved layout has a windowGeometry field
+    const config = await listLayoutsViaBridge();
+    const layout = config.layouts.find((l) => l.id === 'geo-from-ui');
+    expect(layout).toBeTruthy();
+    // In E2E environment with tauri-driver the geometry may be partial,
+    // but the field should at least exist on the layout object
+    expect(layout.windowGeometry !== undefined).toBe(true);
+  });
+
+  // ================================================================
+  // Set as Default (P1)
+  // ================================================================
+
+  it('sets layout as default via editor "Set as Default" button', async () => {
+    await saveLayoutAs('Set Default Test');
+    await openLayoutsModal();
+    await clickModalLayout('Set Default Test');
+    await browser.pause(300);
+
+    // Find and click "Set as Default" button in editor panel
+    const overlay = await $('.settings-modal-overlay');
+    const editor = await overlay.$('#modal-layout-editor');
+    const buttons = await editor.$$('.layout-info-btn');
+
+    // First button should be "Set as Default"
+    const setDefaultBtn = buttons[0];
+    const text = await getTextSafe(setDefaultBtn);
+    expect(text).toContain('Set as Default');
+
+    await setDefaultBtn.click();
+    await browser.pause(500);
+
+    // Verify defaultLayoutId is updated
+    const config = await listLayoutsViaBridge();
+    expect(config.defaultLayoutId).toBe('set-default-test');
+  });
+
+  it('shows "Default" and star indicator after setting as default in editor', async () => {
+    await saveLayoutAs('Default Indicator');
+    await openLayoutsModal();
+    await clickModalLayout('Default Indicator');
+    await browser.pause(300);
+
+    const overlay = await $('.settings-modal-overlay');
+    const editor = await overlay.$('#modal-layout-editor');
+    const buttons = await editor.$$('.layout-info-btn');
+
+    // Click "Set as Default"
+    await buttons[0].click();
+    await browser.pause(500);
+
+    // Re-query buttons — the editor re-renders after setting default
+    const newButtons = await editor.$$('.layout-info-btn');
+
+    // Verify the button text changed to indicate default status
+    const btnHtml = await newButtons[0].getHTML();
+    expect(btnHtml).toContain('Default');
+
+    // Verify star indicator appears in sidebar
+    const items = await getModalLayoutItems();
+    const nameEl = await items[0].$('.layout-name');
+    const html = await nameEl.getHTML();
+    expect(html).toContain('star');
+  });
+
+  // ================================================================
+  // Open in New Window (P1)
+  // ================================================================
+
+  it('opens layout in new window from editor "Open in New Window" button', async () => {
+    await saveLayoutAs('Editor NewWin');
+    await openLayoutsModal();
+    await clickModalLayout('Editor NewWin');
+    await browser.pause(300);
+
+    const beforeHandles = await browser.getWindowHandles();
+
+    // Find and click "Open in New Window" button in editor panel
+    const overlay = await $('.settings-modal-overlay');
+    const editor = await overlay.$('#modal-layout-editor');
+    const buttons = await editor.$$('.layout-info-btn');
+
+    // Second button should be "Open in New Window"
+    const openNewWinBtn = buttons[1];
+    const text = await getTextSafe(openNewWinBtn);
+    expect(text).toBe('Open in New Window');
+
+    await openNewWinBtn.click();
+
+    // Wait for new window and verify it loads
+    const newHandle = await waitForNewWindow(beforeHandles);
+    expect(newHandle).not.toBeNull();
+
+    await browser.switchToWindow(newHandle);
+    await waitForAppReady(1);
+    expect(await getPaneCount()).toBeGreaterThanOrEqual(1);
+
+    await switchToMainWindow(mainWindowHandle);
+    await closeExtraWindows(mainWindowHandle);
+  });
+
+  // ================================================================
+  // Layout Focus Notice (P1)
+  // ================================================================
+
+  it('shows layout focus notice when LAYOUT_FOCUS_NOTICE_EVENT is received', async () => {
+    // Ensure there is an active layout bound to this window
+    await saveLayoutAs('Focus Notice Layout');
+
+    // Emit the layout-focus-notice event via Tauri's event system
+    await browser.execute(async () => {
+      const tauri = window.__TAURI__;
+      if (tauri?.event?.emitTo) {
+        const win = tauri.window.getCurrentWindow();
+        await tauri.event.emitTo(win.label, 'vibe99:layout-focus-notice');
+      }
+    });
+
+    // Wait for the CSS class to be applied
+    await browser.pause(300);
+
+    // Verify the focus-notice CSS class is on the body
+    const hasClass = await browser.execute(() => {
+      return document.body.classList.contains('is-layout-focus-notice');
+    });
+    expect(hasClass).toBe(true);
+
+    // Verify the status label reflects the focus notice
+    const statusLabel = await $('#status-label');
+    const labelText = await statusLabel.getText();
+    expect(labelText).toBe('Layout focused');
+  });
+
+  it('layout focus notice clears after animation timeout', async () => {
+    await saveLayoutAs('Focus Timeout Layout');
+
+    // Trigger focus notice
+    await browser.execute(async () => {
+      const tauri = window.__TAURI__;
+      if (tauri?.event?.emitTo) {
+        const win = tauri.window.getCurrentWindow();
+        await tauri.event.emitTo(win.label, 'vibe99:layout-focus-notice');
+      }
+    });
+
+    // Verify notice is active
+    await browser.pause(200);
+    let hasClass = await browser.execute(() => {
+      return document.body.classList.contains('is-layout-focus-notice');
+    });
+    expect(hasClass).toBe(true);
+
+    // Wait for the 1400ms timeout to expire
+    await browser.pause(1500);
+
+    // Verify the notice class is removed
+    hasClass = await browser.execute(() => {
+      return document.body.classList.contains('is-layout-focus-notice');
+    });
+    expect(hasClass).toBe(false);
+
+    // Verify status returns to normal (not "Layout focused")
+    const statusLabel = await $('#status-label');
+    const labelText = await statusLabel.getText();
+    expect(labelText).not.toBe('Layout focused');
+  });
 });
