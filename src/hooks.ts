@@ -35,6 +35,18 @@ export type HookEventMap = {
 
 export type HookEventType = keyof HookEventMap & string;
 
+const EVENT_PAYLOAD_FIELDS: Record<HookEventType, readonly string[]> = {
+  'alert.start': ['paneId', 'paneTitle', 'recentOutput'],
+  'alert.stop': ['paneId', 'paneTitle'],
+};
+
+function renderHint(eventType: string): string {
+  const fields = EVENT_PAYLOAD_FIELDS[eventType as HookEventType] ?? [];
+  return fields.length
+    ? `Variables: ${fields.map((f) => `<code>{{${f}}}</code>`).join(' ')}`
+    : '';
+}
+
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
@@ -343,8 +355,7 @@ export function createHookManager({
 
     const hint = document.createElement('div');
     hint.className = 'hook-template-hint';
-    hint.innerHTML = 'Variables: <code>{{paneId}}</code> <code>{{paneTitle}}</code>'
-      + (eh.event === 'alert.start' ? ' <code>{{recentOutput}}</code>' : '');
+    hint.innerHTML = renderHint(eh.event);
     editor.appendChild(hint);
 
     if (eh.isNew) {
@@ -376,8 +387,7 @@ export function createHookManager({
         });
         btn.classList.add('is-active');
         eventSelect.value = evt;
-        hint.innerHTML = 'Variables: <code>{{paneId}}</code> <code>{{paneTitle}}</code>'
-          + (evt === 'alert.start' ? ' <code>{{recentOutput}}</code>' : '');
+        hint.innerHTML = renderHint(evt);
       });
 
       eventGroup.appendChild(btn);
