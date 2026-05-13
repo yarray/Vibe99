@@ -74,11 +74,11 @@ export interface LayoutPane {
 
 /** Window geometry information for layout restoration */
 export interface WindowGeometry {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  fullscreen?: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fullscreen: boolean;
 }
 
 /** Layout data as stored / transmitted */
@@ -285,7 +285,7 @@ export interface Bridge {
   cwdReady: Promise<void>;
 
   // Window geometry
-  getWindowGeometry: () => Promise<WindowGeometry>;
+  getWindowGeometry: () => Promise<WindowGeometry | null>;
 
   // -- Flat aliases (backward compat) --
   createTerminal: TerminalApi['create'];
@@ -595,7 +595,7 @@ function createUnavailableBridge(): Bridge {
     removeHook: () => Promise.resolve({ hooks: [] }),
     updateHook: () => Promise.resolve({ hooks: [] }),
     executeHook: () => Promise.resolve(),
-    getWindowGeometry: () => Promise.resolve({}),
+    getWindowGeometry: () => Promise.resolve(null),
   };
 }
 
@@ -648,34 +648,45 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
 
   /**
    * Get the current window's geometry information.
-   * Returns position, size, and fullscreen state.
+   * Returns position, size, and fullscreen state, or null if any property cannot be obtained.
    */
-  async function getWindowGeometry(): Promise<WindowGeometry> {
-    const geom: WindowGeometry = {};
+  async function getWindowGeometry(): Promise<WindowGeometry | null> {
+    let x: number | undefined;
+    let y: number | undefined;
+    let width: number | undefined;
+    let height: number | undefined;
+    let fullscreen: boolean | undefined;
 
     try {
       const pos = await currentWindow.outerPosition();
-      geom.x = pos.x;
-      geom.y = pos.y;
+      x = pos.x;
+      y = pos.y;
     } catch {
-      // Position might not be available on all platforms
+      // Position not available
     }
 
     try {
       const size = await currentWindow.innerSize();
-      geom.width = size.width;
-      geom.height = size.height;
+      width = size.width;
+      height = size.height;
     } catch {
-      // Size might not be available
+      // Size not available
     }
 
     try {
-      geom.fullscreen = await currentWindow.isFullscreen();
+      fullscreen = await currentWindow.isFullscreen();
     } catch {
-      // Fullscreen might not be available
+      // Fullscreen not available
     }
 
-    return geom;
+    // If any property is missing, return null
+    if (x === undefined || y === undefined ||
+        width === undefined || height === undefined ||
+        fullscreen === undefined) {
+      return null;
+    }
+
+    return { x, y, width, height, fullscreen };
   }
 
   async function openLayoutWindow(layoutId: string): Promise<void> {
