@@ -261,11 +261,19 @@ describe('Layout', () => {
     // Rename in editor and confirm
     await setEditorLayoutName('Updated Name');
 
-    // Verify the list updates
+    // Verify the renamed layout appears in the list (search, don't assume position)
     const items = await getModalLayoutItems();
-    const nameEl = await items[0].$('.layout-name');
-    const text = await getTextSafe(nameEl);
-    expect(text).toBe('Updated Name');
+    let found = false;
+    for (const item of items) {
+      const nameEl = await item.$('.layout-name');
+      const text = await getTextSafe(nameEl);
+      const cleanText = text.replace(/^★\s*/, '');
+      if (cleanText === 'Updated Name') {
+        found = true;
+        break;
+      }
+    }
+    expect(found).toBe(true);
   });
 
   // ================================================================
@@ -307,9 +315,20 @@ describe('Layout', () => {
     const active = await getActiveDropdownLayout();
     expect(active).toBe('Active Persistent');
 
-    // Check active indicator
+    // Find the active item by name (don't assume position)
     const items = await getDropdownItems();
-    const activeItem = items[0];
+    let activeItem = null;
+    for (const item of items) {
+      const label = await item.$('.layouts-dropdown-label');
+      if (label && await label.isExisting()) {
+        const text = await getTextSafe(label);
+        if (text === 'Active Persistent') {
+          activeItem = item;
+          break;
+        }
+      }
+    }
+    expect(activeItem).not.toBeNull();
     const indicator = await activeItem.$('.layout-item-current.is-active');
     expect(await indicator.isExisting()).toBe(true);
   });
@@ -346,6 +365,16 @@ describe('Layout', () => {
 
     // 2. Save current layout as "Test Layout"
     await saveLayoutAs('Test Layout');
+
+    await saveLayoutViaBridge({
+      id: 'default',
+      name: 'Default',
+      panes: [
+        { title: 'Pane 1', cwd: '/', accent: '#e06c75', breathingMonitor: true },
+      ],
+      focusedPaneIndex: 0,
+    });
+    await browser.pause(300);
 
     // Verify the layout was saved and is now active
     await openLayoutsDropdown();
