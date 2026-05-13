@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- **E2E Activity Alert Debounce + Float Window Settings (VIB-252):** Added 7 new test cases to `settings.spec.js`:
+  - P0: Activity Alert Debounce input exists, converts seconds to ms on change, enforces lower limit (3s → 3000ms), enforces upper limit (300s → 300000ms)
+  - P1: Float Window toggle row exists in settings, toggles float window open/close on click
+  - P1: Debounce input ignores non-numeric input and restores previous valid value
+
 ### Fixed
 
 - **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.

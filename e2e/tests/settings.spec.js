@@ -292,6 +292,110 @@ describe('Settings Panel', () => {
     });
   });
 
+  describe('Activity Alert Debounce Settings', () => {
+    it('shows debounce input with default value (seconds)', async () => {
+      const input = await $('#activity-alert-debounce-input');
+      expect(await input.isExisting()).toBe(true);
+      // Default is 30000ms → input shows 30 (seconds)
+      const value = await input.getValue();
+      expect(parseInt(value)).toBe(30);
+    });
+
+    it('updates debounce ms when input changes (10s → 10000ms)', async () => {
+      await setInputValue('#activity-alert-debounce-input', '10');
+      await browser.pause(300);
+
+      // Verify the setting was stored correctly (10s = 10000ms)
+      const settings = await loadSettings();
+      expect(settings?.ui?.activityAlertDebounceMs).toBe(10000);
+    });
+
+    it('enforces debounce lower limit (below 3s clamps to 3000ms)', async () => {
+      await setInputValue('#activity-alert-debounce-input', '1');
+      await browser.pause(300);
+
+      const settings = await loadSettings();
+      // Math.max(3000, min(300000, 1 * 1000)) = 3000
+      expect(settings?.ui?.activityAlertDebounceMs).toBe(3000);
+    });
+
+    it('enforces debounce upper limit (above 300s clamps to 300000ms)', async () => {
+      await setInputValue('#activity-alert-debounce-input', '500');
+      await browser.pause(300);
+
+      const settings = await loadSettings();
+      // Math.max(3000, min(300000, 500 * 1000)) = 300000
+      expect(settings?.ui?.activityAlertDebounceMs).toBe(300000);
+    });
+  });
+
+  describe('Float Window Settings', () => {
+    it('shows float window toggle in settings panel', async () => {
+      const row = await $('#float-window-row');
+      expect(await row.isExisting()).toBe(true);
+
+      const toggle = await $('#float-window-toggle');
+      expect(await toggle.isExisting()).toBe(true);
+    });
+
+    it('toggles float window when toggle row is clicked', async () => {
+      // Click the float window row (same pattern as breathing toggle)
+      const row = await $('#float-window-row');
+      await browser.execute((el) => el.click(), row);
+      await browser.pause(500);
+
+      // Verify toggle state changed
+      const isChecked = await browser.execute(() => {
+        return document.getElementById('float-window-toggle')?.checked ?? false;
+      });
+      // Toggle should flip from default (false if not auto-opened) to true
+      expect(isChecked).toBe(true);
+
+      // Click again to toggle off
+      await browser.execute((el) => el.click(), row);
+      await browser.pause(500);
+
+      const isCheckedAfter = await browser.execute(() => {
+        return document.getElementById('float-window-toggle')?.checked ?? false;
+      });
+      expect(isCheckedAfter).toBe(false);
+    });
+  });
+
+  describe('Debounce Input Edge Cases', () => {
+    it('ignores non-numeric input and restores previous valid value', async () => {
+      // Set a valid value first
+      await setInputValue('#activity-alert-debounce-input', '15');
+      await browser.pause(300);
+
+      const settingsBefore = await loadSettings();
+      expect(settingsBefore?.ui?.activityAlertDebounceMs).toBe(15000);
+
+      // Simulate non-numeric input by bypassing the event handler's isFinite check
+      // → the change event will restore via applySettings()
+      await browser.execute(() => {
+        const input = document.getElementById('activity-alert-debounce-input');
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value',
+        )?.set;
+        if (nativeSetter) nativeSetter.call(input, 'abc');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await browser.pause(300);
+
+      // After invalid input, applySettings() restores from settings object
+      // which still holds 15000 → input shows 15
+      const input = await $('#activity-alert-debounce-input');
+      const value = await input.getValue();
+      expect(parseInt(value)).toBe(15);
+
+      // Settings should not have changed
+      const settingsAfter = await loadSettings();
+      expect(settingsAfter?.ui?.activityAlertDebounceMs).toBe(15000);
+    });
+  });
+
   describe('Settings persistence', () => {
     it('persists font size after restart', async () => {
       await setInputValue('#font-size-input', '18');
