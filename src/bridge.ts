@@ -72,12 +72,22 @@ export interface LayoutPane {
   [key: string]: unknown;
 }
 
+/** Window geometry information for layout restoration */
+export interface WindowGeometry {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fullscreen?: boolean;
+}
+
 /** Layout data as stored / transmitted */
 export interface LayoutData {
   id: string;
   name: string;
   panes: LayoutPane[];
   focusedPaneIndex: number;
+  windowGeometry?: WindowGeometry;
 }
 
 /** Result of listing layouts */
@@ -273,6 +283,9 @@ export interface Bridge {
 
   // Lifecycle
   cwdReady: Promise<void>;
+
+  // Window geometry
+  getWindowGeometry: () => Promise<WindowGeometry>;
 
   // -- Flat aliases (backward compat) --
   createTerminal: TerminalApi['create'];
@@ -582,6 +595,7 @@ function createUnavailableBridge(): Bridge {
     removeHook: () => Promise.resolve({ hooks: [] }),
     updateHook: () => Promise.resolve({ hooks: [] }),
     executeHook: () => Promise.resolve(),
+    getWindowGeometry: () => Promise.resolve({}),
   };
 }
 
@@ -632,6 +646,38 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     return `layout-${safeLabel}`;
   }
 
+  /**
+   * Get the current window's geometry information.
+   * Returns position, size, and fullscreen state.
+   */
+  async function getWindowGeometry(): Promise<WindowGeometry> {
+    const geom: WindowGeometry = {};
+
+    try {
+      const pos = await currentWindow.outerPosition();
+      geom.x = pos.x;
+      geom.y = pos.y;
+    } catch {
+      // Position might not be available on all platforms
+    }
+
+    try {
+      const size = await currentWindow.innerSize();
+      geom.width = size.width;
+      geom.height = size.height;
+    } catch {
+      // Size might not be available
+    }
+
+    try {
+      geom.fullscreen = await currentWindow.isFullscreen();
+    } catch {
+      // Fullscreen might not be available
+    }
+
+    return geom;
+  }
+
   async function openLayoutWindow(layoutId: string): Promise<void> {
     if (layoutId === windowLayoutId) {
       return focusWindow(currentWindow);
@@ -658,17 +704,59 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       }
     }
 
+    // Fetch the layout data to get saved window geometry
+    const layoutsResult = await invoke<LayoutsListResult>('layouts_list');
+    const layout = layoutsResult.layouts.find(l => l.id === layoutId);
+    const geom = layout?.windowGeometry;
+
+    // Default window dimensions
+    const width = geom?.width ?? 1600;
+    const height = geom?.height ?? 920;
+    const minWidth = 960;
+    const minHeight = 640;
+
+    // Determine window position with multi-monitor safety
+    // Use center as fallback for invalid or missing positions
+    let position: { x: number; y: number } | { center: true };
+    if (geom?.x !== undefined && geom?.y !== undefined) {
+      // Validate position is within reasonable bounds
+      // Negative coordinates or very large coordinates may indicate a disconnected monitor
+      // Tauri has built-in protection, but we add an extra layer of safety
+      const MAX_REASONABLE_COORD = 50000;
+      if (geom.x >= -MAX_REASONABLE_COORD && geom.y >= -MAX_REASONABLE_COORD &&
+          geom.x <= MAX_REASONABLE_COORD && geom.y <= MAX_REASONABLE_COORD) {
+        position = { x: geom.x, y: geom.y };
+      } else {
+        position = { center: true };
+      }
+    } else {
+      position = { center: true };
+    }
+
     const url = `index.html?layoutId=${encodeURIComponent(layoutId)}`;
     const win = new WebviewWindow(label, {
       url,
       title: `Vibe99 - ${layoutId}`,
-      width: 1600,
-      height: 920,
-      minWidth: 960,
-      minHeight: 640,
-      center: true,
+      width,
+      height,
+      minWidth,
+      minHeight,
+      ...position,
     });
-    return win.once('tauri://created', () => {}).then(() => {});
+
+    // Wait for window creation, then apply fullscreen state if needed
+    await win.once('tauri://created', () => {}).then(() => {});
+
+    if (geom?.fullscreen) {
+      try {
+        const createdWin = await WebviewWindow.getByLabel(label);
+        if (createdWin) {
+          await createdWin.setFullscreen(true);
+        }
+      } catch {
+        // Ignore fullscreen errors
+      }
+    }
   }
 
   return {
@@ -758,6 +846,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     onLayoutFocusNotice: (handler: () => void) =>
       onTauriEvent<void>(LAYOUT_FOCUS_NOTICE_EVENT, handler),
     cwdReady: _cwdReady,
+    getWindowGeometry,
   };
 }
 
