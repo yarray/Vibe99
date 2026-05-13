@@ -287,7 +287,7 @@ export function createPaneOperations({
     if (paneIndex === -1) return true;
 
     if (paneState.getPanes().length === 1) {
-      return false; // signal caller to close window
+      return true; // keep window open
     }
 
     closePane(paneIndex, { destroyTerminal: false });
