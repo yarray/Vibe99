@@ -32,7 +32,9 @@ export interface HookBridge {
   addHook: (hook: HookData) => Promise<{ hooks: Hook[] }>;
   removeHook: (hookId: string) => Promise<{ hooks: Hook[] }>;
   updateHook: (hookId: string, updates: Partial<HookData>) => Promise<{ hooks: Hook[] }>;
-  executeHook: (command: string) => Promise<void>;
+  executeHook: (command: string, params?: Record<string, string>) => Promise<void>;
+  getRecentOutput: (paneId: string) => Promise<string>;
+  getPaneTitle: (paneId: string) => string;
 }
 
 export interface HookManagerDeps {
@@ -42,9 +44,13 @@ export interface HookManagerDeps {
   unregisterModal: (closeFn: () => void) => void;
 }
 
+export interface HookEventContext {
+  paneId?: string;
+}
+
 export interface HookManager {
   loadHooks: () => Promise<void>;
-  emitEvent: (eventType: string) => void;
+  emitEvent: (eventType: string, context?: HookEventContext) => void;
   openHooksModal: () => void;
 }
 
@@ -88,10 +94,37 @@ export function createHookManager({
   // Event dispatch
   // ----------------------------------------------------------------
 
-  function emitEvent(eventType: string): void {
+  async function buildParams(eventType: string, ctx: HookEventContext): Promise<Record<string, string>> {
+    const params: Record<string, string> = { event: eventType };
+
+    if (ctx.paneId) {
+      params.paneId = ctx.paneId;
+      params.paneTitle = bridge.getPaneTitle(ctx.paneId);
+
+      try {
+        const output = await bridge.getRecentOutput(ctx.paneId);
+        const lastNewline = output.lastIndexOf('\n', output.length - 2);
+        const tail = lastNewline >= 0 ? output.slice(lastNewline + 1) : output;
+        params.recentOutput = tail.slice(-2048);
+      } catch {
+        params.recentOutput = '';
+      }
+    }
+
+    return params;
+  }
+
+  function emitEvent(eventType: string, context?: HookEventContext): void {
+    const ctx = context ?? {};
     for (const hook of hooks) {
       if (hook.enabled && hook.event === eventType) {
-        bridge.executeHook(hook.command).catch(reportError);
+        if (hook.command.includes('{')) {
+          buildParams(eventType, ctx)
+            .then((params) => bridge.executeHook(hook.command, params))
+            .catch(reportError);
+        } else {
+          bridge.executeHook(hook.command).catch(reportError);
+        }
       }
     }
   }
@@ -272,7 +305,7 @@ export function createHookManager({
 
     const fields: { key: 'name' | 'command'; label: string; placeholder: string }[] = [
       { key: 'name', label: 'Name', placeholder: 'e.g. Alert Sound' },
-      { key: 'command', label: 'Command', placeholder: 'paplay /usr/share/sounds/freedesktop/stereo/bell.oga' },
+      { key: 'command', label: 'Command', placeholder: 'notify-send "Alert" "Pane {paneTitle} stopped — {recentOutput}"' },
     ];
 
     const inputs: Record<string, HTMLInputElement> = {};

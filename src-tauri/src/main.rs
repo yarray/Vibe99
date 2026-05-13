@@ -45,6 +45,7 @@ fn main() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_destroy,
+            terminal::terminal_recent_output,
             terminal::get_cwd,
             settings::settings_load,
             settings::settings_save,
