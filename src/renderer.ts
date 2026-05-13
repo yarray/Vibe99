@@ -121,7 +121,18 @@ const layoutModal = createLayoutModal({
 });
 
 const hookManager = createHookManager({
-  bridge: bridge as any,
+  bridge: {
+    listHooks: () => bridge.hooks.list(),
+    addHook: (hook) => bridge.hooks.add(hook),
+    removeHook: (hookId) => bridge.hooks.remove(hookId),
+    updateHook: (hookId, updates) => bridge.hooks.update(hookId, updates),
+    executeHook: (command, params) => bridge.hooks.execute(command, params),
+    getRecentOutput: (paneId) => bridge.terminal.recentOutput(paneId),
+    getPaneTitle: (paneId) => {
+      const pane = paneState.getPaneById(paneId);
+      return pane?.title ?? pane?.terminalTitle ?? paneId;
+    },
+  },
   reportError,
   registerModal: (closeFn) => modalStack.register(closeFn),
   unregisterModal: (closeFn) => modalStack.unregister(closeFn),
@@ -132,12 +143,12 @@ const paneActivityWatcher = createPaneActivityWatcher({
   onAlert: (paneId) => {
     paneRenderer?.setAlerted(paneId, true);
     floatWindowManager.noteAlert(paneId);
-    hookManager.emitEvent('alert.start');
+    hookManager.emitEvent('alert.start', { paneId });
   },
   onClear: (paneId) => {
     paneRenderer?.setAlerted(paneId, false);
     floatWindowManager.noteClear(paneId);
-    hookManager.emitEvent('alert.stop');
+    hookManager.emitEvent('alert.stop', { paneId });
   },
 });
 

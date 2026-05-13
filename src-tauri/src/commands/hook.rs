@@ -287,20 +287,52 @@ pub fn hook_update(app: AppHandle, hook_id: String, updates: Value) -> Result<Ho
 /// the Tauri shell plugin. Does not wait for completion; fire-and-forget.
 ///
 /// The `command` string is passed to `sh -c` on Unix or `cmd /C` on Windows.
+/// Template placeholders `{key}` are replaced with shell-escaped values
+/// from `params`.
 #[tauri::command]
-pub async fn hook_execute(app: AppHandle, command: String) -> Result<(), String> {
+pub async fn hook_execute(
+    app: AppHandle,
+    command: String,
+    params: Option<std::collections::HashMap<String, String>>,
+) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
+
+    let resolved = resolve_templates(&command, params.unwrap_or_default());
 
     let shell = app.shell();
 
-    // Use the platform-appropriate command interpreter.
     #[cfg(target_os = "windows")]
-    let result = shell.command("cmd").args(["/C", &command]).spawn();
+    let result = shell.command("cmd").args(["/C", &resolved]).spawn();
 
     #[cfg(not(target_os = "windows"))]
-    let result = shell.command("sh").args(["-c", &command]).spawn();
+    let result = shell.command("sh").args(["-c", &resolved]).spawn();
 
     result
         .map(|_| ())
         .map_err(|e| format!("failed to execute hook command: {e}"))
+}
+
+fn resolve_templates(template: &str, params: std::collections::HashMap<String, String>) -> String {
+    let mut result = template.to_string();
+    for (key, value) in &params {
+        let pattern = format!("{{{key}}}");
+        if result.contains(&pattern) {
+            let escaped = shell_escape(value);
+            result = result.replace(&pattern, &escaped);
+        }
+    }
+    result
+}
+
+fn shell_escape(s: &str) -> String {
+    if s.is_empty() {
+        return "''".to_string();
+    }
+    let safe = s
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.' || b == b'/');
+    if safe {
+        return s.to_string();
+    }
+    format!("'{}'", s.replace('\'', "'\\''"))
 }

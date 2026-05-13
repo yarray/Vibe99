@@ -87,12 +87,25 @@ struct TerminalExitPayload {
     reason: String,
 }
 
+const RECENT_OUTPUT_CAP: usize = 8192;
+
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
     _reader_thread: std::thread::JoinHandle<()>,
     exit_thread: std::thread::JoinHandle<()>,
+    recent_output: Arc<Mutex<Vec<u8>>>,
+}
+
+fn append_recent(buf: &Arc<Mutex<Vec<u8>>>, data: &[u8]) {
+    if let Ok(mut ring) = buf.lock() {
+        if ring.len() + data.len() > RECENT_OUTPUT_CAP {
+            let overflow = (ring.len() + data.len()) - RECENT_OUTPUT_CAP;
+            ring.drain(..overflow.min(ring.len()));
+        }
+        ring.extend_from_slice(data);
+    }
 }
 
 pub struct PtyManager {
@@ -211,6 +224,9 @@ impl PtyManager {
         let master = pair.master;
         let killer = child.clone_killer();
 
+        let recent_output: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::with_capacity(RECENT_OUTPUT_CAP)));
+        let recent_buf = Arc::clone(&recent_output);
+
         let pane_id_owned = pane_id.to_string();
 
         let app_reader = app.clone();
@@ -227,6 +243,7 @@ impl PtyManager {
                     Ok(0) | Err(_) => {
                         if !pending.is_empty() {
                             let text = String::from_utf8_lossy(&pending);
+                            append_recent(&recent_buf, &pending);
                             let _ = app_reader.emit_to(
                                 &window_label_reader,
                                 "vibe99:terminal-data",
@@ -243,6 +260,7 @@ impl PtyManager {
                         let cut = utf8_safe_cut(&pending);
                         if cut > 0 {
                             let text = String::from_utf8_lossy(&pending[..cut]);
+                            append_recent(&recent_buf, &pending[..cut]);
                             let _ = app_reader.emit_to(
                                 &window_label_reader,
                                 "vibe99:terminal-data",
@@ -285,6 +303,7 @@ impl PtyManager {
             killer,
             _reader_thread,
             exit_thread,
+            recent_output,
         };
 
         self.sessions
@@ -408,12 +427,24 @@ impl PtyManager {
             let PtySession {
                 mut killer,
                 exit_thread,
+                recent_output: _,
                 ..
             } = session;
             let _ = killer.kill();
             exit_thread
         };
         let _ = exit_handle.join();
+    }
+
+    pub fn recent_output(&self, window_label: &str, pane_id: &str) -> Option<String> {
+        let key = PaneRef {
+            window_label: window_label.to_string(),
+            pane_id: pane_id.to_string(),
+        };
+        let sessions = self.sessions.lock().ok()?;
+        let session = sessions.get(&key)?;
+        let buf = session.recent_output.lock().ok()?;
+        Some(String::from_utf8_lossy(&buf).into_owned())
     }
 }
 

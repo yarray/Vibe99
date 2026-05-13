@@ -191,6 +191,7 @@ export interface TerminalApi {
   write: (payload: TerminalWritePayload) => Promise<void>;
   resize: (payload: TerminalResizePayload) => Promise<void>;
   destroy: (payload: TerminalDestroyPayload) => Promise<void>;
+  recentOutput: (paneId: string) => Promise<string>;
   onData: (handler: (event: TerminalDataEvent) => void) => () => void;
   onExit: (handler: (event: TerminalExitEvent) => void) => () => void;
 }
@@ -239,7 +240,7 @@ export interface HookApi {
   add: (hook: HookData) => Promise<HooksListResult>;
   remove: (hookId: string) => Promise<HooksListResult>;
   update: (hookId: string, updates: Partial<HookData>) => Promise<HooksListResult>;
-  execute: (command: string) => Promise<void>;
+  execute: (command: string, params?: Record<string, string>) => Promise<void>;
 }
 
 /** Event listener unsubscribes with void return */
@@ -495,6 +496,7 @@ function createUnavailableBridge(): Bridge {
       write: fail,
       resize: fail,
       destroy: fail,
+      recentOutput: fail,
       onData: () => () => {},
       onExit: () => () => {},
     },
@@ -695,6 +697,8 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
         }),
       destroy: (payload: TerminalDestroyPayload) =>
         invoke('terminal_destroy', { paneId: payload.paneId }),
+      recentOutput: (paneId: string) =>
+        invoke<string>('terminal_recent_output', { paneId }),
       onData: (handler: (event: TerminalDataEvent) => void) =>
         onTauriEvent<TerminalDataEvent>('vibe99:terminal-data', handler),
       onExit: (handler: (event: TerminalExitEvent) => void) =>
@@ -747,7 +751,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       remove: (hookId: string) => invoke<HooksListResult>('hook_remove', { hookId }),
       update: (hookId: string, updates: Partial<HookData>) =>
         invoke<HooksListResult>('hook_update', { hookId, updates }),
-      execute: (command: string) => invoke('hook_execute', { command }),
+      execute: (command: string, params?: Record<string, string>) => invoke('hook_execute', { command, params }),
     },
     onMenuAction: (handler: (event: MenuActionEvent) => void) =>
       onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler),

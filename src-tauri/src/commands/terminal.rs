@@ -71,6 +71,18 @@ pub fn get_cwd() -> Result<String, String> {
         .map_err(|e| format!("failed to get cwd: {e}"))
 }
 
+#[tauri::command]
+pub fn terminal_recent_output(
+    window: Window,
+    state: State<'_, AppState>,
+    pane_id: String,
+) -> Result<String, String> {
+    state
+        .pty
+        .recent_output(window.label(), &pane_id)
+        .ok_or_else(|| format!("no session for pane {pane_id}"))
+}
+
 fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD
