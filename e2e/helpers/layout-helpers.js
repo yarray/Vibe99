@@ -282,11 +282,11 @@ export async function addLayoutInModal(name) {
 }
 
 export async function renameLayoutInModal(layoutName, newName) {
-  // The modal no longer has an inline rename button in the sidebar.
-  // Instead, click the layout item to select it (shows editor panel),
-  // then rename via the editor panel's name input + confirm button.
+  // Click the layout item to select it and show it in the editor panel
   await clickModalLayout(layoutName);
   await browser.pause(300);
+
+  // Rename via the editor panel name input
   await setEditorLayoutName(newName);
 }
 
@@ -299,12 +299,14 @@ export async function deleteLayoutInModal(layoutName) {
       const cleanText = text.replace(/^★\s*/, '');
       if (cleanText === layoutName) {
         const buttons = await item.$$('.settings-btn');
-        // Buttons: [0]=open-in-new-window, [1]=delete
+        // Sidebar item buttons: [0] = open-in-new-window, [1] = delete (if present)
+        // Delete button is only rendered for non-default, non-active layouts
         if (buttons.length >= 2) {
           await buttons[1].click();
           await browser.pause(500);
           return;
         }
+        throw new Error(`Cannot delete layout "${layoutName}" — it may be the active or default layout`);
       }
     }
   }
@@ -388,7 +390,7 @@ export async function setEditorLayoutName(name) {
         throw e;
       }
     }
-    await browser.pause(500);
+    await browser.pause(800);
   }
 }
 
@@ -414,6 +416,24 @@ export async function clearAllLayouts() {
       } catch {
         // ignore errors
       }
+    }
+    // Recreate the default layout so the app remains in a consistent state.
+    // The app expects a default layout to exist (id='default', name='Default').
+    // This is especially important for tests that interact with the layout
+    // dropdown or modal, as they may expect the default layout to be present.
+    try {
+      const defaultLayout = window.layoutManager?.createDefaultLayout();
+      if (defaultLayout) {
+        await core.invoke('layout_save', { layout: defaultLayout });
+        await core.invoke('layout_set_default', { layoutId: defaultLayout.id });
+      }
+    } catch {
+      // If creating the default layout fails, continue without it.
+      // The app will create it on the next startup.
+    }
+    // Refresh the frontend layout manager to pick up the recreated default layout.
+    if (window.layoutManager) {
+      await window.layoutManager.refreshLayouts();
     }
   });
 }

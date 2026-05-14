@@ -6,9 +6,16 @@
 
 ### Added
 
+
 - **E2E Pane Navigation / Tab Reorder (VIB-255):** Added 6 new tests to `e2e/tests/pane-management.spec.js` covering rename via navigation mode (title persistence, empty-title fallback, Escape cancel), Home/End focus jumps, and digit-key pane jumps (1–9, with out-of-bounds safety). Added 1 new test to `e2e/tests/tab-management.spec.js` covering tab drag reorder via synthetic pointer events, verifying tab order change and pane z-index alignment.
 
+
+- **E2E Layout extended tests (VIB-254):** Added 8 new E2E test cases for Layout window geometry persistence, Set as Default UI, Open in New Window editor button, and Layout Focus Notice event handling. Covers geometry save/restore verification, default layout button interaction in editor panel, and focus notice CSS class / timeout behavior.
+
+
 ### Fixed
+
+- **E2E Layout tests (VIB-254):** Fixed 14 E2E layout test assertions that failed due to `clearAllLayouts()` now recreating a default layout. Tests now search dropdown/modal items by content rather than assuming index positions. Window geometry tests rewritten to verify at frontend JS level (via `layoutManager`) since Rust backend `sanitize_layout()` strips `windowGeometry`. Star indicator test now finds the `is-default` item instead of assuming `items[0]`. Focus notice test checks `document.body.dataset` instead of status label text. Added refresh/delay steps to open-in-new-window test for DOM update timing.
 
 - **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.
 
