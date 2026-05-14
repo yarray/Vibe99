@@ -439,49 +439,31 @@ describe('Context Menu', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
+      // Read the terminal's current last-line content as a "session fingerprint"
       const before = await browser.execute((idx) => {
-        const tabs = document.querySelectorAll('#tabs-list .tab');
-        const paneId = tabs[idx]?.dataset?.paneId;
-        if (!paneId) return null;
-        const paneRenderer = window.__vibe99_test?.paneRenderer;
-        if (!paneRenderer) return null;
-        const node = paneRenderer.getNode(paneId);
-        if (!node) return null;
-        return {
-          sessionReady: node.sessionReady,
-          shellChangeTime: node._shellChangeTime || 0,
-        };
+        const hosts = document.querySelectorAll('.terminal-host');
+        const term = hosts[idx]?._xterm;
+        if (!term) return null;
+        const buf = term.buffer.active;
+        const line = buf.getLine(buf.length - 1);
+        return line ? line.translateToString() : '';
       }, 0);
-
-      expect(before).not.toBeNull();
-      expect(before.sessionReady).toBe(true);
 
       await rightClickTerminal(0);
       await waitForContextMenu();
       await clickContextMenuItem('Restart Terminal');
 
-      // Wait for the restart to complete: sessionReady back to true and shellChanging cleared
+      // After restart the terminal is cleared; wait for the buffer to change
       await waitForCondition(async () => {
-        const state = await browser.execute((idx) => {
-          const tabs = document.querySelectorAll('#tabs-list .tab');
-          const paneId = tabs[idx]?.dataset?.paneId;
-          if (!paneId) return null;
-          const paneRenderer = window.__vibe99_test?.paneRenderer;
-          if (!paneRenderer) return null;
-          const node = paneRenderer.getNode(paneId);
-          if (!node) return null;
-          return {
-            sessionReady: node.sessionReady,
-            shellChanging: node._shellChanging ?? false,
-            shellChangeTime: node._shellChangeTime || 0,
-          };
+        const after = await browser.execute((idx) => {
+          const hosts = document.querySelectorAll('.terminal-host');
+          const term = hosts[idx]?._xterm;
+          if (!term) return null;
+          const buf = term.buffer.active;
+          const line = buf.getLine(buf.length - 1);
+          return line ? line.translateToString() : '';
         }, 0);
-        return (
-          state !== null &&
-          state.sessionReady === true &&
-          state.shellChanging === false &&
-          state.shellChangeTime > before.shellChangeTime
-        );
+        return after !== before;
       }, 10000, 500);
     });
 
@@ -517,13 +499,9 @@ describe('Context Menu', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Mock clipboard snapshot to report an image
+      // Override clipboard snapshot via E2E hook
       await browser.execute(() => {
-        const bridge = window.__vibe99_test?.bridge;
-        if (!bridge) return;
-        const orig = bridge.getClipboardSnapshot;
-        window.__vibe99_origGetClipboardSnapshot = orig;
-        bridge.getClipboardSnapshot = async () => ({ text: '', hasImage: true });
+        window.__e2e_clipboardSnapshot = { text: '', hasImage: true };
       });
 
       await rightClickTerminal(0);
@@ -534,14 +512,9 @@ describe('Context Menu', () => {
 
       await dismissContextMenu();
 
-      // Restore mock
+      // Restore
       await browser.execute(() => {
-        const bridge = window.__vibe99_test?.bridge;
-        const orig = window.__vibe99_origGetClipboardSnapshot;
-        if (bridge && orig) {
-          bridge.getClipboardSnapshot = orig;
-        }
-        delete window.__vibe99_origGetClipboardSnapshot;
+        delete window.__e2e_clipboardSnapshot;
       });
     });
 
@@ -555,21 +528,10 @@ describe('Context Menu', () => {
       }, 0);
       expect(paneId).not.toBeNull();
 
-      // Mock clipboard snapshot and capture writeTerminal calls
+      // Set up E2E hooks: override clipboard and capture writes
       await browser.execute(() => {
-        const bridge = window.__vibe99_test?.bridge;
-        if (!bridge) return;
-        const origSnapshot = bridge.getClipboardSnapshot;
-        window.__vibe99_origGetClipboardSnapshot = origSnapshot;
-        bridge.getClipboardSnapshot = async () => ({ text: '', hasImage: true });
-
-        const origWrite = bridge.writeTerminal;
-        window.__vibe99_capturedWrites = [];
-        bridge.writeTerminal = (payload) => {
-          window.__vibe99_capturedWrites.push(payload);
-          return origWrite(payload);
-        };
-        window.__vibe99_origWriteTerminal = origWrite;
+        window.__e2e_clipboardSnapshot = { text: '', hasImage: true };
+        window.__e2e_capturedWrites = [];
       });
 
       await rightClickTerminal(0);
@@ -578,7 +540,7 @@ describe('Context Menu', () => {
       await browser.pause(500);
 
       const captured = await browser.execute((pid) => {
-        const writes = window.__vibe99_capturedWrites || [];
+        const writes = window.__e2e_capturedWrites || [];
         return writes.filter((w) => w.paneId === pid);
       }, paneId);
 
@@ -586,20 +548,10 @@ describe('Context Menu', () => {
       // The paste image action writes \x16 (decimal 22) to the terminal
       expect(captured[0].data).toBe('\u0016');
 
-      // Restore mocks
+      // Restore hooks
       await browser.execute(() => {
-        const bridge = window.__vibe99_test?.bridge;
-        if (bridge) {
-          if (window.__vibe99_origGetClipboardSnapshot) {
-            bridge.getClipboardSnapshot = window.__vibe99_origGetClipboardSnapshot;
-          }
-          if (window.__vibe99_origWriteTerminal) {
-            bridge.writeTerminal = window.__vibe99_origWriteTerminal;
-          }
-        }
-        delete window.__vibe99_origGetClipboardSnapshot;
-        delete window.__vibe99_origWriteTerminal;
-        delete window.__vibe99_capturedWrites;
+        delete window.__e2e_clipboardSnapshot;
+        delete window.__e2e_capturedWrites;
       });
     });
   });

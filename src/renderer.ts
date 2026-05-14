@@ -87,6 +87,16 @@ const tabBarState: TabBarLocalState = (() => {
 // ---------------------------------------------------------------------------
 const bridge = createBridge((window as any).__TAURI__ ?? (window as any).vibe99 ?? null, null);
 
+// E2E instrumentation: capture writeTerminal calls
+const _originalWriteTerminal = bridge.writeTerminal;
+(bridge as any).writeTerminal = (payload: any) => {
+  const captures = (window as any).__e2e_capturedWrites;
+  if (captures) {
+    captures.push(payload);
+  }
+  return _originalWriteTerminal(payload);
+};
+
 const windowContext: { kind: 'layout'; layoutId: string } | { kind: 'main' } = (() => {
   const params = new URLSearchParams(window.location.search);
   const layoutId = params.get('layoutId');

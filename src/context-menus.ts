@@ -139,6 +139,8 @@ function getSelectAllShortcut(platform: Platform): string {
 }
 
 async function getClipboardSnapshot(bridge: Bridge): Promise<ClipboardSnapshot> {
+  const e2eOverride = (window as any).__e2e_clipboardSnapshot;
+  if (e2eOverride) return e2eOverride;
   try {
     return await bridge.getClipboardSnapshot?.() ?? { text: '', hasImage: false };
   } catch {
