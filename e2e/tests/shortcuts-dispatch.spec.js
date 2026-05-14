@@ -71,6 +71,7 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
   /**
    * Helper: Find a shortcut item by name
    * Uses browser.execute for reliable text matching in the DOM.
+   * Returns -1 if not found.
    */
   async function findShortcutItemByName(name) {
     // Wait for shortcut items to be present in the DOM
@@ -83,21 +84,47 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
       200,
     );
 
-    return await browser.execute((searchName) => {
-      const shortcutsList = document.querySelector('.shortcuts-list');
-      if (!shortcutsList) return -1;
+    // Debug: log all available shortcut names
+    const debugInfo = await browser.execute(() => {
+      const allItems = Array.from(document.querySelectorAll('.shortcut-item'));
+      return allItems.map(item => {
+        const nameEl = item.querySelector('.shortcut-name');
+        return {
+          name: nameEl ? nameEl.textContent : null,
+          html: nameEl ? nameEl.innerHTML : null
+        };
+      });
+    });
 
-      const items = Array.from(shortcutsList.querySelectorAll('.shortcut-item'));
+    // Search using a more flexible approach
+    return await browser.execute((searchName) => {
+      // Try multiple selectors for the shortcuts list
+      const listSelectors = ['.shortcuts-list', '.settings-modal .shortcuts-list', '.settings-modal'];
+      let items = [];
+
+      for (const selector of listSelectors) {
+        const container = document.querySelector(selector);
+        if (container) {
+          items = Array.from(container.querySelectorAll('.shortcut-item'));
+          if (items.length > 0) break;
+        }
+      }
+
+      // If still no items, try searching the entire document
+      if (items.length === 0) {
+        items = Array.from(document.querySelectorAll('.shortcut-item'));
+      }
+
       for (const item of items) {
         const nameEl = item.querySelector('.shortcut-name');
         if (nameEl) {
           // Get text content, excluding any badge elements
           const text = nameEl.textContent || '';
-          // Remove "Nav" badge text if present
-          const cleanText = text.replace('Nav', '').trim();
+          // Remove "Nav" badge text if present (it's a span element)
+          const cleanText = text.replace(/\s*Nav\s*/g, '').trim();
           // Case-insensitive partial match
           if (cleanText.toLowerCase().includes(searchName.toLowerCase())) {
-            return items.indexOf(item);
+            return document.querySelectorAll('.shortcut-item').indexOf(item);
           }
         }
       }
@@ -110,15 +137,29 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
    */
   async function getShortcutBinding(shortcutName) {
     return await browser.execute((name) => {
-      const shortcutsList = document.querySelector('.shortcuts-list');
-      if (!shortcutsList) return null;
+      // Try multiple selectors for the shortcuts list
+      const listSelectors = ['.shortcuts-list', '.settings-modal .shortcuts-list', '.settings-modal'];
+      let items = [];
 
-      const items = Array.from(shortcutsList.querySelectorAll('.shortcut-item'));
+      for (const selector of listSelectors) {
+        const container = document.querySelector(selector);
+        if (container) {
+          items = Array.from(container.querySelectorAll('.shortcut-item'));
+          if (items.length > 0) break;
+        }
+      }
+
+      // If still no items, try searching the entire document
+      if (items.length === 0) {
+        items = Array.from(document.querySelectorAll('.shortcut-item'));
+      }
+
       const item = items.find(it => {
         const nameEl = it.querySelector('.shortcut-name');
         if (!nameEl) return false;
         const text = nameEl.textContent || '';
-        const cleanText = text.replace('Nav', '').trim();
+        // Remove "Nav" badge text if present (it's a span element)
+        const cleanText = text.replace(/\s*Nav\s*/g, '').trim();
         return cleanText.toLowerCase().includes(name.toLowerCase());
       });
       if (!item) return null;
