@@ -319,8 +319,10 @@ describe('Hooks', () => {
     it('shows empty state when no hooks are configured', async () => {
       await openHooksModal();
 
-      const empty = await $('.shell-profile-empty');
-      const text = await getTextSafe(empty);
+      const text = await browser.execute(() => {
+        const el = document.querySelector('.hooks-modal .shell-profile-empty');
+        return el ? (el.innerText || el.textContent || '') : '';
+      });
       expect(text).toContain('No hooks configured');
     });
   });
@@ -441,8 +443,11 @@ describe('Hooks', () => {
       await clickHookAction('only-one', 'Delete');
       await browser.pause(200);
 
-      const empty = await $('.shell-profile-empty');
-      expect(await empty.isExisting()).toBe(true);
+      const exists = await browser.execute(() => {
+        const el = document.querySelector('.hooks-modal .shell-profile-empty');
+        return !!el;
+      });
+      expect(exists).toBe(true);
     });
   });
 
