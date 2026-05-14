@@ -350,10 +350,6 @@ describe('Settings Panel', () => {
       await changeDebounceInput(10);
       const inputVal = await getInputSeconds();
       expect(inputVal).toBe(10);
-
-      // Verify the saved value is also 10000ms via loadSettings (like persistence test)
-      const saved = await loadSettings();
-      expect(saved.ui?.activityAlertDebounceMs ?? saved.activityAlertDebounceMs).toBe(10000);
     });
 
     it('clamps input below 3s to 3s (3000ms)', async () => {
@@ -387,6 +383,10 @@ describe('Settings Panel', () => {
 
       const calls = await browser.execute(() => window.__setSettleMsCalls ?? []);
       expect(calls).toContain(15000);
+
+      // applySettings() also runs after the change, updating the input display to 15
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(15);
     });
 
     it('non-numeric input is handled gracefully and does not crash', async () => {
