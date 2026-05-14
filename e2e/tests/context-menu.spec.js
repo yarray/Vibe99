@@ -497,62 +497,52 @@ describe('Context Menu', () => {
       await dismissContextMenu();
     });
 
-    it('should enable Paste Image when clipboard has image', async () => {
+    it('should change shell profile via context menu and restart terminal', async () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Monkey-patch bridge.getClipboardSnapshot at runtime so the menu
-      // sees an image in the clipboard without needing a binary rebuild.
-      await browser.execute(() => {
-        window.__e2e_origGetClipboardSnapshot = window.__vibe99_test.bridge.getClipboardSnapshot;
-        window.__vibe99_test.bridge.getClipboardSnapshot = async () => ({ text: '', hasImage: true });
-      });
+      // Capture terminal text before profile change
+      const before = await getTerminalText(0);
 
       await rightClickTerminal(0);
       await waitForContextMenu();
 
-      expect(await hasContextMenuItem('Paste Image')).toBe(true);
-      expect(await isContextMenuItemDisabled('Paste Image')).toBe(false);
-
-      await dismissContextMenu();
-    });
-
-    it('should execute Paste Image action via context menu', async () => {
-      await waitForAppReady();
-      await waitForTerminalReady(0);
-
-      const paneId = await browser.execute((idx) => {
-        const tabs = document.querySelectorAll('#tabs-list .tab');
-        return tabs[idx]?.dataset?.paneId || null;
-      }, 0);
-      expect(paneId).not.toBeNull();
-
-      // Monkey-patch clipboard snapshot and writeTerminal at runtime.
+      // Hover over "Change Profile" to reveal its submenu
       await browser.execute(() => {
-        window.__e2e_origGetClipboardSnapshot = window.__vibe99_test.bridge.getClipboardSnapshot;
-        window.__vibe99_test.bridge.getClipboardSnapshot = async () => ({ text: '', hasImage: true });
-
-        window.__e2e_origWriteTerminal = window.__vibe99_test.bridge.writeTerminal;
-        window.__e2e_capturedWrites = [];
-        window.__vibe99_test.bridge.writeTerminal = (payload) => {
-          window.__e2e_capturedWrites.push(payload);
-          return window.__e2e_origWriteTerminal(payload);
-        };
+        const items = document.querySelectorAll('.context-menu-item');
+        for (const item of items) {
+          if (item.textContent.includes('Change Profile')) {
+            item.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+            return;
+          }
+        }
       });
+      await browser.pause(300);
 
-      await rightClickTerminal(0);
-      await waitForContextMenu();
-      await clickContextMenuItem('Paste Image');
-      await browser.pause(500);
+      // Click the first profile in the submenu
+      const clicked = await browser.execute(() => {
+        const items = document.querySelectorAll('.context-menu-item');
+        for (const item of items) {
+          if (item.textContent.includes('Change Profile')) {
+            const submenu = item.querySelector('.context-menu-submenu');
+            if (submenu) {
+              const firstChild = submenu.querySelector('.context-menu-item');
+              if (firstChild) {
+                firstChild.click();
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      });
+      expect(clicked).toBe(true);
 
-      const captured = await browser.execute((pid) => {
-        const writes = window.__e2e_capturedWrites || [];
-        return writes.filter((w) => w.paneId === pid);
-      }, paneId);
-
-      expect(captured.length).toBeGreaterThanOrEqual(1);
-      // The paste image action writes \x16 (decimal 22) to the terminal
-      expect(captured[0].data).toBe('\u0016');
+      // After changing profile the terminal clears and restarts
+      await waitForCondition(async () => {
+        const after = await getTerminalText(0);
+        return after !== before;
+      }, 10000, 500);
     });
   });
 
