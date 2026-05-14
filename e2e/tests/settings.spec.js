@@ -354,7 +354,7 @@ describe('Settings Panel', () => {
     it('converts entered seconds to ms in settings', async () => {
       await setDebounceSeconds(10);
       const debounceMs = await browser.execute(() => {
-        return (window as any).settings?.activityAlertDebounceMs ?? null;
+        return window.settings?.activityAlertDebounceMs ?? null;
       });
       expect(debounceMs).toBe(10000);
     });
@@ -362,7 +362,7 @@ describe('Settings Panel', () => {
     it('clamps input below 3s to 3s (3000ms)', async () => {
       await setDebounceSeconds(1);
       const debounceMs = await browser.execute(() => {
-        return (window as any).settings?.activityAlertDebounceMs ?? null;
+        return window.settings?.activityAlertDebounceMs ?? null;
       });
       expect(debounceMs).toBe(3000);
     });
@@ -370,7 +370,7 @@ describe('Settings Panel', () => {
     it('clamps input above 300s to 300s (300000ms)', async () => {
       await setDebounceSeconds(999);
       const debounceMs = await browser.execute(() => {
-        return (window as any).settings?.activityAlertDebounceMs ?? null;
+        return window.settings?.activityAlertDebounceMs ?? null;
       });
       expect(debounceMs).toBe(300000);
     });
@@ -378,12 +378,12 @@ describe('Settings Panel', () => {
     it('calls paneActivityWatcher.setSettleMs after debounce change', async () => {
       // Set up a persistent spy that records calls across browser.execute calls
       await browser.execute(() => {
-        const paw = (window as any).paneActivityWatcher;
+        const paw = window.paneActivityWatcher;
         if (!paw) return;
-        (window as any).__setSettleMsCalls = [];
+        window.__setSettleMsCalls = [];
         const original = paw.setSettleMs.bind(paw);
         paw.setSettleMs = (ms) => {
-          (window as any).__setSettleMsCalls.push(ms);
+          window.__setSettleMsCalls.push(ms);
           original(ms);
         };
       });
@@ -391,14 +391,14 @@ describe('Settings Panel', () => {
       await setDebounceSeconds(15);
 
       const calls = await browser.execute(() => {
-        return (window as any).__setSettleMsCalls ?? [];
+        return window.__setSettleMsCalls ?? [];
       });
 
       // setSettleMs is called via settingsManager when debounce input changes (in applySettings)
       expect(calls).toContain(15000);
 
       const debounceMs = await browser.execute(() => {
-        return (window as any).settings?.activityAlertDebounceMs ?? null;
+        return window.settings?.activityAlertDebounceMs ?? null;
       });
       expect(debounceMs).toBe(15000);
     });
@@ -459,7 +459,7 @@ describe('Settings Panel', () => {
       await setDebounceInput('abc');
       // Should not throw; settings should revert to previous valid value
       const debounceMs = await browser.execute(() => {
-        return (window as any).settings?.activityAlertDebounceMs ?? null;
+        return window.settings?.activityAlertDebounceMs ?? null;
       });
       // Reverts to the last valid value (default 30s = 30000ms since no prior change)
       expect(debounceMs).toBe(30000);
@@ -468,7 +468,7 @@ describe('Settings Panel', () => {
     it('debounce value persists after settings panel is closed and reopened', async () => {
       await setDebounceInput(7);
       const before = await browser.execute(() => {
-        return (window as any).settings?.activityAlertDebounceMs ?? null;
+        return window.settings?.activityAlertDebounceMs ?? null;
       });
       expect(before).toBe(7000);
 
@@ -478,7 +478,7 @@ describe('Settings Panel', () => {
       await waitForElement('#settings-panel:not(.is-hidden)', 5000);
 
       const after = await browser.execute(() => {
-        return (window as any).settings?.activityAlertDebounceMs ?? null;
+        return window.settings?.activityAlertDebounceMs ?? null;
       });
       expect(after).toBe(7000);
     });
