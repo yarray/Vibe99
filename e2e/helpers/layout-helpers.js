@@ -282,32 +282,12 @@ export async function addLayoutInModal(name) {
 }
 
 export async function renameLayoutInModal(layoutName, newName) {
-  const items = await getModalLayoutItems();
-  for (const item of items) {
-    const nameEl = await item.$('.layout-name');
-    if (nameEl) {
-      const text = await getTextSafe(nameEl);
-      const cleanText = text.replace(/^★\s*/, '');
-      if (cleanText === layoutName) {
-        const renameBtn = await item.$$('.settings-btn');
-        // Buttons are: open-in-new-window (⎆), rename (✎), delete (✕)
-        // We want the rename button (second one)
-        if (renameBtn.length >= 2) {
-          await renameBtn[1].click();
-          await browser.pause(200);
+  // Click the layout item to select it and show it in the editor panel
+  await clickModalLayout(layoutName);
+  await browser.pause(300);
 
-          const input = await item.$('input');
-          if (!input) throw new Error('Rename input not found');
-          await setInputValue(input, newName);
-          await browser.pause(100);
-          await browser.keys('Enter');
-          await browser.pause(500);
-          return;
-        }
-      }
-    }
-  }
-  throw new Error(`Modal layout "${layoutName}" not found for rename`);
+  // Rename via the editor panel name input
+  await setEditorLayoutName(newName);
 }
 
 export async function deleteLayoutInModal(layoutName) {
@@ -319,13 +299,14 @@ export async function deleteLayoutInModal(layoutName) {
       const cleanText = text.replace(/^★\s*/, '');
       if (cleanText === layoutName) {
         const buttons = await item.$$('.settings-btn');
-        // Buttons are: open-in-new-window (⎆), rename (✎), delete (✕)
-        // We want the delete button (third one, if present)
-        if (buttons.length >= 3) {
-          await buttons[2].click();
+        // Sidebar item buttons: [0] = open-in-new-window, [1] = delete (if present)
+        // Delete button is only rendered for non-default, non-active layouts
+        if (buttons.length >= 2) {
+          await buttons[1].click();
           await browser.pause(500);
           return;
         }
+        throw new Error(`Cannot delete layout "${layoutName}" — it may be the active or default layout`);
       }
     }
   }
@@ -409,7 +390,7 @@ export async function setEditorLayoutName(name) {
         throw e;
       }
     }
-    await browser.pause(500);
+    await browser.pause(800);
   }
 }
 
