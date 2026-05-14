@@ -1,7 +1,7 @@
 import { waitForAppReady } from '../helpers/app-launch.js';
 import { openSettingsPanel, closeSettingsPanel, resetSettings } from '../helpers/settings-helpers.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
-import { waitForElement } from '../helpers/wait-for.js';
+import { waitForElement, waitForCondition } from '../helpers/wait-for.js';
 
 describe('Keyboard Shortcuts Actual Dispatch', () => {
   beforeEach(async () => {
