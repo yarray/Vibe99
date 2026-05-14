@@ -7,10 +7,15 @@
 ### Added
 
 
+
 - **E2E Pane Navigation / Tab Reorder (VIB-255):** Added 6 new tests to `e2e/tests/pane-management.spec.js` covering rename via navigation mode (title persistence, empty-title fallback, Escape cancel), Home/End focus jumps, and digit-key pane jumps (1–9, with out-of-bounds safety). Added 1 new test to `e2e/tests/tab-management.spec.js` covering tab drag reorder via synthetic pointer events, verifying tab order change and pane z-index alignment.
 
 
 - **E2E Layout extended tests (VIB-254):** Added 8 new E2E test cases for Layout window geometry persistence, Set as Default UI, Open in New Window editor button, and Layout Focus Notice event handling. Covers geometry save/restore verification, default layout button interaction in editor panel, and focus notice CSS class / timeout behavior.
+
+
+
+- **E2E Hook system tests (VIB-249):** Added `e2e/tests/hooks.spec.js` with 22 test cases covering hook modal open/close (5), hook CRUD — create (4), edit (3), delete (2) — enable/disable toggle (3), `{{var}}` template rendering with variable hints (3), and event trigger integration (2).
 
 
 ### Fixed
