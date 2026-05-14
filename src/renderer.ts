@@ -333,6 +333,8 @@ const floatWindowManager = createFloatWindowManager({
   },
 });
 
+(window as any).__floatWindowManager = floatWindowManager;
+
 const commandPaletteEntries = createCommandPaletteEntries({
   paneState,
   paneRenderer,
