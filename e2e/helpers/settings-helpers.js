@@ -58,6 +58,19 @@ export async function resetSettings() {
     }
   });
   await browser.pause(300);
+
+  // Reload and re-apply so in-memory settings match the persisted defaults.
+  // Without this, the previous test's in-memory settings persist across
+  // beforeEach calls (settingsManager.settings is a shared object reference).
+  await browser.execute(() => {
+    if (window.__TAURI__ && window.settingsManager) {
+      window.__TAURI__.core.invoke('settings_load').then((saved) => {
+        window.settingsManager.applyPersistedSettings(saved);
+        window.settingsManager.applySettings();
+      });
+    }
+  });
+  await browser.pause(300);
 }
 
 export async function loadSettings() {
