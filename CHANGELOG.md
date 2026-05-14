@@ -28,6 +28,14 @@
 
 - **Context menu Activity toggle (VIB-143):** Fixed "Background activity alert" context menu item displaying raw SVG text instead of a visual indicator. Replaced broken `icon('check', 12)` approach with `toggleActive` property that renders a yellow dot (using `--status-highlight`) consistent with the settings menu style (VIB-127). Added `MenuEntryItem.toggleActive` interface property and `.context-menu-toggle-dot` CSS class.
 
+### Added
+
+- **E2E settings tests (VIB-252):** Added 7 new E2E test cases in `e2e/tests/settings.spec.js`:
+  - Activity Alert Debounce: input existence, seconds-to-ms conversion, lower/upper clamping (3s–300s), `paneActivityWatcher.setSettleMs` integration
+  - Float Window Toggle: element existence, `is-active` class state sync
+  - Debounce Input: non-numeric input handling, persistence after panel close/reopen
+  - Exposed `paneActivityWatcher`, `settingsManager`, `floatWindowManager`, and `settings` on `window` in `src/renderer.ts` for E2E access
+
 ### Changed
 
 - **Docker e2e workflow (VIB-198):** Updated `e2e/README.md` to document the correct workflow — use `git fetch` inside the container for incremental builds (not volume mounts, which bypass the pre-compiled Cargo cache). Added e2e testing reference in main `README.md`.

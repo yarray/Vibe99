@@ -710,3 +710,9 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   reportError(event.reason);
 });
+
+// Expose internals for E2E testing
+(window as any).paneActivityWatcher = paneActivityWatcher;
+(window as any).settingsManager = settingsManager;
+(window as any).floatWindowManager = floatWindowManager;
+(window as any).settings = settingsManager.settings;

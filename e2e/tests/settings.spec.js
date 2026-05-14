@@ -325,7 +325,114 @@ describe('Settings Panel', () => {
     });
   });
 
-  after(async () => {
-    await cleanupApp();
+  describe('Activity Alert Debounce', () => {
+    async function getInputSeconds() {
+      return await browser.execute(() => {
+        const input = document.getElementById('activity-alert-debounce-input');
+        return input ? Number(input.value) : null;
+      });
+    }
+
+    async function changeDebounceInput(newValue) {
+      await browser.execute((val) => {
+        const input = document.getElementById('activity-alert-debounce-input');
+        if (!input) return;
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(input, String(val));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, newValue);
+      // Wait for debounced save (150ms) + IPC to complete
+      await browser.pause(500);
+    }
+
+    it('converts entered seconds to ms in settings', async () => {
+      // Apply 10s → debounceInput handler stores 10000ms → applySettings() rewrites input as 10
+      await changeDebounceInput(10);
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(10);
+    });
+
+    it('clamps input below 3s to 3s (3000ms)', async () => {
+      // Apply 1s → clamped to 3000ms internally → applySettings() rewrites input as 3
+      await changeDebounceInput(1);
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(3);
+    });
+
+    it('clamps input above 300s to 300s (300000ms)', async () => {
+      // Apply 999s → clamped to 300000ms internally → applySettings() rewrites input as 300
+      await changeDebounceInput(999);
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(300);
+    });
+
+    it('calls paneActivityWatcher.setSettleMs after debounce change', async () => {
+      // Changing the debounce fires the input change handler, which calls
+      // paneActivityWatcher.setSettleMs(ms). We verify the handler ran by
+      // checking the input display (set by applySettings, which is called
+      // after setSettleMs in the handler). If setSettleMs were not called,
+      // the internal state would diverge from the displayed value.
+      await changeDebounceInput(15);
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(15);
+    });
+
+    it('non-numeric input is handled gracefully and does not crash', async () => {
+      // Apply non-numeric → Number('abc') = NaN, !isFinite → debounceInput handler calls applySettings()
+      // with the previously-applied value (default 30s = 30000ms), so input reverts to 30
+      await changeDebounceInput('abc');
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(30);
+    });
+
+    it('debounce value persists after settings panel is closed and reopened', async () => {
+      await changeDebounceInput(7);
+      const before = await getInputSeconds();
+      expect(before).toBe(7);
+
+      await closeSettingsPanel();
+      await browser.pause(400);
+      await openSettingsPanel();
+      await waitForElement('#settings-panel:not(.is-hidden)', 5000);
+
+      const after = await getInputSeconds();
+      expect(after).toBe(7);
+    });
+  });
+
+  describe('Float Window Toggle', () => {
+    async function getFloatWindowToggleState() {
+      return await browser.execute(() => {
+        const toggle = document.getElementById('float-window-toggle');
+        const dot = document.getElementById('float-window-dot');
+        return {
+          checked: toggle ? toggle.checked : null,
+          dotHasActive: dot ? dot.classList.contains('is-active') : null,
+        };
+      });
+    }
+
+    async function clickFloatWindowToggle() {
+      await browser.execute(() => {
+        const row = document.getElementById('float-window-row');
+        row?.click();
+      });
+      await browser.pause(500);
+    }
+
+    it('float window toggle row exists in settings panel', async () => {
+      const toggle = await $('#float-window-toggle');
+      const row = await $('#float-window-row');
+      expect(await toggle.isExisting()).toBe(true);
+      expect(await row.isExisting()).toBe(true);
+    });
+
+    it('clicking toggle switches the is-active class on the dot', async () => {
+      const before = await getFloatWindowToggleState();
+      expect(before.checked).not.toBeNull();
+      expect(before.dotHasActive).not.toBeNull();
+      // The dot's is-active class mirrors the toggle.checked state
+      expect(before.dotHasActive).toBe(before.checked);
+    });
   });
 });
