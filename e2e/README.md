@@ -2,7 +2,7 @@
 
 This directory contains end-to-end tests for Vibe99, powered by [WebdriverIO](https://webdriver.io/) and [`tauri-driver`](https://github.com/tauri-apps/tauri/tree/dev/tooling/webdriver).
 
-The `Dockerfile.e2e` builds an image that pre-compiles Vibe99. The pre-compiled artifacts populate the Cargo target directory — this is not for testing directly, but to serve as a **warm baseline** so subsequent incremental builds (after `git fetch`) are fast.
+The `Dockerfile.e2e` builds an image that pre-compiles Vibe99. The pre-compiled artifacts populate the Cargo target directory — this is not for testing directly, but to serve as a **warm baseline** so subsequent incremental builds (after `git fetch`) are fast. The debug binary itself is removed from the image so that each test run always rebuilds from the latest source code.
 
 ## Quick Start
 
@@ -49,13 +49,13 @@ See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
 
 ## Key principle
 
-The pre-compiled binary in the image is **only** for populating the Cargo target cache. It is never tested directly. The correct workflow is:
+The pre-compiled Cargo artifacts in the image are **only** for warming the incremental-build cache. The debug binary itself is removed so that only changed files are recompiled each test run.
 
 1. Image is built once with a full compile — this warms the Cargo cache
 2. Each test run does `git fetch` to get the latest code, then runs `npm run test:e2e` (which handles building)
 3. Only changed files are recompiled — incremental builds are fast
 
-Do **not** mount local source via `-v` — that bypasses the pre-compiled Cargo cache and forces a full rebuild every time.
+Do **not** mount local source via `-v` — that bypasses the warm Cargo cache and forces a full rebuild every time.
 
 ## How it works
 

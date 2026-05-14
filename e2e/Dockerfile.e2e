@@ -40,8 +40,8 @@ WORKDIR /app/Vibe99
 RUN npm ci \
     && npm run tauri:build-dev
 
-# 5b. 删除 release binary，防止测试脚本误加载旧版预编译产物
-RUN rm -rf src-tauri/target/release
+# 5b. 删除预编译的 debug binary，强制测试运行时增量编译
+RUN rm -f src-tauri/target/debug/vibe99
 
 # 6. 安装 e2e 依赖
 WORKDIR /app/Vibe99/e2e

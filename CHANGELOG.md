@@ -19,7 +19,7 @@
 
 ### Fixed
 
-- **E2E Dockerfile: use debug build and remove stale release binary (VIB-257):** Changed `tauri:build` to `tauri:build-dev` and added `RUN rm -rf src-tauri/target/release` at the end of the Dockerfile to prevent test scripts from loading an outdated precompiled release binary when running with newer source code.
+- **E2E Dockerfile: use debug build and remove stale release binary (VIB-257):** Changed `tauri:build` to `tauri:build-dev` and removed the precompiled `src-tauri/target/debug/vibe99` from the image so that test runs always build incrementally from the mounted source.
 
 
 ### Fixed
