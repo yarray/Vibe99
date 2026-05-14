@@ -38,7 +38,10 @@ RUN git clone https://github.com/yarray/Vibe99.git
 
 WORKDIR /app/Vibe99
 RUN npm ci \
-    && npm run tauri:build
+    && npm run tauri:build-dev
+
+# 5b. 删除预编译的 debug binary，强制测试运行时增量编译
+RUN rm -f src-tauri/target/debug/vibe99
 
 # 6. 安装 e2e 依赖
 WORKDIR /app/Vibe99/e2e

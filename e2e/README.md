@@ -49,13 +49,13 @@ See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
 
 ## Key principle
 
-The pre-compiled binary in the image is **only** for populating the Cargo target cache. It is never tested directly. The correct workflow is:
+The pre-compiled Cargo artifacts in the image are **only** for warming the incremental-build cache.
 
 1. Image is built once with a full compile — this warms the Cargo cache
 2. Each test run does `git fetch` to get the latest code, then runs `npm run test:e2e` (which handles building)
 3. Only changed files are recompiled — incremental builds are fast
 
-Do **not** mount local source via `-v` — that bypasses the pre-compiled Cargo cache and forces a full rebuild every time.
+Do **not** mount local source via `-v` — that bypasses the warm Cargo cache and forces a full rebuild every time.
 
 ## How it works
 
