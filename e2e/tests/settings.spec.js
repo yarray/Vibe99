@@ -352,37 +352,34 @@ describe('Settings Panel', () => {
     });
 
     it('converts entered seconds to ms in settings', async () => {
+      // Input 10s → settings becomes 10000ms → applySettings() writes back 10000/1000=10
       await setDebounceSeconds(10);
-      const debounceMs = await browser.execute(() => {
-        return window.settings?.activityAlertDebounceMs ?? null;
-      });
-      expect(debounceMs).toBe(10000);
+      const displayedSec = await getDebounceValue();
+      expect(displayedSec).toBe(10);
     });
 
     it('clamps input below 3s to 3s (3000ms)', async () => {
+      // Input 1s → 1*1000=1000ms, clamped to 3000ms → applySettings() writes 3000/1000=3
       await setDebounceSeconds(1);
-      const debounceMs = await browser.execute(() => {
-        return window.settings?.activityAlertDebounceMs ?? null;
-      });
-      expect(debounceMs).toBe(3000);
+      const displayedSec = await getDebounceValue();
+      expect(displayedSec).toBe(3);
     });
 
     it('clamps input above 300s to 300s (300000ms)', async () => {
+      // Input 999s → 999000ms, clamped to 300000ms → applySettings() writes 300000/1000=300
       await setDebounceSeconds(999);
-      const debounceMs = await browser.execute(() => {
-        return window.settings?.activityAlertDebounceMs ?? null;
-      });
-      expect(debounceMs).toBe(300000);
+      const displayedSec = await getDebounceValue();
+      expect(displayedSec).toBe(300);
     });
 
     it('calls paneActivityWatcher.setSettleMs after debounce change', async () => {
-      // Set up a persistent spy that records calls across browser.execute calls
+      // Set up a persistent spy that intercepts setSettleMs across browser.execute calls
       await browser.execute(() => {
         const paw = window.paneActivityWatcher;
         if (!paw) return;
         window.__setSettleMsCalls = [];
         const original = paw.setSettleMs.bind(paw);
-        paw.setSettleMs = (ms) => {
+        paw.setSettleMs = function (ms) {
           window.__setSettleMsCalls.push(ms);
           original(ms);
         };
@@ -390,17 +387,12 @@ describe('Settings Panel', () => {
 
       await setDebounceSeconds(15);
 
-      const calls = await browser.execute(() => {
-        return window.__setSettleMsCalls ?? [];
-      });
-
-      // setSettleMs is called via settingsManager when debounce input changes (in applySettings)
+      const calls = await browser.execute(() => window.__setSettleMsCalls ?? []);
       expect(calls).toContain(15000);
 
-      const debounceMs = await browser.execute(() => {
-        return window.settings?.activityAlertDebounceMs ?? null;
-      });
-      expect(debounceMs).toBe(15000);
+      // applySettings() also runs after the change, updating the input display
+      const displayedSec = await getDebounceValue();
+      expect(displayedSec).toBe(15);
     });
   });
 
@@ -456,31 +448,36 @@ describe('Settings Panel', () => {
     }
 
     it('non-numeric input is handled gracefully and does not crash', async () => {
+      // Non-numeric input: Number('abc') = NaN, !isFinite → applySettings() reverts to previous value
       await setDebounceInput('abc');
-      // Should not throw; settings should revert to previous valid value
-      const debounceMs = await browser.execute(() => {
-        return window.settings?.activityAlertDebounceMs ?? null;
+      // Reverts to the last valid displayed value (default 30s)
+      const displayedSec = await browser.execute(() => {
+        const input = document.getElementById('activity-alert-debounce-input');
+        return input ? Number(input.value) : null;
       });
-      // Reverts to the last valid value (default 30s = 30000ms since no prior change)
-      expect(debounceMs).toBe(30000);
+      expect(displayedSec).toBe(30);
     });
 
     it('debounce value persists after settings panel is closed and reopened', async () => {
+      // Enter 7s → settings = 7000ms → applySettings() writes 7000/1000=7 to input
       await setDebounceInput(7);
       const before = await browser.execute(() => {
-        return window.settings?.activityAlertDebounceMs ?? null;
+        const input = document.getElementById('activity-alert-debounce-input');
+        return input ? Number(input.value) : null;
       });
-      expect(before).toBe(7000);
+      expect(before).toBe(7);
 
+      // Close and reopen the panel — settings are persisted and re-loaded
       await closeSettingsPanel();
       await browser.pause(400);
       await openSettingsPanel();
       await waitForElement('#settings-panel:not(.is-hidden)', 5000);
 
       const after = await browser.execute(() => {
-        return window.settings?.activityAlertDebounceMs ?? null;
+        const input = document.getElementById('activity-alert-debounce-input');
+        return input ? Number(input.value) : null;
       });
-      expect(after).toBe(7000);
+      expect(after).toBe(7);
     });
   });
 });
