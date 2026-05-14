@@ -1,0 +1,1 @@
+Fix wide-character rendering glitches where CJK glyphs would render incorrectly and visibly swap between broken and correct when text was selected. The terminal now uses xterm.js's canvas renderer instead of the WebGL renderer, whose glyph-atlas caching does not reliably handle East Asian wide characters under font fallback.
