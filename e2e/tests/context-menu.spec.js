@@ -223,14 +223,6 @@ describe('Context Menu', () => {
     afterEach(async () => {
       // Clean up any runtime mocks installed by tests
       await browser.execute(() => {
-        if (window.__e2e_origGetClipboardSnapshot) {
-          window.__vibe99_test.bridge.getClipboardSnapshot = window.__e2e_origGetClipboardSnapshot;
-          delete window.__e2e_origGetClipboardSnapshot;
-        }
-        if (window.__e2e_origWriteTerminal) {
-          window.__vibe99_test.bridge.writeTerminal = window.__e2e_origWriteTerminal;
-          delete window.__e2e_origWriteTerminal;
-        }
         delete window.__e2e_capturedWrites;
         delete window.__e2e_clipboardSnapshot;
       });
