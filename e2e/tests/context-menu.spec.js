@@ -1,7 +1,7 @@
 import { waitForAppReady, getPaneCount, getTabCount } from '../helpers/app-launch.js';
 import { waitForCondition } from '../helpers/wait-for.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
-import { waitForTerminalReady } from '../helpers/terminal-helpers.js';
+import { waitForTerminalReady, getTerminalText, clearCapturedOutput } from '../helpers/terminal-helpers.js';
 import { dispatchContextMenu, jsClick } from '../helpers/webview2-helpers.js';
 
 /**
@@ -220,6 +220,14 @@ async function waitForRenameInput(tabIndex, timeout = 5000) {
 
 describe('Context Menu', () => {
   describe('Terminal context menu', () => {
+    afterEach(async () => {
+      // Clean up any runtime mocks installed by tests
+      await browser.execute(() => {
+        delete window.__e2e_capturedWrites;
+        delete window.__e2e_clipboardSnapshot;
+      });
+    });
+
     it('should open context menu on right-click', async () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
@@ -421,6 +429,112 @@ describe('Context Menu', () => {
       // Menu should be closed
       const menuAfter = await $('.context-menu');
       expect(await menuAfter.isExisting()).toBe(false);
+    });
+
+    it('should show Restart Terminal in terminal context menu', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+
+      expect(await hasContextMenuItem('Restart Terminal')).toBe(true);
+
+      await dismissContextMenu();
+    });
+
+    it('should restart terminal and recreate PTY session', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      // Capture current terminal text; after restart the buffer is cleared
+      // and a new shell prompt appears, so text should change.
+      const before = await getTerminalText(0);
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+      await clickContextMenuItem('Restart Terminal');
+
+      await waitForCondition(async () => {
+        const after = await getTerminalText(0);
+        return after !== before;
+      }, 10000, 500);
+    });
+
+    it('should keep pane alive after terminal restart', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      const countBefore = await getPaneCount();
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+      await clickContextMenuItem('Restart Terminal');
+      await browser.pause(1000);
+
+      const countAfter = await getPaneCount();
+      expect(countAfter).toBe(countBefore);
+    });
+
+    it('should disable Paste Image when clipboard has no image', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+
+      expect(await hasContextMenuItem('Paste Image')).toBe(true);
+      expect(await isContextMenuItemDisabled('Paste Image')).toBe(true);
+
+      await dismissContextMenu();
+    });
+
+    it('should change shell profile via context menu and restart terminal', async () => {
+      await waitForAppReady();
+      await waitForTerminalReady(0);
+
+      // Capture terminal text before profile change
+      const before = await getTerminalText(0);
+
+      await rightClickTerminal(0);
+      await waitForContextMenu();
+
+      // Hover over "Change Profile" to reveal its submenu
+      await browser.execute(() => {
+        const items = document.querySelectorAll('.context-menu-item');
+        for (const item of items) {
+          if (item.textContent.includes('Change Profile')) {
+            item.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+            return;
+          }
+        }
+      });
+      await browser.pause(300);
+
+      // Click the first profile in the submenu
+      const clicked = await browser.execute(() => {
+        const items = document.querySelectorAll('.context-menu-item');
+        for (const item of items) {
+          if (item.textContent.includes('Change Profile')) {
+            const submenu = item.querySelector('.context-menu-submenu');
+            if (submenu) {
+              const firstChild = submenu.querySelector('.context-menu-item');
+              if (firstChild) {
+                firstChild.click();
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      });
+      expect(clicked).toBe(true);
+
+      // After changing profile the terminal clears and restarts
+      await waitForCondition(async () => {
+        const after = await getTerminalText(0);
+        return after !== before;
+      }, 10000, 500);
     });
   });
 

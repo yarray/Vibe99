@@ -127,6 +127,44 @@ if (!fs.existsSync(wdioBin)) {
   execSync('npm install', { cwd: e2eDir, stdio: 'inherit' });
 }
 
+// ---------------------------------------------------------------------------
+// Ensure the Tauri binary is up-to-date with frontend source changes.
+// In container environments (e.g. vibe99-builder) a pre-built binary may
+// exist that was compiled before the checked-out branch was created.
+// ---------------------------------------------------------------------------
+const releaseBinary = path.join(projectRoot, 'src-tauri', 'target', 'release', `vibe99${isWindows ? '.exe' : ''}`);
+const debugBinary = path.join(projectRoot, 'src-tauri', 'target', 'debug', `vibe99${isWindows ? '.exe' : ''}`);
+
+function needsRebuild() {
+  const binaryPath = fs.existsSync(releaseBinary) ? releaseBinary : debugBinary;
+  if (!fs.existsSync(binaryPath)) return true;
+  const binaryMtime = fs.statSync(binaryPath).mtimeMs;
+  const srcDir = path.join(projectRoot, 'src');
+  const excludes = new Set(['dist', 'node_modules', '.git']);
+
+  function checkDir(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (excludes.has(entry.name)) continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (checkDir(fullPath)) return true;
+      } else if (fs.statSync(fullPath).mtimeMs > binaryMtime) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  return checkDir(srcDir);
+}
+
+if (needsRebuild()) {
+  console.log('Frontend source is newer than the application binary — rebuilding...');
+  if (fs.existsSync(releaseBinary)) fs.unlinkSync(releaseBinary);
+  if (fs.existsSync(debugBinary)) fs.unlinkSync(debugBinary);
+  execSync('npm run tauri:build-dev', { cwd: projectRoot, stdio: 'inherit' });
+}
+
 const wdioArgs = ['run', 'wdio.conf.js'];
 for (const spec of specs) {
   wdioArgs.push('--spec', spec);

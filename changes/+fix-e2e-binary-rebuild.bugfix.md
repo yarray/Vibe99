@@ -1,0 +1,1 @@
+Fix E2E test runner to automatically rebuild the Tauri application binary when frontend source files are newer than the existing binary. This ensures Docker E2E environments (e.g. vibe99-builder) always test against the latest frontend code instead of a stale pre-built binary.
