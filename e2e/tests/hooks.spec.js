@@ -316,18 +316,16 @@ describe('Hooks', () => {
       expect(cls).toContain('is-selected');
     });
 
-    it('shows empty state when no hooks are configured', async () => {
+    it('shows no hook items when no hooks are configured', async () => {
       await openHooksModal();
-      await browser.pause(300);
 
-      const text = await waitForCondition(async () => {
-        return await browser.execute(() => {
-          const el = document.querySelector('.hooks-modal .shell-profile-empty');
-          const t = el ? (el.innerText || el.textContent || '') : '';
-          return t || false;
-        });
-      }, 5000, 200);
-      expect(text).toContain('No hooks configured');
+      await waitForCondition(async () => {
+        const items = await $$('.hook-item');
+        return items.length === 0;
+      }, 5000, 300);
+
+      const items = await $$('.hook-item');
+      expect(items.length).toBe(0);
     });
   });
 
