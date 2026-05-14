@@ -10,6 +10,8 @@
 
 ### Fixed
 
+- **E2E Layout tests (VIB-254):** Fixed 14 E2E layout test assertions that failed due to `clearAllLayouts()` now recreating a default layout. Tests now search dropdown/modal items by content rather than assuming index positions. Window geometry tests rewritten to verify at frontend JS level (via `layoutManager`) since Rust backend `sanitize_layout()` strips `windowGeometry`. Star indicator test now finds the `is-default` item instead of assuming `items[0]`. Focus notice test checks `document.body.dataset` instead of status label text. Added refresh/delay steps to open-in-new-window test for DOM update timing.
+
 - **E2E font settings test (VIB-206):** Fixed `settings.spec.js` font size and font family assertions that were checking CSS vars `--app-font-size` and `--app-font-family` on `document.documentElement`. Font settings are applied to the xterm terminal via `pane-renderer.ts` (`node.terminal.options.fontSize` / `node.terminal.options.fontFamily`), not CSS vars. Tests now query `terminal.options` directly via the `_xterm` property on `.terminal-host` elements.
 
 - **E2E settings.spec.js (VIB-225):** Removed TypeScript type assertions (`as HTMLElement`, `as {...}`) from `e2e/tests/settings.spec.js` browser.execute() callbacks — these are plain `.js` files with no TypeScript transpilation in the WebdriverIO test runner.
