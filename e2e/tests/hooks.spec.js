@@ -10,22 +10,14 @@ import { setInputValue, jsClick, getTextSafe } from '../helpers/webview2-helpers
 
 /** Reset hook-related data to a clean state via the Tauri bridge. */
 async function resetHooksSettings() {
-  await browser.execute(() => {
+  await browser.execute(async () => {
     const tauri = window.__TAURI__;
     if (!tauri) return;
-    return tauri.core.invoke('settings_save', {
-      settings: {
-        version: 6,
-        ui: {
-          fontSize: 13,
-          paneOpacity: 0.8,
-          paneMaskOpacity: 0.75,
-          paneWidth: 720,
-          breathingAlertEnabled: true,
-        },
-        hooks: [],
-      },
-    });
+    const result = await tauri.core.invoke('hooks_list');
+    const hooks = result?.hooks ?? [];
+    for (const hook of hooks) {
+      await tauri.core.invoke('hook_remove', { hookId: hook.id });
+    }
   });
   await browser.pause(300);
 }
@@ -316,15 +308,22 @@ describe('Hooks', () => {
       expect(cls).toContain('is-selected');
     });
 
-    it('shows no hook items when no hooks are configured', async () => {
+    it('shows no hook items after all hooks are removed', async () => {
       await openHooksModal();
+      await clickAddHookBtn();
+      await fillHookEditor({
+        name: 'Temp Hook',
+        command: 'echo temp',
+        event: 'alert.start',
+      });
 
-      await waitForCondition(async () => {
-        const items = await $$('.hook-item');
-        return items.length === 0;
-      }, 5000, 300);
+      let items = await $$('.hook-item');
+      expect(items.length).toBeGreaterThanOrEqual(1);
 
-      const items = await $$('.hook-item');
+      await clickHookAction('temp-hook', 'Delete');
+      await browser.pause(300);
+
+      items = await $$('.hook-item');
       expect(items.length).toBe(0);
     });
   });
