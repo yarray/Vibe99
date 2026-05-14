@@ -51,20 +51,42 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
 
     const shortcutsBtn = await $('#keyboard-shortcuts-settings-btn');
     await shortcutsBtn.click();
-    await browser.pause(500);
 
+    // Wait for the modal to appear
+    await waitForElement('.settings-modal', 5000);
     const modal = await $('.settings-modal');
     expect(await modal.isExisting()).toBe(true);
+
+    // Wait for the shortcuts list to be populated
+    await waitForCondition(
+      async () => {
+        const items = await $$('.shortcut-item');
+        return items.length > 0;
+      },
+      5000,
+      200,
+    );
   }
 
   /**
    * Helper: Find a shortcut item by name
-   * Uses browser.execute for more reliable text matching
+   * Waits for the shortcuts list to be populated before searching.
+   * Uses browser.execute for more reliable text matching.
    */
   async function findShortcutItemByName(name) {
+    // Wait for shortcut items to be present in the DOM
+    await waitForCondition(
+      async () => {
+        const items = await $$('.shortcut-item');
+        return items.length > 0;
+      },
+      5000,
+      200,
+    );
+
     return await browser.execute((searchName) => {
       const shortcutsList = document.querySelector('.shortcuts-list');
-      if (!shortcutsList) return null;
+      if (!shortcutsList) return -1;
 
       const items = Array.from(shortcutsList.querySelectorAll('.shortcut-item'));
       for (const item of items) {
@@ -73,7 +95,6 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
           const text = nameEl.textContent || '';
           // Case-insensitive partial match
           if (text.toLowerCase().includes(searchName.toLowerCase())) {
-            // Return the DOM element itself - we'll use browser.$ to get a WebdriverIO wrapper
             return items.indexOf(item);
           }
         }
