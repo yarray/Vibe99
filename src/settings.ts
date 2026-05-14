@@ -55,12 +55,12 @@ interface PersistedSettingsRaw {
 
 export function getDefaultFontFamily(platform: string): string {
   if (platform === 'win32' || platform === 'windows') {
-    return 'Consolas, "Cascadia Mono", "Courier New", monospace';
+    return 'Consolas, "Cascadia Mono", "Courier New", "Microsoft YaHei", monospace';
   }
   if (platform === 'darwin') {
-    return 'Menlo, Monaco, "SF Mono", monospace';
+    return 'Menlo, Monaco, "SF Mono", "PingFang SC", monospace';
   }
-  return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", monospace';
+  return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", "Noto Sans CJK SC", monospace';
 }
 
 // ---------------------------------------------------------------------------
