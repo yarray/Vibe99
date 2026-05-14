@@ -17,6 +17,10 @@
 
 - **E2E Hook system tests (VIB-249):** Added `e2e/tests/hooks.spec.js` with 22 test cases covering hook modal open/close (5), hook CRUD — create (4), edit (3), delete (2) — enable/disable toggle (3), `{{var}}` template rendering with variable hints (3), and event trigger integration (2).
 
+### Fixed
+
+- **E2E Dockerfile: use debug build and remove stale release binary (VIB-257):** Changed `tauri:build` to `tauri:build-dev` and added `RUN rm -rf src-tauri/target/release` at the end of the Dockerfile to prevent test scripts from loading an outdated precompiled release binary when running with newer source code.
+
 
 ### Fixed
 
