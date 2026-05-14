@@ -62,12 +62,15 @@ export async function resetSettings() {
   // Reload and re-apply so in-memory settings match the persisted defaults.
   // Without this, the previous test's in-memory settings persist across
   // beforeEach calls (settingsManager.settings is a shared object reference).
-  await browser.execute(() => {
+  await browser.executeAsync((done) => {
     if (window.__TAURI__ && window.settingsManager) {
       window.__TAURI__.core.invoke('settings_load').then((saved) => {
         window.settingsManager.applyPersistedSettings(saved);
         window.settingsManager.applySettings();
-      });
+        done();
+      }).catch(done);
+    } else {
+      done();
     }
   });
   await browser.pause(300);
