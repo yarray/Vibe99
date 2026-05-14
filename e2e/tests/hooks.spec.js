@@ -318,11 +318,15 @@ describe('Hooks', () => {
 
     it('shows empty state when no hooks are configured', async () => {
       await openHooksModal();
+      await browser.pause(300);
 
-      const text = await browser.execute(() => {
-        const el = document.querySelector('.hooks-modal .shell-profile-empty');
-        return el ? (el.innerText || el.textContent || '') : '';
-      });
+      const text = await waitForCondition(async () => {
+        return await browser.execute(() => {
+          const el = document.querySelector('.hooks-modal .shell-profile-empty');
+          const t = el ? (el.innerText || el.textContent || '') : '';
+          return t || false;
+        });
+      }, 5000, 200);
       expect(text).toContain('No hooks configured');
     });
   });
