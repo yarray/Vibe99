@@ -1,0 +1,1 @@
+Background activity alert now pulses with a much softer overlay (lower peak opacity, no bright accent border, smaller glow) and breathes over a slower 3.5s cycle, so it stays noticeable without feeling intrusive when an agent finishes a task.
