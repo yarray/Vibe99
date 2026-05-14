@@ -59,17 +59,27 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
 
   /**
    * Helper: Find a shortcut item by name
+   * Uses browser.execute for more reliable text matching
    */
   async function findShortcutItemByName(name) {
-    const shortcutItems = await $$('.shortcut-item');
-    for (const item of shortcutItems) {
-      const nameEl = await item.$('.shortcut-name');
-      const text = await nameEl.getText();
-      if (text.includes(name)) {
-        return item;
+    return await browser.execute((searchName) => {
+      const shortcutsList = document.querySelector('.shortcuts-list');
+      if (!shortcutsList) return null;
+
+      const items = Array.from(shortcutsList.querySelectorAll('.shortcut-item'));
+      for (const item of items) {
+        const nameEl = item.querySelector('.shortcut-name');
+        if (nameEl) {
+          const text = nameEl.textContent || '';
+          // Case-insensitive partial match
+          if (text.toLowerCase().includes(searchName.toLowerCase())) {
+            // Return the DOM element itself - we'll use browser.$ to get a WebdriverIO wrapper
+            return items.indexOf(item);
+          }
+        }
       }
-    }
-    return null;
+      return -1;
+    }, name);
   }
 
   /**
@@ -94,8 +104,12 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
    * Helper: Modify a shortcut binding by clicking on it and recording a new key
    */
   async function modifyShortcutBinding(shortcutName, newKey) {
-    const item = await findShortcutItemByName(shortcutName);
-    expect(item).not.toBeNull();
+    const itemIndex = await findShortcutItemByName(shortcutName);
+    expect(itemIndex).not.toBe(-1);
+    expect(itemIndex).toBeGreaterThanOrEqual(0);
+
+    const shortcutItems = await $$('.shortcut-item');
+    const item = shortcutItems[itemIndex];
 
     const keysEl = await item.$('.shortcut-keys');
     await keysEl.click();

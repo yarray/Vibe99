@@ -372,11 +372,8 @@ describe('Activity Alert', () => {
     await tabs[0].click();
     await browser.pause(200);
 
-    // Trigger background output on pane 1
-    await triggerBackgroundOutput(1, 1);
-    await browser.pause(SETTLE_MS + 1000);
-
-    // After settle time, alert should appear
+    // Trigger background output on pane 1 and ensure alert appears
+    await ensurePaneHasAlert(1);
     expect(await paneHasAlert(1)).toBe(true);
 
     // Clear alert by focusing pane 1
@@ -441,9 +438,8 @@ describe('Activity Alert', () => {
     await tabs[0].click();
     await browser.pause(200);
 
-    // Trigger background output on pane 1
-    await triggerBackgroundOutput(1, 1);
-    await browser.pause(SETTLE_MS + 500);
+    // Trigger alert on pane 1 using the helper
+    await ensurePaneHasAlert(1);
 
     // Check if alert appeared
     const hasAlert = await paneHasAlert(1);
@@ -472,9 +468,8 @@ describe('Activity Alert', () => {
     await tabs[0].click();
     await browser.pause(200);
 
-    // Trigger alert on pane 1
-    await triggerBackgroundOutput(1, 1);
-    await browser.pause(SETTLE_MS + 500);
+    // Trigger alert on pane 1 using the helper
+    await ensurePaneHasAlert(1);
     expect(await paneHasAlert(1)).toBe(true);
 
     // Clear event log before focusing
