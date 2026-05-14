@@ -94,6 +94,15 @@ describe('Float Window', () => {
     });
 
     it('persists float window closed state to settings after toggle off', async () => {
+      // Ensure float window starts closed to avoid state leakage from prior tests
+      await browser.execute(() => {
+        const fwm = window.__floatWindowManager;
+        if (fwm && fwm.isOpen()) {
+          return fwm.close();
+        }
+      });
+      await browser.pause(400);
+
       // Open then close
       await clickFloatWindowRow();
       await browser.pause(400);
