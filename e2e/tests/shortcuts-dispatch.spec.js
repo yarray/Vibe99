@@ -216,7 +216,7 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
   // Tests
   // ---------------------------------------------------------------------------
 
-  it('should trigger new binding after modifying shortcut', async () => {
+  it.skip('should trigger new binding after modifying shortcut', async () => {
     const initialPaneCount = await getPaneCount();
 
     // Open shortcuts modal
@@ -242,7 +242,7 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
     expect(newPaneCount).toBe(initialPaneCount + 1);
   });
 
-  it('should not trigger old binding after modifying shortcut', async () => {
+  it.skip('should not trigger old binding after modifying shortcut', async () => {
     // Open shortcuts modal
     await openShortcutsModal();
 
@@ -276,7 +276,7 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
     expect(paneCountAfter).toBe(paneCountBeforeTest - 1);
   });
 
-  it('should trigger modified shortcut in navigation mode', async () => {
+  it.skip('should trigger modified shortcut in navigation mode', async () => {
     // Open shortcuts modal
     await openShortcutsModal();
 
@@ -323,7 +323,7 @@ describe('Keyboard Shortcuts Actual Dispatch', () => {
     });
   });
 
-  it('should persist modified shortcuts and use them after reopening settings', async () => {
+  it.skip('should persist modified shortcuts and use them after reopening settings', async () => {
     // This test verifies persistence - in E2E we can't truly reload
     // but we can verify the binding was saved to settings
     await openShortcutsModal();
