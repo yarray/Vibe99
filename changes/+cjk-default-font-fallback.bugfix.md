@@ -1,0 +1,1 @@
+Default terminal font now includes a CJK fallback per platform (PingFang SC on macOS, Microsoft YaHei on Windows, Noto Sans CJK SC on Linux), reducing the wide-character glyph glitches that appeared when relying on opaque OS font substitution.
