@@ -1,7 +1,7 @@
 import { waitForAppReady, getPaneCount, getTabCount } from '../helpers/app-launch.js';
 import { waitForCondition } from '../helpers/wait-for.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
-import { waitForTerminalReady } from '../helpers/terminal-helpers.js';
+import { waitForTerminalReady, getTerminalText, clearCapturedOutput } from '../helpers/terminal-helpers.js';
 import { dispatchContextMenu, jsClick } from '../helpers/webview2-helpers.js';
 
 /**
@@ -220,6 +220,22 @@ async function waitForRenameInput(tabIndex, timeout = 5000) {
 
 describe('Context Menu', () => {
   describe('Terminal context menu', () => {
+    afterEach(async () => {
+      // Clean up any runtime mocks installed by tests
+      await browser.execute(() => {
+        if (window.__e2e_origGetClipboardSnapshot) {
+          window.__vibe99_test.bridge.getClipboardSnapshot = window.__e2e_origGetClipboardSnapshot;
+          delete window.__e2e_origGetClipboardSnapshot;
+        }
+        if (window.__e2e_origWriteTerminal) {
+          window.__vibe99_test.bridge.writeTerminal = window.__e2e_origWriteTerminal;
+          delete window.__e2e_origWriteTerminal;
+        }
+        delete window.__e2e_capturedWrites;
+        delete window.__e2e_clipboardSnapshot;
+      });
+    });
+
     it('should open context menu on right-click', async () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
@@ -439,30 +455,16 @@ describe('Context Menu', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Read the terminal's current last-line content as a "session fingerprint"
-      const before = await browser.execute((idx) => {
-        const hosts = document.querySelectorAll('.terminal-host');
-        const term = hosts[idx]?._xterm;
-        if (!term) return null;
-        const buf = term.buffer.active;
-        const line = buf.getLine(buf.length - 1);
-        return line ? line.translateToString() : '';
-      }, 0);
+      // Capture current terminal text; after restart the buffer is cleared
+      // and a new shell prompt appears, so text should change.
+      const before = await getTerminalText(0);
 
       await rightClickTerminal(0);
       await waitForContextMenu();
       await clickContextMenuItem('Restart Terminal');
 
-      // After restart the terminal is cleared; wait for the buffer to change
       await waitForCondition(async () => {
-        const after = await browser.execute((idx) => {
-          const hosts = document.querySelectorAll('.terminal-host');
-          const term = hosts[idx]?._xterm;
-          if (!term) return null;
-          const buf = term.buffer.active;
-          const line = buf.getLine(buf.length - 1);
-          return line ? line.translateToString() : '';
-        }, 0);
+        const after = await getTerminalText(0);
         return after !== before;
       }, 10000, 500);
     });
@@ -499,9 +501,11 @@ describe('Context Menu', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Override clipboard snapshot via E2E hook
+      // Monkey-patch bridge.getClipboardSnapshot at runtime so the menu
+      // sees an image in the clipboard without needing a binary rebuild.
       await browser.execute(() => {
-        window.__e2e_clipboardSnapshot = { text: '', hasImage: true };
+        window.__e2e_origGetClipboardSnapshot = window.__vibe99_test.bridge.getClipboardSnapshot;
+        window.__vibe99_test.bridge.getClipboardSnapshot = async () => ({ text: '', hasImage: true });
       });
 
       await rightClickTerminal(0);
@@ -511,11 +515,6 @@ describe('Context Menu', () => {
       expect(await isContextMenuItemDisabled('Paste Image')).toBe(false);
 
       await dismissContextMenu();
-
-      // Restore
-      await browser.execute(() => {
-        delete window.__e2e_clipboardSnapshot;
-      });
     });
 
     it('should execute Paste Image action via context menu', async () => {
@@ -528,10 +527,17 @@ describe('Context Menu', () => {
       }, 0);
       expect(paneId).not.toBeNull();
 
-      // Set up E2E hooks: override clipboard and capture writes
+      // Monkey-patch clipboard snapshot and writeTerminal at runtime.
       await browser.execute(() => {
-        window.__e2e_clipboardSnapshot = { text: '', hasImage: true };
+        window.__e2e_origGetClipboardSnapshot = window.__vibe99_test.bridge.getClipboardSnapshot;
+        window.__vibe99_test.bridge.getClipboardSnapshot = async () => ({ text: '', hasImage: true });
+
+        window.__e2e_origWriteTerminal = window.__vibe99_test.bridge.writeTerminal;
         window.__e2e_capturedWrites = [];
+        window.__vibe99_test.bridge.writeTerminal = (payload) => {
+          window.__e2e_capturedWrites.push(payload);
+          return window.__e2e_origWriteTerminal(payload);
+        };
       });
 
       await rightClickTerminal(0);
@@ -547,12 +553,6 @@ describe('Context Menu', () => {
       expect(captured.length).toBeGreaterThanOrEqual(1);
       // The paste image action writes \x16 (decimal 22) to the terminal
       expect(captured[0].data).toBe('\u0016');
-
-      // Restore hooks
-      await browser.execute(() => {
-        delete window.__e2e_clipboardSnapshot;
-        delete window.__e2e_capturedWrites;
-      });
     });
   });
 
