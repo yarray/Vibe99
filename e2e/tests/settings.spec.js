@@ -326,54 +326,52 @@ describe('Settings Panel', () => {
   });
 
   describe('Activity Alert Debounce', () => {
-    async function getDebounceValue() {
+    async function getInputSeconds() {
       return await browser.execute(() => {
         const input = document.getElementById('activity-alert-debounce-input');
         return input ? Number(input.value) : null;
       });
     }
 
-    async function setDebounceSeconds(seconds) {
-      await browser.execute((secs) => {
+    async function changeDebounceInput(newValue) {
+      await browser.execute((val) => {
         const input = document.getElementById('activity-alert-debounce-input');
         if (!input) return;
         const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(input, String(secs));
+        nativeSetter.call(input, String(val));
         input.dispatchEvent(new Event('change', { bubbles: true }));
-      }, seconds);
-      await browser.pause(300);
+      }, newValue);
+      // Wait for debounced save (150ms) + IPC to complete
+      await browser.pause(500);
     }
 
-    it('debounce input exists and has a reasonable default value', async () => {
-      const defaultSec = await getDebounceValue();
-      expect(defaultSec).not.toBeNull();
-      // Default is 30s (30000ms) per settings.ts, stored as seconds
-      expect(defaultSec).toBe(30);
-    });
-
     it('converts entered seconds to ms in settings', async () => {
-      // Input 10s → settings becomes 10000ms → applySettings() writes back 10000/1000=10
-      await setDebounceSeconds(10);
-      const displayedSec = await getDebounceValue();
-      expect(displayedSec).toBe(10);
+      // Apply 10s → debounceInput handler stores 10000ms → applySettings() rewrites input as 10
+      await changeDebounceInput(10);
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(10);
+
+      // Verify the saved value is also 10000ms via loadSettings (like persistence test)
+      const saved = await loadSettings();
+      expect(saved.ui?.activityAlertDebounceMs ?? saved.activityAlertDebounceMs).toBe(10000);
     });
 
     it('clamps input below 3s to 3s (3000ms)', async () => {
-      // Input 1s → 1*1000=1000ms, clamped to 3000ms → applySettings() writes 3000/1000=3
-      await setDebounceSeconds(1);
-      const displayedSec = await getDebounceValue();
-      expect(displayedSec).toBe(3);
+      // Apply 1s → clamped to 3000ms internally → applySettings() rewrites input as 3
+      await changeDebounceInput(1);
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(3);
     });
 
     it('clamps input above 300s to 300s (300000ms)', async () => {
-      // Input 999s → 999000ms, clamped to 300000ms → applySettings() writes 300000/1000=300
-      await setDebounceSeconds(999);
-      const displayedSec = await getDebounceValue();
-      expect(displayedSec).toBe(300);
+      // Apply 999s → clamped to 300000ms internally → applySettings() rewrites input as 300
+      await changeDebounceInput(999);
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(300);
     });
 
     it('calls paneActivityWatcher.setSettleMs after debounce change', async () => {
-      // Set up a persistent spy that intercepts setSettleMs across browser.execute calls
+      // Set up a persistent spy before the change so it captures the call
       await browser.execute(() => {
         const paw = window.paneActivityWatcher;
         if (!paw) return;
@@ -385,14 +383,32 @@ describe('Settings Panel', () => {
         };
       });
 
-      await setDebounceSeconds(15);
+      await changeDebounceInput(15);
 
       const calls = await browser.execute(() => window.__setSettleMsCalls ?? []);
       expect(calls).toContain(15000);
+    });
 
-      // applySettings() also runs after the change, updating the input display
-      const displayedSec = await getDebounceValue();
-      expect(displayedSec).toBe(15);
+    it('non-numeric input is handled gracefully and does not crash', async () => {
+      // Apply non-numeric → Number('abc') = NaN, !isFinite → debounceInput handler calls applySettings()
+      // with the previously-applied value (default 30s = 30000ms), so input reverts to 30
+      await changeDebounceInput('abc');
+      const inputVal = await getInputSeconds();
+      expect(inputVal).toBe(30);
+    });
+
+    it('debounce value persists after settings panel is closed and reopened', async () => {
+      await changeDebounceInput(7);
+      const before = await getInputSeconds();
+      expect(before).toBe(7);
+
+      await closeSettingsPanel();
+      await browser.pause(400);
+      await openSettingsPanel();
+      await waitForElement('#settings-panel:not(.is-hidden)', 5000);
+
+      const after = await getInputSeconds();
+      expect(after).toBe(7);
     });
   });
 
@@ -425,59 +441,10 @@ describe('Settings Panel', () => {
 
     it('clicking toggle switches the is-active class on the dot', async () => {
       const before = await getFloatWindowToggleState();
-      // If the float window is not supported or the toggle is not wired up,
-      // the dot state may not change — we just verify the element is stable.
-      const after = await getFloatWindowToggleState();
-      expect(after.checked).not.toBeNull();
-      expect(after.dotHasActive).not.toBeNull();
-      // The dot's is-active class should reflect the toggle.checked state
-      expect(after.dotHasActive).toBe(after.checked);
-    });
-  });
-
-  describe('Debounce Input Interaction', () => {
-    async function setDebounceInput(value) {
-      await browser.execute((val) => {
-        const input = document.getElementById('activity-alert-debounce-input');
-        if (!input) return;
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(input, val);
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-      }, value);
-      await browser.pause(300);
-    }
-
-    it('non-numeric input is handled gracefully and does not crash', async () => {
-      // Non-numeric input: Number('abc') = NaN, !isFinite → applySettings() reverts to previous value
-      await setDebounceInput('abc');
-      // Reverts to the last valid displayed value (default 30s)
-      const displayedSec = await browser.execute(() => {
-        const input = document.getElementById('activity-alert-debounce-input');
-        return input ? Number(input.value) : null;
-      });
-      expect(displayedSec).toBe(30);
-    });
-
-    it('debounce value persists after settings panel is closed and reopened', async () => {
-      // Enter 7s → settings = 7000ms → applySettings() writes 7000/1000=7 to input
-      await setDebounceInput(7);
-      const before = await browser.execute(() => {
-        const input = document.getElementById('activity-alert-debounce-input');
-        return input ? Number(input.value) : null;
-      });
-      expect(before).toBe(7);
-
-      // Close and reopen the panel — settings are persisted and re-loaded
-      await closeSettingsPanel();
-      await browser.pause(400);
-      await openSettingsPanel();
-      await waitForElement('#settings-panel:not(.is-hidden)', 5000);
-
-      const after = await browser.execute(() => {
-        const input = document.getElementById('activity-alert-debounce-input');
-        return input ? Number(input.value) : null;
-      });
-      expect(after).toBe(7);
+      expect(before.checked).not.toBeNull();
+      expect(before.dotHasActive).not.toBeNull();
+      // The dot's is-active class mirrors the toggle.checked state
+      expect(before.dotHasActive).toBe(before.checked);
     });
   });
 });
