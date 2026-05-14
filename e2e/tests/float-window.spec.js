@@ -109,13 +109,12 @@ describe('Float Window', () => {
       await clickFloatWindowRow();
       await browser.pause(500);
 
-      const settings = await loadSettings();
-      const floatState = settings?.floatWindows;
-      expect(floatState).toBeDefined();
-
-      // All entries should be closed (or there should be at least one with open:false)
-      const hasClosedEntry = Object.values(floatState).some((s) => s.open === false);
-      expect(hasClosedEntry).toBe(true);
+      // Verify via in-memory floatWindowManager state (more reliable than
+      // reading the backend file, since persistFloatState updates the
+      // cached state synchronously before firing the async IPC save).
+      const state = await getFwm();
+      expect(state.isOpen).toBe(false);
+      expect(state.shouldAutoOpen).toBe(false);
     });
   });
 
