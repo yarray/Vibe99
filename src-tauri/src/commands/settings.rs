@@ -373,6 +373,21 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
+    let webgl_enabled = ui
+        .get("webglEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let breathing_intensity = ui
+        .get("breathingIntensity")
+        .and_then(|v| v.as_str())
+        .filter(|s| ["none", "mild", "intense"].contains(&s.to_lowercase().as_str()))
+        .unwrap_or("mild");
+
+    let activity_alert_debounce_ms = get_number(ui, "activityAlertDebounceMs", 30_000.0);
+    let activity_alert_debounce_ms =
+        (activity_alert_debounce_ms.round()).clamp(3000.0, 300_000.0) as u64;
+
     let font_family = ui
         .get("fontFamily")
         .and_then(|v| v.as_str())
@@ -386,6 +401,9 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         "paneMaskOpacity": pane_mask_opacity,
         "paneWidth": pane_width,
         "breathingAlertEnabled": breathing_alert_enabled,
+        "webglEnabled": webgl_enabled,
+        "breathingIntensity": breathing_intensity,
+        "activityAlertDebounceMs": activity_alert_debounce_ms,
     });
 
     if !font_family.is_empty() {
@@ -505,6 +523,9 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "paneMaskOpacity": 0.25,
                     "paneWidth": DEFAULT_PANE_WIDTH,
                     "breathingAlertEnabled": true,
+                    "webglEnabled": true,
+                    "breathingIntensity": "mild",
+                    "activityAlertDebounceMs": 30000,
                 },
                 "shell": {
                     "profiles": [],

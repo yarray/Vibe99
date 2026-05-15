@@ -338,32 +338,21 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // WebGL (3D acceleration)
-  async function applyAndPromptRestart(): Promise<void> {
-    webglToggle.checked = settings.webglEnabled;
-    webglDot.classList.toggle('is-active', settings.webglEnabled);
+  webglRow.addEventListener('click', async () => {
+    const newValue = !settings.webglEnabled;
     const restart = await showConfirmDialog({
       title: '3D acceleration',
       message: '3D acceleration change will take effect after restart. Restart now?',
       confirmLabel: 'Restart',
-      cancelLabel: 'Later',
+      cancelLabel: 'Cancel',
     });
-    if (restart) {
-      bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData)
-        .then(() => { deps.requestAppRestart?.(); })
-        .catch(reportError);
-    } else {
-      scheduleSettingsSave();
-    }
-  }
-
-  webglRow.addEventListener('click', () => {
-    settings.webglEnabled = !settings.webglEnabled;
-    applyAndPromptRestart();
-  });
-
-  webglToggle.addEventListener('change', () => {
-    settings.webglEnabled = webglToggle.checked;
-    applyAndPromptRestart();
+    if (!restart) return;
+    settings.webglEnabled = newValue;
+    webglToggle.checked = newValue;
+    webglDot.classList.toggle('is-active', newValue);
+    bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData)
+      .then(() => { deps.requestAppRestart?.(); })
+      .catch(reportError);
   });
 
   // Float window toggle
