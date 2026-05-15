@@ -1,0 +1,5 @@
+# Normalize line endings — prevent CRLF/LF churn on Windows
+* text=auto eol=lf
+
+# Generated files that may be overwritten by tooling
+src-tauri/gen/** linguist-generated
