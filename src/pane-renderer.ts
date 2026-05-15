@@ -397,7 +397,7 @@ export function createPaneRenderer({
     const rows = Math.max(8, node.terminal.rows || 24);
     const nextSizeKey = `${cols}x${rows}`;
 
-    if (node.sessionReady && (force || nextSizeKey !== node.sizeKey)) {
+    if (node.sessionReady && nextSizeKey !== node.sizeKey) {
       bridge.resizeTerminal({
         paneId: node.paneId,
         cols,
@@ -423,7 +423,8 @@ export function createPaneRenderer({
         shellProfileId: profileId,
       });
       node.sessionReady = true;
-      fitTerminal(node, true);
+      node.sizeKey = '';
+      fitTerminal(node);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       node.terminal.writeln(`\x1b[38;5;204mFailed to start shell${profileId ? ` "${profileId}"` : ''}: ${message}\x1b[0m`);
