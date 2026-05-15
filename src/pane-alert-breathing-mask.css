@@ -1,7 +1,6 @@
 /* Breathing-mask alert: animates the existing `.pane::after` overlay so its
    opacity pulses between fully transparent and a configurable peak, with an
-   inset glow at the peak. No extra DOM element needed.
-   CSS custom properties (--breathing-*) are set by JS based on intensity. */
+   inset glow at the peak. No extra DOM element needed. */
 
 @keyframes pane-breathing-pulse {
   0%,
@@ -10,15 +9,17 @@
     box-shadow: none;
   }
   50% {
-    opacity: var(--breathing-peak-opacity, 0.7);
-    box-shadow: var(--breathing-glow, none);
+    opacity: max(0.7, calc(1 - var(--pane-bg-mask-opacity)));
+    box-shadow:
+      inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white),
+      inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent);
   }
 }
 
 .pane.has-pending-activity::after {
   opacity: 0;
   transition: opacity 200ms ease;
-  animation: pane-breathing-pulse var(--breathing-duration, 2.4s) ease-in-out 200ms infinite;
+  animation: pane-breathing-pulse 2.4s ease-in-out 200ms infinite;
 }
 
 .pane.is-focused::after,
@@ -29,7 +30,9 @@
 @media (prefers-reduced-motion: reduce) {
   .pane.has-pending-activity::after {
     animation: none;
-    opacity: var(--breathing-peak-opacity, 0.7);
-    box-shadow: var(--breathing-glow, none);
+    opacity: max(0.7, calc(1 - var(--pane-bg-mask-opacity)));
+    box-shadow:
+      inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white),
+      inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent);
   }
 }

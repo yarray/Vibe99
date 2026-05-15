@@ -5,8 +5,6 @@ import type { Bridge } from './bridge';
 // Exported types
 // ---------------------------------------------------------------------------
 
-export type BreathingIntensity = 'none' | 'mild' | 'intense';
-
 export interface AppSettings {
   fontSize: number;
   fontFamily: string;
@@ -14,7 +12,7 @@ export interface AppSettings {
   paneMaskOpacity: number;
   paneWidth: number;
   webglEnabled: boolean;
-  breathingIntensity: BreathingIntensity;
+  breathingAlertEnabled: boolean;
   activityAlertDebounceMs: number;
 }
 
@@ -26,7 +24,7 @@ export interface SettingsManagerDeps {
     setGlobalEnabled: (enabled: boolean) => void;
     setSettleMs: (ms: number) => void;
   };
-  onBreathingIntensityChange?: (intensity: BreathingIntensity) => void;
+  onBreathingAlertToggle?: (enabled: boolean) => void;
   onWebglChangeRequest?: (enabled: boolean) => Promise<boolean>;
   onToggleFloatWindow?: () => Promise<void>;
   getFloatWindowOpen?: () => boolean;
@@ -53,7 +51,7 @@ interface PersistedSettingsRaw {
   ui?: Partial<AppSettings & {
     shortcuts: Record<string, unknown>;
     paneMaskAlpha?: number;
-    breathingAlertEnabled?: boolean;
+    breathingIntensity?: string;
   }>;
 }
 
@@ -81,7 +79,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     reportError,
     applyCallback,
     paneActivityWatcher,
-    onBreathingIntensityChange,
+    onBreathingAlertToggle,
   } = deps;
 
   const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement;
@@ -92,7 +90,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const paneOpacityInput = document.getElementById('pane-opacity-input') as HTMLInputElement;
   const paneMaskOpacityRange = document.getElementById('pane-mask-alpha-range') as HTMLInputElement;
   const paneMaskOpacityInput = document.getElementById('pane-mask-alpha-input') as HTMLInputElement;
-  const breathingRange = document.getElementById('breathing-intensity-range') as HTMLInputElement;
+  const breathingAlertToggle = document.getElementById('breathing-alert-toggle') as HTMLInputElement;
+  const breathingAlertDot = document.getElementById('breathing-alert-dot') as HTMLElement;
+  const breathingAlertRow = document.getElementById('breathing-alert-row') as HTMLElement;
   const webglToggle = document.getElementById('webgl-toggle') as HTMLInputElement;
   const webglDot = document.getElementById('webgl-dot') as HTMLElement;
   const webglRow = document.getElementById('webgl-row') as HTMLElement;
@@ -108,21 +108,11 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneMaskOpacity: 0.75,
     paneWidth: 720,
     webglEnabled: true,
-    breathingIntensity: 'mild',
+    breathingAlertEnabled: true,
     activityAlertDebounceMs: 30000,
   };
 
   let pendingSettingsSave: number | null = null;
-
-  const BREATHING_OPTIONS: BreathingIntensity[] = ['none', 'mild', 'intense'];
-
-  function breathingIntensityToIndex(intensity: BreathingIntensity): number {
-    return BREATHING_OPTIONS.indexOf(intensity);
-  }
-
-  function indexToBreathingIntensity(index: number): BreathingIntensity {
-    return BREATHING_OPTIONS[Math.max(0, Math.min(2, index))] ?? 'mild';
-  }
 
   function applySettings(): void {
     document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
@@ -136,8 +126,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneOpacityInput.value = settings.paneOpacity.toFixed(2);
     paneMaskOpacityRange.value = settings.paneMaskOpacity.toFixed(2);
     paneMaskOpacityInput.value = settings.paneMaskOpacity.toFixed(2);
-    breathingRange.value = String(breathingIntensityToIndex(settings.breathingIntensity));
-    onBreathingIntensityChange?.(settings.breathingIntensity);
+    breathingAlertToggle.checked = settings.breathingAlertEnabled;
+    breathingAlertDot.classList.toggle('is-active', settings.breathingAlertEnabled);
+    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
     webglToggle.checked = settings.webglEnabled;
     webglDot.classList.toggle('is-active', settings.webglEnabled);
     // Sync float window toggle dot with current runtime state
@@ -190,13 +181,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       settings.paneWidth = uiSettings.paneWidth!;
     }
 
-    if (typeof uiSettings.breathingIntensity === 'string') {
-      const valid: BreathingIntensity[] = ['none', 'mild', 'intense'];
-      if (valid.includes(uiSettings.breathingIntensity as BreathingIntensity)) {
-        settings.breathingIntensity = uiSettings.breathingIntensity as BreathingIntensity;
-      }
-    } else if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
-      settings.breathingIntensity = uiSettings.breathingAlertEnabled ? 'intense' : 'none';
+    if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
+      settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
+    } else if (typeof uiSettings.breathingIntensity === 'string') {
+      settings.breathingAlertEnabled = uiSettings.breathingIntensity !== 'none';
     }
 
     if (typeof uiSettings.webglEnabled === 'boolean') {
@@ -330,10 +318,19 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     updatePaneMaskOpacity(paneMaskOpacityInput.value);
   });
 
-  // Breathing alert
-  breathingRange.addEventListener('input', () => {
-    settings.breathingIntensity = indexToBreathingIntensity(Number(breathingRange.value));
-    applySettings();
+  // Breathing alert toggle
+  breathingAlertRow.addEventListener('click', () => {
+    settings.breathingAlertEnabled = !settings.breathingAlertEnabled;
+    breathingAlertToggle.checked = settings.breathingAlertEnabled;
+    breathingAlertDot.classList.toggle('is-active', settings.breathingAlertEnabled);
+    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
+    scheduleSettingsSave();
+  });
+
+  breathingAlertToggle.addEventListener('change', () => {
+    settings.breathingAlertEnabled = breathingAlertToggle.checked;
+    breathingAlertDot.classList.toggle('is-active', settings.breathingAlertEnabled);
+    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
     scheduleSettingsSave();
   });
 
