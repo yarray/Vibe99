@@ -1,0 +1,1 @@
+Fixed missing `getTabCount` import in `command-palette.spec.js`. The function was being called in tests but was not imported from `app-launch.js`, causing E2E test failures with "ReferenceError: getTabCount is not defined".

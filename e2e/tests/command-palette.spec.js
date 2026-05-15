@@ -1,5 +1,5 @@
 import os from 'os';
-import { waitForAppReady, getPaneCount, getFocusedPane, getPaneByIndex } from '../helpers/app-launch.js';
+import { waitForAppReady, getPaneCount, getTabCount, getFocusedPane, getPaneByIndex } from '../helpers/app-launch.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import { waitForElement, waitForCondition } from '../helpers/wait-for.js';
 import { setInputValue, getTextSafe } from '../helpers/webview2-helpers.js';
