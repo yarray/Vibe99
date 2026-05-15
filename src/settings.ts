@@ -5,6 +5,8 @@ import type { Bridge } from './bridge';
 // Exported types
 // ---------------------------------------------------------------------------
 
+export type BreathingIntensity = 'none' | 'mild' | 'intense';
+
 export interface AppSettings {
   fontSize: number;
   fontFamily: string;
@@ -12,7 +14,7 @@ export interface AppSettings {
   paneMaskOpacity: number;
   paneWidth: number;
   webglEnabled: boolean;
-  breathingAlertEnabled: boolean;
+  breathingIntensity: BreathingIntensity;
   activityAlertDebounceMs: number;
 }
 
@@ -24,7 +26,7 @@ export interface SettingsManagerDeps {
     setGlobalEnabled: (enabled: boolean) => void;
     setSettleMs: (ms: number) => void;
   };
-  onBreathingAlertToggle?: (enabled: boolean) => void;
+  onBreathingIntensityChange?: (intensity: BreathingIntensity) => void;
   onWebglChangeRequest?: (enabled: boolean) => Promise<boolean>;
   onToggleFloatWindow?: () => Promise<void>;
   getFloatWindowOpen?: () => boolean;
@@ -51,7 +53,7 @@ interface PersistedSettingsRaw {
   ui?: Partial<AppSettings & {
     shortcuts: Record<string, unknown>;
     paneMaskAlpha?: number;
-    breathingIntensity?: string;
+    breathingAlertEnabled?: boolean;
   }>;
 }
 
@@ -79,7 +81,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     reportError,
     applyCallback,
     paneActivityWatcher,
-    onBreathingAlertToggle,
+    onBreathingIntensityChange,
   } = deps;
 
   const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement;
@@ -90,9 +92,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const paneOpacityInput = document.getElementById('pane-opacity-input') as HTMLInputElement;
   const paneMaskOpacityRange = document.getElementById('pane-mask-alpha-range') as HTMLInputElement;
   const paneMaskOpacityInput = document.getElementById('pane-mask-alpha-input') as HTMLInputElement;
-  const breathingAlertToggle = document.getElementById('breathing-alert-toggle') as HTMLInputElement;
-  const breathingAlertDot = document.getElementById('breathing-alert-dot') as HTMLElement;
-  const breathingAlertRow = document.getElementById('breathing-alert-row') as HTMLElement;
+  const breathingSegments = document.getElementById('breathing-intensity-segments') as HTMLElement;
   const webglToggle = document.getElementById('webgl-toggle') as HTMLInputElement;
   const webglDot = document.getElementById('webgl-dot') as HTMLElement;
   const webglRow = document.getElementById('webgl-row') as HTMLElement;
@@ -108,7 +108,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneMaskOpacity: 0.75,
     paneWidth: 720,
     webglEnabled: true,
-    breathingAlertEnabled: true,
+    breathingIntensity: 'mild',
     activityAlertDebounceMs: 30000,
   };
 
@@ -126,9 +126,13 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneOpacityInput.value = settings.paneOpacity.toFixed(2);
     paneMaskOpacityRange.value = settings.paneMaskOpacity.toFixed(2);
     paneMaskOpacityInput.value = settings.paneMaskOpacity.toFixed(2);
-    breathingAlertToggle.checked = settings.breathingAlertEnabled;
-    breathingAlertDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
+    breathingSegments.querySelectorAll('.settings-segmented-btn').forEach((btn) => {
+      const value = (btn as HTMLElement).dataset.value ?? '';
+      const isActive = value === settings.breathingIntensity;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-checked', String(isActive));
+    });
+    onBreathingIntensityChange?.(settings.breathingIntensity);
     webglToggle.checked = settings.webglEnabled;
     webglDot.classList.toggle('is-active', settings.webglEnabled);
     // Sync float window toggle dot with current runtime state
@@ -181,10 +185,13 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       settings.paneWidth = uiSettings.paneWidth!;
     }
 
-    if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
-      settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
-    } else if (typeof uiSettings.breathingIntensity === 'string') {
-      settings.breathingAlertEnabled = uiSettings.breathingIntensity !== 'none';
+    if (typeof uiSettings.breathingIntensity === 'string') {
+      const valid: BreathingIntensity[] = ['none', 'mild', 'intense'];
+      if (valid.includes(uiSettings.breathingIntensity as BreathingIntensity)) {
+        settings.breathingIntensity = uiSettings.breathingIntensity as BreathingIntensity;
+      }
+    } else if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
+      settings.breathingIntensity = uiSettings.breathingAlertEnabled ? 'intense' : 'none';
     }
 
     if (typeof uiSettings.webglEnabled === 'boolean') {
@@ -318,19 +325,14 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     updatePaneMaskOpacity(paneMaskOpacityInput.value);
   });
 
-  // Breathing alert toggle
-  breathingAlertRow.addEventListener('click', () => {
-    settings.breathingAlertEnabled = !settings.breathingAlertEnabled;
-    breathingAlertToggle.checked = settings.breathingAlertEnabled;
-    breathingAlertDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
-    scheduleSettingsSave();
-  });
-
-  breathingAlertToggle.addEventListener('change', () => {
-    settings.breathingAlertEnabled = breathingAlertToggle.checked;
-    breathingAlertDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
+  // Breathing alert
+  breathingSegments.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.settings-segmented-btn') as HTMLElement | null;
+    if (!btn) return;
+    const value = btn.dataset.value as BreathingIntensity | undefined;
+    if (!value) return;
+    settings.breathingIntensity = value;
+    applySettings();
     scheduleSettingsSave();
   });
 
