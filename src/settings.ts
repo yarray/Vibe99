@@ -1,5 +1,6 @@
 import * as ShortcutsRegistry from './shortcuts-registry';
 import type { Bridge } from './bridge';
+import { showConfirmDialog } from './confirm-dialog';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -29,6 +30,7 @@ export interface SettingsManagerDeps {
   onBreathingIntensityChange?: (intensity: BreathingIntensity) => void;
   onToggleFloatWindow?: () => Promise<void>;
   getFloatWindowOpen?: () => boolean;
+  requestAppRestart?: () => void;
 }
 
 export interface SettingsManager {
@@ -336,17 +338,32 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // WebGL (3D acceleration)
-  webglRow.addEventListener('click', () => {
-    settings.webglEnabled = !settings.webglEnabled;
+  async function applyAndPromptRestart(): Promise<void> {
     webglToggle.checked = settings.webglEnabled;
     webglDot.classList.toggle('is-active', settings.webglEnabled);
-    scheduleSettingsSave();
+    const restart = await showConfirmDialog({
+      title: '3D acceleration',
+      message: '3D acceleration change will take effect after restart. Restart now?',
+      confirmLabel: 'Restart',
+      cancelLabel: 'Later',
+    });
+    if (restart) {
+      bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData)
+        .then(() => { deps.requestAppRestart?.(); })
+        .catch(reportError);
+    } else {
+      scheduleSettingsSave();
+    }
+  }
+
+  webglRow.addEventListener('click', () => {
+    settings.webglEnabled = !settings.webglEnabled;
+    applyAndPromptRestart();
   });
 
   webglToggle.addEventListener('change', () => {
     settings.webglEnabled = webglToggle.checked;
-    webglDot.classList.toggle('is-active', settings.webglEnabled);
-    scheduleSettingsSave();
+    applyAndPromptRestart();
   });
 
   // Float window toggle

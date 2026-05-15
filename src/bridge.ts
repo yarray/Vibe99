@@ -182,6 +182,8 @@ interface TauriWindow {
   close: () => Promise<void>;
   isFullscreen: () => Promise<boolean>;
   setFullscreen: (fullscreen: boolean) => Promise<void>;
+  outerPosition: () => Promise<{ x: number; y: number }>;
+  innerSize: () => Promise<{ width: number; height: number }>;
 }
 
 /**
@@ -214,6 +216,7 @@ export interface ClipboardApi {
 export interface SettingsApi {
   load: () => Promise<SettingsData>;
   save: (payload: SettingsData) => Promise<SettingsData>;
+  saveFloatWindowState: (state: unknown) => Promise<void>;
 }
 
 export interface ShellApi {
@@ -522,6 +525,7 @@ function createUnavailableBridge(): Bridge {
     settings: {
       load: () => Promise.resolve({}),
       save: () => Promise.resolve({}),
+      saveFloatWindowState: () => Promise.resolve(),
     },
     shell: {
       list: () => Promise.resolve({ profiles: [], defaultProfile: '' }),

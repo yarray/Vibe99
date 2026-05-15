@@ -108,7 +108,7 @@ export function createLayoutManager({
       name,
       panes: session.panes as unknown as LayoutData['panes'],
       focusedPaneIndex: session.focusedPaneIndex,
-      windowGeometry,
+      windowGeometry: windowGeometry ?? undefined,
     };
   }
 

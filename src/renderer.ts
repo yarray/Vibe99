@@ -205,6 +205,7 @@ const settingsManager = createSettingsManager({
   },
   onToggleFloatWindow: () => floatWindowManager.toggle(),
   getFloatWindowOpen: () => floatWindowManager.isOpen(),
+  requestAppRestart: () => window.location.reload(),
 });
 
 // paneOps is created after tabBar and paneRenderer, but closures capture the binding.
