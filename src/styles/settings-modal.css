@@ -174,7 +174,22 @@
   color: #000;
 }
 
-.settings-section {
+.settings-dual-range {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-dual-range datalist {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--panel-muted);
+  margin-top: 2px;
+  padding: 0 2px;
+}
+
+.settings-dual-range datalist option {
+  padding: 0;
+}
   padding: 8px 14px;
   display: grid;
   gap: 8px;

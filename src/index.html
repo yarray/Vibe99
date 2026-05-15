@@ -66,13 +66,16 @@
               <input class="settings-number" id="pane-mask-alpha-input" type="number" min="0" max="1" step="0.01" value="0.75" />
             </div>
 
-            <div class="settings-row">
+            <label class="settings-row" for="breathing-intensity-range">
               <span>Breathing alert</span>
-              <div class="settings-segmented" id="breathing-intensity-segments" role="radiogroup" aria-label="Breathing alert intensity">
-                <button class="settings-segmented-btn" data-value="none" role="radio" aria-checked="false">None</button>
-                <button class="settings-segmented-btn is-active" data-value="mild" role="radio" aria-checked="true">Mild</button>
-                <button class="settings-segmented-btn" data-value="intense" role="radio" aria-checked="false">Intense</button>
-              </div>
+            </label>
+            <div class="settings-dual settings-dual-range">
+              <input id="breathing-intensity-range" type="range" min="0" max="2" step="1" value="1" list="breathing-intensity-stops" />
+              <datalist id="breathing-intensity-stops">
+                <option value="0" label="None"></option>
+                <option value="1" label="Mild"></option>
+                <option value="2" label="Intense"></option>
+              </datalist>
             </div>
 
             <div class="settings-row settings-clickable-row" id="webgl-row" role="button" tabindex="0" aria-label="Toggle 3D acceleration">

@@ -195,6 +195,50 @@ const paneActivityWatcher = createPaneActivityWatcher({
   },
 });
 
+function showConfirmDialog(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'shortcut-recorder-overlay';
+    overlay.style.zIndex = '10002';
+
+    overlay.innerHTML = `
+      <div class="shortcut-recorder-dialog" style="max-width: 360px;">
+        <div class="shortcut-recorder-title">Confirm</div>
+        <div style="margin: 16px 0; color: var(--text); font-size: 14px;">${message}</div>
+        <div class="shortcut-recorder-actions">
+          <button type="button" class="shortcut-recorder-btn" id="webgl-confirm-cancel">Cancel</button>
+          <button type="button" class="shortcut-recorder-btn is-primary" id="webgl-confirm-ok">Restart</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const okBtn = overlay.querySelector('#webgl-confirm-ok') as HTMLButtonElement;
+    const cancelBtn = overlay.querySelector('#webgl-confirm-cancel') as HTMLButtonElement;
+
+    const cleanup = (result: boolean) => {
+      overlay.remove();
+      resolve(result);
+    };
+
+    okBtn.addEventListener('click', () => cleanup(true));
+    cancelBtn.addEventListener('click', () => cleanup(false));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        cleanup(false);
+      }
+    });
+
+    okBtn.focus();
+  });
+}
+
 const settingsManager = createSettingsManager({
   bridge,
   reportError,
@@ -202,6 +246,18 @@ const settingsManager = createSettingsManager({
   paneActivityWatcher,
   onBreathingIntensityChange: (intensity) => {
     applyBreathingIntensity(intensity);
+  },
+  onWebglChangeRequest: async (enabled) => {
+    const confirmed = await showConfirmDialog(
+      enabled
+        ? 'Enable 3D acceleration? This will restart all terminals.'
+        : 'Disable 3D acceleration? This will restart all terminals.',
+    );
+    if (!confirmed) return false;
+    paneState.getPanes().forEach((pane) => {
+      paneRenderer?.restartPaneTerminal(pane.id);
+    });
+    return true;
   },
   onToggleFloatWindow: () => floatWindowManager.toggle(),
   getFloatWindowOpen: () => floatWindowManager.isOpen(),

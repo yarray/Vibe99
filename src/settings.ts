@@ -27,6 +27,7 @@ export interface SettingsManagerDeps {
     setSettleMs: (ms: number) => void;
   };
   onBreathingIntensityChange?: (intensity: BreathingIntensity) => void;
+  onWebglChangeRequest?: (enabled: boolean) => Promise<boolean>;
   onToggleFloatWindow?: () => Promise<void>;
   getFloatWindowOpen?: () => boolean;
 }
@@ -91,7 +92,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const paneOpacityInput = document.getElementById('pane-opacity-input') as HTMLInputElement;
   const paneMaskOpacityRange = document.getElementById('pane-mask-alpha-range') as HTMLInputElement;
   const paneMaskOpacityInput = document.getElementById('pane-mask-alpha-input') as HTMLInputElement;
-  const breathingSegments = document.getElementById('breathing-intensity-segments') as HTMLElement;
+  const breathingRange = document.getElementById('breathing-intensity-range') as HTMLInputElement;
   const webglToggle = document.getElementById('webgl-toggle') as HTMLInputElement;
   const webglDot = document.getElementById('webgl-dot') as HTMLElement;
   const webglRow = document.getElementById('webgl-row') as HTMLElement;
@@ -113,6 +114,16 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   let pendingSettingsSave: number | null = null;
 
+  const BREATHING_OPTIONS: BreathingIntensity[] = ['none', 'mild', 'intense'];
+
+  function breathingIntensityToIndex(intensity: BreathingIntensity): number {
+    return BREATHING_OPTIONS.indexOf(intensity);
+  }
+
+  function indexToBreathingIntensity(index: number): BreathingIntensity {
+    return BREATHING_OPTIONS[Math.max(0, Math.min(2, index))] ?? 'mild';
+  }
+
   function applySettings(): void {
     document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
     document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
@@ -125,12 +136,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneOpacityInput.value = settings.paneOpacity.toFixed(2);
     paneMaskOpacityRange.value = settings.paneMaskOpacity.toFixed(2);
     paneMaskOpacityInput.value = settings.paneMaskOpacity.toFixed(2);
-    breathingSegments.querySelectorAll('.settings-segmented-btn').forEach((btn) => {
-      const value = (btn as HTMLElement).dataset.value ?? '';
-      const isActive = value === settings.breathingIntensity;
-      btn.classList.toggle('is-active', isActive);
-      btn.setAttribute('aria-checked', String(isActive));
-    });
+    breathingRange.value = String(breathingIntensityToIndex(settings.breathingIntensity));
     onBreathingIntensityChange?.(settings.breathingIntensity);
     webglToggle.checked = settings.webglEnabled;
     webglDot.classList.toggle('is-active', settings.webglEnabled);
@@ -325,27 +331,36 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // Breathing alert
-  breathingSegments.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('.settings-segmented-btn') as HTMLElement | null;
-    if (!btn) return;
-    const value = btn.dataset.value as BreathingIntensity | undefined;
-    if (!value) return;
-    settings.breathingIntensity = value;
+  breathingRange.addEventListener('input', () => {
+    settings.breathingIntensity = indexToBreathingIntensity(Number(breathingRange.value));
     applySettings();
     scheduleSettingsSave();
   });
 
   // WebGL (3D acceleration)
-  webglRow.addEventListener('click', () => {
-    settings.webglEnabled = !settings.webglEnabled;
-    webglToggle.checked = settings.webglEnabled;
-    webglDot.classList.toggle('is-active', settings.webglEnabled);
+  webglRow.addEventListener('click', async () => {
+    const nextEnabled = !settings.webglEnabled;
+    if (deps.onWebglChangeRequest) {
+      const confirmed = await deps.onWebglChangeRequest(nextEnabled);
+      if (!confirmed) return;
+    }
+    settings.webglEnabled = nextEnabled;
+    webglToggle.checked = nextEnabled;
+    webglDot.classList.toggle('is-active', nextEnabled);
     scheduleSettingsSave();
   });
 
-  webglToggle.addEventListener('change', () => {
-    settings.webglEnabled = webglToggle.checked;
-    webglDot.classList.toggle('is-active', settings.webglEnabled);
+  webglToggle.addEventListener('change', async () => {
+    const nextEnabled = webglToggle.checked;
+    if (deps.onWebglChangeRequest && nextEnabled !== settings.webglEnabled) {
+      const confirmed = await deps.onWebglChangeRequest(nextEnabled);
+      if (!confirmed) {
+        webglToggle.checked = settings.webglEnabled;
+        return;
+      }
+    }
+    settings.webglEnabled = nextEnabled;
+    webglDot.classList.toggle('is-active', nextEnabled);
     scheduleSettingsSave();
   });
 
