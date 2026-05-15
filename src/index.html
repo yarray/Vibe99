@@ -32,6 +32,8 @@
         </div>
         <section class="settings-panel is-hidden" id="settings-panel" aria-label="Settings">
           <div class="settings-section">
+            <div class="settings-section-title">Appearance</div>
+
             <label class="settings-row" for="font-size-input">
               <span>Font size</span>
             </label>
@@ -66,15 +68,6 @@
               <input class="settings-number" id="pane-mask-alpha-input" type="number" min="0" max="1" step="0.01" value="0.75" />
             </div>
 
-            <div class="settings-row">
-              <span>Breathing alert</span>
-              <div class="settings-segmented" id="breathing-intensity-segments" role="radiogroup" aria-label="Breathing alert intensity">
-                <button class="settings-segmented-btn" data-value="none" role="radio" aria-checked="false">None</button>
-                <button class="settings-segmented-btn is-active" data-value="mild" role="radio" aria-checked="true">Mild</button>
-                <button class="settings-segmented-btn" data-value="intense" role="radio" aria-checked="false">Intense</button>
-              </div>
-            </div>
-
             <div class="settings-row settings-clickable-row" id="webgl-row" role="button" tabindex="0" aria-label="Toggle 3D acceleration">
               <span>3D acceleration</span>
               <span id="webgl-dot" class="settings-toggle-dot is-active"></span>
@@ -86,13 +79,27 @@
               <span id="float-window-dot" class="settings-toggle-dot"></span>
             </div>
             <input id="float-window-toggle" type="checkbox" style="display:none" />
+          </div>
+
+          <div class="settings-divider"></div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">Alert Settings</div>
+
+            <div class="settings-row">
+              <span>Breathing alert</span>
+              <div class="settings-segmented" id="breathing-intensity-segments" role="radiogroup" aria-label="Breathing alert intensity">
+                <button class="settings-segmented-btn" data-value="none" role="radio" aria-checked="false">None</button>
+                <button class="settings-segmented-btn is-active" data-value="mild" role="radio" aria-checked="true">Mild</button>
+                <button class="settings-segmented-btn" data-value="intense" role="radio" aria-checked="false">Intense</button>
+              </div>
+            </div>
 
             <label class="settings-row" for="activity-alert-debounce-input">
               <span>Activity alert debounce</span>
               <input class="settings-number" id="activity-alert-debounce-input" type="number" min="3" max="300" step="1" value="30" style="width: 60px;" />
               <span class="settings-unit">seconds</span>
             </label>
-
           </div>
 
           <div class="settings-divider"></div>
