@@ -1,6 +1,7 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { getDefaultFontFamily } from './settings';
@@ -271,6 +272,9 @@ export function createPaneRenderer({
     terminal.unicode.activeVersion = '11';
     terminal.open(terminalHost);
     (terminalHost as HTMLDivElement & { _xterm?: Terminal })._xterm = terminal;
+    if (settingsManager.settings.webglEnabled) {
+      try { terminal.loadAddon(new WebglAddon()); } catch {}
+    }
     terminal.attachCustomKeyEventHandler((event) => {
       if (
         event.type === 'keydown' &&

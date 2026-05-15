@@ -13,6 +13,7 @@ export interface AppSettings {
   paneOpacity: number;
   paneMaskOpacity: number;
   paneWidth: number;
+  webglEnabled: boolean;
   breathingIntensity: BreathingIntensity;
   activityAlertDebounceMs: number;
 }
@@ -91,6 +92,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const paneMaskOpacityRange = document.getElementById('pane-mask-alpha-range') as HTMLInputElement;
   const paneMaskOpacityInput = document.getElementById('pane-mask-alpha-input') as HTMLInputElement;
   const breathingSegments = document.getElementById('breathing-intensity-segments') as HTMLElement;
+  const webglToggle = document.getElementById('webgl-toggle') as HTMLInputElement;
+  const webglDot = document.getElementById('webgl-dot') as HTMLElement;
+  const webglRow = document.getElementById('webgl-row') as HTMLElement;
   const floatWindowToggle = document.getElementById('float-window-toggle') as HTMLInputElement;
   const floatWindowDot = document.getElementById('float-window-dot') as HTMLElement;
   const floatWindowRow = document.getElementById('float-window-row') as HTMLElement;
@@ -102,6 +106,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneOpacity: 0.8,
     paneMaskOpacity: 0.75,
     paneWidth: 720,
+    webglEnabled: true,
     breathingIntensity: 'mild',
     activityAlertDebounceMs: 30000,
   };
@@ -127,6 +132,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       btn.setAttribute('aria-checked', String(isActive));
     });
     onBreathingIntensityChange?.(settings.breathingIntensity);
+    webglToggle.checked = settings.webglEnabled;
+    webglDot.classList.toggle('is-active', settings.webglEnabled);
     // Sync float window toggle dot with current runtime state
     const floatOpen = deps.getFloatWindowOpen?.() ?? false;
     floatWindowToggle.checked = floatOpen;
@@ -184,6 +191,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       }
     } else if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
       settings.breathingIntensity = uiSettings.breathingAlertEnabled ? 'intense' : 'none';
+    }
+
+    if (typeof uiSettings.webglEnabled === 'boolean') {
+      settings.webglEnabled = uiSettings.webglEnabled;
     }
 
     if (Number.isFinite(uiSettings.activityAlertDebounceMs)) {
@@ -321,6 +332,20 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     if (!value) return;
     settings.breathingIntensity = value;
     applySettings();
+    scheduleSettingsSave();
+  });
+
+  // WebGL (3D acceleration)
+  webglRow.addEventListener('click', () => {
+    settings.webglEnabled = !settings.webglEnabled;
+    webglToggle.checked = settings.webglEnabled;
+    webglDot.classList.toggle('is-active', settings.webglEnabled);
+    scheduleSettingsSave();
+  });
+
+  webglToggle.addEventListener('change', () => {
+    settings.webglEnabled = webglToggle.checked;
+    webglDot.classList.toggle('is-active', settings.webglEnabled);
     scheduleSettingsSave();
   });
 
