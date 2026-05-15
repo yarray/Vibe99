@@ -1,0 +1,1 @@
+Full-width punctuation (？（）etc.) typed via a Chinese IME no longer disappears silently. Under WebKit, the IME could commit fast enough that xterm.js's composition pipeline lost the character; the end-of-composition position is now resolved synchronously so the committed text reaches the shell.

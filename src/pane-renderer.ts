@@ -271,6 +271,29 @@ export function createPaneRenderer({
     terminal.unicode.activeVersion = '11';
     terminal.open(terminalHost);
     (terminalHost as HTMLDivElement & { _xterm?: Terminal })._xterm = terminal;
+    // Under WebKit, the IME can commit instant-punctuation compositions
+    // (？（） etc.) so fast that xterm.js's compositionupdate setTimeout
+    // for the end position has not fired by the time compositionend reads
+    // the slice — and the committed char is silently dropped. Force the
+    // end position to the textarea's current length synchronously.
+    {
+      const helper = (terminal as unknown as {
+        _core?: {
+          _compositionHelper?: {
+            _textarea: HTMLTextAreaElement;
+            _compositionPosition: { start: number; end: number };
+            compositionend: () => void;
+          };
+        };
+      })._core?._compositionHelper;
+      if (helper) {
+        const origEnd = helper.compositionend.bind(helper);
+        helper.compositionend = function () {
+          helper._compositionPosition.end = helper._textarea.value.length;
+          origEnd();
+        };
+      }
+    }
     terminal.attachCustomKeyEventHandler((event) => {
       if (
         event.type === 'keydown' &&
