@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
@@ -91,6 +92,7 @@ struct PtySession {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
+    killed: Arc<AtomicBool>,
     _reader_thread: std::thread::JoinHandle<()>,
     exit_thread: std::thread::JoinHandle<()>,
 }
@@ -258,21 +260,27 @@ impl PtyManager {
             }
         });
 
+        let killed = Arc::new(AtomicBool::new(false));
+        let killed_flag = Arc::clone(&killed);
+
         let manager = Arc::clone(self);
         let app_exit = app.clone();
         let exit_key = key.clone();
         let exit_thread = std::thread::spawn(move || {
             let exit_code = child.wait().map(|s| s.exit_code()).unwrap_or(1);
 
-            let _ = app_exit.emit_to(
-                &exit_key.window_label,
-                "vibe99:terminal-exit",
-                TerminalExitPayload {
-                    pane_id: exit_key.pane_id.clone(),
-                    exit_code,
-                    reason: "exited".into(),
-                },
-            );
+            let was_killed = killed_flag.load(Ordering::Acquire);
+            if !was_killed {
+                let _ = app_exit.emit_to(
+                    &exit_key.window_label,
+                    "vibe99:terminal-exit",
+                    TerminalExitPayload {
+                        pane_id: exit_key.pane_id.clone(),
+                        exit_code,
+                        reason: "exited".into(),
+                    },
+                );
+            }
 
             if let Ok(mut sessions) = manager.sessions.lock() {
                 sessions.remove(&exit_key);
@@ -283,6 +291,7 @@ impl PtyManager {
             master,
             writer,
             killer,
+            killed,
             _reader_thread,
             exit_thread,
         };
@@ -366,6 +375,7 @@ impl PtyManager {
     pub fn destroy_all(&self) {
         if let Ok(mut sessions) = self.sessions.lock() {
             for session in sessions.values_mut() {
+                session.killed.store(true, Ordering::Release);
                 let _ = session.killer.kill();
             }
             sessions.clear();
@@ -390,6 +400,7 @@ impl PtyManager {
         };
         std::thread::spawn(move || {
             for mut session in sessions_to_clean {
+                session.killed.store(true, Ordering::Release);
                 let _ = session.killer.kill();
                 let _ = session.exit_thread.join();
             }
@@ -407,9 +418,11 @@ impl PtyManager {
             };
             let PtySession {
                 mut killer,
+                killed,
                 exit_thread,
                 ..
             } = session;
+            killed.store(true, Ordering::Release);
             let _ = killer.kill();
             exit_thread
         };

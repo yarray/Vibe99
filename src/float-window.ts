@@ -204,7 +204,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       const unlisten = await webview.listen<PhysicalPosition>(MOVED_EVENT, (e) => {
         const layoutId = getLayoutId();
         if (layoutId) {
-          saveStateForLayout(layoutId, { x: e.payload.x, y: e.payload.y }, persistFloatState);
+          saveStateForLayout(layoutId, { open: true, x: e.payload.x, y: e.payload.y }, persistFloatState);
         }
       });
       unlistenMoved = () => { unlisten(); };

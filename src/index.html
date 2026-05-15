@@ -66,11 +66,20 @@
               <input class="settings-number" id="pane-mask-alpha-input" type="number" min="0" max="1" step="0.01" value="0.75" />
             </div>
 
-            <div class="settings-row settings-clickable-row" id="breathing-alert-row" role="button" tabindex="0" aria-label="Toggle full-pane activity alert">
-              <span>Full-pane activity alert</span>
-              <span id="breathing-alert-dot" class="settings-toggle-dot is-active"></span>
+            <div class="settings-row">
+              <span>Breathing alert</span>
+              <div class="settings-segmented" id="breathing-intensity-segments" role="radiogroup" aria-label="Breathing alert intensity">
+                <button class="settings-segmented-btn" data-value="none" role="radio" aria-checked="false">None</button>
+                <button class="settings-segmented-btn is-active" data-value="mild" role="radio" aria-checked="true">Mild</button>
+                <button class="settings-segmented-btn" data-value="intense" role="radio" aria-checked="false">Intense</button>
+              </div>
             </div>
-            <input id="breathing-alert-toggle" type="checkbox" checked style="display:none" />
+
+            <div class="settings-row settings-clickable-row" id="webgl-row" role="button" tabindex="0" aria-label="Toggle 3D acceleration">
+              <span>3D acceleration</span>
+              <span id="webgl-dot" class="settings-toggle-dot is-active"></span>
+            </div>
+            <input id="webgl-toggle" type="checkbox" checked style="display:none" />
 
             <div class="settings-row settings-clickable-row" id="float-window-row" role="button" tabindex="0" aria-label="Toggle float window">
               <span>Float window</span>

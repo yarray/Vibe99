@@ -1,9 +1,12 @@
 import * as ShortcutsRegistry from './shortcuts-registry';
 import type { Bridge } from './bridge';
+import { showConfirmDialog } from './confirm-dialog';
 
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
+
+export type BreathingIntensity = 'none' | 'mild' | 'intense';
 
 export interface AppSettings {
   fontSize: number;
@@ -11,7 +14,8 @@ export interface AppSettings {
   paneOpacity: number;
   paneMaskOpacity: number;
   paneWidth: number;
-  breathingAlertEnabled: boolean;
+  webglEnabled: boolean;
+  breathingIntensity: BreathingIntensity;
   activityAlertDebounceMs: number;
 }
 
@@ -23,9 +27,10 @@ export interface SettingsManagerDeps {
     setGlobalEnabled: (enabled: boolean) => void;
     setSettleMs: (ms: number) => void;
   };
-  onBreathingAlertToggle?: (enabled: boolean) => void;
+  onBreathingIntensityChange?: (intensity: BreathingIntensity) => void;
   onToggleFloatWindow?: () => Promise<void>;
   getFloatWindowOpen?: () => boolean;
+  requestAppRestart?: () => void;
 }
 
 export interface SettingsManager {
@@ -46,7 +51,11 @@ interface PersistedSettings {
 /** Shape expected from the persistence layer (all fields optional). */
 interface PersistedSettingsRaw {
   version?: number;
-  ui?: Partial<AppSettings & { shortcuts: Record<string, unknown>; paneMaskAlpha?: number }>;
+  ui?: Partial<AppSettings & {
+    shortcuts: Record<string, unknown>;
+    paneMaskAlpha?: number;
+    breathingAlertEnabled?: boolean;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,12 +64,12 @@ interface PersistedSettingsRaw {
 
 export function getDefaultFontFamily(platform: string): string {
   if (platform === 'win32' || platform === 'windows') {
-    return 'Consolas, "Cascadia Mono", "Courier New", monospace';
+    return 'Consolas, "Cascadia Mono", "Courier New", "Microsoft YaHei", monospace';
   }
   if (platform === 'darwin') {
-    return 'Menlo, Monaco, "SF Mono", monospace';
+    return 'Menlo, Monaco, "SF Mono", "PingFang SC", monospace';
   }
-  return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", monospace';
+  return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", "Noto Sans CJK SC", monospace';
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +82,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     reportError,
     applyCallback,
     paneActivityWatcher,
-    onBreathingAlertToggle,
+    onBreathingIntensityChange,
   } = deps;
 
   const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement;
@@ -84,9 +93,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const paneOpacityInput = document.getElementById('pane-opacity-input') as HTMLInputElement;
   const paneMaskOpacityRange = document.getElementById('pane-mask-alpha-range') as HTMLInputElement;
   const paneMaskOpacityInput = document.getElementById('pane-mask-alpha-input') as HTMLInputElement;
-  const breathingToggle = document.getElementById('breathing-alert-toggle') as HTMLInputElement;
-  const breathingDot = document.getElementById('breathing-alert-dot') as HTMLElement;
-  const breathingRow = document.getElementById('breathing-alert-row') as HTMLElement;
+  const breathingSegments = document.getElementById('breathing-intensity-segments') as HTMLElement;
+  const webglToggle = document.getElementById('webgl-toggle') as HTMLInputElement;
+  const webglDot = document.getElementById('webgl-dot') as HTMLElement;
+  const webglRow = document.getElementById('webgl-row') as HTMLElement;
   const floatWindowToggle = document.getElementById('float-window-toggle') as HTMLInputElement;
   const floatWindowDot = document.getElementById('float-window-dot') as HTMLElement;
   const floatWindowRow = document.getElementById('float-window-row') as HTMLElement;
@@ -98,7 +108,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneOpacity: 0.8,
     paneMaskOpacity: 0.75,
     paneWidth: 720,
-    breathingAlertEnabled: true,
+    webglEnabled: true,
+    breathingIntensity: 'mild',
     activityAlertDebounceMs: 30000,
   };
 
@@ -116,9 +127,15 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     paneOpacityInput.value = settings.paneOpacity.toFixed(2);
     paneMaskOpacityRange.value = settings.paneMaskOpacity.toFixed(2);
     paneMaskOpacityInput.value = settings.paneMaskOpacity.toFixed(2);
-    breathingToggle.checked = settings.breathingAlertEnabled;
-    breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
+    breathingSegments.querySelectorAll('.settings-segmented-btn').forEach((btn) => {
+      const value = (btn as HTMLElement).dataset.value ?? '';
+      const isActive = value === settings.breathingIntensity;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-checked', String(isActive));
+    });
+    onBreathingIntensityChange?.(settings.breathingIntensity);
+    webglToggle.checked = settings.webglEnabled;
+    webglDot.classList.toggle('is-active', settings.webglEnabled);
     // Sync float window toggle dot with current runtime state
     const floatOpen = deps.getFloatWindowOpen?.() ?? false;
     floatWindowToggle.checked = floatOpen;
@@ -169,8 +186,17 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       settings.paneWidth = uiSettings.paneWidth!;
     }
 
-    if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
-      settings.breathingAlertEnabled = uiSettings.breathingAlertEnabled;
+    if (typeof uiSettings.breathingIntensity === 'string') {
+      const valid: BreathingIntensity[] = ['none', 'mild', 'intense'];
+      if (valid.includes(uiSettings.breathingIntensity as BreathingIntensity)) {
+        settings.breathingIntensity = uiSettings.breathingIntensity as BreathingIntensity;
+      }
+    } else if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
+      settings.breathingIntensity = uiSettings.breathingAlertEnabled ? 'intense' : 'none';
+    }
+
+    if (typeof uiSettings.webglEnabled === 'boolean') {
+      settings.webglEnabled = uiSettings.webglEnabled;
     }
 
     if (Number.isFinite(uiSettings.activityAlertDebounceMs)) {
@@ -301,23 +327,32 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // Breathing alert
-  function toggleBreathingAlert(): void {
-    breathingToggle.checked = !breathingToggle.checked;
-    settings.breathingAlertEnabled = breathingToggle.checked;
-    breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
+  breathingSegments.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.settings-segmented-btn') as HTMLElement | null;
+    if (!btn) return;
+    const value = btn.dataset.value as BreathingIntensity | undefined;
+    if (!value) return;
+    settings.breathingIntensity = value;
+    applySettings();
     scheduleSettingsSave();
-  }
-
-  breathingRow.addEventListener('click', () => {
-    toggleBreathingAlert();
   });
 
-  breathingToggle.addEventListener('change', () => {
-    settings.breathingAlertEnabled = breathingToggle.checked;
-    breathingDot.classList.toggle('is-active', settings.breathingAlertEnabled);
-    onBreathingAlertToggle?.(settings.breathingAlertEnabled);
-    scheduleSettingsSave();
+  // WebGL (3D acceleration)
+  webglRow.addEventListener('click', async () => {
+    const newValue = !settings.webglEnabled;
+    const restart = await showConfirmDialog({
+      title: '3D acceleration',
+      message: '3D acceleration change will take effect after restart. Restart now?',
+      confirmLabel: 'Restart',
+      cancelLabel: 'Cancel',
+    });
+    if (!restart) return;
+    settings.webglEnabled = newValue;
+    webglToggle.checked = newValue;
+    webglDot.classList.toggle('is-active', newValue);
+    bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData)
+      .then(() => { deps.requestAppRestart?.(); })
+      .catch(reportError);
   });
 
   // Float window toggle

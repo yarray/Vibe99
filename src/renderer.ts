@@ -32,7 +32,7 @@ import { createActions } from './input/actions';
 import { createDispatcher } from './input/dispatcher';
 
 import { renderHintBar } from './hint-bar';
-import { createSettingsManager } from './settings';
+import { createSettingsManager, type BreathingIntensity } from './settings';
 import { createTabBar } from './tab-bar';
 import type { TabBarLocalState } from './tab-bar';
 import type { PaneNode } from './pane-renderer';
@@ -141,6 +141,34 @@ const hookManager = createHookManager({
 const paneAlert = createBreathingMaskAlert();
 let globalBreathingEnabled = true;
 
+function applyBreathingIntensity(intensity: string): void {
+  const root = document.documentElement;
+  globalBreathingEnabled = intensity !== 'none';
+  switch (intensity) {
+    case 'none':
+      root.style.removeProperty('--breathing-peak-opacity');
+      root.style.removeProperty('--breathing-duration');
+      root.style.removeProperty('--breathing-glow');
+      break;
+    case 'mild':
+      root.style.setProperty('--breathing-peak-opacity', 'max(0.2, calc(0.6 - var(--pane-bg-mask-opacity)))');
+      root.style.setProperty('--breathing-duration', '3.5s');
+      root.style.setProperty('--breathing-glow', 'inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)');
+      break;
+    case 'intense':
+      root.style.setProperty('--breathing-peak-opacity', 'max(0.7, calc(1 - var(--pane-bg-mask-opacity)))');
+      root.style.setProperty('--breathing-duration', '2.4s');
+      root.style.setProperty('--breathing-glow',
+        'inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)');
+      break;
+  }
+  if (!globalBreathingEnabled) {
+    paneState.getPanes().forEach((pane) => {
+      paneRenderer?.setAlerted(pane.id, false);
+    });
+  }
+}
+
 const paneActivityWatcher = createPaneActivityWatcher({
   onAlert: (paneId) => {
     if (globalBreathingEnabled) {
@@ -172,16 +200,12 @@ const settingsManager = createSettingsManager({
   reportError,
   applyCallback: () => render(true),
   paneActivityWatcher,
-  onBreathingAlertToggle: (enabled) => {
-    globalBreathingEnabled = enabled;
-    if (!enabled) {
-      paneState.getPanes().forEach((pane) => {
-        paneRenderer?.setAlerted(pane.id, false);
-      });
-    }
+  onBreathingIntensityChange: (intensity) => {
+    applyBreathingIntensity(intensity);
   },
   onToggleFloatWindow: () => floatWindowManager.toggle(),
   getFloatWindowOpen: () => floatWindowManager.isOpen(),
+  requestAppRestart: () => window.location.reload(),
 });
 
 // paneOps is created after tabBar and paneRenderer, but closures capture the binding.

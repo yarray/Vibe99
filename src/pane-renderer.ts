@@ -272,7 +272,9 @@ export function createPaneRenderer({
     terminal.unicode.activeVersion = '11';
     terminal.open(terminalHost);
     (terminalHost as HTMLDivElement & { _xterm?: Terminal })._xterm = terminal;
-    try { terminal.loadAddon(new WebglAddon()); } catch {}
+    if (settingsManager.settings.webglEnabled) {
+      try { terminal.loadAddon(new WebglAddon()); } catch {}
+    }
     terminal.attachCustomKeyEventHandler((event) => {
       if (
         event.type === 'keydown' &&
