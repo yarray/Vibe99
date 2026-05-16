@@ -41,8 +41,8 @@ export type ContextMenuCallback = (
   event: MouseEvent,
 ) => Promise<void> | void;
 
-/** Callback used by TerminalSession to request a tab bar refresh check. */
-export type TabRefreshCheckCallback = (paneId: string) => boolean;
+/** Callback used by TerminalSession when a title change may require a tab bar refresh. */
+export type TabRefreshCallback = (paneId: string) => void;
 
 /** Activity watcher interface used by TerminalSession. */
 export interface TerminalActivityWatcher {
@@ -62,7 +62,7 @@ export interface TerminalSessionDeps {
   onTitleChange: TitleChangeCallback;
   onContextMenu: ContextMenuCallback;
   onCwdChanged: CwdChangeCallback;
-  onNeedsTabRefresh: TabRefreshCheckCallback;
+  onTabRefreshNeeded: TabRefreshCallback;
   onSessionReadyChange?: (paneId: string, ready: boolean) => void;
 }
 
@@ -300,7 +300,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     onTitleChange,
     onContextMenu,
     onCwdChanged,
-    onNeedsTabRefresh,
+    onTabRefreshNeeded,
   } = deps;
 
   const pane = getPaneSnapshot();
@@ -443,10 +443,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
       return;
     }
     onTitleChange(paneId, trimmedTitle);
-    if (onNeedsTabRefresh(paneId)) {
-      // Tab bar refresh is handled by the renderer; we just notify.
-      // The caller of onNeedsTabRefresh handles the actual tabBar.renderTabs() call.
-    }
+    onTabRefreshNeeded(paneId);
   });
 
   terminal.onSelectionChange(() => {

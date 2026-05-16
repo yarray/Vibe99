@@ -207,7 +207,11 @@ export function createPaneRenderer({
       onTitleChange: onTerminalTitleChange,
       onContextMenu: contextMenuAdapter,
       onCwdChanged: onPaneCwdChanged,
-      onNeedsTabRefresh: entryNeedsTabRefresh,
+      onTabRefreshNeeded: (paneId: string) => {
+        if (entryNeedsTabRefresh(paneId)) {
+          tabBar.renderTabs();
+        }
+      },
     });
 
     return session;
