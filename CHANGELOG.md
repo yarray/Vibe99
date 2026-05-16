@@ -19,6 +19,8 @@
 
 ### Fixed
 
+- **E2E Dockerfile: replace git clone with COPY and npm ci with npm install (VIB-274):** Changed `RUN git clone https://github.com/yarray/Vibe99.git` to `COPY . /app/Vibe99` so the image uses the local build context instead of fetching remote source. Replaced all `npm ci` with `npm install` to avoid failures when `package-lock.json` is absent in the build context.
+
 - **E2E Dockerfile: use debug build and remove stale release binary (VIB-257):** Changed `tauri:build` to `tauri:build-dev` and removed the precompiled `src-tauri/target/debug/vibe99` from the image so that test runs always build incrementally from the mounted source.
 
 
