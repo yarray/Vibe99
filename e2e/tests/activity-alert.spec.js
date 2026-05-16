@@ -93,7 +93,7 @@ async function openSettingsAndGetBreathingToggle() {
   const btn = await $('#tabs-settings');
   await btn.click();
   await browser.pause(400);
-  return await $('#breathing-alert-toggle');
+  return await $('#breathing-intensity-segments');
 }
 
 async function closeSettings() {
@@ -281,12 +281,13 @@ describe('Activity Alert', () => {
   });
 
   it('should disable breathing mask when global activity alert is off', async () => {
-    const toggle = await openSettingsAndGetBreathingToggle();
-    const isChecked = await browser.execute(() => document.getElementById('breathing-alert-toggle')?.checked);
-    if (isChecked) {
-      await browser.execute(() => document.getElementById('breathing-alert-toggle')?.click());
-      await browser.pause(300);
-    }
+    await openSettingsAndGetBreathingToggle();
+    // Set intensity to 'none' to disable global breathing alert
+    await browser.execute(() => {
+      const noneBtn = document.querySelector('#breathing-intensity-segments .settings-segmented-btn[data-value="none"]');
+      if (noneBtn) noneBtn.click();
+    });
+    await browser.pause(300);
     await closeSettings();
 
     // Clear any existing alerts
@@ -302,12 +303,13 @@ describe('Activity Alert', () => {
   });
 
   it('should restore breathing mask when global activity alert is re-enabled', async () => {
-    const toggle = await openSettingsAndGetBreathingToggle();
-    const isChecked = await browser.execute(() => document.getElementById('breathing-alert-toggle')?.checked);
-    if (!isChecked) {
-      await browser.execute(() => document.getElementById('breathing-alert-toggle')?.click());
-      await browser.pause(300);
-    }
+    await openSettingsAndGetBreathingToggle();
+    // Ensure intensity is not 'none' (re-enable if needed)
+    await browser.execute(() => {
+      const mildBtn = document.querySelector('#breathing-intensity-segments .settings-segmented-btn[data-value="mild"]');
+      if (mildBtn) mildBtn.click();
+    });
+    await browser.pause(300);
     await closeSettings();
 
     await ensurePaneHasAlert(1);

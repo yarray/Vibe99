@@ -40,7 +40,8 @@ export async function closeSettingsPanel() {
 }
 
 export async function resetSettings() {
-  await browser.execute(() => {
+  // Save defaults to disk and wait for the operation to complete.
+  await browser.executeAsync((done) => {
     if (window.__TAURI__) {
       window.__TAURI__.core.invoke('settings_save', {
         settings: {
@@ -54,7 +55,9 @@ export async function resetSettings() {
             activityAlertDebounceMs: 30000,
           },
         },
-      });
+      }).then(() => done()).catch(done);
+    } else {
+      done();
     }
   });
   await browser.pause(300);
