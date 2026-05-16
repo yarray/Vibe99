@@ -32,12 +32,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --pr
 # 4. tauri-driver（e2e WebDriver bridge）
 RUN cargo install tauri-driver
 
-# 5. 克隆 Vibe99 并预编译
+# 5. 复制本地源码并预编译
 WORKDIR /app
-RUN git clone https://github.com/yarray/Vibe99.git
+COPY . /app/Vibe99
 
 WORKDIR /app/Vibe99
-RUN npm ci \
+RUN npm install \
     && npm run tauri:build-dev
 
 # 5b. 删除预编译的 debug binary，强制测试运行时增量编译
@@ -45,7 +45,7 @@ RUN rm -f src-tauri/target/debug/vibe99
 
 # 6. 安装 e2e 依赖
 WORKDIR /app/Vibe99/e2e
-RUN npm ci
+RUN npm install
 
 WORKDIR /app/Vibe99
 CMD ["/bin/bash"]
