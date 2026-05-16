@@ -198,7 +198,27 @@ Vibe99/
 
 ## E2E Testing
 
-For end-to-end test setup (Docker-based Linux testing, WebdriverIO configuration, etc.), see [e2e/README.md](./e2e/README.md).
+Using docker
+
+``` bash
+docker run --rm --privileged vibe99-builder \
+  bash -c "git fetch origin && git checkout <branch> && npm run test:e2e"
+```
+
+Run specific spec
+
+``` bash
+docker run --rm --privileged vibe99-builder \
+  bash -c "git fetch origin && git checkout <branch> && npm run test:e2e -- <spec_name>"
+```
+
+If image does not exist, build it:
+
+``` bash
+docker build -f e2e/Dockerfile.e2e -t vibe99-builder:latest .
+```
+
+Details see [e2e/README.md](./e2e/README.md).
 
 ## Contributing
 
