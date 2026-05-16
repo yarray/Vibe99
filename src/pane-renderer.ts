@@ -48,7 +48,7 @@ export interface PaneRendererDeps {
   getMode: () => string;
   onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
   onTerminalTitleChange: (paneId: string, title: string) => void;
-  onTerminalContextMenu: (node: PaneNode, event: MouseEvent) => Promise<void> | void;
+  onTerminalContextMenu: (paneId: string, event: MouseEvent) => Promise<void> | void;
   scheduleWindowLayoutSave: () => void;
   tabBar: TabBar;
   getPaneLabel: (pane: Pane) => string;
@@ -191,7 +191,7 @@ export function createPaneRenderer({
     return Boolean(pane && pane.title === null);
   }
 
-  // -- Session creation (legacy, kept for compatibility) -------------------------
+  // -- Session creation ---------------------------------------------------------
 
   function createSession(pane: Pane): TerminalSession {
     paneAlert.attach();
@@ -205,10 +205,7 @@ export function createPaneRenderer({
       onPaneClick,
       onTitleChange: onTerminalTitleChange,
       onContextMenu: (session, event) => {
-        const node = getNode(session.paneId);
-        if (node) {
-          return onTerminalContextMenu(node, event);
-        }
+        return onTerminalContextMenu(session.paneId, event);
       },
       onCwdChanged: onPaneCwdChanged,
       onTabRefreshNeeded: (paneId: string) => {
