@@ -107,6 +107,14 @@ export interface FocusPrevCommand {
   type: 'focus.prev';
 }
 
+export interface FocusLeftCommand {
+  type: 'focus.left';
+}
+
+export interface FocusRightCommand {
+  type: 'focus.right';
+}
+
 export interface FocusRecentCommand {
   type: 'focus.recent';
   reverse?: boolean;
@@ -177,6 +185,8 @@ export type AppCommand =
   | TerminalChangeShellCommand
   | FocusNextCommand
   | FocusPrevCommand
+  | FocusLeftCommand
+  | FocusRightCommand
   | FocusRecentCommand
   | FocusNextLitCommand
   | FocusAtCommand

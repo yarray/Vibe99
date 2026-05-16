@@ -221,6 +221,26 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
         return ok();
       }
 
+      case 'focus.left': {
+        const panes = paneState.getPanes();
+        if (panes.length === 0) return fail('too-few');
+        const nextIndex = paneState.getFocusedIndex() - 1;
+        if (nextIndex < 0) return ok();
+        paneState.focusPane(panes[nextIndex].id);
+        render();
+        return ok();
+      }
+
+      case 'focus.right': {
+        const panes = paneState.getPanes();
+        if (panes.length === 0) return fail('too-few');
+        const nextIndex = paneState.getFocusedIndex() + 1;
+        if (nextIndex >= panes.length) return ok();
+        paneState.focusPane(panes[nextIndex].id);
+        render();
+        return ok();
+      }
+
       case 'focus.recent': {
         const currentPanes = paneState.getPanes();
         if (currentPanes.length < 2) return fail('too-few');
