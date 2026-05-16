@@ -368,7 +368,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Activity alert debounce time
   debounceInput.addEventListener('change', () => {
     const seconds = Number(debounceInput.value);
-    if (!Number.isFinite(seconds)) {
+    // Browser sanitises non-numeric input on <input type="number"> to "",
+    // which Number("") converts to 0 (not NaN).  Treat 0 / negative / NaN
+    // as invalid so the field reverts to the current settings value.
+    if (!Number.isFinite(seconds) || seconds <= 0) {
       applySettings();
       return;
     }
