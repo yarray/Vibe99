@@ -40,21 +40,44 @@ export async function closeSettingsPanel() {
 }
 
 export async function resetSettings() {
-  await browser.execute(() => {
+  // Use executeAsync so we await the settings_save invoke — without this,
+  // the save races against a pending 150ms debounced save from the previous
+  // test. If the pending timeout fires after ours, buildSettingsPayload
+  // spreads the in-memory settings (possibly still stale) and overwrites
+  // the defaults we just wrote.
+  //
+  // Flush any pending debounced save before writing defaults so the timeout
+  // is cancelled and its stale data cannot land on disk after our write.
+  await browser.executeAsync(async (done) => {
     if (window.__TAURI__) {
-      window.__TAURI__.core.invoke('settings_save', {
-        settings: {
-          version: 6,
-          ui: {
-            fontSize: 13,
-            paneOpacity: 0.8,
-            paneMaskOpacity: 0.75,
-            paneWidth: 720,
-            breathingAlertEnabled: true,
-            activityAlertDebounceMs: 30000,
+      // Cancel pending debounced save; the flush write is harmless since
+      // we overwrite it immediately below.
+      if (window.settingsManager) {
+        window.settingsManager.flushSettingsSave();
+      }
+      // Brief settle so the flush save (if any) acquires + releases the
+      // Rust-side settings lock before our write.
+      await new Promise((r) => setTimeout(r, 50));
+      try {
+        await window.__TAURI__.core.invoke('settings_save', {
+          settings: {
+            version: 6,
+            ui: {
+              fontSize: 13,
+              paneOpacity: 0.8,
+              paneMaskOpacity: 0.75,
+              paneWidth: 720,
+              breathingAlertEnabled: true,
+              activityAlertDebounceMs: 30000,
+            },
           },
-        },
-      });
+        });
+      } catch (_) {
+        // settings_save may fail if the app is shutting down; ignore.
+      }
+      done();
+    } else {
+      done();
     }
   });
   await browser.pause(300);
