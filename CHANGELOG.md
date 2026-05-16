@@ -8,6 +8,8 @@
 
 
 
+- **Workbench session coordination (VIB-269):** Created `src/runtime/workbench.ts` with `Workbench` interface and `createWorkbench()` factory for coordinating Layout and TerminalSession lifecycle. The Workbench owns the active Layout and the TerminalSession collection (`Map<paneId, TerminalSession>`) for a single window. Added `ensureSessions()` and `closeSession()` methods to `PaneRenderer` interface as new API names for `ensurePaneNodes()` and `destroyPane()`. This is Step 4 of the Phase 2 domain refactor - establishing the session coordination layer that will eventually replace direct sessionMap management in pane-renderer.
+
 - **Pane domain entity (VIB-266):** Created `src/domain/pane.ts` with `PaneSnapshot`, `Pane` interface, and `createPane()` factory. The Pane entity is a pure data object expressing only persistent properties (id, title, terminalTitle, cwd, accent, customColor, shellProfileId, breathingMonitor) with no knowledge of DOM, xterm, PTY, or rendering state. Modified `pane-state.ts` to use the Pane entity internally while keeping the public API unchanged for backward compatibility.
 
 

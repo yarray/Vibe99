@@ -10,6 +10,7 @@ import {
   type TerminalSession,
   type ContextMenuCallback,
 } from './runtime/terminal-session';
+import type { Workbench } from './runtime/workbench';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -55,7 +56,10 @@ export interface PaneRendererDeps {
 }
 
 export interface PaneRenderer {
+  /** @deprecated Use ensureSessions() instead. Will be removed in Step 5. */
   ensurePaneNodes: () => void;
+  /** Ensure sessions are synchronized with Layout's pane collection. */
+  ensureSessions: () => void;
   renderPanes: (refit?: boolean) => void;
   fitTerminal: (paneId: string, force?: boolean) => void;
   getNode: (paneId: string) => PaneNode | null;
@@ -78,8 +82,13 @@ export interface PaneRenderer {
   getShellChangeTime: (paneId: string) => number | null;
   isShellChanging: (paneId: string) => boolean;
   initializePaneTerminal: (node: PaneNode) => Promise<void>;
+  /** @deprecated Use closeSession() instead. Will be removed in Step 5. */
   destroyPane: (paneId: string) => void;
+  /** Close a session for a specific pane. */
+  closeSession: (paneId: string, options?: { destroyPty?: boolean }) => void;
   getRecentOutput: (paneId: string, maxLines?: number) => string;
+  /** Get the Workbench instance (for coordination layer). */
+  getWorkbench: () => Workbench | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +124,8 @@ export function createPaneRenderer({
   getPaneLabel,
   onPaneCwdChanged,
 }: PaneRendererDeps): PaneRenderer {
+  // Direct session map - this is the internal state that will be managed by Workbench
+  // In Step 5, this will move entirely into Workbench
   const sessionMap = new Map<string, TerminalSession>();
 
   // -- PaneNode adapter ---------------------------------------------------------
@@ -180,19 +191,7 @@ export function createPaneRenderer({
     return Boolean(pane && pane.title === null);
   }
 
-  // -- Context menu adapter -----------------------------------------------------
-
-  const contextMenuAdapter: ContextMenuCallback = (
-    _session: TerminalSession,
-    event: MouseEvent,
-  ): Promise<void> | void => {
-    const node = getNode(_session.paneId);
-    if (node) {
-      return onTerminalContextMenu(node, event);
-    }
-  };
-
-  // -- Session creation ---------------------------------------------------------
+  // -- Session creation (legacy, kept for compatibility) -------------------------
 
   function createSession(pane: Pane): TerminalSession {
     paneAlert.attach();
@@ -205,7 +204,12 @@ export function createPaneRenderer({
       getPaneSnapshot: () => paneState.getPaneById(pane.id),
       onPaneClick,
       onTitleChange: onTerminalTitleChange,
-      onContextMenu: contextMenuAdapter,
+      onContextMenu: (session, event) => {
+        const node = getNode(session.paneId);
+        if (node) {
+          return onTerminalContextMenu(node, event);
+        }
+      },
       onCwdChanged: onPaneCwdChanged,
       onTabRefreshNeeded: (paneId: string) => {
         if (entryNeedsTabRefresh(paneId)) {
@@ -220,6 +224,7 @@ export function createPaneRenderer({
   // -- Pane lifecycle -----------------------------------------------------------
 
   function ensurePaneNodes(): void {
+    // Synchronize sessions with current pane list
     const currentPanes = paneState.getPanes();
     const activeIds = new Set(currentPanes.map((pane) => pane.id));
 
@@ -241,6 +246,11 @@ export function createPaneRenderer({
         });
       }
     }
+  }
+
+  function ensureSessions(): void {
+    // New API name for the same operation
+    ensurePaneNodes();
   }
 
   // -- Rendering ----------------------------------------------------------------
@@ -293,6 +303,14 @@ export function createPaneRenderer({
     sessionMap.delete(paneId);
   }
 
+  function closeSession(paneId: string, options: { destroyPty?: boolean } = {}): void {
+    const session = sessionMap.get(paneId);
+    if (!session) return;
+    const { destroyPty = true } = options;
+    session.close({ destroyPty });
+    sessionMap.delete(paneId);
+  }
+
   function changePaneShell(paneId: string, profileId: string, previousProfileId?: string | null): void {
     const session = sessionMap.get(paneId);
     if (!session) return;
@@ -334,6 +352,7 @@ export function createPaneRenderer({
 
   return {
     ensurePaneNodes,
+    ensureSessions,
     renderPanes,
     fitTerminal: (paneId, force = false) => {
       const session = sessionMap.get(paneId);
@@ -421,10 +440,12 @@ export function createPaneRenderer({
     },
     initializePaneTerminal,
     destroyPane,
+    closeSession,
     getRecentOutput: (paneId, maxLines = 20) => {
       const session = sessionMap.get(paneId);
       if (!session) return '';
       return session.getRecentOutput(maxLines);
     },
+    getWorkbench: () => null, // Will be implemented in Step 5
   };
 }
