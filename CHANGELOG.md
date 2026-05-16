@@ -8,7 +8,7 @@
 
 
 
-- **E2E Pane Navigation / Tab Reorder (VIB-255):** Added 6 new tests to `e2e/tests/pane-management.spec.js` covering rename via navigation mode (title persistence, empty-title fallback, Escape cancel), Home/End focus jumps, and digit-key pane jumps (1–9, with out-of-bounds safety). Added 1 new test to `e2e/tests/tab-management.spec.js` covering tab drag reorder via synthetic pointer events, verifying tab order change and pane z-index alignment.
+- **Pane domain entity (VIB-266):** Created `src/domain/pane.ts` with `PaneSnapshot`, `Pane` interface, and `createPane()` factory. The Pane entity is a pure data object expressing only persistent properties (id, title, terminalTitle, cwd, accent, customColor, shellProfileId, breathingMonitor) with no knowledge of DOM, xterm, PTY, or rendering state. Modified `pane-state.ts` to use the Pane entity internally while keeping the public API unchanged for backward compatibility.
 
 
 - **E2E Layout extended tests (VIB-254):** Added 8 new E2E test cases for Layout window geometry persistence, Set as Default UI, Open in New Window editor button, and Layout Focus Notice event handling. Covers geometry save/restore verification, default layout button interaction in editor panel, and focus notice CSS class / timeout behavior.
