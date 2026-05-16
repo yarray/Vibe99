@@ -19,7 +19,9 @@ import { createLayoutManager } from './layout-manager';
 import { createLayoutModal } from './layout-modal';
 import { createModalStack } from './modal-stack';
 import { createFullscreenManager } from './fullscreen-manager';
-import { createPaneOperations } from './pane-operations';
+import { createCommandDispatcher } from './runtime/command-dispatcher.js';
+import type { CommandResult } from './domain/commands.js';
+import type { AppCommand } from './domain/commands.js';
 import { createCommandPaletteEntries } from './command-palette-entries';
 import '@xterm/xterm/css/xterm.css';
 
@@ -177,7 +179,7 @@ const paneActivityWatcher = createPaneActivityWatcher({
     floatWindowManager.noteAlert(paneId);
     const payload: AlertStartPayload = {
       paneId,
-      paneTitle: paneOps?.getPaneLabel(paneState.getPaneById(paneId)!) ?? '',
+      paneTitle: (() => { const p = paneState.getPaneById(paneId); return p ? (p.title ?? p.terminalTitle ?? '') : ''; })(),
       recentOutput: paneRenderer?.getRecentOutput(paneId, 20) ?? '',
     };
     hookManager.emitEvent('alert.start', payload);
@@ -189,7 +191,7 @@ const paneActivityWatcher = createPaneActivityWatcher({
     floatWindowManager.noteClear(paneId);
     const payload: AlertStopPayload = {
       paneId,
-      paneTitle: paneOps?.getPaneLabel(paneState.getPaneById(paneId)!) ?? '',
+      paneTitle: (() => { const p = paneState.getPaneById(paneId); return p ? (p.title ?? p.terminalTitle ?? '') : ''; })(),
     };
     hookManager.emitEvent('alert.stop', payload);
   },
@@ -208,15 +210,78 @@ const settingsManager = createSettingsManager({
   requestAppRestart: () => window.location.reload(),
 });
 
-// paneOps is created after tabBar and paneRenderer, but closures capture the binding.
-let paneOps: ReturnType<typeof createPaneOperations> | null = null;
+// --- Inline helpers (replacing pane-operations.ts) -------------------------
+
+function getFocusedPaneAccent(): string {
+  const pane = paneState.getPanes()[paneState.getFocusedIndex()];
+  return pane?.customColor || pane?.accent || '#ffd166';
+}
+
+function handleTerminalExit({ paneId, exitCode, reason }: { paneId: string; exitCode: number; reason: string }): boolean {
+  const node = paneRenderer?.getNode(paneId);
+  if (!node) return true;
+
+  if (reason === 'killed') {
+    paneRenderer!.setSessionReady(paneId, false);
+    return true;
+  }
+
+  const graceMs = 3000;
+  const recentShellChange = paneRenderer!.getShellChangeTime(paneId) && (Date.now() - paneRenderer!.getShellChangeTime(paneId)! < graceMs);
+  if (paneRenderer!.isShellChanging(paneId) || recentShellChange) {
+    paneRenderer!.setSessionReady(paneId, false);
+    paneRenderer!.writeln(paneId, '');
+    paneRenderer!.writeln(paneId, `\x1b[38;5;204m[shell exited with code ${exitCode}]\x1b[0m`);
+    return true;
+  }
+
+  paneRenderer!.setSessionReady(paneId, false);
+  paneRenderer!.writeln(paneId, '');
+  paneRenderer!.writeln(paneId, `\x1b[38;5;244m[process exited with code ${exitCode}]\x1b[0m`);
+
+  const paneIndex = paneState.getPaneIndex(paneId);
+  if (paneIndex === -1) return true;
+
+  if (paneState.getPanes().length === 1) {
+    return true; // keep window open
+  }
+
+  // Close pane locally (destroyPty: false — unlike the normal pane.close command)
+  const currentPanes = paneState.getPanes();
+  const closingPane = currentPanes[paneIndex];
+  if (closingPane.id === tabBarState.renamingPaneId) tabBarState.renamingPaneId = null;
+  if (closingPane.id === tabBarState.dragState?.paneId) {
+    tabBarState.dragState = null;
+    document.body.classList.remove('is-dragging-tabs');
+  }
+  if (closingPane.id === tabBarState.pendingTabFocus?.paneId) {
+    window.clearTimeout(tabBarState.pendingTabFocus.timerId);
+    tabBarState.pendingTabFocus = null;
+  }
+  const wasFocused = closingPane.id === paneState.getFocusedPaneId();
+  paneState.closePane(paneIndex);
+  render(true);
+  if (wasFocused) {
+    const newFocusedPaneId = paneState.getFocusedPaneId();
+    if (newFocusedPaneId) {
+      requestAnimationFrame(() => {
+        setMode('terminal');
+        paneRenderer?.focusTerminal(newFocusedPaneId);
+      });
+    }
+  }
+  return true;
+}
+
+// Command dispatcher — created after tabBar and paneRenderer, closures capture the binding.
+let dispatch: (command: AppCommand) => CommandResult;
 
 const tabBar = createTabBar({
   paneState,
   state: tabBarState,
-  getPaneLabel: (pane) => paneOps?.getPaneLabel(pane) ?? '',
+  getPaneLabel: (pane) => pane.title ?? pane.terminalTitle ?? '',
   getTextColorForBackground,
-  onTabClick: (...args) => paneOps?.focusPane(...args),
+  onTabClick: (paneId: string, opts?: { focusTerminal?: boolean }) => { dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }); },
   onTabContext: (paneId, event) => contextMenus?.showTabContextMenu(paneId, event),
   onTabDrag: (fromIndex, toIndex) => {
     const panes = paneState.getPanes();
@@ -226,9 +291,12 @@ const tabBar = createTabBar({
   },
   onRename: (paneId, title) => {
     paneState.setPaneTitle(paneId, title);
-    paneOps?.focusPane(paneId, { focusTerminal: true });
+    dispatch({ type: 'pane.focus', paneId, focusTerminal: true });
   },
-  onCloseTab: (...args) => paneOps?.closePane(...args),
+  onCloseTab: (index) => {
+    const paneId = paneState.getPanes()[index]?.id;
+    if (paneId) dispatch({ type: 'pane.close', paneId });
+  },
   reportError,
   tabsListEl,
   setIcon,
@@ -243,14 +311,14 @@ paneRenderer = createPaneRenderer({
   reportError,
   stageEl,
   getMode: () => currentMode,
-  onPaneClick: (...args) => paneOps?.focusPane(...args),
+  onPaneClick: (paneId: string, opts?: { focusTerminal?: boolean }) => { dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }); },
   onTerminalTitleChange: (paneId, title) => paneState.setPaneTerminalTitle(paneId, title),
   onTerminalContextMenu: (node, event) => {
     void contextMenus?.showTerminalContextMenu(node, event);
   },
   scheduleWindowLayoutSave: () => layoutManager.scheduleWindowLayoutSave(),
   tabBar,
-  getPaneLabel: (pane) => paneOps?.getPaneLabel(pane) ?? '',
+  getPaneLabel: (pane) => pane.title ?? pane.terminalTitle ?? '',
   onPaneCwdChanged: (paneId, newCwd) => {
     const pane = paneState.getPaneById(paneId);
     if (!pane || pane.cwd === newCwd) return;
@@ -324,12 +392,15 @@ contextMenus = createContextMenus({
   bridge,
   shellProfileManager,
   reportError,
-  focusPane: (...args) => paneOps?.focusPane(...args),
+  focusPane: (paneId) => dispatch({ type: 'pane.focus', paneId }),
   beginRenamePane: (index) => tabBar.beginRenamePane(index),
-  closePane: (...args) => paneOps?.closePane(...args),
+  closePane: (index) => {
+    const paneId = paneState.getPanes()[index]?.id;
+    if (paneId) dispatch({ type: 'pane.close', paneId });
+  },
   togglePaneBreathingMonitor: (paneId) => {
-    const next = paneOps?.togglePaneBreathingMonitor(paneId) ?? false;
-    paneActivityWatcher.setPaneEnabled(paneId, next);
+    const result = dispatch({ type: 'pane.toggleActivityAlert', paneId });
+    paneActivityWatcher.setPaneEnabled(paneId, result.ok ? !!result.value : false);
   },
   restartPaneTerminal: (paneId) => paneRenderer?.restartPaneTerminal(paneId),
 });
@@ -341,16 +412,17 @@ contextMenus = createContextMenus({
   paneRenderer,
 };
 
-paneOps = createPaneOperations({
+dispatch = createCommandDispatcher({
   paneState,
   paneRenderer,
   tabBar,
-  layoutManager,
+  scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
   render,
   setMode,
   getCurrentMode: () => currentMode,
   state: tabBarState,
-});
+  bridge,
+}).dispatch;
 
 let cachedFloatWindowState: Record<string, any> = {};
 
@@ -361,7 +433,7 @@ const floatWindowManager = createFloatWindowManager({
   getPanes: () => paneState.getPanes(),
   onFocusPane: (paneId) => {
     void bridge.focusWindow();
-    paneOps?.focusPane(paneId, { focusTerminal: true });
+    dispatch({ type: 'pane.focus', paneId, focusTerminal: true });
   },
   onOpen: () => {
     paneActivityWatcher.setIgnoreFocus(true);
@@ -387,8 +459,8 @@ const commandPaletteEntries = createCommandPaletteEntries({
   bridge,
   settingsManager,
   modalStack,
-  focusPane: (id: string | null) => { if (id) paneOps?.focusPane(id); },
-  addPane: (profileId?: string | null) => paneOps?.addPane(profileId),
+  focusPane: (id: string | null) => { if (id) dispatch({ type: 'pane.focus', paneId: id }); },
+  addPane: (profileId?: string | null) => dispatch({ type: 'pane.create', shellProfileId: profileId }),
   closeSettingsPanel,
   closeKeyboardShortcutsModal,
   openKeymapHelpModal,
@@ -413,12 +485,12 @@ const removeTerminalDataListener = bridge.onTerminalData(({ paneId, data }) => {
 
 bridge.onLayoutFocusNotice?.(() => {
   if (!layoutManager.getWindowLayoutId()) return;
-  paneOps?.refocusCurrentPaneTerminal();
+  dispatch({ type: 'focus.refocus' });
   showLayoutFocusNotice(layoutManager.getWindowLayoutId()!);
 });
 
 const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
-  const handled = paneOps?.handleTerminalExit({ paneId, exitCode, reason });
+  const handled = handleTerminalExit({ paneId, exitCode, reason });
   if (handled === false) {
     void bridge.closeWindow().catch(reportError);
   }
@@ -450,11 +522,11 @@ function setMode(next: string): void {
 function enterNavigationMode(): void {
   if (paneState.getPanes().length === 0) return;
   enterNavSourcePaneId = paneState.getFocusedPaneId();
-  setMode('nav'); paneOps?.blurFocusedTerminal(); render();
+  setMode('nav'); dispatch({ type: 'focus.blur' }); render();
 }
 
 function cancelNavigationMode(): void {
-  if (enterNavSourcePaneId) { paneOps?.focusPane(enterNavSourcePaneId, { focusTerminal: true }); enterNavSourcePaneId = null; }
+  if (enterNavSourcePaneId) { dispatch({ type: 'pane.focus', paneId: enterNavSourcePaneId, focusTerminal: true }); enterNavSourcePaneId = null; }
   else { setMode('terminal'); render(); }
 }
 
@@ -478,7 +550,7 @@ function updateStatus(): void {
 
   const currentPanes = paneState.getPanes();
   const focusedPane = currentPanes[paneState.getFocusedIndex()];
-  const focusedPaneLabel = focusedPane ? (paneOps?.getPaneLabel(focusedPane) || focusedPane.id) : '';
+  const focusedPaneLabel = focusedPane ? ((focusedPane.title ?? focusedPane.terminalTitle) || focusedPane.id) : '';
 
   const keymap = ShortcutsRegistry.getActiveKeymap();
   const { modeLabel, hintsHtml } = renderHintBar(
@@ -495,7 +567,7 @@ function updateStatus(): void {
 
 function showLayoutFocusNotice(layoutId: string): void {
   layoutFocusNotice = { layoutId };
-  document.body.style.setProperty('--layout-focus-accent', paneOps?.getFocusedPaneAccent() ?? null);
+  document.body.style.setProperty('--layout-focus-accent', getFocusedPaneAccent());
   document.body.dataset.layoutFocusName = layoutManager.getLayoutDisplayName(layoutId);
   document.body.classList.remove('is-layout-focus-notice');
   void document.body.offsetWidth;
@@ -527,16 +599,16 @@ function openKeymapHelpModal(): void {
 
 // ---------------------------------------------------------------------------
 const keyboardActions = createActions({
-  addPane: (...args) => paneOps?.addPane(...args),
+  addPane: () => dispatch({ type: 'pane.create' }),
   enterNavigationMode,
-  cycleToRecentPane: (...args) => paneOps?.cycleToRecentPane(...args),
-  cycleToNextLitPane: (...args) => paneOps?.cycleToNextLitPane(...args),
-  navigateLeft: (...args) => paneOps?.navigateLeft(...args),
-  navigateRight: (...args) => paneOps?.navigateRight(...args),
+  cycleToRecentPane: (opts) => dispatch({ type: 'focus.recent', reverse: opts.reverse }),
+  cycleToNextLitPane: () => dispatch({ type: 'focus.nextLit' }),
+  navigateLeft: () => dispatch({ type: 'focus.left' }),
+  navigateRight: () => dispatch({ type: 'focus.right' }),
   copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); return id ? paneRenderer?.copySelection(id) : false; },
   pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) await paneRenderer?.pasteInto(id); },
-  moveFocus: (...args) => paneOps?.moveFocus(...args),
-  focusPane: (...args) => paneOps?.focusPane(...args),
+  moveFocus: (delta) => dispatch({ type: delta > 0 ? 'focus.next' : 'focus.prev' }),
+  focusPane: (paneId, opts) => dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }),
   cancelNavigationMode,
   getFocusedPaneId: () => paneState.getFocusedPaneId() ?? '',
   isCommandPaletteOpen,
@@ -544,11 +616,11 @@ const keyboardActions = createActions({
   openTabSwitcher: () => commandPaletteEntries.openTabSwitcher(),
   openCommandList: () => commandPaletteEntries.openCommandList(),
   openNewPaneProfilePicker: () => commandPaletteEntries.openNewPaneProfilePicker(),
-  focusPaneAt: (...args) => paneOps?.focusPaneAt(...args),
-  getPaneCount: () => paneOps?.getPaneCount() ?? 0,
-  getPaneIdAt: (index: number) => paneOps?.getPaneIdAt(index) ?? undefined,
-  requestClosePane: (paneId: string) => paneOps?.requestClosePane(paneId),
-  startInlineRename: (...args) => paneOps?.startInlineRename(...args),
+  focusPaneAt: (index) => dispatch({ type: 'focus.at', index }),
+  getPaneCount: () => paneState.getPanes().length,
+  getPaneIdAt: (index: number) => paneState.getPanes()[index]?.id,
+  requestClosePane: (paneId: string) => dispatch({ type: 'pane.requestClose', paneId }),
+  startInlineRename: (paneId: string) => dispatch({ type: 'pane.rename', paneId }),
   openKeymapHelpModal,
   openLayoutsModal: () => layoutModal.openLayoutsModal(),
 });
@@ -575,7 +647,7 @@ window.addEventListener('blur', () => {
 
 // ---------------------------------------------------------------------------
 addPaneButtonEl.addEventListener('click', () => {
-  try { paneOps?.addPane(); } catch (error) { reportError(error); }
+  try { dispatch({ type: 'pane.create' }); } catch (error) { reportError(error); }
 });
 
 addProfileButtonEl.addEventListener('click', (event) => {
@@ -647,7 +719,7 @@ window.addEventListener('keydown', (event) => {
     modalStack.closeTop();
     const focusedPaneId = paneState.getFocusedPaneId();
     if (focusedPaneId && modalStack.isEmpty()) {
-      paneOps?.focusPane(focusedPaneId, { focusTerminal: true });
+      dispatch({ type: 'pane.focus', paneId: focusedPaneId, focusTerminal: true });
     }
   }
 }, true);
