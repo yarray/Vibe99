@@ -96,6 +96,20 @@ export interface TerminalChangeShellCommand {
 }
 
 // ---------------------------------------------------------------------------
+// Query commands (read-only, return values)
+// ---------------------------------------------------------------------------
+
+export interface QueryTerminalHasSelectionCommand {
+  type: 'query.terminal.hasSelection';
+  paneId: string;
+}
+
+export interface QueryTerminalIsReadyCommand {
+  type: 'query.terminal.isReady';
+  paneId: string;
+}
+
+// ---------------------------------------------------------------------------
 // Focus commands
 // ---------------------------------------------------------------------------
 
@@ -183,6 +197,8 @@ export type AppCommand =
   | TerminalSelectAllCommand
   | TerminalRestartCommand
   | TerminalChangeShellCommand
+  | QueryTerminalHasSelectionCommand
+  | QueryTerminalIsReadyCommand
   | FocusNextCommand
   | FocusPrevCommand
   | FocusLeftCommand

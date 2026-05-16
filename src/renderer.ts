@@ -273,35 +273,26 @@ function handleTerminalExit({ paneId, exitCode, reason }: { paneId: string; exit
   return true;
 }
 
-// Command dispatcher — created after tabBar and paneRenderer, closures capture the binding.
+// Command dispatcher — will be created after paneRenderer, used by modules
 let dispatch: (command: AppCommand) => CommandResult;
 
+// Create tabBar first (needed by command dispatcher)
 const tabBar = createTabBar({
   paneState,
   state: tabBarState,
   getPaneLabel: (pane) => pane.title ?? pane.terminalTitle ?? '',
   getTextColorForBackground,
-  onTabClick: (paneId: string, opts?: { focusTerminal?: boolean }) => { dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }); },
+  dispatch: (command: AppCommand) => {
+    // Temporary placeholder, will be reassigned after dispatcher is created
+    return dispatch(command);
+  },
   onTabContext: (paneId, event) => contextMenus?.showTabContextMenu(paneId, event),
-  onTabDrag: (fromIndex, toIndex) => {
-    const panes = paneState.getPanes();
-    const pane = panes[fromIndex];
-    paneState.reorderPane(pane.id, toIndex);
-    render();
-  },
-  onRename: (paneId, title) => {
-    paneState.setPaneTitle(paneId, title);
-    dispatch({ type: 'pane.focus', paneId, focusTerminal: true });
-  },
-  onCloseTab: (index) => {
-    const paneId = paneState.getPanes()[index]?.id;
-    if (paneId) dispatch({ type: 'pane.close', paneId });
-  },
   reportError,
   tabsListEl,
   setIcon,
 });
 
+// Create paneRenderer (needed by command dispatcher)
 paneRenderer = createPaneRenderer({
   bridge,
   paneState,
@@ -311,10 +302,13 @@ paneRenderer = createPaneRenderer({
   reportError,
   stageEl,
   getMode: () => currentMode,
-  onPaneClick: (paneId: string, opts?: { focusTerminal?: boolean }) => { dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }); },
+  onPaneClick: (paneId: string, opts?: { focusTerminal?: boolean }) => {
+    // Temporary placeholder, will be reassigned after dispatcher is created
+    return dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal });
+  },
   onTerminalTitleChange: (paneId, title) => paneState.setPaneTerminalTitle(paneId, title),
-  onTerminalContextMenu: (node, event) => {
-    void contextMenus?.showTerminalContextMenu(node, event);
+  onTerminalContextMenu: (paneId, event) => {
+    void contextMenus?.showTerminalContextMenu(paneId, event);
   },
   scheduleWindowLayoutSave: () => layoutManager.scheduleWindowLayoutSave(),
   tabBar,
@@ -327,7 +321,23 @@ paneRenderer = createPaneRenderer({
   },
 });
 
-// Modules that need paneRenderer / tabBar (closures capture the variable binding)
+// Now create the command dispatcher
+dispatch = createCommandDispatcher({
+  paneState,
+  paneRenderer,
+  tabBar,
+  scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
+  render,
+  setMode,
+  getCurrentMode: () => currentMode,
+  state: tabBarState,
+  bridge,
+}).dispatch;
+
+// Update tabBar and paneRenderer callbacks to use the real dispatch
+// (They were using the placeholder dispatch variable which now points to the real dispatcher)
+
+// Modules that need dispatch / paneRenderer / tabBar
 let shellProfileManager: ReturnType<typeof createShellProfileManager> | null = null;
 let contextMenus: ReturnType<typeof createContextMenus> | null = null;
 
@@ -344,7 +354,6 @@ shellProfileManager = createShellProfileManager({
       });
     },
     getFocusedPaneId: () => paneState.getFocusedPaneId(),
-    getPaneNode: (paneId) => paneRenderer?.getNode(paneId) ?? null,
     getShellProfiles: () => shellProfiles,
     setShellProfiles: (profiles) => { shellProfiles = profiles; },
     getDefaultShellProfileId: () => defaultShellProfileId,
@@ -358,7 +367,7 @@ shellProfileManager = createShellProfileManager({
   },
   reportError,
   scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
-  initializePaneTerminal: (node: PaneNode) => paneRenderer?.initializePaneTerminal(node),
+  dispatch,
   registerModal: (closeFn) => modalStack.register(closeFn),
   unregisterModal: (closeFn) => modalStack.unregister(closeFn),
 });
@@ -381,7 +390,6 @@ contextMenus = createContextMenus({
     getPaneIndex: (paneId) => paneState.getPaneIndex(paneId),
     getFocusedPaneId: () => paneState.getFocusedPaneId(),
     setFocusedPaneId: (id) => paneState.focusPane(id),
-    getPaneNode: (paneId) => paneRenderer?.getNode(paneId) ?? null,
     clearPaneCycleState: () => {},
     recordPaneVisit: (paneId) => paneState.recordPaneVisit(paneId),
     render: () => render(),
@@ -392,17 +400,8 @@ contextMenus = createContextMenus({
   bridge,
   shellProfileManager,
   reportError,
-  focusPane: (paneId) => dispatch({ type: 'pane.focus', paneId }),
+  dispatch,
   beginRenamePane: (index) => tabBar.beginRenamePane(index),
-  closePane: (index) => {
-    const paneId = paneState.getPanes()[index]?.id;
-    if (paneId) dispatch({ type: 'pane.close', paneId });
-  },
-  togglePaneBreathingMonitor: (paneId) => {
-    const result = dispatch({ type: 'pane.toggleActivityAlert', paneId });
-    paneActivityWatcher.setPaneEnabled(paneId, result.ok ? !!result.value : false);
-  },
-  restartPaneTerminal: (paneId) => paneRenderer?.restartPaneTerminal(paneId),
 });
 
 // Expose internals for E2E testing
@@ -411,18 +410,6 @@ contextMenus = createContextMenus({
   contextMenus,
   paneRenderer,
 };
-
-dispatch = createCommandDispatcher({
-  paneState,
-  paneRenderer,
-  tabBar,
-  scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
-  render,
-  setMode,
-  getCurrentMode: () => currentMode,
-  state: tabBarState,
-  bridge,
-}).dispatch;
 
 let cachedFloatWindowState: Record<string, any> = {};
 

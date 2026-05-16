@@ -3,10 +3,14 @@
  *
  * Handles tab rendering, drag-and-drop reordering, focus management,
  * and inline renaming for the terminal pane tabs.
+ *
+ * UI modules only interact through commands - no direct access to
+ * PaneNode, xterm instances, or internal state.
  */
 
 import type { Pane, PaneState } from './pane-state';
 import type { IconName } from './icons';
+import type { AppCommand, CommandResult } from './domain/commands';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -45,11 +49,8 @@ export interface TabBarDeps {
   state: TabBarLocalState;
   getPaneLabel: (pane: Pane) => string;
   getTextColorForBackground: (hexColor: string) => string;
-  onTabClick: (paneId: string) => void;
+  dispatch: (command: AppCommand) => CommandResult;
   onTabContext: (paneId: string, event: PointerEvent | MouseEvent) => void;
-  onTabDrag: (fromIndex: number, toIndex: number) => void;
-  onRename: (paneId: string, title: string | null) => void;
-  onCloseTab: (index: number) => void;
   reportError: (error: unknown) => void;
   tabsListEl: HTMLElement;
   setIcon: (el: HTMLElement, name: IconName, size?: number) => void;
@@ -72,11 +73,8 @@ export function createTabBar({
   state,
   getPaneLabel,
   getTextColorForBackground,
-  onTabClick,
+  dispatch,
   onTabContext,
-  onTabDrag,
-  onRename,
-  onCloseTab,
   reportError,
   tabsListEl,
   setIcon,
@@ -112,7 +110,13 @@ export function createTabBar({
   function commitRenamePane(paneId: string, nextTitle: string): void {
     const trimmedTitle = nextTitle.trim();
     state.renamingPaneId = null;
-    onRename(paneId, trimmedTitle || null);
+    // Set the title via paneState, then focus the pane
+    if (trimmedTitle) {
+      paneState.setPaneTitle(paneId, trimmedTitle);
+    } else {
+      paneState.setPaneTitle(paneId, null);
+    }
+    dispatch({ type: 'pane.focus', paneId, focusTerminal: true });
   }
 
   function clearPendingTabFocus(): void {
@@ -130,7 +134,7 @@ export function createTabBar({
       paneId,
       timerId: window.setTimeout(() => {
         state.pendingTabFocus = null;
-        onTabClick(paneId);
+        dispatch({ type: 'pane.focus', paneId });
       }, 180),
     };
   }
@@ -206,12 +210,8 @@ export function createTabBar({
       return;
     }
 
-    // Call the drag callback with from and to indices
-    const panes = paneState.getPanes();
-    const fromIndex = panes.findIndex((entry) => entry.id === paneId);
-    if (fromIndex !== -1) {
-      onTabDrag(fromIndex, dropIndex);
-    }
+    // Use dispatch to move the pane
+    dispatch({ type: 'pane.move', paneId, index: dropIndex });
   }
 
   function endTabDrag(): void {
@@ -337,7 +337,7 @@ export function createTabBar({
 
     close.addEventListener('click', (event) => {
       event.stopPropagation();
-      onCloseTab(index);
+      dispatch({ type: 'pane.close', paneId: pane.id });
     });
 
     tabMain.append(swatch, label);

@@ -207,6 +207,18 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
         return ok();
       }
 
+      // -- Query commands -------------------------------------------------------
+
+      case 'query.terminal.hasSelection': {
+        const hasSelection = paneRenderer?.hasSelection(command.paneId) ?? false;
+        return ok(hasSelection);
+      }
+
+      case 'query.terminal.isReady': {
+        const isReady = paneRenderer?.isSessionReady(command.paneId) ?? false;
+        return ok(isReady);
+      }
+
       // -- Focus commands ------------------------------------------------------
 
       case 'focus.next': {

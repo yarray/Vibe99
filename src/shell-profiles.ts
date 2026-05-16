@@ -7,9 +7,12 @@
 //
 // Dependencies injected at creation time to keep the module testable
 // and decoupled from the renderer.
+//
+// UI modules only interact through commands - no direct access to
+// PaneNode, xterm instances, or internal state.
 
 import { icon } from './icons';
-import type { PaneNode } from './pane-renderer';
+import type { AppCommand, CommandResult } from './domain/commands';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -43,7 +46,6 @@ export interface ShellProfileState {
   getPanels: () => ShellProfilePanel[];
   setPanels: (panels: ShellProfilePanel[]) => void;
   getFocusedPaneId: () => string | null;
-  getPaneNode: (paneId: string) => PaneNode | null;
   getShellProfiles: () => ShellProfile[];
   setShellProfiles: (profiles: ShellProfile[]) => void;
   getDefaultShellProfileId: () => string;
@@ -78,7 +80,7 @@ export interface ShellProfileManagerDeps {
   state: ShellProfileState;
   reportError: (error: unknown) => void;
   scheduleSave: () => void;
-  initializePaneTerminal: (node: PaneNode) => Promise<void>;
+  dispatch: (command: AppCommand) => CommandResult;
   registerModal: (closeFn: () => void) => void;
   unregisterModal: (closeFn: () => void) => void;
 }
@@ -141,7 +143,7 @@ export function createShellProfileManager({
   state,
   reportError,
   scheduleSave,
-  initializePaneTerminal,
+  dispatch,
   registerModal,
   unregisterModal,
 }: ShellProfileManagerDeps): ShellProfileManager {
@@ -185,34 +187,11 @@ export function createShellProfileManager({
   // ----------------------------------------------------------------
 
   function changePaneShell(paneId: string, profileId: string): void {
-    const node = state.getPaneNode(paneId);
-    if (!node) return;
-
-    const panes = state.getPanels();
-    const previousProfileId = panes.find((p) => p.id === paneId)?.shellProfileId ?? null;
-
-    state.setPanels(panes.map((p) =>
-      p.id === paneId ? { ...p, shellProfileId: profileId } : p
-    ));
-    scheduleSave();
-
-    // Suppress the exit handler — the old PTY is about to be replaced.
-    // spawn() on the backend already destroys any previous session.
-    node._shellChanging = true;
-    node._shellChangeTime = Date.now();
-    node.sessionReady = false;
-    node.terminal.clear();
-    initializePaneTerminal(node).finally(() => {
-      node._shellChanging = false;
-      // Revert profile on failure so the session doesn't persist a broken profile.
-      if (!node.sessionReady) {
-        const currentPanes = state.getPanels();
-        state.setPanels(currentPanes.map((p) =>
-          p.id === paneId ? { ...p, shellProfileId: previousProfileId } : p
-        ));
-        scheduleSave();
-      }
-    });
+    // The command dispatcher handles all the shell change logic:
+    // - Updating pane state
+    // - Reinitializing the PTY
+    // - Reverting on failure
+    dispatch({ type: 'terminal.changeShell', paneId, profileId });
   }
 
   // ----------------------------------------------------------------
