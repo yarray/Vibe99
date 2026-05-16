@@ -28,6 +28,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
     && rm -rf /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/doc \
     /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/man
+RUN mkdir -p /root/.cargo && \
+    echo "[source.crates-io]" >> /root/.cargo/config.toml && \
+    echo "replace-with = 'tuna'" >> /root/.cargo/config.toml && \
+    echo "[source.tuna]" >> /root/.cargo/config.toml && \
+    echo "registry = 'https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git'" >> /root/.cargo/config.toml
 
 # 4. tauri-driver（e2e WebDriver bridge）
 RUN cargo install tauri-driver
