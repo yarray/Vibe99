@@ -226,69 +226,49 @@ describe('Settings Panel', () => {
     });
   });
 
-  describe('Breathing alert toggle', () => {
-    async function getBreathingAlertChecked() {
+  describe('Breathing alert intensity', () => {
+    async function getActiveBreathingIntensity() {
       return await browser.execute(() => {
-        const input = document.getElementById('breathing-alert-toggle');
-        return input ? input.checked : false;
+        const activeBtn = document.querySelector('#breathing-intensity-segments .settings-segmented-btn.is-active');
+        return activeBtn ? activeBtn.dataset.value : null;
       });
     }
 
-    async function clickBreathingAlertToggle() {
-      // The checkbox is hidden (display:none) with a visual switch overlay.
-      // Click the label or use JS to toggle the hidden checkbox.
-      await browser.execute(() => {
-        const input = document.getElementById('breathing-alert-toggle');
-        if (input) {
-          input.click();
-        }
-      });
+    async function setBreathingIntensity(value) {
+      await browser.execute((targetValue) => {
+        const btn = document.querySelector(`#breathing-intensity-segments .settings-segmented-btn[data-value="${targetValue}"]`);
+        if (btn) btn.click();
+      }, value);
       await browser.pause(300);
     }
 
-    it('toggles breathing alert when checkbox is clicked', async () => {
-      const isCheckedBefore = await getBreathingAlertChecked();
-      expect(isCheckedBefore).toBe(true);
+    it('defaults to a non-none intensity', async () => {
+      const intensity = await getActiveBreathingIntensity();
+      expect(intensity).not.toBe('none');
+    });
 
-      await clickBreathingAlertToggle();
+    it('switches to none when the none button is clicked', async () => {
+      await setBreathingIntensity('none');
+      const intensity = await getActiveBreathingIntensity();
+      expect(intensity).toBe('none');
+    });
 
-      const isCheckedAfter = await getBreathingAlertChecked();
-      expect(isCheckedAfter).toBe(false);
-
-      await clickBreathingAlertToggle();
-
-      const isCheckedRestored = await getBreathingAlertChecked();
-      expect(isCheckedRestored).toBe(true);
+    it('switches back to mild when the mild button is clicked', async () => {
+      await setBreathingIntensity('none');
+      await setBreathingIntensity('mild');
+      const intensity = await getActiveBreathingIntensity();
+      expect(intensity).toBe('mild');
     });
 
     it('persists breathing alert setting', async () => {
-      await clickBreathingAlertToggle();
+      await setBreathingIntensity('none');
 
       // Wait for debounced settings save (150ms) + IPC to complete
       await browser.pause(500);
 
-      // Force flush any pending settings save
-      await browser.execute(async () => {
-        if (window.__TAURI__) {
-          await window.__TAURI__.core.invoke('settings_save', {
-            settings: {
-              version: 6,
-              ui: {
-                fontSize: 13,
-                paneOpacity: 0.8,
-                paneMaskOpacity: 0.75,
-                paneWidth: 720,
-                breathingAlertEnabled: false,
-              },
-            },
-          });
-        }
-      });
-      await browser.pause(300);
-
       const settings = await loadSettings();
-      const enabled = settings?.ui?.breathingAlertEnabled ?? settings?.breathingAlertEnabled;
-      expect(enabled).toBe(false);
+      const intensity = settings?.ui?.breathingIntensity;
+      expect(intensity).toBe('none');
     });
   });
 
