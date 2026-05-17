@@ -449,6 +449,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     bridge,
     contextMenus,
     paneRenderer,
+    flushLayoutSave: () => layoutManager.flushWindowLayoutSave(),
   };
 
   let cachedFloatWindowState: Record<string, any> = {};
