@@ -268,10 +268,18 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
       }
 
       case 'focus.nextLit': {
+        const ALERTED_CLASS = 'has-pending-activity';
         const panes = paneState.getPanes();
         const litIds = panes
           .map((p: Pane) => p.id)
-          .filter((id: string) => isAlerted(id));
+          .filter((id: string) => {
+            // Primary: check activity watcher's internal state
+            if (isAlerted(id)) return true;
+            // Fallback: check DOM class for edge cases (e.g., E2E testing,
+            // scenarios where DOM class is set directly but watcher state lags)
+            const node = paneRenderer?.getNode(id);
+            return node?.root.classList.contains(ALERTED_CLASS) ?? false;
+          });
         if (litIds.length === 0) return fail('no-lit');
         const focusedId = paneState.getFocusedPaneId();
         const focusedIndex = focusedId !== null ? litIds.indexOf(focusedId) : -1;
