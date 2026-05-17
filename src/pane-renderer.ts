@@ -53,6 +53,8 @@ export interface PaneRendererDeps {
   tabBar: TabBar;
   getPaneLabel: (pane: Pane) => string;
   onPaneCwdChanged: (paneId: string, cwd: string) => void;
+  /** When provided, session ownership is delegated to this Workbench. */
+  workbench?: Workbench;
 }
 
 export interface PaneRenderer {
@@ -123,10 +125,14 @@ export function createPaneRenderer({
   tabBar,
   getPaneLabel,
   onPaneCwdChanged,
+  workbench,
 }: PaneRendererDeps): PaneRenderer {
-  // Direct session map - this is the internal state that will be managed by Workbench
-  // In Step 5, this will move entirely into Workbench
-  const sessionMap = new Map<string, TerminalSession>();
+  const sessionMap = workbench ? null : new Map<string, TerminalSession>();
+
+  function resolveSession(paneId: string): TerminalSession | undefined {
+    if (workbench) return workbench.session(paneId) ?? undefined;
+    return sessionMap!.get(paneId);
+  }
 
   // -- PaneNode adapter ---------------------------------------------------------
 
@@ -148,7 +154,7 @@ export function createPaneRenderer({
   }
 
   function getNode(paneId: string): PaneNode | null {
-    const session = sessionMap.get(paneId);
+    const session = resolveSession(paneId);
     return session ? sessionToNode(session) : null;
   }
 
@@ -221,21 +227,24 @@ export function createPaneRenderer({
   // -- Pane lifecycle -----------------------------------------------------------
 
   function ensurePaneNodes(): void {
-    // Synchronize sessions with current pane list
+    if (workbench) {
+      workbench.ensureSessions();
+      return;
+    }
     const currentPanes = paneState.getPanes();
     const activeIds = new Set(currentPanes.map((pane) => pane.id));
 
-    for (const [paneId, session] of sessionMap.entries()) {
+    for (const [paneId, session] of sessionMap!.entries()) {
       if (!activeIds.has(paneId)) {
         session.close({ destroyPty: true });
-        sessionMap.delete(paneId);
+        sessionMap!.delete(paneId);
       }
     }
 
     for (const pane of currentPanes) {
-      if (!sessionMap.has(pane.id)) {
+      if (!sessionMap!.has(pane.id)) {
         const session = createSession(pane);
-        sessionMap.set(pane.id, session);
+        sessionMap!.set(pane.id, session);
         stageEl.append(session.root);
         paneActivityWatcher.setPaneEnabled(pane.id, pane.breathingMonitor !== false);
         requestAnimationFrame(() => {
@@ -263,7 +272,7 @@ export function createPaneRenderer({
     paneActivityWatcher.setFocus(paneState.getFocusedPaneId());
 
     currentPanes.forEach((pane, index) => {
-      const session = sessionMap.get(pane.id);
+      const session = resolveSession(pane.id);
       if (!session) return;
       const left = getPaneLeft(index, previewWidth, focusedIndex);
       const isFocused = index === focusedIndex;
@@ -287,29 +296,37 @@ export function createPaneRenderer({
   // -- Per-pane operations ------------------------------------------------------
 
   async function initializePaneTerminal(node: PaneNode): Promise<void> {
-    const session = sessionMap.get(node.paneId);
+    const session = resolveSession(node.paneId);
     if (session) {
       await session.initializePty();
     }
   }
 
   function destroyPane(paneId: string): void {
-    const session = sessionMap.get(paneId);
+    if (workbench) {
+      workbench.closeSession(paneId, { destroyPty: true });
+      return;
+    }
+    const session = sessionMap!.get(paneId);
     if (!session) return;
     session.close({ destroyPty: true });
-    sessionMap.delete(paneId);
+    sessionMap!.delete(paneId);
   }
 
   function closeSession(paneId: string, options: { destroyPty?: boolean } = {}): void {
-    const session = sessionMap.get(paneId);
+    if (workbench) {
+      workbench.closeSession(paneId, options);
+      return;
+    }
+    const session = sessionMap!.get(paneId);
     if (!session) return;
     const { destroyPty = true } = options;
     session.close({ destroyPty });
-    sessionMap.delete(paneId);
+    sessionMap!.delete(paneId);
   }
 
   function changePaneShell(paneId: string, profileId: string, previousProfileId?: string | null): void {
-    const session = sessionMap.get(paneId);
+    const session = resolveSession(paneId);
     if (!session) return;
 
     const prevProfileId = previousProfileId ?? paneState.getPaneById(paneId)?.shellProfileId ?? null;
@@ -339,7 +356,7 @@ export function createPaneRenderer({
   }
 
   function restartPaneTerminal(paneId: string): void {
-    const session = sessionMap.get(paneId);
+    const session = resolveSession(paneId);
     if (!session) return;
     session.restart();
   }
@@ -351,48 +368,48 @@ export function createPaneRenderer({
     ensureSessions,
     renderPanes,
     fitTerminal: (paneId, force = false) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return;
       session.fit({ force });
     },
     getNode,
     write: (paneId, data) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return;
       session.write(data);
     },
     copySelection: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return false;
       return session.copySelection();
     },
     pasteInto: (paneId, options?) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return Promise.resolve(false);
       return session.paste(options);
     },
     selectAll: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return false;
       return session.selectAll();
     },
     focusTerminal: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return;
       session.focus();
     },
     blurTerminal: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return;
       session.blur();
     },
     clearTerminal: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return;
       session.clear();
     },
     writeln: (paneId, text) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return;
       session.writeLine(text);
     },
@@ -400,37 +417,37 @@ export function createPaneRenderer({
     restartPaneTerminal,
     entryNeedsTabRefresh,
     setAlerted: (paneId, alerted) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return;
       paneAlert.setAlerted(session.root, alerted);
     },
     rootContains: (paneId, el) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return false;
       return session.contains(el);
     },
     hasSelection: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return false;
       return session.hasSelection();
     },
     isSessionReady: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return false;
       return session.isReady();
     },
     setSessionReady: (paneId, ready) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return;
       session.setReady(ready);
     },
     getShellChangeTime: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return null;
       return session.shellChangeTime();
     },
     isShellChanging: (paneId) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return false;
       return session.isShellChanging();
     },
@@ -438,10 +455,10 @@ export function createPaneRenderer({
     destroyPane,
     closeSession,
     getRecentOutput: (paneId, maxLines = 20) => {
-      const session = sessionMap.get(paneId);
+      const session = resolveSession(paneId);
       if (!session) return '';
       return session.getRecentOutput(maxLines);
     },
-    getWorkbench: () => null, // Will be implemented in Step 5
+    getWorkbench: () => workbench ?? null,
   };
 }
