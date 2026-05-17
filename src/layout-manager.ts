@@ -40,6 +40,8 @@ export interface LayoutManager {
   closeLayoutsDropdown: () => void;
   scheduleWindowLayoutSave: (delay?: number) => void;
   flushWindowLayoutSave: () => void;
+  disableAutoSave: () => void;
+  enableAutoSave: () => void;
   getLayoutDisplayName: (layoutId: string | null) => string;
   createDefaultLayout: () => LayoutData;
   getLayouts: () => LayoutData[];
@@ -78,6 +80,7 @@ export function createLayoutManager({
   let layoutsDropdownOpen: boolean = false;
   let layoutsDropdownEl: HTMLDivElement | null = null;
   let layoutRestoreComplete: boolean = false;
+  let autoSaveDisabled: boolean = false;
 
   function setWindowLayoutId(layoutId: string | null): void {
     if (windowLayoutId === layoutId) return;
@@ -227,6 +230,8 @@ export function createLayoutManager({
   }
 
   function scheduleWindowLayoutSave(delay: number = 250): void {
+    // Skip if auto-save is temporarily disabled (e.g., during E2E tests)
+    if (autoSaveDisabled) return;
     if (!layoutRestoreComplete || !windowLayoutId) return;
     if (pendingLayoutSave !== null) {
       window.clearTimeout(pendingLayoutSave);
@@ -242,9 +247,21 @@ export function createLayoutManager({
       window.clearTimeout(pendingLayoutSave);
       pendingLayoutSave = null;
     }
-    if (layoutRestoreComplete && windowLayoutId) {
-      void saveCurrentLayout().catch(reportError);
+    // Note: We don't save here to avoid interfering with explicit save operations
+    // (e.g., during E2E tests). The flush is primarily used to cancel pending saves.
+  }
+
+  function disableAutoSave(): void {
+    autoSaveDisabled = true;
+    // Also clear any pending saves
+    if (pendingLayoutSave !== null) {
+      window.clearTimeout(pendingLayoutSave);
+      pendingLayoutSave = null;
     }
+  }
+
+  function enableAutoSave(): void {
+    autoSaveDisabled = false;
   }
 
   async function toggleLayoutsDropdown(): Promise<void> {
@@ -419,6 +436,8 @@ export function createLayoutManager({
     closeLayoutsDropdown,
     scheduleWindowLayoutSave,
     flushWindowLayoutSave,
+    disableAutoSave,
+    enableAutoSave,
     getLayoutDisplayName,
     createDefaultLayout,
     getLayouts,

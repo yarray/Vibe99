@@ -450,6 +450,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     contextMenus,
     paneRenderer,
     flushLayoutSave: () => layoutManager.flushWindowLayoutSave(),
+    disableAutoSave: () => layoutManager.disableAutoSave(),
+    enableAutoSave: () => layoutManager.enableAutoSave(),
   };
 
   let cachedFloatWindowState: Record<string, any> = {};
