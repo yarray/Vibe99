@@ -495,4 +495,92 @@ describe('Activity Alert', () => {
 
     expect(Array.isArray(eventLog)).toBe(true);
   });
+
+  // ---------------------------------------------------------------------------
+  // Per-pane runtime sync tests
+  // ---------------------------------------------------------------------------
+
+  it('should show Disable Alert by default for new panes', async () => {
+    await waitForAppReady();
+
+    const tabs = await $$('#tabs-list .tab');
+    const addBtn = await $('#tabs-add');
+    if (addBtn) {
+      await addBtn.click();
+      await browser.pause(600);
+    }
+
+    const paneIndex = (await $$('.pane')).length - 1;
+
+    await openContextMenuForPane(paneIndex);
+    const hasDisable = await (async () => {
+      const items = await $$('.context-menu-item');
+      for (const item of items) {
+        const text = await item.getText();
+        if (text.includes('Disable Alert')) return true;
+      }
+      return false;
+    })();
+    expect(hasDisable).toBe(true);
+
+    await browser.keys('Escape');
+    await browser.pause(200);
+  });
+
+  it('should suppress alert immediately after disabling per-pane alert', async () => {
+    await waitForAppReady();
+
+    const panes = await $$('.pane');
+    const paneIndex = panes.length > 1 ? 1 : 0;
+
+    await openContextMenuForPane(paneIndex);
+    await clickContextMenuItem('Disable Alert');
+    await browser.pause(300);
+
+    await browser.execute(() => {
+      document.querySelectorAll('.pane').forEach(p => p.classList.remove('has-pending-activity'));
+    });
+    await browser.pause(200);
+
+    await injectActivityData(paneIndex);
+    await browser.pause(2000);
+
+    expect(await paneHasAlert(paneIndex)).toBe(false);
+
+    await openContextMenuForPane(paneIndex);
+    await clickContextMenuItem('Enable Alert');
+    await browser.pause(200);
+  });
+
+  it('should restore alert immediately after re-enabling per-pane alert', async () => {
+    await waitForAppReady();
+
+    const panes = await $$('.pane');
+    const paneIndex = panes.length > 1 ? 1 : 0;
+
+    const tabs = await $$('#tabs-list .tab');
+    if (tabs[0]) await tabs[0].click();
+    await browser.pause(200);
+
+    await openContextMenuForPane(paneIndex);
+    const hasEnable = await (async () => {
+      const items = await $$('.context-menu-item');
+      for (const item of items) {
+        const text = await item.getText();
+        if (text.includes('Enable Alert')) return true;
+      }
+      return false;
+    })();
+
+    if (hasEnable) {
+      await clickContextMenuItem('Enable Alert');
+      await browser.pause(300);
+    } else {
+      await browser.keys('Escape');
+      await browser.pause(200);
+    }
+
+    await ensurePaneHasAlert(paneIndex);
+    expect(await paneHasAlert(paneIndex)).toBe(true);
+  });
 });

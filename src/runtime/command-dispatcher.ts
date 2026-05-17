@@ -25,6 +25,7 @@ export interface CommandDispatcherDeps {
   state: TabBarLocalState;
   bridge: Bridge;
   render: (refit?: boolean) => void;
+  setPaneActivityAlertEnabled: (paneId: string, enabled: boolean) => void;
 }
 
 function ok(value?: unknown): CommandResult {
@@ -38,7 +39,7 @@ function fail(reason?: string): CommandResult {
 export function createCommandDispatcher(deps: CommandDispatcherDeps): {
   dispatch: (command: AppCommand) => CommandResult;
 } {
-  const { paneState, paneRenderer, tabBar, setMode, getCurrentMode, scheduleSave, state, bridge, render } = deps;
+  const { paneState, paneRenderer, tabBar, setMode, getCurrentMode, scheduleSave, state, bridge, render, setPaneActivityAlertEnabled } = deps;
 
   function dispatch(command: AppCommand): CommandResult {
     switch (command.type) {
@@ -131,6 +132,7 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
       case 'pane.toggleActivityAlert': {
         const next = paneState.togglePaneBreathingMonitor(command.paneId);
         scheduleSave();
+        setPaneActivityAlertEnabled(command.paneId, next);
         return ok(next);
       }
 

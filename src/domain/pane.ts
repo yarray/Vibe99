@@ -181,6 +181,6 @@ export function createDefaultPane(
     cwd: defaults.cwd,
     accent: defaults.accent,
     shellProfileId: null,
-    breathingMonitor: false,
+    breathingMonitor: true,
   });
 }
