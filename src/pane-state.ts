@@ -4,14 +4,26 @@
  * Pure logic module for managing pane state, collection operations, and
  * session persistence. No DOM operations.
  *
+ * This module is a compatibility facade over the Layout aggregate root.
+ * New code should prefer using `Layout` from `./domain/layout.js` directly.
+ *
  * @module pane-state
  */
+
+import type { Pane as PaneEntity, PaneSnapshot } from './domain/pane.js';
+import { createPane, createDefaultPane } from './domain/pane.js';
+import type { LayoutSnapshot } from './domain/layout.js';
+import { createLayout } from './domain/layout.js';
 
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
 
-/** Shape of a single pane object. */
+/**
+ * Shape of a single pane object.
+ * @deprecated Use the Pane domain entity from './domain/pane.js' for new code.
+ * This interface is kept for backward compatibility.
+ */
 export interface Pane {
   id: string;
   title: string | null;
@@ -92,13 +104,41 @@ export interface PaneState {
 }
 
 // ---------------------------------------------------------------------------
-// Internal types
+// Internal helpers
 // ---------------------------------------------------------------------------
 
-/** Internal cycle state while the user holds Ctrl+Tab. */
-interface PaneCycleState {
-  snapshot: string[];
-  index: number;
+/**
+ * Helper to convert a Pane entity to the legacy Pane interface.
+ * Used for backward compatibility with the public API.
+ */
+function paneToLegacy(pane: PaneEntity): Pane {
+  return {
+    id: pane.id,
+    title: pane.title(),
+    terminalTitle: pane.terminalTitle(),
+    cwd: pane.cwd(),
+    accent: pane.accent(),
+    customColor: pane.customColor(),
+    shellProfileId: pane.shellProfileId(),
+    breathingMonitor: pane.breathingMonitorEnabled(),
+  };
+}
+
+/**
+ * Helper to convert a PaneSnapshot to the legacy Pane interface.
+ * Used for backward compatibility with the public API.
+ */
+function snapshotToLegacy(snapshot: PaneSnapshot): Pane {
+  return {
+    id: snapshot.id,
+    title: snapshot.title,
+    terminalTitle: snapshot.terminalTitle,
+    cwd: snapshot.cwd,
+    accent: snapshot.accent,
+    customColor: snapshot.customColor,
+    shellProfileId: snapshot.shellProfileId,
+    breathingMonitor: snapshot.breathingMonitor,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -125,49 +165,25 @@ export function createPaneState({
   let defaultTabTitle = initialDefaultTabTitle;
   const palette: string[] = getAccentPalette();
 
-  // Helper function to get the default three-pane layout - defined here so initialPanes can use it
-  const getDefaultPanes = (): Pane[] => [
-    {
-      id: 'p1',
-      title: null,
-      terminalTitle: defaultTabTitle,
-      cwd: defaultCwd,
-      accent: palette[0],
-      shellProfileId: null,
-    },
-    {
-      id: 'p2',
-      title: null,
-      terminalTitle: defaultTabTitle,
-      cwd: defaultCwd,
-      accent: palette[1],
-      shellProfileId: null,
-    },
-    {
-      id: 'p3',
-      title: null,
-      terminalTitle: defaultTabTitle,
-      cwd: defaultCwd,
-      accent: palette[2],
-      shellProfileId: null,
-    },
+  // Helper function to get the default three-pane layout (internal, returns PaneEntity[])
+  const createDefaultPaneEntities = (): PaneEntity[] => [
+    createDefaultPane('p1', { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[0] }),
+    createDefaultPane('p2', { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[1] }),
+    createDefaultPane('p3', { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[2] }),
   ];
 
-  // Core state
-  let panes: Pane[] = getDefaultPanes().map((pane: Pane) => ({ ...pane }));
-  let focusedPaneId: string | null = panes[0].id;
-  let nextPaneNumber: number = panes.length + 1;
+  const defaultPaneEntities = createDefaultPaneEntities();
 
-  // Most-recently-used pane stack for Ctrl+Tab cycling. Index 0 is the most
-  // recently visited pane (typically equals focusedPaneId when no cycle is in
-  // progress). All current pane IDs always appear exactly once.
-  let paneMruOrder: string[] = panes.map((pane: Pane) => pane.id);
+  // Core state - delegated to Layout aggregate root
+  let layout = createLayout({
+    id: 'default',
+    name: 'Default',
+    panes: defaultPaneEntities.map((pane) => pane.snapshot()),
+    focusedPaneId: defaultPaneEntities[0]?.id ?? null,
+    mruPaneIds: defaultPaneEntities.map((pane) => pane.id),
+  });
 
-  // Transient state while the user is cycling with the modifier still held.
-  // `snapshot` freezes the MRU order at the start of the cycle so repeated
-  // presses step through a stable list. `index` points into that snapshot.
-  // `null` means no cycle is in progress.
-  let paneCycleState: PaneCycleState | null = null;
+  let nextPaneNumber: number = layout.panes().length + 1;
 
   // Internal helpers
   const notifyChange = (): void => {
@@ -176,124 +192,98 @@ export function createPaneState({
     }
   };
 
-  const syncPaneMruOrder = (): void => {
-    const known: Set<string> = new Set(panes.map((pane: Pane) => pane.id));
-    paneMruOrder = paneMruOrder.filter((id: string) => known.has(id));
-    for (const pane of panes) {
-      if (!paneMruOrder.includes(pane.id)) {
-        paneMruOrder.push(pane.id);
-      }
-    }
+  // Read operations
+  const getPanes = (): Pane[] => layout.panes().map((pane) => paneToLegacy(pane));
+
+  const getFocusedPaneId = (): string | null => layout.focusedPaneId();
+
+  const getPaneById = (paneId: string): Pane | null => {
+    const pane = layout.panes().find((p) => p.id === paneId);
+    return pane ? paneToLegacy(pane) : null;
   };
 
-  // Read operations
-  const getPanes = (): Pane[] => [...panes];
-
-  const getFocusedPaneId = (): string | null => focusedPaneId;
-
-  const getPaneById = (paneId: string): Pane | null =>
-    panes.find((pane: Pane) => pane.id === paneId) ?? null;
-
   const getPaneIndex = (paneId: string): number =>
-    panes.findIndex((pane: Pane) => pane.id === paneId);
+    layout.panes().findIndex((pane) => pane.id === paneId);
 
   const getFocusedIndex = (): number => {
-    const focusedIndex: number = panes.findIndex((pane: Pane) => pane.id === focusedPaneId);
+    const focusedIndex = layout.panes().findIndex((pane) => pane.id === layout.focusedPaneId());
     if (focusedIndex !== -1) {
       return focusedIndex;
     }
 
-    focusedPaneId = panes[0]?.id ?? null;
+    const panes = layout.panes();
+    const fallbackId = panes[0]?.id ?? null;
+    if (fallbackId) {
+      layout.setFocusedPaneId(fallbackId);
+    }
     return panes.length > 0 ? 0 : -1;
   };
 
   // Write operations
   const addPane = (shellProfileId: string | null = null): string => {
     const usedAccents: Set<string> = new Set(
-      panes.map((p: Pane) => (p.customColor || p.accent).toLowerCase()),
+      layout.panes().map((p) => (p.customColor() || p.accent()).toLowerCase()),
     );
     const accent: string =
       getAccentPalette().find((c: string) => !usedAccents.has(c.toLowerCase()))
       || getAccentPalette()[(nextPaneNumber - 1) % getAccentPalette().length];
-    const focusedPane: Pane | undefined = panes[getFocusedIndex()];
-    const newPane: Pane = {
-      id: `p${nextPaneNumber}`,
-      title: null,
+    const focusedPane: PaneEntity | undefined = layout.panes()[getFocusedIndex()];
+    const newPane: PaneEntity = createDefaultPane(`p${nextPaneNumber}`, {
+      cwd: focusedPane?.cwd() || defaultCwd,
       terminalTitle: defaultTabTitle,
-      cwd: focusedPane?.cwd || defaultCwd,
       accent,
-      shellProfileId: shellProfileId ?? null,
-    };
+    });
+    if (shellProfileId !== null && shellProfileId !== undefined) {
+      newPane.setShellProfile(shellProfileId);
+    }
 
     nextPaneNumber += 1;
-    paneCycleState = null;
-    panes = [...panes, newPane];
-    focusedPaneId = newPane.id;
-    recordPaneVisit(newPane.id);
+    layout.addPane(newPane);
     notifyChange();
     return newPane.id;
   };
 
   const closePane = (index: number): string | null => {
-    if (panes.length === 1) {
+    if (layout.panes().length === 1) {
       return null;
     }
 
-    const closingPane: Pane | undefined = panes[index];
+    const closingPane: PaneEntity | undefined = layout.panes()[index];
     if (!closingPane) {
       return null;
     }
 
-    const wasFocused: boolean = closingPane.id === focusedPaneId;
-    const remainingPanes: Pane[] = panes.filter(
-      (_: Pane, paneIndex: number) => paneIndex !== index,
-    );
-    if (wasFocused) {
-      const fallbackIndex: number = Math.max(0, index - 1);
-      focusedPaneId = remainingPanes[fallbackIndex]?.id ?? remainingPanes[0]?.id ?? null;
-    }
-    panes = remainingPanes;
-    paneCycleState = null;
-    paneMruOrder = paneMruOrder.filter((id: string) => id !== closingPane.id);
-    recordPaneVisit(focusedPaneId);
+    layout.closePane(closingPane.id);
     notifyChange();
     return closingPane.id;
   };
 
   const focusPane = (paneId: string): boolean => {
-    const targetPane: Pane | undefined = panes.find((p: Pane) => p.id === paneId);
-    if (!targetPane) {
-      return false;
+    const result = layout.focusPane(paneId);
+    if (result) {
+      notifyChange();
     }
-    paneCycleState = null;
-    focusedPaneId = paneId;
-    recordPaneVisit(paneId);
-    notifyChange();
-    return true;
+    return result;
   };
 
   const moveFocus = (delta: number): boolean => {
-    if (panes.length === 0) {
-      return false;
+    const result = layout.moveFocus(delta);
+    if (result) {
+      notifyChange();
     }
-
-    const focusedIndex: number = getFocusedIndex();
-    const nextIndex: number = (focusedIndex + delta + panes.length) % panes.length;
-    focusedPaneId = panes[nextIndex].id;
-    notifyChange();
-    return true;
+    return result;
   };
 
   const navigateLeft = (): boolean => {
-    if (panes.length === 0) {
+    if (layout.panes().length === 0) {
       return false;
     }
 
-    const focusedIndex: number = getFocusedIndex();
-    const nextIndex: number = focusedIndex - 1;
+    const focusedIndex = getFocusedIndex();
+    const nextIndex = focusedIndex - 1;
 
     if (nextIndex >= 0) {
-      focusedPaneId = panes[nextIndex].id;
+      layout.setFocusedPaneId(layout.panes()[nextIndex].id);
       notifyChange();
       return true;
     }
@@ -301,15 +291,15 @@ export function createPaneState({
   };
 
   const navigateRight = (): boolean => {
-    if (panes.length === 0) {
+    if (layout.panes().length === 0) {
       return false;
     }
 
-    const focusedIndex: number = getFocusedIndex();
-    const nextIndex: number = focusedIndex + 1;
+    const focusedIndex = getFocusedIndex();
+    const nextIndex = focusedIndex + 1;
 
-    if (nextIndex < panes.length) {
-      focusedPaneId = panes[nextIndex].id;
+    if (nextIndex < layout.panes().length) {
+      layout.setFocusedPaneId(layout.panes()[nextIndex].id);
       notifyChange();
       return true;
     }
@@ -321,114 +311,83 @@ export function createPaneState({
     if (!paneId) {
       return;
     }
-    if (paneMruOrder[0] === paneId) {
-      return;
-    }
-    paneMruOrder = [paneId, ...paneMruOrder.filter((id: string) => id !== paneId)];
+    layout.recordPaneVisit(paneId);
   };
 
   const cycleToRecentPane = ({ reverse = false }: { reverse?: boolean } = {}): string | null => {
-    if (panes.length < 2) {
-      return null;
+    const targetId = layout.cycleRecent({ reverse });
+    if (targetId) {
+      notifyChange();
     }
-
-    syncPaneMruOrder();
-
-    if (!paneCycleState) {
-      paneCycleState = { snapshot: [...paneMruOrder], index: 0 };
-    }
-
-    const { snapshot }: PaneCycleState = paneCycleState;
-    if (snapshot.length < 2) {
-      return null;
-    }
-
-    const step: number = reverse ? -1 : 1;
-    paneCycleState.index = (paneCycleState.index + step + snapshot.length) % snapshot.length;
-    const targetId: string = snapshot[paneCycleState.index];
-
-    if (!panes.some((pane: Pane) => pane.id === targetId)) {
-      // Target pane was closed mid-cycle — recover by aborting.
-      paneCycleState = null;
-      return null;
-    }
-
-    focusedPaneId = targetId;
-    notifyChange();
     return targetId;
   };
 
   const commitPaneCycle = (): void => {
-    if (!paneCycleState) {
-      return;
-    }
-    paneCycleState = null;
-    recordPaneVisit(focusedPaneId);
+    layout.commitCycle();
     notifyChange();
   };
 
   // Property modification operations
   const setPaneTitle = (paneId: string, title: string | null): boolean => {
-    const paneIndex: number = getPaneIndex(paneId);
-    if (paneIndex === -1) return false;
-
-    panes[paneIndex] = { ...panes[paneIndex], title: title || null };
-    notifyChange();
-    return true;
+    const result = layout.renamePane(paneId, title || null);
+    if (result) {
+      notifyChange();
+    }
+    return result;
   };
 
   const setPaneCwd = (paneId: string, cwd: string): boolean => {
-    const paneIndex: number = getPaneIndex(paneId);
-    if (paneIndex === -1) return false;
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
 
-    panes[paneIndex] = { ...panes[paneIndex], cwd: cwd || defaultCwd };
+    pane.setCwd(cwd || defaultCwd);
     notifyChange();
     return true;
   };
 
   const setPaneColor = (paneId: string, color: string): boolean => {
-    const paneIndex: number = getPaneIndex(paneId);
-    if (paneIndex === -1) return false;
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
 
-    panes[paneIndex] = { ...panes[paneIndex], customColor: color };
+    pane.setCustomColor(color);
     notifyChange();
     return true;
   };
 
   const clearPaneColor = (paneId: string): boolean => {
-    const paneIndex: number = getPaneIndex(paneId);
-    if (paneIndex === -1) return false;
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
 
-    panes[paneIndex] = { ...panes[paneIndex], customColor: undefined };
+    pane.clearCustomColor();
     notifyChange();
     return true;
   };
 
   const setPaneShellProfile = (paneId: string, profileId: string | null): boolean => {
-    const paneIndex: number = getPaneIndex(paneId);
-    if (paneIndex === -1) return false;
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
 
-    panes[paneIndex] = { ...panes[paneIndex], shellProfileId: profileId };
+    pane.setShellProfile(profileId);
     notifyChange();
     return true;
   };
 
   const setPaneTerminalTitle = (paneId: string, terminalTitle: string): boolean => {
-    const paneIndex: number = getPaneIndex(paneId);
-    if (paneIndex === -1) return false;
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
 
-    panes[paneIndex] = { ...panes[paneIndex], terminalTitle: terminalTitle || defaultTabTitle };
+    pane.setTerminalTitle(terminalTitle || defaultTabTitle);
     notifyChange();
     return true;
   };
 
   const togglePaneBreathingMonitor = (paneId: string): boolean => {
-    const paneIndex: number = getPaneIndex(paneId);
-    if (paneIndex === -1) return false;
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
 
-    const current: boolean = panes[paneIndex].breathingMonitor !== false;
+    const current: boolean = pane.breathingMonitorEnabled();
     const next = !current;
-    panes[paneIndex] = { ...panes[paneIndex], breathingMonitor: next };
+    pane.setBreathingMonitor(next);
     notifyChange();
     return next;
   };
@@ -443,41 +402,43 @@ export function createPaneState({
     defaultCwd = cwd;
     defaultTabTitle = tabTitle || cwd;
 
-    panes = panes.map((pane: Pane) => ({
-      ...pane,
-      cwd: pane.cwd === previousDefaultCwd ? defaultCwd : pane.cwd,
-      terminalTitle: pane.terminalTitle === previousDefaultTabTitle ? defaultTabTitle : pane.terminalTitle,
-    }));
+    for (const pane of layout.panes()) {
+      if (pane.cwd() === previousDefaultCwd) {
+        pane.setCwd(defaultCwd);
+      }
+      if (pane.terminalTitle() === previousDefaultTabTitle) {
+        pane.setTerminalTitle(defaultTabTitle);
+      }
+    }
     notifyChange();
   };
 
   const reorderPane = (paneId: string, newIndex: number): boolean => {
-    const paneIndex: number = getPaneIndex(paneId);
-    if (paneIndex === -1) return false;
-
-    const pane: Pane = panes[paneIndex];
-    const nextPanes: Pane[] = panes.filter((p: Pane) => p.id !== paneId);
-    const insertionIndex: number = Math.max(0, Math.min(newIndex, nextPanes.length));
-    nextPanes.splice(insertionIndex, 0, pane);
-    panes = nextPanes;
-    notifyChange();
-    return true;
+    const result = layout.movePane(paneId, newIndex);
+    if (result) {
+      notifyChange();
+    }
+    return result;
   };
 
   // Session operations
   const buildSessionData = (): SessionData => {
-    const focusedIndex: number = getFocusedIndex();
+    const panes = layout.panes();
+    const focusedIndex = getFocusedIndex();
     return {
       version: 2,
-      panes: panes.map((p: Pane) => ({
-        paneId: p.id,
-        title: p.title,
-        cwd: p.cwd,
-        accent: p.accent,
-        customColor: p.customColor,
-        shellProfileId: p.shellProfileId,
-        breathingMonitor: p.breathingMonitor !== false,
-      })),
+      panes: panes.map((p) => {
+        const snapshot = p.snapshot();
+        return {
+          paneId: snapshot.id,
+          title: snapshot.title,
+          cwd: snapshot.cwd,
+          accent: snapshot.accent,
+          customColor: snapshot.customColor,
+          shellProfileId: snapshot.shellProfileId,
+          breathingMonitor: snapshot.breathingMonitor,
+        };
+      }),
       focusedPaneIndex: focusedIndex >= 0 ? focusedIndex : 0,
     };
   };
@@ -486,12 +447,12 @@ export function createPaneState({
     panes?: SessionPaneEntry[];
     focusedPaneIndex?: number;
   }): boolean => {
-    const validPanes: Pane[] = (session.panes ?? [])
+    const validSnapshots: PaneSnapshot[] = (session.panes ?? [])
       .filter(
         (p: SessionPaneEntry) =>
           p && typeof p.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.accent),
       )
-      .map((p: SessionPaneEntry, index: number): Pane => ({
+      .map((p: SessionPaneEntry, index: number): PaneSnapshot => ({
         id: `p${index + 1}`,
         title: (typeof p.title === 'string' && p.title) || null,
         terminalTitle: defaultTabTitle,
@@ -506,33 +467,42 @@ export function createPaneState({
         breathingMonitor: p.breathingMonitor !== false,
       }));
 
-    if (validPanes.length === 0) {
-      panes = getDefaultPanes().map((p: Pane) => ({
-        ...p,
-        cwd: defaultCwd,
-        terminalTitle: defaultTabTitle,
-      }));
-      focusedPaneId = panes[0].id;
-      nextPaneNumber = panes.length + 1;
-      paneMruOrder = panes.map((p: Pane) => p.id);
-      paneCycleState = null;
+    if (validSnapshots.length === 0) {
+      const freshDefaults = createDefaultPaneEntities();
+      layout = createLayout({
+        id: 'default',
+        name: 'Default',
+        panes: freshDefaults.map((pane) => pane.snapshot()),
+        focusedPaneId: freshDefaults[0]?.id ?? null,
+        mruPaneIds: freshDefaults.map((pane) => pane.id),
+      });
+      for (const pane of layout.panes()) {
+        pane.setCwd(defaultCwd);
+        pane.setTerminalTitle(defaultTabTitle);
+      }
+      nextPaneNumber = layout.panes().length + 1;
       notifyChange();
       return false;
     }
 
-    panes = validPanes;
     const focusedIndex: number = Math.min(
       Number.isFinite(session.focusedPaneIndex) ? session.focusedPaneIndex! : 0,
-      panes.length - 1,
+      validSnapshots.length - 1,
     );
-    focusedPaneId = panes[Math.max(0, focusedIndex)].id;
-    nextPaneNumber = panes.length + 1;
-    // Initial MRU order: focused pane first, then remaining panes in tab order.
-    paneMruOrder = [
+    const focusedPaneId = validSnapshots[Math.max(0, focusedIndex)]?.id ?? null;
+
+    layout = createLayout({
+      id: 'default',
+      name: 'Default',
+      panes: validSnapshots,
       focusedPaneId,
-      ...panes.map((p: Pane) => p.id).filter((id: string) => id !== focusedPaneId),
-    ];
-    paneCycleState = null;
+      mruPaneIds: [
+        focusedPaneId ?? '',
+        ...validSnapshots.map((p) => p.id).filter((id) => id !== focusedPaneId),
+      ].filter((id) => id !== ''),
+    });
+
+    nextPaneNumber = validSnapshots.length + 1;
     notifyChange();
     return true;
   };
@@ -545,7 +515,7 @@ export function createPaneState({
     getPaneById,
     getPaneIndex,
     getFocusedIndex,
-    getDefaultPanes,
+    getDefaultPanes: (): Pane[] => layout.panes().map((pane) => paneToLegacy(pane)),
 
     // Write operations
     addPane,
@@ -559,7 +529,7 @@ export function createPaneState({
     // MRU operations
     cycleToRecentPane,
     commitPaneCycle,
-    hasActivePaneCycle: (): boolean => paneCycleState !== null,
+    hasActivePaneCycle: (): boolean => layout.hasActiveCycle(),
     recordPaneVisit,
 
     // Property modification operations
