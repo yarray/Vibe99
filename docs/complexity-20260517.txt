@@ -1,0 +1,25 @@
+===========================================================================================================
+!!!! Warnings (cyclomatic_complexity > 15 or length > 1000 or nloc > 1000000 or parameter_count > 100) !!!!
+================================================
+  NLOC    CCN   token  PARAM  length  location  
+------------------------------------------------
+      35     21    292      3      55 matchesChord@150-204@./src/input/keymap.ts
+     244     76   1672      1     291 dispatch@43-333@./src/runtime/command-dispatcher.ts
+      34     22    153      0      34 (anonymous)@389-422@./src/runtime/terminal-session.ts
+     266     36   1514      1     486 createTerminalSession@292-777@./src/runtime/terminal-session.ts
+      44     16    356      0      54 init@702-755@./src/runtime/workbench-renderer.ts
+      27     16    224      0      27 (anonymous)@138-164@./src/command-palette-entries.ts
+      48     18    381      3      52 isCommandPaletteHotkey@236-287@./src/command-palette.ts
+     104     18    695     14     147 hideContextMenu@188-334@./src/context-menus.ts
+     101     26    787      6     149 renderHintBar@86-234@./src/hint-bar.ts
+      69     16    490      2     144 renameLayoutById@220-363@./src/layout-manager.ts
+     161     36   1409      1     386 openLayoutsModal@50-435@./src/layout-modal.ts
+      73     27    571      1      97 applyPersistedSettings@148-244@./src/settings.ts
+     216     32   1621     10     481 createShellProfileManager@141-621@./src/shell-profiles.ts
+     205     29   1402      6     294 beginRenamePane@84-377@./src/tab-bar.ts
+      54     19    618      2      71 settings_save@572-642@./src-tauri/src/commands/settings.rs
+     171     23   1044      8     195 spawn@111-305@./src-tauri/src/pty/mod.rs
+==========================================================================================
+Total nloc   Avg.NLOC  AvgCCN  Avg.token   Fun Cnt  Warning cnt   Fun Rt   nloc Rt
+------------------------------------------------------------------------------------------
+     11003      10.2     2.8       68.4      846           16      0.02    0.21
