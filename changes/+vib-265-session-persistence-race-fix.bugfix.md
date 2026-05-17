@@ -1,1 +1,0 @@
-Fix race condition in session-persistence E2E test where auto-save was overwriting test's explicit layout save. Expose `flushLayoutSave()` via `__vibe99_test` for E2E tests to flush pending auto-saves before saving their own layouts.

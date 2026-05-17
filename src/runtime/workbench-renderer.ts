@@ -444,12 +444,26 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     beginRenamePane: (index) => tabBar.beginRenamePane(index),
   });
 
+  // Track auto-save state for E2E testing
+  let autoSaveEnabled = true;
+  function setAutoSaveEnabled(enabled: boolean): void { autoSaveEnabled = enabled; }
+  function isAutoSaveEnabled(): boolean { return autoSaveEnabled; }
+
+  // Override scheduleWindowLayoutSave to respect the auto-save flag
+  const originalScheduleWindowLayoutSave = layoutManager.scheduleWindowLayoutSave.bind(layoutManager);
+  layoutManager.scheduleWindowLayoutSave = function(delay: number = 250): void {
+    if (autoSaveEnabled) {
+      return originalScheduleWindowLayoutSave(delay);
+    }
+  };
+
   // Expose internals for E2E testing
   (window as any).__vibe99_test = {
     bridge,
     contextMenus,
     paneRenderer,
-    flushLayoutSave: () => layoutManager.flushWindowLayoutSave(),
+    setAutoSaveEnabled,
+    isAutoSaveEnabled,
   };
 
   let cachedFloatWindowState: Record<string, any> = {};

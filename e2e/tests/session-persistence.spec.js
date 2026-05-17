@@ -34,9 +34,9 @@ async function getActualCwd() {
  */
 async function saveLayoutViaBridge(panes, focusedPaneIndex = 0) {
   return await browser.execute(async (p, fi) => {
-    // Flush any pending auto-save before saving to prevent race conditions
-    if (window.__vibe99_test?.flushLayoutSave) {
-      window.__vibe99_test.flushLayoutSave();
+    // Disable auto-save to prevent race conditions
+    if (window.__vibe99_test?.setAutoSaveEnabled) {
+      window.__vibe99_test.setAutoSaveEnabled(false);
     }
 
     const tauri = window.__TAURI__;
@@ -50,6 +50,12 @@ async function saveLayoutViaBridge(panes, focusedPaneIndex = 0) {
     await tauri.core.invoke('layout_save', { layout });
     const config = await tauri.core.invoke('layouts_list');
     const saved = (config.layouts ?? []).find(l => l.id === 'default');
+
+    // Re-enable auto-save after the test save
+    if (window.__vibe99_test?.setAutoSaveEnabled) {
+      window.__vibe99_test.setAutoSaveEnabled(true);
+    }
+
     return saved ? saved.panes.length : -1;
   }, panes, focusedPaneIndex);
 }
