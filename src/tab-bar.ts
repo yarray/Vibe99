@@ -5,7 +5,7 @@
  * and inline renaming for the terminal pane tabs.
  *
  * UI modules only interact through commands - no direct access to
- * PaneNode, xterm instances, or internal state.
+ * xterm instances, or internal state.
  */
 
 import type { Pane, PaneState } from './pane-state';

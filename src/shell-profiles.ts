@@ -9,7 +9,7 @@
 // and decoupled from the renderer.
 //
 // UI modules only interact through commands - no direct access to
-// PaneNode, xterm instances, or internal state.
+// xterm instances, or internal state.
 
 import { icon } from './icons';
 import type { AppCommand, CommandResult } from './domain/commands';
