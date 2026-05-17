@@ -12,7 +12,7 @@
 
 import type { Pane as PaneEntity, PaneSnapshot } from './domain/pane.js';
 import { createPane, createDefaultPane } from './domain/pane.js';
-import type { LayoutSnapshot } from './domain/layout.js';
+import type { Layout, LayoutSnapshot } from './domain/layout.js';
 import { createLayout } from './domain/layout.js';
 
 // ---------------------------------------------------------------------------
@@ -101,6 +101,10 @@ export interface PaneState {
   // Session operations
   buildSessionData: () => SessionData;
   restoreSession: (session: { panes?: SessionPaneEntry[]; focusedPaneIndex?: number }) => boolean;
+
+  // Domain access
+  /** Get the underlying Layout aggregate root. */
+  getLayout: () => Layout;
 }
 
 // ---------------------------------------------------------------------------
@@ -545,5 +549,8 @@ export function createPaneState({
     // Session operations
     buildSessionData,
     restoreSession,
+
+    // Domain access
+    getLayout: () => layout,
   };
 }

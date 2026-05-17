@@ -40,8 +40,8 @@ export interface CloseSessionOptions {
  * Dependencies injected into `createWorkbench`.
  */
 export interface WorkbenchDeps {
-  /** The active Layout aggregate root */
-  layout: Layout;
+  /** The active Layout aggregate root, or a function returning the current one. */
+  layout: Layout | (() => Layout);
 
   /** Terminal session dependencies (passed through to createTerminalSession) */
   terminalSessionDeps: Omit<
@@ -147,7 +147,11 @@ function needsTabRefresh(pane: PaneEntity, entryNeedsTabRefresh: (paneId: string
  * @returns Workbench instance
  */
 export function createWorkbench(deps: WorkbenchDeps): Workbench {
-  const { layout, terminalSessionDeps, stageEl, paneActivityWatcher, paneAlert, tabBar, entryNeedsTabRefresh } = deps;
+  const { layout: layoutInput, terminalSessionDeps, stageEl, paneActivityWatcher, paneAlert, tabBar, entryNeedsTabRefresh } = deps;
+
+  const resolveLayout = typeof layoutInput === 'function'
+    ? (layoutInput as () => Layout)
+    : () => layoutInput;
 
   // Internal session map: paneId -> TerminalSession
   const sessionMap = new Map<string, TerminalSession>();
@@ -183,6 +187,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
   }
 
   function ensureSessions(): void {
+    const layout = resolveLayout();
     const currentPanes = layout.panes();
     const activeIds = new Set(currentPanes.map((pane) => pane.id));
 
@@ -223,6 +228,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
   function render(options: WorkbenchRenderOptions = {}): void {
     const { refit = false } = options;
+    const layout = resolveLayout();
 
     ensureSessions();
     paneActivityWatcher.setFocus(layout.focusedPaneId());
@@ -254,7 +260,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
   return {
     layout(): Layout {
-      return layout;
+      return resolveLayout();
     },
 
     session(paneId: string): TerminalSession | null {
