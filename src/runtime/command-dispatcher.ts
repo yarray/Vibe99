@@ -199,16 +199,12 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
       }
 
       case 'terminal.restart': {
-        const session = getSession(command.paneId);
-        if (!session) return fail('not-found');
-        session.restart();
+        paneRenderer?.restartPaneTerminal(command.paneId);
         return ok();
       }
 
       case 'terminal.changeShell': {
-        const session = getSession(command.paneId);
-        if (!session) return fail('not-found');
-        session.changeShell(command.profileId);
+        paneRenderer?.changePaneShell(command.paneId, command.profileId);
         return ok();
       }
 

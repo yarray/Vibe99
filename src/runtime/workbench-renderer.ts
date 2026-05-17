@@ -384,10 +384,12 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
         return paneRenderer?.hasSelection(node.paneId) ?? false;
       },
       restart: () => {
-        paneRenderer?.restartPaneTerminal(node.paneId);
+        // Handled directly by dispatcher calling paneRenderer
+        throw new Error('Not implemented');
       },
       changeShell: (profileId: string, previousProfileId?: string | null) => {
-        paneRenderer?.changePaneShell(node.paneId, profileId, previousProfileId);
+        // Handled directly by dispatcher calling paneRenderer
+        throw new Error('Not implemented');
       },
       setAccent: (color: string) => {
         // Not used by dispatcher - handled by render
