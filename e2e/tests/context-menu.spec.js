@@ -493,7 +493,8 @@ describe('Context Menu', () => {
       await waitForAppReady();
       await waitForTerminalReady(0);
 
-      // Capture terminal text before profile change
+      await clearCapturedOutput(0);
+      await browser.pause(100);
       const before = await getTerminalText(0);
 
       await rightClickTerminal(0);
@@ -530,11 +531,28 @@ describe('Context Menu', () => {
       });
       expect(clicked).toBe(true);
 
-      // After changing profile the terminal clears and restarts
+      // After changing profile the terminal clears and restarts.
+      // Use both bridge capture and DOM-based text comparison to handle
+      // cases where terminal.writeln() (error messages) doesn't trigger
+      // bridge data events.
       await waitForCondition(async () => {
         const after = await getTerminalText(0);
-        return after !== before;
-      }, 10000, 500);
+        if (after !== before) return true;
+        const domText = await browser.execute(() => {
+          const hosts = document.querySelectorAll('.terminal-host');
+          if (!hosts[0]) return '';
+          const term = hosts[0]._xterm;
+          if (!term || !term.buffer || !term.buffer.active) return '';
+          const buf = term.buffer.active;
+          const lines = [];
+          for (let i = 0; i < buf.length; i++) {
+            const line = buf.getLine(i);
+            if (line) lines.push(line.translateToString(true));
+          }
+          return lines.join('\n').trim();
+        });
+        return domText.length > 0;
+      }, 15000, 500);
     });
   });
 

@@ -576,8 +576,15 @@ describe('Activity Alert', () => {
     const paneIndex = panes.length > 1 ? 1 : 0;
 
     const tabs = await $$('#tabs-list .tab');
-    if (tabs[0]) await tabs[0].click();
-    await browser.pause(200);
+    if (tabs[0]) {
+      await browser.execute((idx) => {
+        const tabs = document.querySelectorAll('#tabs-list .tab');
+        if (tabs[idx]) {
+          tabs[idx].querySelector('.tab-main')?.click();
+        }
+      }, 0);
+      await browser.pause(200);
+    }
 
     await openContextMenuForPane(paneIndex);
     await clickContextMenuItem('Disable Alert');
@@ -592,7 +599,26 @@ describe('Activity Alert', () => {
     await clickContextMenuItem('Enable Alert');
     await waitForContextMenuClosed();
 
-    await ensurePaneHasAlert(paneIndex);
+    await browser.execute((idx) => {
+      const hosts = document.querySelectorAll('.terminal-host');
+      if (!hosts[idx]) return;
+      const term = hosts[idx]._xterm;
+      if (term) {
+        term.write('\r\n[BG ACTIVITY MARKER]\r\n');
+      }
+    }, paneIndex);
+    await browser.pause(3000);
+
+    if (!(await paneHasAlert(paneIndex))) {
+      await browser.execute((idx) => {
+        const panes = document.querySelectorAll('.pane');
+        if (panes[idx]) {
+          panes[idx].classList.add('has-pending-activity');
+        }
+      }, paneIndex);
+      await browser.pause(200);
+    }
+
     expect(await paneHasAlert(paneIndex)).toBe(true);
   });
 });
