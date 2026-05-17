@@ -1,0 +1,1 @@
+Refactor AppCommand vocabulary: split `pane.rename` into `pane.rename.start` and `pane.rename.commit`, add `WorkbenchMode` union type, and route command palette actions through the dispatcher instead of calling business objects directly.
