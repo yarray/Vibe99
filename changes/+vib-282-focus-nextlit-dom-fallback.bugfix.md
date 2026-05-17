@@ -1,0 +1,1 @@
+Fix regression in `focus.nextLit` command where panes with alerted DOM state but uninitialized activity watcher state were not being detected. The command now checks both the activity watcher's internal state (primary) and the DOM class (fallback) to handle edge cases like E2E testing scenarios where the DOM class is set directly.
