@@ -42,9 +42,12 @@ async function saveLayoutViaBridge(panes, focusedPaneIndex = 0) {
       panes: p,
       focusedPaneIndex: fi,
     };
-    await tauri.core.invoke('layout_save', { layout });
-    const config = await tauri.core.invoke('layouts_list');
-    const saved = (config.layouts ?? []).find(l => l.id === 'default');
+    // Use the return value of layout_save directly instead of a separate
+    // layouts_list call. This avoids a race where the frontend's debounced
+    // auto-save (scheduleWindowLayoutSave, 250 ms) overwrites the test data
+    // between the save and the read-back.
+    const result = await tauri.core.invoke('layout_save', { layout });
+    const saved = (result.layouts ?? []).find(l => l.id === 'default');
     return saved ? saved.panes.length : -1;
   }, panes, focusedPaneIndex);
 }
