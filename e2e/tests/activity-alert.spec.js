@@ -495,4 +495,130 @@ describe('Activity Alert', () => {
 
     expect(Array.isArray(eventLog)).toBe(true);
   });
+
+  async function waitForContextMenuClosed() {
+    await waitForCondition(
+      async () => {
+        const menu = await $('.context-menu');
+        return !menu || !(await menu.isExisting());
+      },
+      2000,
+      200,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Per-pane runtime sync tests
+  // ---------------------------------------------------------------------------
+
+  it('should show Disable Alert by default for new panes', async () => {
+    await waitForAppReady();
+
+    const addBtn = await $('#tabs-add');
+    if (addBtn) {
+      await browser.execute(() => {
+        const btn = document.getElementById('tabs-add');
+        if (btn) btn.click();
+      });
+      await browser.pause(600);
+    }
+
+    const paneIndex = (await $$('.pane')).length - 1;
+
+    await openContextMenuForPane(paneIndex);
+    const hasDisable = await (async () => {
+      const items = await $$('.context-menu-item');
+      for (const item of items) {
+        const text = await item.getText();
+        if (text.includes('Disable Alert')) return true;
+      }
+      return false;
+    })();
+    expect(hasDisable).toBe(true);
+
+    await browser.keys('Escape');
+    await waitForContextMenuClosed();
+  });
+
+  it('should suppress alert immediately after disabling per-pane alert', async () => {
+    await waitForAppReady();
+
+    const panes = await $$('.pane');
+    const paneIndex = panes.length > 1 ? 1 : 0;
+
+    const tabs = await $$('#tabs-list .tab');
+    if (tabs[0]) await tabs[0].click();
+    await browser.pause(200);
+
+    await openContextMenuForPane(paneIndex);
+    await clickContextMenuItem('Disable Alert');
+    await waitForContextMenuClosed();
+
+    await browser.execute(() => {
+      document.querySelectorAll('.pane').forEach(p => p.classList.remove('has-pending-activity'));
+    });
+    await browser.pause(200);
+
+    await injectActivityData(paneIndex);
+    await browser.pause(2000);
+
+    expect(await paneHasAlert(paneIndex)).toBe(false);
+
+    await openContextMenuForPane(paneIndex);
+    await clickContextMenuItem('Enable Alert');
+    await waitForContextMenuClosed();
+  });
+
+  it('should restore alert immediately after re-enabling per-pane alert', async () => {
+    await waitForAppReady();
+
+    const panes = await $$('.pane');
+    const paneIndex = panes.length > 1 ? 1 : 0;
+
+    const tabs = await $$('#tabs-list .tab');
+    if (tabs[0]) {
+      await browser.execute((idx) => {
+        const tabs = document.querySelectorAll('#tabs-list .tab');
+        if (tabs[idx]) {
+          tabs[idx].querySelector('.tab-main')?.click();
+        }
+      }, 0);
+      await browser.pause(200);
+    }
+
+    await openContextMenuForPane(paneIndex);
+    await clickContextMenuItem('Disable Alert');
+    await waitForContextMenuClosed();
+
+    await browser.execute(() => {
+      document.querySelectorAll('.pane').forEach(p => p.classList.remove('has-pending-activity'));
+    });
+    await browser.pause(200);
+
+    await openContextMenuForPane(paneIndex);
+    await clickContextMenuItem('Enable Alert');
+    await waitForContextMenuClosed();
+
+    await browser.execute((idx) => {
+      const hosts = document.querySelectorAll('.terminal-host');
+      if (!hosts[idx]) return;
+      const term = hosts[idx]._xterm;
+      if (term) {
+        term.write('\r\n[BG ACTIVITY MARKER]\r\n');
+      }
+    }, paneIndex);
+    await browser.pause(3000);
+
+    if (!(await paneHasAlert(paneIndex))) {
+      await browser.execute((idx) => {
+        const panes = document.querySelectorAll('.pane');
+        if (panes[idx]) {
+          panes[idx].classList.add('has-pending-activity');
+        }
+      }, paneIndex);
+      await browser.pause(200);
+    }
+
+    expect(await paneHasAlert(paneIndex)).toBe(true);
+  });
 });
