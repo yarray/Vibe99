@@ -3,7 +3,6 @@
   "entry": [
     "src/index.html",
     "src/float.html",
-    "src/renderer.ts",
     "src/float-renderer.ts",
     "e2e/wdio.conf.js",
     "e2e/tests/activity-alert.spec.js",
@@ -33,10 +32,6 @@
     "e2e/helpers/webview2-helpers.js"
   ],
   "ignore": [
-    // Domain types are cross-module API vocabulary (exported but internal)
-    "src/domain/commands.ts",
-    "src/domain/layout.ts",
-    "src/domain/pane.ts",
     // Bridge is the shared API type layer (exported but internal)
     "src/bridge.ts",
     // Interface types used via object property access — knip can't trace
@@ -50,14 +45,9 @@
     "src/colors-registry.ts": ["duplicates"]
   },
   "ignoreDependencies": [
-    "@tauri-apps/cli",
-    "knip",
     "@tauri-apps/plugin-opener"
   ],
-  "ignoreBinaries": [
-    "tauri",
-    "vite"
-  ],
+  "ignoreBinaries": [],
   "tags": [
     "-lintignore"
   ]

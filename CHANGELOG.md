@@ -19,6 +19,8 @@
 
 ### Fixed
 
+- **Knip configuration cleanup (VIB-286):** Removed redundant knip entries (`src/renderer.ts`, unnecessary `ignoreDependencies`/`ignoreBinaries`) after verifying they are auto-detected. Replaced `@tauri-apps/api/webviewWindow` type import in `src/bridge.ts` with minimal local interfaces (`TauriWebviewWindow`, `TauriWebviewWindowClass`) to eliminate implicit external type dependency. `npm run knip` now outputs zero issues.
+
 - **E2E Dockerfile: replace git clone with COPY and npm ci with npm install (VIB-274):** Changed `RUN git clone https://github.com/yarray/Vibe99.git` to `COPY . /app/Vibe99` so the image uses the local build context instead of fetching remote source. Replaced all `npm ci` with `npm install` to avoid failures when `package-lock.json` is absent in the build context.
 - **E2E Docker image bloat reduction (VIB-276):** Merged cleanup steps into the same RUN layers to reduce image size: clean npm cache after each `npm install`, remove Cargo registry cache and target incremental/build/fingerprint intermediates after `tauri:build-dev`. Added `.gitattributes`, `.github/` to `.dockerignore` (`.git/` is intentionally kept — needed for `git fetch`/`git checkout` at test time). Target: < 3 GB.
 - **Activity alert debounce non-numeric input (VIB-273):** `<input type="number">` sanitises non-numeric values to `""`, which `Number("")` converts to `0` (not `NaN`). The debounce change handler now treats `0` and negative values as invalid, reverting the field to the current setting instead of clamping to the 3 s minimum.
