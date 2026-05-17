@@ -65,7 +65,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-rust-
 
+      - name: Cache tauri-driver
+        id: cache-td
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: tauri-driver-${{ runner.os }}
+
       - name: Install tauri-driver
+        if: steps.cache-td.outputs.cache-hit != 'true'
         run: cargo install tauri-driver
 
       - name: Install frontend dependencies
