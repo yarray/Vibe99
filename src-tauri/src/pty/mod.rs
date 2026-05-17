@@ -442,8 +442,9 @@ impl PtyManager {
 /// 3. Auto-detected platform fallbacks including WSL (always appended as safety net).
 ///
 /// When `shell_profile_id` is `Some(id)`, only the matching profile is
-/// tried (with auto-detected fallbacks as safety net), bypassing the
-/// normal priority order.
+/// tried - NO fallback to detected shells. This ensures that requesting
+/// an invalid profile fails explicitly rather than silently starting a
+/// different shell.
 fn shell_candidates(app: &AppHandle, shell_profile_id: Option<&str>) -> Vec<ShellCandidate> {
     let mut candidates: Vec<ShellCandidate> = Vec::new();
     let mut seen: HashSet<(PathBuf, Option<String>)> = HashSet::new();
@@ -453,6 +454,8 @@ fn shell_candidates(app: &AppHandle, shell_profile_id: Option<&str>) -> Vec<Shel
         let default_id = extract_default_profile(&config);
 
         if let Some(requested_id) = shell_profile_id {
+            // When a specific profile is requested, only try that exact profile.
+            // Do NOT fall back to detected shells - fail explicitly instead.
             if let Some(profile) = profiles.iter().find(|p| p.id == requested_id) {
                 let path = PathBuf::from(&profile.command);
                 if seen.insert((path.clone(), None)) {
@@ -463,6 +466,8 @@ fn shell_candidates(app: &AppHandle, shell_profile_id: Option<&str>) -> Vec<Shel
                     });
                 }
             }
+            // If profile not found or command invalid, candidates stays empty
+            // and spawn() will return a clear error.
         } else {
             let ordered: Vec<_> = profiles
                 .iter()
@@ -483,40 +488,13 @@ fn shell_candidates(app: &AppHandle, shell_profile_id: Option<&str>) -> Vec<Shel
         }
     }
 
-    let detected = auto_detected_candidates();
-
-    if let Some(requested_id) = shell_profile_id {
-        if candidates.is_empty() {
-            let requested_lower = requested_id.to_lowercase();
-            for candidate in &detected {
-                let derived_id = candidate
-                    .display_name
-                    .as_ref()
-                    .map(|d| display_name_to_id(d));
-                let matches_display = derived_id.as_deref() == Some(&requested_lower);
-                let stem = candidate
-                    .shell
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_default()
-                    .to_lowercase();
-                if matches_display || stem == requested_lower {
-                    if seen.insert((candidate.shell.clone(), candidate.display_name.clone())) {
-                        candidates.push(ShellCandidate {
-                            shell: candidate.shell.clone(),
-                            args: candidate.args.clone(),
-                            display_name: candidate.display_name.clone(),
-                        });
-                    }
-                    break;
-                }
+    // Only add detected fallbacks when no specific profile was requested.
+    if shell_profile_id.is_none() {
+        let detected = auto_detected_candidates();
+        for candidate in detected {
+            if seen.insert((candidate.shell.clone(), candidate.display_name.clone())) {
+                candidates.push(candidate);
             }
-        }
-    }
-
-    for candidate in detected {
-        if seen.insert((candidate.shell.clone(), candidate.display_name.clone())) {
-            candidates.push(candidate);
         }
     }
 

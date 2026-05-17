@@ -314,29 +314,28 @@ export function createPaneRenderer({
 
     const prevProfileId = previousProfileId ?? paneState.getPaneById(paneId)?.shellProfileId ?? null;
 
-    paneState.setPaneShellProfile(paneId, profileId);
-    scheduleWindowLayoutSave();
-
+    // DON'T update paneState yet - wait for PTY to start successfully first
+    // This prevents bad profiles from polluting the layout
     session.changeShell(profileId, prevProfileId);
 
-    // The revert-on-failure logic requires access to paneState and scheduleWindowLayoutSave,
-    // which are owned by pane-renderer, not TerminalSession. So we wrap changeShell here.
-    // TerminalSession.changeShell handles the PTY lifecycle; we handle state revert.
-    // We need to observe when the shell change finishes and revert if needed.
-    // Since changeShell is async internally, we poll for the result.
-    const checkRevert = (): void => {
+    // After the PTY starts, update the state if successful, otherwise keep old profile
+    // The error message is already written to the terminal by initializePty
+    const checkResult = (): void => {
       requestAnimationFrame(() => {
         if (!session.isShellChanging()) {
-          if (!session.isReady()) {
-            paneState.setPaneShellProfile(paneId, prevProfileId);
+          if (session.isReady()) {
+            // PTY started successfully - now update the state and save layout
+            paneState.setPaneShellProfile(paneId, profileId);
             scheduleWindowLayoutSave();
           }
+          // If not ready, the error was already written to terminal
+          // and we keep the previous profileId in state
         } else {
-          checkRevert();
+          checkResult();
         }
       });
     };
-    checkRevert();
+    checkResult();
   }
 
   function restartPaneTerminal(paneId: string): void {
