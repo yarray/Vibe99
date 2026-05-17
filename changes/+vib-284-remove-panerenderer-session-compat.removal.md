@@ -1,0 +1,1 @@
+Removed `PaneRenderer.getNode()`, `PaneNode` type, and direct terminal manipulation methods (`copySelection`, `pasteInto`, `selectAll`, `initializePaneTerminal`). All call sites now access sessions through the `Workbench` or `TerminalSession` directly.

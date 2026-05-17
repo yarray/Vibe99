@@ -1,5 +1,3 @@
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
 import type { Bridge } from './bridge';
 import type { Pane, PaneState } from './pane-state';
 import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
@@ -15,21 +13,6 @@ import type { Workbench } from './runtime/workbench';
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
-
-export interface PaneNode {
-  paneId: string;
-  cwd: string;
-  root: HTMLElement;
-  terminalHost: HTMLElement & { _xterm?: Terminal };
-  terminal: Terminal;
-  fitAddon: FitAddon;
-  sessionReady: boolean;
-  sizeKey: string;
-  needsFit: boolean;
-  accent: string;
-  _shellChanging?: boolean;
-  _shellChangeTime?: number;
-}
 
 export interface PaneRendererDeps {
   bridge: Bridge;
@@ -64,11 +47,7 @@ export interface PaneRenderer {
   ensureSessions: () => void;
   renderPanes: (refit?: boolean) => void;
   fitTerminal: (paneId: string, force?: boolean) => void;
-  getNode: (paneId: string) => PaneNode | null;
   write: (paneId: string, data: string) => void;
-  copySelection: (paneId: string) => boolean;
-  pasteInto: (paneId: string, options?: { clipboardSnapshot?: { text: string; hasImage: boolean } }) => Promise<boolean>;
-  selectAll: (paneId: string) => boolean;
   focusTerminal: (paneId: string) => void;
   blurTerminal: (paneId: string) => void;
   clearTerminal: (paneId: string) => void;
@@ -77,13 +56,14 @@ export interface PaneRenderer {
   restartPaneTerminal: (paneId: string) => void;
   entryNeedsTabRefresh: (paneId: string) => boolean;
   setAlerted: (paneId: string, alerted: boolean) => void;
+  /** Check whether the pane's root element has the alert CSS class. */
+  hasAlertClass: (paneId: string) => boolean;
   rootContains: (paneId: string, el: Node) => boolean;
   hasSelection: (paneId: string) => boolean;
   isSessionReady: (paneId: string) => boolean;
   setSessionReady: (paneId: string, ready: boolean) => void;
   getShellChangeTime: (paneId: string) => number | null;
   isShellChanging: (paneId: string) => boolean;
-  initializePaneTerminal: (node: PaneNode) => Promise<void>;
   /** @deprecated Use closeSession() instead. Will be removed in Step 5. */
   destroyPane: (paneId: string) => void;
   /** Close a session for a specific pane. */
@@ -132,30 +112,6 @@ export function createPaneRenderer({
   function resolveSession(paneId: string): TerminalSession | undefined {
     if (workbench) return workbench.session(paneId) ?? undefined;
     return sessionMap!.get(paneId);
-  }
-
-  // -- PaneNode adapter ---------------------------------------------------------
-
-  function sessionToNode(session: TerminalSession): PaneNode {
-    return {
-      paneId: session.paneId,
-      cwd: session.cwd,
-      root: session.root,
-      terminalHost: session.terminalHost,
-      terminal: session.terminal,
-      fitAddon: session.fitAddon,
-      sessionReady: session.isReady(),
-      sizeKey: '',
-      needsFit: session.needsFit(),
-      accent: '',
-      _shellChanging: session.isShellChanging(),
-      _shellChangeTime: session.shellChangeTime() ?? undefined,
-    };
-  }
-
-  function getNode(paneId: string): PaneNode | null {
-    const session = resolveSession(paneId);
-    return session ? sessionToNode(session) : null;
   }
 
   // -- Layout helpers -----------------------------------------------------------
@@ -295,13 +251,6 @@ export function createPaneRenderer({
 
   // -- Per-pane operations ------------------------------------------------------
 
-  async function initializePaneTerminal(node: PaneNode): Promise<void> {
-    const session = resolveSession(node.paneId);
-    if (session) {
-      await session.initializePty();
-    }
-  }
-
   function destroyPane(paneId: string): void {
     if (workbench) {
       workbench.closeSession(paneId, { destroyPty: true });
@@ -372,26 +321,10 @@ export function createPaneRenderer({
       if (!session) return;
       session.fit({ force });
     },
-    getNode,
     write: (paneId, data) => {
       const session = resolveSession(paneId);
       if (!session) return;
       session.write(data);
-    },
-    copySelection: (paneId) => {
-      const session = resolveSession(paneId);
-      if (!session) return false;
-      return session.copySelection();
-    },
-    pasteInto: (paneId, options?) => {
-      const session = resolveSession(paneId);
-      if (!session) return Promise.resolve(false);
-      return session.paste(options);
-    },
-    selectAll: (paneId) => {
-      const session = resolveSession(paneId);
-      if (!session) return false;
-      return session.selectAll();
     },
     focusTerminal: (paneId) => {
       const session = resolveSession(paneId);
@@ -420,6 +353,11 @@ export function createPaneRenderer({
       const session = resolveSession(paneId);
       if (!session) return;
       paneAlert.setAlerted(session.root, alerted);
+    },
+    hasAlertClass: (paneId) => {
+      const session = resolveSession(paneId);
+      if (!session) return false;
+      return session.root.classList.contains('has-pending-activity');
     },
     rootContains: (paneId, el) => {
       const session = resolveSession(paneId);
@@ -451,7 +389,6 @@ export function createPaneRenderer({
       if (!session) return false;
       return session.isShellChanging();
     },
-    initializePaneTerminal,
     destroyPane,
     closeSession,
     getRecentOutput: (paneId, maxLines = 20) => {

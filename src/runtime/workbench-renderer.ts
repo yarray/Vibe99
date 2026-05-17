@@ -271,8 +271,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   }
 
   function handleTerminalExit({ paneId, exitCode, reason }: { paneId: string; exitCode: number; reason: string }): boolean {
-    const node = paneRenderer?.getNode(paneId);
-    if (!node) return true;
+    const session = workbench!.session(paneId);
+    if (!session) return true;
 
     if (reason === 'killed') {
       paneRenderer!.setSessionReady(paneId, false);
@@ -728,8 +728,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     cycleToNextLitPane: () => dispatch({ type: 'focus.nextLit' }),
     navigateLeft: () => dispatch({ type: 'focus.left' }),
     navigateRight: () => dispatch({ type: 'focus.right' }),
-    copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); return id ? paneRenderer?.copySelection(id) : false; },
-    pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) await paneRenderer?.pasteInto(id); },
+    copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); return id ? workbench!.session(id)?.copySelection() ?? false : false; },
+    pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) await workbench!.session(id)?.paste(); },
     moveFocus: (delta) => dispatch({ type: delta > 0 ? 'focus.next' : 'focus.prev' }),
     focusPane: (paneId, opts) => dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }),
     cancelNavigationMode,

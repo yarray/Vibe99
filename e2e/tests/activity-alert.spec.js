@@ -34,16 +34,18 @@ async function injectActivityData(paneIndex) {
     const paneId = tabs[idx]?.dataset?.paneId;
     if (!paneId) return;
 
-    // Simulate PTY output arriving through the bridge
-    // by writing data directly to the xterm terminal
+    // Write data directly to the xterm terminal (visual update)
     const hosts = document.querySelectorAll('.terminal-host');
-    if (!hosts[idx]) return;
-    const term = hosts[idx]._xterm;
-    if (term) {
-      // Write some data to the terminal which triggers xterm's
-      // onData/onRender handlers. But we also need the bridge handler.
-      // Instead, directly call the activity watcher if accessible.
-      term.write('\r\n[BG ACTIVITY MARKER]\r\n');
+    if (hosts[idx]) {
+      const term = hosts[idx]._xterm;
+      if (term) {
+        term.write('\r\n[BG ACTIVITY MARKER]\r\n');
+      }
+    }
+
+    // Also notify the activity watcher so internal alerted state is updated
+    if (window.paneActivityWatcher?.noteData) {
+      window.paneActivityWatcher.noteData(paneId);
     }
   }, paneIndex);
   await browser.pause(200);
@@ -134,13 +136,17 @@ async function ensurePaneHasAlert(paneIndex) {
 
   if (await paneHasAlert(paneIndex)) return true;
 
-  // Last resort: directly set the class to test the UI flow
-  // (the activity detection mechanism is tested at unit level;
-  // here we test that the UI responds correctly when it fires)
+  // Last resort: directly set the class and notify the activity watcher
+  // so that both the DOM state and the internal alerted state are consistent.
   await browser.execute((idx) => {
     const panes = document.querySelectorAll('.pane');
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const paneId = tabs[idx]?.dataset?.paneId;
     if (panes[idx]) {
       panes[idx].classList.add('has-pending-activity');
+    }
+    if (paneId && window.paneActivityWatcher?.noteData) {
+      window.paneActivityWatcher.noteData(paneId);
     }
   }, paneIndex);
   await browser.pause(200);
