@@ -33,7 +33,7 @@ import { createLayoutModal } from '../layout-modal';
 import { createModalStack } from '../modal-stack';
 import { createFullscreenManager } from '../fullscreen-manager';
 import { createCommandDispatcher } from './command-dispatcher.js';
-import type { CommandResult } from '../domain/commands.js';
+import type { CommandResult, WorkbenchMode } from '../domain/commands.js';
 import type { AppCommand } from '../domain/commands.js';
 import { createCommandPaletteEntries } from '../command-palette-entries';
 import type { TerminalSession } from './terminal-session.js';
@@ -121,7 +121,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   // -- Mutable bootstrap state ------------------------------------------------
 
-  let currentMode: string = 'terminal';
+  let currentMode: WorkbenchMode = 'terminal';
   let paneRenderer: PaneRenderer | null = null;
   let enterNavSourcePaneId: string | null = null;
   let layoutRestoreComplete = false;
@@ -548,7 +548,6 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     shellProfileManager,
     reportError,
     dispatch,
-    beginRenamePane: (index) => tabBar.beginRenamePane(index),
   });
 
   // Track auto-save state for E2E testing
@@ -619,6 +618,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     getCurrentMode: () => currentMode,
     setMode,
     toggleFloatWindow: () => { void floatWindowManager.toggle(); },
+    dispatch,
   });
 
   const fullscreenManager = createFullscreenManager({
@@ -662,7 +662,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     console.error(error);
   }
 
-  function setMode(next: string): void {
+  function setMode(next: WorkbenchMode): void {
     if (currentMode === next) return;
     currentMode = next;
     document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
@@ -784,7 +784,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     getPaneCount: () => paneState.getPanes().length,
     getPaneIdAt: (index: number) => paneState.getPanes()[index]?.id,
     requestClosePane: (paneId: string) => dispatch({ type: 'pane.requestClose', paneId }),
-    startInlineRename: (paneId: string) => dispatch({ type: 'pane.rename', paneId }),
+    startInlineRename: (paneId: string) => dispatch({ type: 'pane.rename.start', paneId }),
     openKeymapHelpModal,
     openLayoutsModal: () => layoutModal.openLayoutsModal(),
   });
