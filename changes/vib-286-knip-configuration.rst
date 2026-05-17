@@ -1,0 +1,1 @@
++ knip: configure entry points for src/index.html, src/float.html, and e2e/wdio.conf.js; add ignore rules for domain types and cross-module API interfaces

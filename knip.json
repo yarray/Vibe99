@@ -2,5 +2,29 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "tags": [
     "-lintignore"
+  ],
+  "entry": [
+    "src/index.html",
+    "src/float.html",
+    "e2e/wdio.conf.js"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "e2e/tests/**/*.spec.js",
+    "e2e/helpers/**/*.js"
+  ],
+  "ignoreUnresolved": [
+    "@tauri-apps/api/webviewWindow"
+  ],
+  "treatConfigHintsAsErrors": false,
+  "rules": {
+    "types": "off",
+    "exports": "off",
+    "files": "off",
+    "dependencies": "off",
+    "duplicates": "off"
+  },
+  "ignoreDependencies": [
+    "@tauri-apps/plugin-opener"
   ]
 }
