@@ -254,6 +254,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     paneActivityWatcher,
     onBreathingIntensityChange: (intensity) => {
       applyBreathingIntensity(intensity);
+      paneActivityWatcher.setGlobalEnabled(intensity !== 'none');
     },
     onToggleFloatWindow: () => floatWindowManager.toggle(),
     getFloatWindowOpen: () => floatWindowManager.isOpen(),
@@ -369,6 +370,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   dispatch = createCommandDispatcher({
     paneState,
     paneRenderer,
+    paneActivityWatcher,
     tabBar,
     scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
     render,

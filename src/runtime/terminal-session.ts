@@ -385,6 +385,32 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     } catch {}
   }
 
+  function visibleBufferFingerprint(): string {
+    const buffer = terminal.buffer.active;
+    const rows = Math.max(0, terminal.rows || 0);
+    const start = buffer.viewportY;
+    const lines: string[] = [];
+
+    for (let i = 0; i < rows; i += 1) {
+      const line = buffer.getLine(start + i);
+      lines.push(line ? `${line.isWrapped ? '1' : '0'}:${line.translateToString(true)}` : '');
+    }
+
+    return lines.join('\n');
+  }
+
+  let lastVisibleActivityFingerprint = visibleBufferFingerprint();
+
+  function noteVisibleTerminalActivity(): void {
+    const nextFingerprint = visibleBufferFingerprint();
+    if (nextFingerprint === lastVisibleActivityFingerprint) {
+      return;
+    }
+
+    lastVisibleActivityFingerprint = nextFingerprint;
+    activityWatcher.noteData(paneId);
+  }
+
   // -- Custom key event handler --
   terminal.attachCustomKeyEventHandler((event) => {
     if (
@@ -541,8 +567,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   }
 
   function write(data: string): void {
-    terminal.write(data);
-    activityWatcher.noteData(paneId);
+    terminal.write(data, noteVisibleTerminalActivity);
   }
 
   function writeLine(text: string): void {

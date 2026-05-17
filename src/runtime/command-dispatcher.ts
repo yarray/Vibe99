@@ -18,6 +18,9 @@ import type { Bridge } from '../bridge.js';
 export interface CommandDispatcherDeps {
   paneState: PaneState;
   paneRenderer: PaneRenderer | null;
+  paneActivityWatcher: {
+    setPaneEnabled: (paneId: string, enabled: boolean) => void;
+  };
   tabBar: TabBar;
   setMode: (mode: string) => void;
   getCurrentMode: () => string;
@@ -38,7 +41,7 @@ function fail(reason?: string): CommandResult {
 export function createCommandDispatcher(deps: CommandDispatcherDeps): {
   dispatch: (command: AppCommand) => CommandResult;
 } {
-  const { paneState, paneRenderer, tabBar, setMode, getCurrentMode, scheduleSave, state, bridge, render } = deps;
+  const { paneState, paneRenderer, paneActivityWatcher, tabBar, setMode, getCurrentMode, scheduleSave, state, bridge, render } = deps;
 
   function dispatch(command: AppCommand): CommandResult {
     switch (command.type) {
@@ -130,6 +133,8 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
 
       case 'pane.toggleActivityAlert': {
         const next = paneState.togglePaneBreathingMonitor(command.paneId);
+        paneActivityWatcher.setPaneEnabled(command.paneId, next);
+        paneRenderer?.setAlerted(command.paneId, false);
         scheduleSave();
         return ok(next);
       }
