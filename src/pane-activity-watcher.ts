@@ -109,6 +109,15 @@ export interface PaneActivityWatcher {
    * Used when the main window is minimized and the float window is showing.
    */
   setIgnoreFocus: (ignored: boolean) => void;
+  /**
+   * Query whether a pane is currently in the alerted state.
+   * Returns true if the pane has pending activity that hasn't been cleared.
+   */
+  isAlerted: (paneId: string) => boolean;
+  /**
+   * Get all pane IDs that are currently in the alerted state.
+   */
+  alertedPaneIds: () => string[];
 }
 
 export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = {}): PaneActivityWatcher {
@@ -263,6 +272,21 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
 
     setIgnoreFocus(ignored: boolean): void {
       ignoreFocus = ignored;
+    },
+
+    isAlerted(paneId: string): boolean {
+      const s = states.get(paneId);
+      return s?.alerted ?? false;
+    },
+
+    alertedPaneIds(): string[] {
+      const result: string[] = [];
+      for (const [paneId, s] of states) {
+        if (s.alerted) {
+          result.push(paneId);
+        }
+      }
+      return result;
     },
   };
 }
