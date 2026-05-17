@@ -9,6 +9,15 @@
  */
 
 // ---------------------------------------------------------------------------
+// Mode types
+// ---------------------------------------------------------------------------
+
+/**
+ * Workbench mode - determines keyboard shortcuts and UI behavior.
+ */
+export type WorkbenchMode = 'terminal' | 'nav';
+
+// ---------------------------------------------------------------------------
 // Pane commands
 // ---------------------------------------------------------------------------
 
@@ -28,9 +37,23 @@ export interface PaneFocusCommand {
   focusTerminal?: boolean;
 }
 
-export interface PaneRenameCommand {
-  type: 'pane.rename';
+/**
+ * Start inline rename for a pane tab.
+ * UI should show an input field; user types and commits or cancels.
+ */
+export interface PaneRenameStartCommand {
+  type: 'pane.rename.start';
   paneId: string;
+}
+
+/**
+ * Commit a pane tab rename with the new title.
+ * If title is null, clears the custom title.
+ */
+export interface PaneRenameCommitCommand {
+  type: 'pane.rename.commit';
+  paneId: string;
+  title: string | null;
 }
 
 export interface PaneMoveCommand {
@@ -161,7 +184,7 @@ export interface FocusCommitCommand {
 
 export interface ModeSetCommand {
   type: 'mode.set';
-  mode: string;
+  mode: WorkbenchMode;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +208,8 @@ export type AppCommand =
   | PaneCreateCommand
   | PaneCloseCommand
   | PaneFocusCommand
-  | PaneRenameCommand
+  | PaneRenameStartCommand
+  | PaneRenameCommitCommand
   | PaneMoveCommand
   | PaneSetColorCommand
   | PaneClearColorCommand

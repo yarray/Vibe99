@@ -9,7 +9,7 @@
  * @module runtime/command-dispatcher
  */
 
-import type { AppCommand, CommandResult } from '../domain/commands.js';
+import type { AppCommand, CommandResult, WorkbenchMode } from '../domain/commands.js';
 import type { PaneState, Pane } from '../pane-state.js';
 import type { PaneRenderer } from '../pane-renderer.js';
 import type { TabBar, TabBarLocalState } from '../tab-bar.js';
@@ -20,8 +20,8 @@ export interface CommandDispatcherDeps {
   paneState: PaneState;
   paneRenderer: PaneRenderer | null;
   tabBar: TabBar;
-  setMode: (mode: string) => void;
-  getCurrentMode: () => string;
+  setMode: (mode: WorkbenchMode) => void;
+  getCurrentMode: () => WorkbenchMode;
   scheduleSave: () => void;
   state: TabBarLocalState;
   bridge: Bridge;
@@ -105,12 +105,19 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
         return ok();
       }
 
-      case 'pane.rename': {
+      case 'pane.rename.start': {
         const idx = paneState.getPaneIndex(command.paneId);
         if (idx !== -1) {
           if (getCurrentMode() === 'nav') setMode('terminal');
           tabBar.beginRenamePane(idx);
         }
+        return ok();
+      }
+
+      case 'pane.rename.commit': {
+        const idx = paneState.getPaneIndex(command.paneId);
+        if (idx === -1) return fail('not-found');
+        tabBar.commitRenamePane(command.paneId, command.title ?? '');
         return ok();
       }
 
