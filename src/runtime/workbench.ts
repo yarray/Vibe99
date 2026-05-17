@@ -66,6 +66,8 @@ export interface WorkbenchDeps {
     noteData: (paneId: string) => void;
     setFocus: (paneId: string | null) => void;
     setPaneEnabled: (paneId: string, enabled: boolean) => void;
+    isAlerted: (paneId: string) => boolean;
+    alertedPaneIds: () => string[];
   };
 
   /** Pane alert strategy */
@@ -111,6 +113,16 @@ export interface Workbench {
    * Render all panes - coordinate DOM, focus state, and terminal fit.
    */
   render(options?: WorkbenchRenderOptions): void;
+
+  /**
+   * Query whether a pane is currently in the alerted state.
+   */
+  isAlerted(paneId: string): boolean;
+
+  /**
+   * Get all pane IDs that are currently in the alerted state.
+   */
+  alertedPaneIds(): string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -252,5 +264,13 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
     ensureSessions,
     closeSession,
     render,
+
+    isAlerted(paneId: string): boolean {
+      return paneActivityWatcher.isAlerted(paneId);
+    },
+
+    alertedPaneIds(): string[] {
+      return paneActivityWatcher.alertedPaneIds();
+    },
   };
 }

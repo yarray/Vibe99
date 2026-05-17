@@ -23,7 +23,7 @@ import {
 import type { Bridge } from '../bridge';
 import { createFloatWindowManager } from '../float-window';
 import { createPaneRenderer, getTextColorForBackground } from '../pane-renderer';
-import type { PaneRenderer } from '../pane-renderer';
+import type { PaneRenderer, PaneNode } from '../pane-renderer';
 import { createShellProfileManager } from '../shell-profiles';
 import { createHookManager } from '../hooks';
 import type { AlertStartPayload, AlertStopPayload } from '../hooks';
@@ -36,6 +36,7 @@ import { createCommandDispatcher } from './command-dispatcher.js';
 import type { CommandResult } from '../domain/commands.js';
 import type { AppCommand } from '../domain/commands.js';
 import { createCommandPaletteEntries } from '../command-palette-entries';
+import type { TerminalSession } from './terminal-session.js';
 
 import * as ShortcutsRegistry from '../shortcuts-registry';
 import * as ShortcutsUI from '../shortcuts-ui';
@@ -327,6 +328,100 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   let dispatch: (command: AppCommand) => CommandResult;
 
+  // Adapter: Wrap PaneNode to provide TerminalSession-like interface
+  // This is a transition adapter until Workbench is fully integrated.
+  function paneNodeToSession(node: PaneNode | null): TerminalSession | null {
+    if (!node) return null;
+    return {
+      paneId: node.paneId,
+      root: node.root,
+      terminalHost: node.terminalHost,
+      terminal: node.terminal,
+      fitAddon: node.fitAddon,
+      cwd: node.cwd,
+      initializePty: async () => {
+        // Not used by dispatcher
+        throw new Error('Not implemented');
+      },
+      close: () => {
+        // Not used by dispatcher
+        throw new Error('Not implemented');
+      },
+      write: (data: string) => {
+        paneRenderer?.write(node.paneId, data);
+      },
+      writeLine: (text: string) => {
+        paneRenderer?.writeln(node.paneId, text);
+      },
+      focus: () => {
+        paneRenderer?.focusTerminal(node.paneId);
+      },
+      blur: () => {
+        paneRenderer?.blurTerminal(node.paneId);
+      },
+      clear: () => {
+        paneRenderer?.clearTerminal(node.paneId);
+      },
+      fit: (options?: { force?: boolean }) => {
+        paneRenderer?.fitTerminal(node.paneId, options?.force);
+      },
+      copySelection: () => {
+        return paneRenderer?.copySelection(node.paneId) ?? false;
+      },
+      paste: async (options?: { clipboardSnapshot?: { text: string; hasImage: boolean } }) => {
+        return paneRenderer?.pasteInto(node.paneId, options) ?? false;
+      },
+      pasteImage: async (options?: { clipboardSnapshot?: { text: string; hasImage: boolean } }) => {
+        const snapshot = options?.clipboardSnapshot ?? await bridge.getClipboardSnapshot();
+        if (!snapshot.hasImage) return false;
+        bridge.writeTerminal({ paneId: node.paneId, data: '\u0016' });
+        return true;
+      },
+      selectAll: () => {
+        return paneRenderer?.selectAll(node.paneId) ?? false;
+      },
+      hasSelection: () => {
+        return paneRenderer?.hasSelection(node.paneId) ?? false;
+      },
+      restart: () => {
+        paneRenderer?.restartPaneTerminal(node.paneId);
+      },
+      changeShell: (profileId: string, previousProfileId?: string | null) => {
+        paneRenderer?.changePaneShell(node.paneId, profileId, previousProfileId);
+      },
+      setAccent: (color: string) => {
+        // Not used by dispatcher - handled by render
+      },
+      setAlerted: (alerted: boolean) => {
+        paneRenderer?.setAlerted(node.paneId, alerted);
+      },
+      contains: (domNode: Node) => {
+        return paneRenderer?.rootContains(node.paneId, domNode) ?? false;
+      },
+      isReady: () => {
+        return paneRenderer?.isSessionReady(node.paneId) ?? false;
+      },
+      isShellChanging: () => {
+        return paneRenderer?.isShellChanging(node.paneId) ?? false;
+      },
+      shellChangeTime: () => {
+        return paneRenderer?.getShellChangeTime(node.paneId) ?? null;
+      },
+      needsFit: () => {
+        return node.needsFit;
+      },
+      setNeedsFit: (needs: boolean) => {
+        node.needsFit = needs;
+      },
+      getRecentOutput: (maxLines?: number) => {
+        return paneRenderer?.getRecentOutput(node.paneId, maxLines) ?? '';
+      },
+      setReady: (ready: boolean) => {
+        paneRenderer?.setSessionReady(node.paneId, ready);
+      },
+    };
+  }
+
   const tabBar = createTabBar({
     paneState,
     state: tabBarState,
@@ -381,6 +476,12 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       if (!enabled) {
         paneRenderer?.setAlerted(paneId, false);
       }
+    },
+    getSession: (paneId: string) => {
+      return paneNodeToSession(paneRenderer?.getNode(paneId) ?? null);
+    },
+    isAlerted: (paneId: string) => {
+      return paneActivityWatcher.isAlerted(paneId);
     },
   }).dispatch;
 
