@@ -226,42 +226,42 @@ describe('Settings Panel', () => {
     });
   });
 
-  describe('Breathing alert intensity', () => {
-    async function getActiveBreathingIntensity() {
+  describe('Breathing alert toggle', () => {
+    async function getActiveIntensity() {
       return await browser.execute(() => {
-        const activeBtn = document.querySelector('#breathing-intensity-segments .settings-segmented-btn.is-active');
-        return activeBtn ? activeBtn.dataset.value : null;
+        const active = document.querySelector('#breathing-intensity-segments .settings-segmented-btn.is-active');
+        return active ? (active).dataset.value : null;
       });
     }
 
-    async function setBreathingIntensity(value) {
-      await browser.execute((targetValue) => {
-        const btn = document.querySelector(`#breathing-intensity-segments .settings-segmented-btn[data-value="${targetValue}"]`);
-        if (btn) btn.click();
+    async function clickIntensityButton(value) {
+      await browser.execute((val) => {
+        const btn = document.querySelector(`#breathing-intensity-segments .settings-segmented-btn[data-value="${val}"]`);
+        if (btn) {
+          btn.click();
+        }
       }, value);
       await browser.pause(300);
     }
 
-    it('defaults to a non-none intensity', async () => {
-      const intensity = await getActiveBreathingIntensity();
-      expect(intensity).not.toBe('none');
-    });
-
-    it('switches to none when the none button is clicked', async () => {
-      await setBreathingIntensity('none');
-      const intensity = await getActiveBreathingIntensity();
-      expect(intensity).toBe('none');
-    });
-
-    it('switches back to mild when the mild button is clicked', async () => {
-      await setBreathingIntensity('none');
-      await setBreathingIntensity('mild');
-      const intensity = await getActiveBreathingIntensity();
+    it('has breathing intensity set to mild by default', async () => {
+      const intensity = await getActiveIntensity();
       expect(intensity).toBe('mild');
     });
 
+    it('switches intensity when segmented button is clicked', async () => {
+      await clickIntensityButton('none');
+      expect(await getActiveIntensity()).toBe('none');
+
+      await clickIntensityButton('intense');
+      expect(await getActiveIntensity()).toBe('intense');
+
+      await clickIntensityButton('mild');
+      expect(await getActiveIntensity()).toBe('mild');
+    });
+
     it('persists breathing alert setting', async () => {
-      await setBreathingIntensity('none');
+      await clickIntensityButton('none');
 
       // Wait for debounced settings save (150ms) + IPC to complete
       await browser.pause(500);
