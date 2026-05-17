@@ -171,6 +171,84 @@ pub fn build_command(
             .file_name()
             .is_some_and(|n| n.eq_ignore_ascii_case("wsl.exe"));
 
+    let is_ssh = candidate
+        .shell
+        .file_name()
+        .is_some_and(|n| {
+            let name = n.to_string_lossy().to_lowercase();
+            name == "ssh" || name == "ssh.exe"
+        });
+
+    if is_ssh {
+        // Resolve ssh via PATH lookup.
+        let shell_path = if candidate.shell.is_absolute() {
+            if !candidate.shell.exists() {
+                return Err(format!("ssh not found: {:?}", candidate.shell));
+            }
+            candidate.shell.clone()
+        } else {
+            which(&candidate.shell.to_string_lossy())
+                .ok_or_else(|| format!("ssh not found on PATH: {:?}", candidate.shell))?
+        };
+
+        if !is_executable(&shell_path) {
+            return Err(format!("ssh not executable: {:?}", shell_path));
+        }
+
+        let mut cmd = CommandBuilder::new(&shell_path);
+        cmd.cwd(cwd);
+
+        // SSH requires special handling: arguments after the hostname must be
+        // passed as a single string to the remote shell. We split args into
+        // "SSH options" (before hostname) and "remote command" (after hostname).
+        //
+        // Options like -t, -p, -l, etc. precede the hostname. The first
+        // non-option argument is the hostname. Everything after forms the
+        // remote command and must be space-joined and quoted.
+        let mut ssh_args = Vec::new();
+        let mut remote_command_args = Vec::new();
+        let mut found_hostname = false;
+
+        let mut i = 0;
+        while i < candidate.args.len() {
+            let arg = &candidate.args[i];
+
+            if !found_hostname {
+                // Still processing SSH options and hostname
+                if arg.starts_with('-') {
+                    // SSH option (may take a value for -p, -l, etc.)
+                    ssh_args.push(arg.clone());
+                    // Options that take a value: -p port, -l user, -i identity, etc.
+                    if matches!(arg.as_str(), "-p" | "-l" | "-i" | "-F" | "-c") {
+                        if i + 1 < candidate.args.len() {
+                            i += 1;
+                            ssh_args.push(candidate.args[i].clone());
+                        }
+                    }
+                } else {
+                    // First non-option is the hostname
+                    ssh_args.push(arg.clone());
+                    found_hostname = true;
+                }
+            } else {
+                // After hostname: these form the remote command
+                remote_command_args.push(arg.clone());
+            }
+
+            i += 1;
+        }
+
+        cmd.args(&ssh_args);
+
+        // Join remote command args with spaces and pass as single argument
+        if !remote_command_args.is_empty() {
+            let remote_cmd = remote_command_args.join(" ");
+            cmd.arg(remote_cmd);
+        }
+
+        return Ok(cmd);
+    }
+
     if is_wsl {
         // Verify wsl.exe exists on the Windows PATH.
         let wsl_path = which("wsl.exe").ok_or("wsl.exe not found on PATH")?;
