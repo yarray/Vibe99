@@ -1,5 +1,63 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/index.html",
+    "src/float.html",
+    "src/renderer.ts",
+    "src/float-renderer.ts",
+    "e2e/wdio.conf.js",
+    "e2e/tests/activity-alert.spec.js",
+    "e2e/tests/clipboard.spec.js",
+    "e2e/tests/color-picker.spec.js",
+    "e2e/tests/command-palette.spec.js",
+    "e2e/tests/context-menu.spec.js",
+    "e2e/tests/float-window.spec.js",
+    "e2e/tests/hooks.spec.js",
+    "e2e/tests/layout.spec.js",
+    "e2e/tests/pane-management.spec.js",
+    "e2e/tests/pty-lifecycle.spec.js",
+    "e2e/tests/session-persistence.spec.js",
+    "e2e/tests/settings.spec.js",
+    "e2e/tests/shell-profile.spec.js",
+    "e2e/tests/shortcuts-dispatch.spec.js",
+    "e2e/tests/shortcuts-modal-stack-fullscreen.spec.js",
+    "e2e/tests/smoke.spec.js",
+    "e2e/tests/tab-management.spec.js",
+    "e2e/helpers/app-cleanup.js",
+    "e2e/helpers/app-launch.js",
+    "e2e/helpers/layout-helpers.js",
+    "e2e/helpers/session-helpers.js",
+    "e2e/helpers/settings-helpers.js",
+    "e2e/helpers/terminal-helpers.js",
+    "e2e/helpers/wait-for.js",
+    "e2e/helpers/webview2-helpers.js"
+  ],
+  "ignore": [
+    // Domain types are cross-module API vocabulary (exported but internal)
+    "src/domain/commands.ts",
+    "src/domain/layout.ts",
+    "src/domain/pane.ts",
+    // Bridge is the shared API type layer (exported but internal)
+    "src/bridge.ts",
+    // Interface types used via object property access — knip can't trace
+    "src/shortcuts-registry.ts"
+  ],
+  "ignoreExportsUsedInFile": {
+    "interface": true,
+    "type": true
+  },
+  "ignoreIssues": {
+    "src/colors-registry.ts": ["duplicates"]
+  },
+  "ignoreDependencies": [
+    "@tauri-apps/cli",
+    "knip",
+    "@tauri-apps/plugin-opener"
+  ],
+  "ignoreBinaries": [
+    "tauri",
+    "vite"
+  ],
   "tags": [
     "-lintignore"
   ]

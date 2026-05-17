@@ -233,7 +233,7 @@ export function isCommandPaletteOpen(): boolean {
  * Whether the keyboard event is the canonical palette toggle hotkey
  * (Ctrl+Shift+O on Windows/Linux, Cmd+Shift+O on macOS).
  */
-export function isCommandPaletteHotkey(event: KeyboardEvent, platform: string): boolean {
+function isCommandPaletteHotkey(event: KeyboardEvent, platform: string): boolean {
   if (event.key.toLowerCase() !== 'o') return false;
   if (event.altKey || !event.shiftKey) return false;
   if (platform === 'darwin') {
