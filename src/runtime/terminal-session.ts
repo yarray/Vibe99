@@ -385,29 +385,21 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     } catch {}
   }
 
-  function visibleBufferFingerprint(): string {
-    const buffer = terminal.buffer.active;
-    const rows = Math.max(0, terminal.rows || 0);
-    const start = buffer.viewportY;
-    const lines: string[] = [];
+  const snapshot = (): string[] => {
+    const { active: buf } = terminal.buffer;
+    const y = buf.viewportY;
+    return Array.from({ length: terminal.rows }, (_, i) => {
+      const line = buf.getLine(y + i);
+      return line ? `${line.isWrapped ? 1 : 0}:${line.translateToString(true)}` : '';
+    });
+  };
 
-    for (let i = 0; i < rows; i += 1) {
-      const line = buffer.getLine(start + i);
-      lines.push(line ? `${line.isWrapped ? '1' : '0'}:${line.translateToString(true)}` : '');
-    }
-
-    return lines.join('\n');
-  }
-
-  let lastVisibleActivityFingerprint = visibleBufferFingerprint();
+  let last = snapshot();
 
   function noteVisibleTerminalActivity(): void {
-    const nextFingerprint = visibleBufferFingerprint();
-    if (nextFingerprint === lastVisibleActivityFingerprint) {
-      return;
-    }
-
-    lastVisibleActivityFingerprint = nextFingerprint;
+    const next = snapshot();
+    if (next.length === last.length && !next.some((l, i) => l !== last[i])) return;
+    last = next;
     activityWatcher.noteData(paneId);
   }
 
