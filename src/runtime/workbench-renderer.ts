@@ -376,6 +376,10 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     getCurrentMode: () => currentMode,
     state: tabBarState,
     bridge,
+    setPaneActivityAlertEnabled: (paneId, enabled) => {
+      paneActivityWatcher.setPaneEnabled(paneId, enabled);
+      if (!enabled) paneRenderer?.setAlerted(paneId, false);
+    },
   }).dispatch;
 
   let shellProfileManager: ReturnType<typeof createShellProfileManager> | null = null;
