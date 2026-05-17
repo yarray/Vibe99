@@ -43,14 +43,19 @@ COPY . /app/Vibe99
 
 WORKDIR /app/Vibe99
 RUN npm install \
-    && npm run tauri:build-dev
-
-# 5b. 删除预编译的 debug binary，强制测试运行时增量编译
-RUN rm -f src-tauri/target/debug/vibe99
+    && npm cache clean --force \
+    && npm run tauri:build-dev \
+    && rm -f src-tauri/target/debug/vibe99 \
+    && rm -rf src-tauri/target/debug/incremental \
+    && rm -rf src-tauri/target/debug/.fingerprint \
+    && rm -rf src-tauri/target/debug/build \
+    && rm -rf /root/.cargo/registry/cache \
+    && rm -rf /tmp/*
 
 # 6. 安装 e2e 依赖
 WORKDIR /app/Vibe99/e2e
-RUN npm install
+RUN npm install \
+    && npm cache clean --force
 
 WORKDIR /app/Vibe99
 CMD ["/bin/bash"]
