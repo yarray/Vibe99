@@ -2,29 +2,31 @@ import * as ShortcutsRegistry from './shortcuts-registry';
 import type { Bridge } from './bridge';
 import { showConfirmDialog } from './confirm-dialog';
 import {
-  appSettingsSchema,
-  ConsoleValidationReporter,
-  sanitizeField,
   type AppSettingsUi,
-  type FieldValidationResult,
-  type PersistedSettingsRaw,
+  type BreathingIntensity,
+  ConsoleValidationReporter,
+  getDefaultSettings,
+  migrateLegacySettings,
   type ValidationReporter,
   validateAndSanitizeSettings,
+  validateField,
 } from './domain/settings-schema.js';
 
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
 
-export type BreathingIntensity = 'none' | 'mild' | 'intense';
-
 /**
  * AppSettings - Application UI settings.
  *
- * This type is re-exported from the schema system for backward compatibility.
- * New code should import AppSettingsUi directly from settings-schema.
+ * Re-exported from schema module for convenience.
  */
 export type AppSettings = AppSettingsUi;
+export { type BreathingIntensity };
+
+// ---------------------------------------------------------------------------
+// Public Interfaces
+// ---------------------------------------------------------------------------
 
 export interface SettingsManagerDeps {
   bridge: Bridge;
@@ -57,17 +59,28 @@ interface PersistedSettings {
   };
 }
 
-// Re-export PersistedSettingsRaw from schema for backward compatibility
-type SettingsPersistedRaw = PersistedSettingsRaw;
-
-// Additional legacy fields not in schema
-interface LegacyPersistedSettingsRaw extends SettingsPersistedRaw {
-  ui?: Partial<AppSettingsUi & {
-    shortcuts: Record<string, unknown>;
-    paneMaskAlpha?: number;
-    breathingAlertEnabled?: boolean;
+/**
+ * Raw settings shape from storage.
+ *
+ * All fields are optional to handle partial/legacy data.
+ * Migration logic transforms this before schema validation.
+ */
+type RawSettingsFromStorage = {
+  version?: number;
+  ui?: Partial<{
+    fontSize?: unknown;
+    fontFamily?: unknown;
+    paneOpacity?: unknown;
+    paneMaskOpacity?: unknown;
+    paneMaskAlpha?: number; // Deprecated
+    paneWidth?: unknown;
+    webglEnabled?: unknown;
+    breathingAlertEnabled?: boolean; // Deprecated
+    breathingIntensity?: unknown;
+    activityAlertDebounceMs?: unknown;
+    shortcuts?: Record<string, unknown>;
   }>;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -115,14 +128,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const debounceInput = document.getElementById('activity-alert-debounce-input') as HTMLInputElement;
 
   const settings: AppSettings = {
-    fontSize: 13,
+    ...getDefaultSettings(),
     fontFamily: getDefaultFontFamily(bridge.platform),
-    paneOpacity: 0.8,
-    paneMaskOpacity: 0.75,
-    paneWidth: 720,
-    webglEnabled: true,
-    breathingIntensity: 'mild',
-    activityAlertDebounceMs: 30000,
   };
 
   let pendingSettingsSave: number | null = null;
@@ -162,45 +169,22 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       return;
     }
 
-    const raw = nextSettings as LegacyPersistedSettingsRaw;
-    const uiSettings: NonNullable<LegacyPersistedSettingsRaw['ui']> =
-      raw.ui && typeof raw.ui === 'object' && raw.ui !== null
-        ? raw.ui
-        : (raw as Partial<AppSettingsUi>);
+    const raw = nextSettings as RawSettingsFromStorage;
 
-    // Extract UI settings with legacy migrations
-    const extractedUiSettings: Partial<AppSettingsUi> = { ...uiSettings };
+    // Step 1: Migrate legacy settings to current format
+    const migrated = migrateLegacySettings(raw);
 
-    // Migrate legacy paneMaskAlpha -> paneMaskOpacity
-    if (uiSettings.paneMaskAlpha !== undefined &&
-        Number.isFinite(uiSettings.paneMaskAlpha) &&
-        !Number.isFinite(uiSettings.paneMaskOpacity)) {
-      extractedUiSettings.paneMaskOpacity = uiSettings.paneMaskAlpha;
-    }
+    // Step 2: Validate and sanitize against schema
+    const result = validateAndSanitizeSettings(migrated);
 
-    // Migrate v3 inverted mask opacity: old value was 1 - overlay opacity.
-    const hasPaneMaskOpacity = extractedUiSettings.paneMaskOpacity !== undefined &&
-                                Number.isFinite(extractedUiSettings.paneMaskOpacity);
-    if (raw.version != null && raw.version < 4 && hasPaneMaskOpacity) {
-      extractedUiSettings.paneMaskOpacity = 1 - extractedUiSettings.paneMaskOpacity;
-    }
-
-    // Migrate breathingAlertEnabled -> breathingIntensity
-    if (uiSettings.breathingAlertEnabled !== undefined &&
-        typeof uiSettings.breathingAlertEnabled === 'boolean') {
-      extractedUiSettings.breathingIntensity = uiSettings.breathingAlertEnabled ? 'intense' : 'none';
-    }
-
-    // Apply schema-based validation and sanitization
-    const result = validateAndSanitizeSettings<AppSettingsUi>(extractedUiSettings, appSettingsSchema);
-
-    // Update settings with sanitized values
+    // Step 3: Apply sanitized settings
     Object.assign(settings, result.sanitized);
 
-    // Report validation results using the configured reporter
+    // Step 4: Report validation issues
     validationReporter.logResult(result);
 
-    // Load keyboard shortcuts (not part of schema validation)
+    // Step 5: Load keyboard shortcuts (separate from schema validation)
+    const uiSettings = raw.ui ?? {};
     if (uiSettings.shortcuts && typeof uiSettings.shortcuts === 'object') {
       ShortcutsRegistry.loadShortcutsFromSettings(uiSettings.shortcuts);
     } else {
@@ -240,8 +224,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Font size
   fontSizeInput.addEventListener('change', () => {
     const nextValue = Number(fontSizeInput.value);
-    const fieldSchema = appSettingsSchema.fontSize;
-    const result = sanitizeField('fontSize', nextValue, fieldSchema);
+    const result = validateField('fontSize', nextValue);
     settings.fontSize = result.sanitizedValue as number;
     applySettings();
     applyCallback();
@@ -250,9 +233,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   // Font family
   fontFamilyInput.addEventListener('change', () => {
-    const fieldSchema = appSettingsSchema.fontFamily;
-    const result = sanitizeField('fontFamily', fontFamilyInput.value, fieldSchema);
-    settings.fontFamily = result.sanitizedValue as string || getDefaultFontFamily(bridge.platform);
+    const result = validateField('fontFamily', fontFamilyInput.value);
+    settings.fontFamily = (result.sanitizedValue as string) || getDefaultFontFamily(bridge.platform);
     applySettings();
     applyCallback();
     scheduleSettingsSave();
@@ -261,8 +243,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Pane width
   function updatePaneWidth(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    const fieldSchema = appSettingsSchema.paneWidth;
-    const result = sanitizeField('paneWidth', parsedValue, fieldSchema);
+    const result = validateField('paneWidth', parsedValue);
     settings.paneWidth = result.sanitizedValue as number;
     applySettings();
     applyCallback();
@@ -280,8 +261,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Pane opacity
   function updatePaneOpacity(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    const fieldSchema = appSettingsSchema.paneOpacity;
-    const result = sanitizeField('paneOpacity', parsedValue, fieldSchema);
+    const result = validateField('paneOpacity', parsedValue);
     settings.paneOpacity = result.sanitizedValue as number;
     applySettings();
     scheduleSettingsSave();
@@ -298,8 +278,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Pane mask opacity
   function updatePaneMaskOpacity(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    const fieldSchema = appSettingsSchema.paneMaskOpacity;
-    const result = sanitizeField('paneMaskOpacity', parsedValue, fieldSchema);
+    const result = validateField('paneMaskOpacity', parsedValue);
     settings.paneMaskOpacity = result.sanitizedValue as number;
     applySettings();
     scheduleSettingsSave();
@@ -320,9 +299,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     const value = btn.dataset.value as BreathingIntensity | undefined;
     if (!value) return;
 
-    // Validate via schema
-    const fieldSchema = appSettingsSchema.breathingIntensity;
-    const result = sanitizeField('breathingIntensity', value, fieldSchema);
+    const result = validateField('breathingIntensity', value);
     settings.breathingIntensity = result.sanitizedValue as BreathingIntensity;
     applySettings();
     scheduleSettingsSave();
@@ -361,12 +338,11 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     const seconds = Number(debounceInput.value);
     // Convert to milliseconds for validation
     const msValue = seconds * 1000;
-    const fieldSchema = appSettingsSchema.activityAlertDebounceMs;
-    const result = sanitizeField('activityAlertDebounceMs', msValue, fieldSchema);
+    const result = validateField('activityAlertDebounceMs', msValue);
     // Browser sanitises non-numeric input on <input type="number"> to "",
     // which Number("") converts to 0 (not NaN). Treat 0 / negative / NaN
     // as invalid so the field reverts to the current settings value.
-    if (!result.valid && seconds <= 0) {
+    if (result.error && seconds <= 0) {
       applySettings();
       return;
     }
