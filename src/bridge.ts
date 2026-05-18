@@ -38,13 +38,6 @@ export interface TerminalDestroyPayload {
   paneId: string;
 }
 
-/** Union of all terminal payload types */
-export type TerminalPayloads =
-  | TerminalCreatePayload
-  | TerminalWritePayload
-  | TerminalResizePayload
-  | TerminalDestroyPayload;
-
 /** Data received from terminal output events */
 export interface TerminalDataEvent {
   paneId: string;
@@ -366,16 +359,6 @@ function getRuntimePlatform(): Platform {
   return 'linux';
 }
 
-function getDefaultFontFamily(platform: Platform = getRuntimePlatform()): string {
-  if (platform === 'win32') {
-    return 'Consolas, "Cascadia Mono", "Courier New", monospace';
-  }
-  if (platform === 'darwin') {
-    return 'Menlo, Monaco, "SF Mono", monospace';
-  }
-  return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", monospace';
-}
-
 function basename(path: string): string {
   return path.replace(/\/+$/, '').split('/').pop() || '/';
 }
@@ -388,43 +371,6 @@ function basename(path: string): string {
  * Splits a command-line string into an array of arguments.
  * Handles quoted strings (single and double quotes).
  */
-function splitArgs(str: string): string[] {
-  const args: string[] = [];
-  let cur = '';
-  let inQuote = false;
-  let quoteChar = '';
-  for (const ch of str) {
-    if (inQuote) {
-      if (ch === quoteChar) { inQuote = false; } else { cur += ch; }
-    } else if (ch === '"' || ch === "'") {
-      inQuote = true;
-      quoteChar = ch;
-    } else if (/\s/.test(ch)) {
-      if (cur) { args.push(cur); cur = ''; }
-    } else {
-      cur += ch;
-    }
-  }
-  if (cur) { args.push(cur); }
-  return args;
-}
-
-/**
- * Converts a string array back to a shell-quoted command-line string.
- * This is the inverse of splitArgs(): formatArgs(splitArgs(s)) === s for any s.
- */
-function formatArgs(args: string[]): string {
-  return args.map((arg) => {
-    // Arguments needing quoting: contain spaces, double quotes, backslashes, or are empty.
-    if (arg === '' || /[\s"]/.test(arg) || /\\/.test(arg)) {
-      // Escape backslashes and double quotes before wrapping in double quotes.
-      const escaped = arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      return `"${escaped}"`;
-    }
-    return arg;
-  }).join(' ');
-}
-
 // ============================================================================
 // Layout Window Bindings
 // ============================================================================
@@ -927,14 +873,7 @@ export function createBridge(
 
 // Export utilities for external use
 export {
-  getRuntimePlatform,
-  getDefaultFontFamily,
-  basename,
-  splitArgs,
-  formatArgs,
-  LAYOUT_FOCUS_NOTICE_EVENT,
   readLayoutWindowBindings,
   writeLayoutWindowBindings,
-  getBoundLayoutWindowLabel,
   clearLayoutWindowBinding,
 };

@@ -31,12 +31,6 @@
     "e2e/helpers/wait-for.js",
     "e2e/helpers/webview2-helpers.js"
   ],
-  "ignore": [
-    // Bridge is the shared API type layer (exported but internal)
-    "src/bridge.ts",
-    // Interface types used via object property access — knip can't trace
-    "src/shortcuts-registry.ts"
-  ],
   "ignoreExportsUsedInFile": {
     "interface": true,
     "type": true
