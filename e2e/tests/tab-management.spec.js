@@ -174,40 +174,51 @@ async function dismissContextMenu() {
 
 /**
  * Simulate dragging a tab from one position to another.
+ *
+ * Uses viewport coordinates exclusively — no element references in the action
+ * chain. The app's renderTabs() calls replaceChildren() during drag, which
+ * invalidates any previously captured element references and causes stale
+ * element errors.
  */
 async function dragTab(fromIndex, toIndex) {
-  const tabs = await $$('#tabs-list .tab');
-  if (fromIndex >= tabs.length) {
-    throw new Error(`From index ${fromIndex} out of bounds (total ${tabs.length})`);
+  const { fromCX, fromCY, dx, dy } = await browser.execute(
+    (fi, ti) => {
+      const tabs = document.querySelectorAll('#tabs-list .tab');
+      if (!tabs[fi]) return null;
+
+      const fromRect = tabs[fi].getBoundingClientRect();
+      const fromCX = fromRect.left + fromRect.width / 2;
+      const fromCY = fromRect.top + fromRect.height / 2;
+
+      let targetCX, targetCY;
+      if (ti >= tabs.length) {
+        const lastRect = tabs[tabs.length - 1].getBoundingClientRect();
+        targetCX = lastRect.right + 50;
+        targetCY = lastRect.top + lastRect.height / 2;
+      } else {
+        const toRect = tabs[ti].getBoundingClientRect();
+        targetCX = toRect.left + toRect.width / 2;
+        targetCY = toRect.top + toRect.height / 2;
+      }
+
+      return {
+        fromCX,
+        fromCY,
+        dx: Math.round(targetCX - fromCX),
+        dy: Math.round(targetCY - fromCY),
+      };
+    },
+    fromIndex,
+    toIndex,
+  );
+
+  if (!fromCX) {
+    throw new Error(`From index ${fromIndex} out of bounds`);
   }
-
-  const fromTab = tabs[fromIndex];
-  const fromRect = await fromTab.getLocation();
-  const fromSize = await fromTab.getSize();
-  const fromCX = fromRect.x + fromSize.width / 2;
-  const fromCY = fromRect.y + fromSize.height / 2;
-
-  let targetCX, targetCY;
-  if (toIndex >= tabs.length) {
-    const lastTab = tabs[tabs.length - 1];
-    const lastRect = await lastTab.getLocation();
-    const lastSize = await lastTab.getSize();
-    targetCX = lastRect.x + lastSize.width + 50;
-    targetCY = lastRect.y + lastSize.height / 2;
-  } else {
-    const toTab = tabs[toIndex];
-    const toRect = await toTab.getLocation();
-    const toSize = await toTab.getSize();
-    targetCX = toRect.x + toSize.width / 2;
-    targetCY = toRect.y + toSize.height / 2;
-  }
-
-  const dx = Math.round(targetCX - fromCX);
-  const dy = Math.round(targetCY - fromCY);
 
   await browser
     .action('pointer', { parameters: { pointerType: 'mouse' } })
-    .move({ origin: fromTab })
+    .move({ x: fromCX, y: fromCY })
     .down({ button: 0 })
     .move({ x: dx, y: dy, origin: 'pointer' })
     .up({ button: 0 })
