@@ -1,0 +1,1 @@
+Removed all session runtime operations from `PaneRenderer`: `ensurePaneNodes`, `destroyPane`, `focusTerminal`, `blurTerminal`, `restartPaneTerminal`, `changePaneShell`, `setSessionReady`, `getShellChangeTime`, `isShellChanging`. Callers now use `Workbench.session()` / `TerminalSession` methods directly.
