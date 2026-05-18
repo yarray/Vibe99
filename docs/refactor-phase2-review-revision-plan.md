@@ -1,317 +1,373 @@
 # Phase 2 Review 修订计划
 
-> 基于 `docs/refactor-phase2-plan.md`、`docs/complexity-20260517.txt`、代码 review 和 `npm run knip` 的结果。
-> 目标：把 Phase 2 从“模块已拆出”推进到“主流程真正使用领域边界”，并先修复 review 中发现的行为回归。
+> 基于 `docs/refactor-phase2-plan.md` 和 2026-05-18 对当前代码库的复查。
+> 目标：把 Phase 2 从“领域对象已经提取并部分接入”推进到“主流程完全通过领域边界运行”。
 
 ---
 
 ## 0. 当前判断
 
-Phase 2 已经完成了若干实体和模块的提取：
+Phase 2 的主要结构已经存在并部分接入：
 
-- `domain/pane.ts`
-- `domain/layout.ts`
-- `runtime/terminal-session.ts`
-- `runtime/workbench.ts`
-- `runtime/command-dispatcher.ts`
+- `src/domain/pane.ts`
+- `src/domain/layout.ts`
+- `src/domain/commands.ts`
+- `src/runtime/terminal-session.ts`
+- `src/runtime/workbench.ts`
+- `src/runtime/command-dispatcher.ts`
+- `src/runtime/workbench-renderer.ts`
 
-但主运行路径仍然是：
+当前主运行路径大致是：
 
 ```txt
 renderer.ts
   -> createWorkbenchRenderer()
   -> createPaneState()
-  -> createPaneRenderer()
+  -> createWorkbench()
+  -> createPaneRenderer(workbench)
   -> createCommandDispatcher()
 ```
 
-`runtime/workbench.ts` 的 `createWorkbench()` 未被接入，`PaneRenderer` 仍然持有 `TerminalSession` map。也就是说，Phase 2 当前更接近“抽象已落地一半”，还不是“领域模型成为系统主干”。
+也就是说，`Workbench` 已经进入主路径，并且在当前配置下实际持有 `TerminalSession` collection；`PaneRenderer` 已经可以委托给 `Workbench`。但系统还没有达到 Phase 2 的最终意图：`Workbench` 不是统一 command 入口，UI 和 dispatcher 仍依赖旧的 `PaneState` / `PaneRenderer` facade，`TerminalSession` 也仍暴露 xterm 细节。
 
 ---
 
-## 1. 优先级
+## 1. 已完成项
+
+### 1.1 Pane / Layout / TerminalSession 已落地
+
+- `Pane` 表达可持久化 pane 属性。
+- `Layout` 管理 pane collection、focus、MRU、cycle state。
+- `TerminalSession` 管理单 pane 的 DOM、xterm、PTY、clipboard、OSC、shell restart。
+
+### 1.2 Workbench 已接入 session ownership
+
+`workbench-renderer.ts` 已创建 `Workbench`，并把它传给 `createPaneRenderer()`。在当前路径下，session 创建、关闭和查询最终由 `Workbench` 的内部 `Map<paneId, TerminalSession>` 承担。
+
+### 1.3 多数 UI terminal 操作已改为 command
+
+`context-menus.ts` 和 `shell-profiles.ts` 不再直接访问 xterm instance，copy/paste/restart/change shell 等操作已经通过 `AppCommand` 或 shell profile manager 的 command wrapper 进入。
+
+### 1.4 已验证的基础质量门槛
+
+复查时通过：
+
+```bash
+rtk npm run vite:build
+rtk npx tsc --noEmit
+rtk npm run knip
+rtk cargo check --target-dir target-codex
+```
+
+未执行完整 E2E。
+
+---
+
+## 2. 主要缺口
+
+### 2.1 Workbench 还不是统一 command 入口
+
+Phase 2 目标接口要求 `Workbench.dispatch(command)`。当前 `Workbench` 只负责 layout/session/render 协调，command dispatch 仍由独立 `runtime/command-dispatcher.ts` 处理。
+
+当前影响：
+
+- command handler 直接依赖 `PaneState`。
+- command handler 仍通过 `PaneRenderer` 执行 focus、restart、change shell 等 runtime 动作。
+- UI 事件入口进入的是 `workbench-renderer.ts` 里的本地 `dispatch` 变量，而不是 `Workbench.dispatch()`。
+
+### 2.2 PaneRenderer 兼容层仍过宽
+
+`PaneRenderer` 当前仍暴露大量 session/runtime 操作：
+
+- `ensurePaneNodes()`
+- `destroyPane()`
+- `focusTerminal()`
+- `blurTerminal()`
+- `restartPaneTerminal()`
+- `changePaneShell()`
+- `setSessionReady()`
+- `getShellChangeTime()`
+- `isShellChanging()`
+
+虽然它在当前路径下会委托给 `Workbench`，但对外 API 仍在鼓励旧式调用。Phase 2 完成时，`PaneRenderer` 应只保留 DOM render coordination，或者被 `workbench-renderer.ts` 的更小 renderer adapter 替代。
+
+### 2.3 UI 模块还没有做到只 dispatch command
+
+仍存在 UI 直接读取或修改 pane state 的路径：
+
+- `tab-bar.ts` 直接注入 `PaneState`，rename commit 直接调用 `paneState.setPaneTitle()`。
+- `context-menus.ts` 的 tab context 路径直接调用 `state.setFocusedPaneId()`、`recordPaneVisit()`、`render()`。
+- `command-palette-entries.ts` 仍接收 `PaneState` / `PaneRenderer`，并直接读取当前 panes。
+- keyboard actions 中 copy/paste 仍直接调用 `workbench.session(id)?.copySelection()` / `paste()`，没有通过 `AppCommand`。
+
+这些不一定都是用户可见 bug，但它们违反了“UI、快捷键、菜单、未来 CLI 和插件入口都通过同一套领域命令进入系统”的目标。
+
+### 2.4 Layout 领域模型还不完整
+
+`LayoutSnapshot` 有 `id` / `name`，但 `Layout` interface 没有暴露 `id` / `name`。当前 `snapshot()` 固定返回空 `id` / `name`，因此 `Layout` 还没有真正成为“可保存、可激活、可在窗口中运行的工作场景”的 aggregate root。
+
+### 2.5 TerminalSession 仍暴露 xterm 细节
+
+`TerminalSession` interface 仍公开：
+
+- `terminalHost`
+- `terminal`
+- `fitAddon`
+
+这与 Phase 2 的约束不一致。短期可以作为内部迁移接口保留，但必须从 public-facing runtime contract 中移除或改成 internal-only。
+
+### 2.6 Theme 边界未建立
+
+计划要求 `src/domain/theme.ts` 提供 `Theme` contract，并让 terminal theme / CSS tokens / animation tokens 分层输出。当前 terminal theme 仍在 `terminal-session.ts` 内部构造，`domain/theme.ts` 不存在。
+
+---
+
+## 3. 修订原则
 
 ### P0: 不再扩大兼容层
 
-在修复完成前，避免继续给以下兼容接口加新能力：
+新增功能和修复不得继续向以下接口加能力：
 
-- `PaneRenderer.getNode()`
-- `PaneNode`
-- `PaneState` 中新增非兼容用途 API
-- UI 模块直接接收 `paneState` 或 `paneRenderer`
+- `PaneState`
+- `PaneRenderer`
+- `TerminalSession.terminal`
+- UI 模块注入的 ad-hoc state adapter
 
-新增用户动作必须优先进入 `AppCommand`，新增 terminal runtime 能力必须优先挂到 `TerminalSession`。
+新增用户动作必须先建模为 `AppCommand`；新增 terminal runtime 能力必须先落到 `TerminalSession` 的领域方法上。
 
-### P1: 修复 activity alert per-pane 状态回归
+### P0: 行为不回退
 
-问题：
+每一阶段都必须保持现有 E2E 行为不变。特别关注：
 
-- `createDefaultPane()` 当前默认 `breathingMonitor: false`。
-- `paneRenderer.ensurePaneNodes()` 用 `pane.breathingMonitor !== false` 初始化 watcher。
-- context menu 也用 `pane.breathingMonitor !== false` 判断显示 `Disable Alert` / `Enable Alert`。
-- `pane.toggleActivityAlert` 只改持久化状态，没有同步 live `paneActivityWatcher.setPaneEnabled(...)`。
-
-结果：
-
-- 新 pane 默认不触发 activity alert。
-- 用户切换 per-pane alert 后，UI 和持久化状态可能变化，但 watcher 仍保持旧运行时状态，直到 session 重建。
-
-修复方案：
-
-1. 明确默认语义：per-pane activity alert 默认开启。
-2. 将 `createDefaultPane()` 的 `breathingMonitor` 改为 `true`。
-3. `pane.toggleActivityAlert` handler 在更新 `paneState` 后同步调用 watcher：
-
-   ```ts
-   paneActivityWatcher.setPaneEnabled(paneId, next);
-   paneRenderer.setAlerted(paneId, false);
-   ```
-
-4. 如果 dispatcher 不应直接知道 watcher，就把该行为收敛成 command deps 的领域回调，例如：
-
-   ```ts
-   setPaneActivityAlertEnabled(paneId, enabled)
-   ```
-
-5. 增加或修正 E2E 覆盖：
-   - 新建 pane 默认显示 `Disable Alert`。
-   - 点击 `Disable Alert` 后，后续 background output 不触发 alert。
-   - 点击 `Enable Alert` 后，后续 background output 恢复 alert。
-
-完成标准：
-
-- per-pane alert 的持久化状态、context menu、watcher live state 三者一致。
-- 不依赖重启或切换 layout 才生效。
-
-### P1: 接入 Workbench，移除 PaneRenderer 的 session ownership
-
-问题：
-
-- `knip` 报 `createWorkbench` unused。
-- `pane-renderer.ts` 仍持有 `Map<paneId, TerminalSession>`。
-- `pane-renderer.ts#getWorkbench()` 返回 `null`。
-- `workbench-renderer.ts` 仍直接创建 `createPaneState()`、`createPaneRenderer()`、`createCommandDispatcher()`。
-
-修复方案分两步做，降低风险。
-
-#### Step A: 让 PaneRenderer 变成 Workbench 的适配层
-
-1. 在 `workbench-renderer.ts` 中创建 `Layout` / `Workbench`，让 `Workbench` 成为 session map owner。
-2. 暂时保留 `PaneRenderer` API，但内部委托到 `workbench.session(paneId)`。
-3. `PaneRenderer.getNode()` 只作为迁移适配器存在，不能再被新代码调用。
-4. `PaneRenderer.getWorkbench()` 返回真实 workbench。
-
-完成标准：
-
-- session 创建、关闭、render refit 都经过 `Workbench`。
-- `PaneRenderer` 不再拥有 `sessionMap`。
-- `createWorkbench()` 不再被 knip 报 unused。
-
-#### Step B: 删除 PaneRenderer session 兼容接口
-
-替换调用点：
-
-- `getNode().terminal` -> `TerminalSession` 方法
-- `copySelection()` -> `session.copySelection()`
-- `pasteInto()` -> `session.paste()`
-- `selectAll()` -> `session.selectAll()`
-- `restartPaneTerminal()` -> `session.restart()`
-- `changePaneShell()` -> command handler / workbench handler
-
-完成标准：
-
-- `PaneNode` 删除或只保留测试过渡类型。
-- `PaneRenderer.getNode()` 删除。
-- UI 和 dispatcher 不再访问 xterm instance。
-
-### P1: 收紧 command dispatcher，让它只调领域接口
-
-问题：
-
-`runtime/command-dispatcher.ts` 现在仍直接访问：
-
-- `paneRenderer.getNode(...).terminal`
-- `session.terminal.paste(...)`
-- `selNode.terminal.selectAll()`
-- `getNode(...).root.classList.contains(...)`
-
-修复方案：
-
-1. 给 dispatcher 注入 Workbench，而不是 `PaneRenderer | null`。
-2. terminal commands 改为：
-
-   ```ts
-   workbench.session(paneId)?.copySelection()
-   workbench.session(paneId)?.paste()
-   workbench.session(paneId)?.pasteImage()
-   workbench.session(paneId)?.selectAll()
-   workbench.session(paneId)?.restart()
-   ```
-
-3. `focus.nextLit` 不读取 DOM class，改为 runtime alert state 查询：
-
-   ```ts
-   workbench.alertedPaneIds()
-   ```
-
-   或让 activity watcher 暴露只读查询：
-
-   ```ts
-   isAlerted(paneId): boolean
-   ```
-
-完成标准：
-
-- `command-dispatcher.ts` 不出现 `.terminal`。
-- `command-dispatcher.ts` 不读取 pane DOM class。
-- command handler 只编排 `Layout`、`Workbench`、`TerminalSession` 和少量基础设施。
-
-### P2: 修复 shell profile 切换的失败语义
-
-问题：
-
-- 前端先把 pane 的 `shellProfileId` 设置为目标 profile，再重启 PTY。
-- 后端 `spawn()` 会先销毁旧 PTY。
-- 后端显式请求某个 profile 时仍会追加 detected fallback candidates。
-
-结果：
-
-- 请求坏 profile 可能静默启动 fallback shell，却把坏 profile 保存进 layout。
-- 如果 fallback 也失败，旧 shell 已经被杀，前端只能恢复持久化状态，不能恢复 live process。
-
-修复方案：
-
-1. 后端 `shell_candidates(app, Some(profileId))` 默认只尝试目标 profile。
-2. 如果目标 profile 无效，`terminal_create` 返回明确错误，不 fallback。
-3. 前端 shell change 流程改为：
-   - 标记 changing。
-   - 请求后端启动目标 profile。
-   - 成功后更新 `paneState.shellProfileId` 并保存。
-   - 失败后保留旧 profileId，显示错误。
-4. 如果要保留 fallback，后端必须返回实际启动 profile id，前端不能保存请求 profile。
-
-完成标准：
-
-- 切换到不存在/坏 command 的 profile 不会污染 layout。
-- 用户能看到失败原因。
-- 旧 profile 的持久化状态不会被错误覆盖。
-
-### P2: 恢复 Phase 2 计划中的 AppCommand 语义
-
-当前偏差：
-
-- `PaneRenameCommand` 没有 `title`，实际语义是“开始 inline rename”。
-- `mode.set.mode` 是 `string`，不是 `WorkbenchMode`。
-- command palette 仍绕过 command 调 `bridge.openLayoutWindow()`、`tabBar.beginRenamePane()`、`paneRenderer.changePaneShell()`。
-
-修复方案：
-
-1. 拆分 rename command：
-
-   ```ts
-   { type: 'pane.rename.start'; paneId: string }
-   { type: 'pane.rename.commit'; paneId: string; title: string | null }
-   ```
-
-2. 引入明确的 `WorkbenchMode`：
-
-   ```ts
-   type WorkbenchMode = 'terminal' | 'nav'
-   ```
-
-3. command palette 中：
-   - layout open -> `dispatch({ type: 'layout.activate', layoutId })`
-   - change profile -> `dispatch({ type: 'terminal.changeShell', paneId, profileId })`
-   - rename pane -> `dispatch({ type: 'pane.rename.start', paneId })`
-
-完成标准：
-
-- command 词汇表达真实意图，不混用“修改 title”和“打开 rename UI”。
-- UI 模块不直接调用业务对象。
-
-### P3: knip 配置和死代码清理
-
-`npm run knip` 当前有明显假阳性：
-
-- E2E spec/helper 未作为入口配置。
-- `src/float-renderer.ts` 实际由 `src/float.html` 加载。
-- 很多 exported types 是跨模块 API 或领域 vocabulary，不应直接按 unused 删除。
-
-修复方案：
-
-1. 配置 knip entry/project：
-   - `src/index.html`
-   - `src/float.html`
-   - `src/**/*.ts`
-   - `e2e/wdio.conf.js`
-   - `e2e/tests/**/*.spec.js`
-   - `e2e/helpers/**/*.js`
-
-2. 对领域 command interfaces、bridge API types 建立 ignore 规则，或改成非 export 内部类型。
-3. 处理真实信号：
-   - `createWorkbench` unused：通过 P1 接入解决。
-   - `@tauri-apps/api/webviewWindow` type import 未声明：选择其一：
-     - 显式添加 `@tauri-apps/api` 到 `package.json`。
-     - 或避免 type import，改成本地最小类型，保持全局 Tauri API shim。
-
-完成标准：
-
-- `npm run knip` 不再被 E2E/HTML entry 噪声淹没。
-- 剩余报告每一项都能转化为明确清理动作或明确 ignore。
+- pane add/close/focus/reorder/MRU
+- layout restore/save/open window
+- context menu copy/paste/restart/change profile
+- tab rename/drag/close
+- activity alert
+- shell profile failure behavior
 
 ---
 
-## 2. 推荐执行顺序
+## 4. 推荐执行顺序
 
-1. 修复 activity alert per-pane runtime 同步。
-2. 修复 shell profile 切换失败语义。
-3. 调整 command dispatcher，不再直接访问 xterm。
-4. 接入 `Workbench` 并迁移 session ownership。
-5. 删除 `PaneRenderer` 兼容接口。
-6. 修订 command vocabulary。
-7. 收敛 knip 配置并清理真实死代码。
+### Step 1: 把 command dispatcher 收进 Workbench
 
-这个顺序优先处理用户可见回归，再处理架构主干。Workbench 接入放在 dispatcher 收紧之后，可以减少一次性迁移的交叉风险。
+目标：
+
+- `Workbench` 暴露 `dispatch(command: AppCommand): CommandResult | Promise<CommandResult>`。
+- `createCommandDispatcher()` 变成 `createWorkbench()` 的内部实现细节，或直接合并进 `workbench.ts`。
+- `workbench-renderer.ts` 只调用 `workbench.dispatch()`。
+
+具体动作：
+
+1. 扩展 `Workbench` interface，添加 `dispatch()`。
+2. 把 `CommandDispatcherDeps` 中的 `paneRenderer` 替换为 `Workbench` / `TerminalSession` 能力。
+3. terminal commands 直接调用 `workbench.session(paneId)`：
+   - `terminal.copy` -> `session.copySelection()`
+   - `terminal.paste` -> `session.paste()`
+   - `terminal.pasteImage` -> `session.pasteImage()`
+   - `terminal.selectAll` -> `session.selectAll()`
+   - `terminal.restart` -> `session.restart()`
+   - `terminal.changeShell` -> Workbench-level shell change handler
+4. focus commands 只通过 `Layout` 和 `TerminalSession.focus()/blur()` 编排。
+
+完成标准：
+
+- `workbench-renderer.ts` 不再创建独立 dispatcher。
+- `command-dispatcher.ts` 不再依赖 `PaneRenderer`。
+- 所有 UI/keyboard/menu entry 都调用同一个 `workbench.dispatch()`。
+
+### Step 2: 收紧 PaneRenderer 为纯 render adapter
+
+目标：
+
+- `PaneRenderer` 不再表达 session lifecycle owner。
+- `ensurePaneNodes()` / `destroyPane()` 等旧名删除，或移动到私有 adapter。
+- 外部不再通过 `PaneRenderer` 做 focus/restart/change shell。
+
+具体动作：
+
+1. 把 render 需要的布局计算保留在 renderer adapter：
+   - pane left/width/z-index
+   - focus CSS class
+   - navigation-target CSS class
+   - fit scheduling
+2. 把 session 操作全部替换为 `Workbench` / `TerminalSession` 方法。
+3. 删除 deprecated API：
+   - `ensurePaneNodes`
+   - `destroyPane`
+   - `restartPaneTerminal`
+   - `changePaneShell`
+   - `setSessionReady`
+   - `getShellChangeTime`
+   - `isShellChanging`
+
+完成标准：
+
+- `pane-renderer.ts` 不再导出 session runtime 操作。
+- 搜索 `paneRenderer?.focusTerminal`、`paneRenderer?.changePaneShell`、`paneRenderer?.restartPaneTerminal` 无结果。
+
+### Step 3: 让 UI 模块只读 snapshot、只 dispatch command
+
+目标：
+
+- `tab-bar.ts` 不再接收 `PaneState`。
+- `context-menus.ts` 不再接收可写 state adapter。
+- `command-palette-entries.ts` 不再接收 `PaneRenderer`。
+
+具体动作：
+
+1. 给 UI 模块提供只读 view model：
+   ```ts
+   interface WorkbenchViewSnapshot {
+     panes: PaneSnapshot[];
+     focusedPaneId: string | null;
+     mode: WorkbenchMode;
+     alertedPaneIds: string[];
+   }
+   ```
+2. tab rename commit 改为：
+   ```ts
+   dispatch({ type: 'pane.rename.commit', paneId, title })
+   ```
+3. tab context focus 改为：
+   ```ts
+   dispatch({ type: 'pane.focus', paneId, focusTerminal: false })
+   ```
+4. command palette 只通过 snapshot 构建 entries，通过 command 执行动作。
+
+完成标准：
+
+- `tab-bar.ts` 不 import `PaneState`。
+- `context-menus.ts` 不暴露 `setPanels` / `setFocusedPaneId` / `render` 这类 mutation adapter。
+- `command-palette-entries.ts` 不 import `PaneRenderer`。
+
+### Step 4: 修正 Layout aggregate contract
+
+目标：
+
+- `Layout` 真正拥有 `id` / `name` / activation / theme id。
+- `snapshot()` 不丢失 layout identity。
+- `layout-manager.ts` 逐步变成 storage adapter。
+
+具体动作：
+
+1. 在 `Layout` interface 暴露：
+   ```ts
+   id: string;
+   name: string;
+   rename(name: string): void;
+   ```
+2. `createLayout(snapshot)` 保存 `id` / `name` 到内部 state。
+3. `snapshot()` 返回真实 `id` / `name` / `activation` / `themeId`。
+4. `PaneState.restoreSession()` 的兼容逻辑只负责把旧 session shape 转成 `LayoutSnapshot`。
+
+完成标准：
+
+- `Layout.snapshot().id` 和 `.name` 不再是空字符串。
+- 保存/恢复 layout 时不依赖外部补写 identity。
+
+### Step 5: 收紧 TerminalSession public contract
+
+目标：
+
+- `TerminalSession` 对外只暴露领域动作和必要状态查询。
+- xterm instance、fit addon、DOM host 不再属于公共 contract。
+
+具体动作：
+
+1. 拆分接口：
+   ```ts
+   export interface TerminalSession { ...domain runtime methods... }
+   interface InternalTerminalSession extends TerminalSession { terminal: Terminal; fitAddon: FitAddon; terminalHost: HTMLElement; }
+   ```
+2. 替换外部对 `terminal` / `fitAddon` / `terminalHost` 的直接访问。
+3. 如测试确实需要内部对象，提供专门 test hook，不放入生产接口。
+
+完成标准：
+
+- `TerminalSession` export 中不出现 `terminal: Terminal` / `fitAddon: FitAddon`。
+- `src` 中除 `terminal-session.ts` 外没有 `.terminal.` 调用链。
+
+### Step 6: 建立 Theme contract
+
+目标：
+
+- 新增 `src/domain/theme.ts`。
+- terminal theme 创建逻辑从 `TerminalSession` 移出。
+- UI CSS variables、terminal theme、animation tokens 有明确出口。
+
+具体动作：
+
+1. 定义：
+   ```ts
+   export interface Theme {
+     id: string;
+     name: string;
+     cssTokens(): Record<string, string>;
+     terminalTheme(accent: string): TerminalTheme;
+     animationTokens(): Record<string, string>;
+   }
+   ```
+2. 提供当前默认 theme 实现。
+3. `TerminalSessionDeps` 接收最终 theme 或 `terminalTheme(accent)` 函数。
+4. `Pane` / `Layout` 只保存 theme id 或 accent override。
+
+完成标准：
+
+- `terminal-session.ts` 不再定义硬编码 `createTerminalTheme()`。
+- 后续主题系统可以通过 `Theme` contract 接入，不侵入 terminal runtime。
 
 ---
 
-## 3. 验证矩阵
+## 5. 风险和测试矩阵
 
-每个阶段至少执行：
+### 高风险区域
+
+- shell change：当前前端在 PTY 成功后才保存 profile，后端显式 profile 不 fallback。迁移到 Workbench command handler 时必须保留这个语义。
+- terminal exit：`destroyPty: false` 和 normal close 的行为不同，迁移时不能统一错。
+- activity alert：持久化开关、live watcher、context menu label 必须保持一致。
+- layout restore：pane id 当前仍由兼容 restore 重新编号，迁移 Layout identity 时不能破坏现有 layout 文件。
+
+### 每阶段必跑
 
 ```bash
-npm run vite:build
-npx tsc --noEmit
-cargo check
+rtk npm run vite:build
+rtk npx tsc --noEmit
+rtk cargo check --target-dir target-codex
 ```
 
-重点 E2E 覆盖范围：
+### 架构阶段完成后补跑
+
+```bash
+rtk npm run knip
+```
+
+### 重点 E2E
 
 - `activity-alert.spec.js`
-- `shell-profile.spec.js`
-- `context-menu.spec.js`
 - `clipboard.spec.js`
+- `context-menu.spec.js`
 - `pane-management.spec.js`
+- `tab-management.spec.js`
+- `shell-profile.spec.js`
 - `layout.spec.js`
-
-具体运行方式参考 `README.md` 的 `E2E Testing` 章节和 `e2e/README.md`，这里不重复写命令，避免和测试入口约定漂移。
-
-迁移完成后执行：
-
-```bash
-npm run knip
-```
+- `session-persistence.spec.js`
 
 ---
 
-## 4. 完成条件
+## 6. Phase 2 修订完成条件
 
-Phase 2 修订完成后必须满足：
+修订完成后必须满足：
 
-- `Workbench` 是 active layout 和 `TerminalSession` collection 的 owner。
-- `PaneRenderer` 不再持有 session map。
-- `command-dispatcher.ts` 不直接访问 xterm 或 pane DOM。
-- UI 模块只 dispatch command，不直接改 pane/session runtime。
-- per-pane activity alert 的持久化状态和 live watcher 状态一致。
-- shell profile 切换失败不会污染 layout。
-- `knip` 报告只剩明确可解释的 public API 或已配置 ignore 项。
+- `Workbench` 是 active `Layout`、`TerminalSession` collection 和 `AppCommand` dispatch 的统一入口。
+- `PaneRenderer` 不再持有或暴露 terminal runtime 操作。
+- UI 模块只读 snapshot，只 dispatch command。
+- keyboard、context menu、command palette、Tauri menu action 都进入同一个 command path。
+- pane collection 不变量只由 `Layout` 保证。
+- terminal runtime 不变量只由 `TerminalSession` 保证。
+- `TerminalSession` public contract 不暴露 xterm instance。
+- `Layout.snapshot()` 保留真实 layout identity。
+- Theme contract 已建立，当前默认主题通过该 contract 输出 terminal/CSS/animation tokens。
+- `vite:build`、`tsc --noEmit`、`cargo check`、`knip` 通过。
+- 上述重点 E2E 通过或有明确、可追踪的环境原因说明。
