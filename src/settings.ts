@@ -1,23 +1,32 @@
 import * as ShortcutsRegistry from './shortcuts-registry';
 import type { Bridge } from './bridge';
 import { showConfirmDialog } from './confirm-dialog';
+import {
+  type AppSettingsUi,
+  type BreathingIntensity,
+  ConsoleValidationReporter,
+  getDefaultSettings,
+  migrateLegacySettings,
+  type ValidationReporter,
+  validateAndSanitizeSettings,
+  validateField,
+} from './domain/settings-schema.js';
 
 // ---------------------------------------------------------------------------
 // Exported types
 // ---------------------------------------------------------------------------
 
-export type BreathingIntensity = 'none' | 'mild' | 'intense';
+/**
+ * AppSettings - Application UI settings.
+ *
+ * Re-exported from schema module for convenience.
+ */
+export type AppSettings = AppSettingsUi;
+export { type BreathingIntensity };
 
-export interface AppSettings {
-  fontSize: number;
-  fontFamily: string;
-  paneOpacity: number;
-  paneMaskOpacity: number;
-  paneWidth: number;
-  webglEnabled: boolean;
-  breathingIntensity: BreathingIntensity;
-  activityAlertDebounceMs: number;
-}
+// ---------------------------------------------------------------------------
+// Public Interfaces
+// ---------------------------------------------------------------------------
 
 export interface SettingsManagerDeps {
   bridge: Bridge;
@@ -31,6 +40,8 @@ export interface SettingsManagerDeps {
   onToggleFloatWindow?: () => Promise<void>;
   getFloatWindowOpen?: () => boolean;
   requestAppRestart?: () => void;
+  /** Optional custom validation reporter (defaults to ConsoleValidationReporter) */
+  validationReporter?: ValidationReporter;
 }
 
 export interface SettingsManager {
@@ -48,15 +59,28 @@ interface PersistedSettings {
   };
 }
 
-/** Shape expected from the persistence layer (all fields optional). */
-interface PersistedSettingsRaw {
+/**
+ * Raw settings shape from storage.
+ *
+ * All fields are optional to handle partial/legacy data.
+ * Migration logic transforms this before schema validation.
+ */
+type RawSettingsFromStorage = {
   version?: number;
-  ui?: Partial<AppSettings & {
-    shortcuts: Record<string, unknown>;
-    paneMaskAlpha?: number;
-    breathingAlertEnabled?: boolean;
+  ui?: Partial<{
+    fontSize?: unknown;
+    fontFamily?: unknown;
+    paneOpacity?: unknown;
+    paneMaskOpacity?: unknown;
+    paneMaskAlpha?: number; // Deprecated
+    paneWidth?: unknown;
+    webglEnabled?: unknown;
+    breathingAlertEnabled?: boolean; // Deprecated
+    breathingIntensity?: unknown;
+    activityAlertDebounceMs?: unknown;
+    shortcuts?: Record<string, unknown>;
   }>;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,6 +107,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     applyCallback,
     paneActivityWatcher,
     onBreathingIntensityChange,
+    validationReporter = new ConsoleValidationReporter(),
   } = deps;
 
   const fontSizeInput = document.getElementById('font-size-input') as HTMLInputElement;
@@ -103,14 +128,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const debounceInput = document.getElementById('activity-alert-debounce-input') as HTMLInputElement;
 
   const settings: AppSettings = {
-    fontSize: 13,
+    ...getDefaultSettings(),
     fontFamily: getDefaultFontFamily(bridge.platform),
-    paneOpacity: 0.8,
-    paneMaskOpacity: 0.75,
-    paneWidth: 720,
-    webglEnabled: true,
-    breathingIntensity: 'mild',
-    activityAlertDebounceMs: 30000,
   };
 
   let pendingSettingsSave: number | null = null;
@@ -150,60 +169,22 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
       return;
     }
 
-    const raw = nextSettings as PersistedSettingsRaw;
-    const uiSettings: NonNullable<PersistedSettingsRaw['ui']> =
-      raw.ui && typeof raw.ui === 'object' && raw.ui !== null
-        ? raw.ui
-        : (raw as Partial<AppSettings>);
+    const raw = nextSettings as RawSettingsFromStorage;
 
-    if (Number.isFinite(uiSettings.fontSize)) {
-      settings.fontSize = uiSettings.fontSize!;
-    }
+    // Step 1: Migrate legacy settings to current format
+    const migrated = migrateLegacySettings(raw);
 
-    if (typeof uiSettings.fontFamily === 'string') {
-      settings.fontFamily = uiSettings.fontFamily;
-    }
+    // Step 2: Validate and sanitize against schema
+    const result = validateAndSanitizeSettings(migrated);
 
-    if (Number.isFinite(uiSettings.paneOpacity)) {
-      settings.paneOpacity = Math.max(0.55, Math.min(1, uiSettings.paneOpacity!));
-    }
+    // Step 3: Apply sanitized settings
+    Object.assign(settings, result.sanitized);
 
-    if (Number.isFinite(uiSettings.paneMaskOpacity)) {
-      settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskOpacity!));
-    }
+    // Step 4: Report validation issues
+    validationReporter.logResult(result);
 
-    // Migrate legacy paneMaskAlpha -> paneMaskOpacity
-    if (uiSettings.paneMaskAlpha !== undefined && Number.isFinite(uiSettings.paneMaskAlpha) && !Number.isFinite(uiSettings.paneMaskOpacity)) {
-      settings.paneMaskOpacity = Math.max(0, Math.min(1, uiSettings.paneMaskAlpha));
-    }
-
-    // Migrate v3 inverted mask opacity: old value was 1 - overlay opacity.
-    if (raw.version != null && raw.version < 4) {
-      settings.paneMaskOpacity = 1 - settings.paneMaskOpacity;
-    }
-
-    if (Number.isFinite(uiSettings.paneWidth)) {
-      settings.paneWidth = uiSettings.paneWidth!;
-    }
-
-    if (typeof uiSettings.breathingIntensity === 'string') {
-      const valid: BreathingIntensity[] = ['none', 'mild', 'intense'];
-      if (valid.includes(uiSettings.breathingIntensity as BreathingIntensity)) {
-        settings.breathingIntensity = uiSettings.breathingIntensity as BreathingIntensity;
-      }
-    } else if (typeof uiSettings.breathingAlertEnabled === 'boolean') {
-      settings.breathingIntensity = uiSettings.breathingAlertEnabled ? 'intense' : 'none';
-    }
-
-    if (typeof uiSettings.webglEnabled === 'boolean') {
-      settings.webglEnabled = uiSettings.webglEnabled;
-    }
-
-    if (Number.isFinite(uiSettings.activityAlertDebounceMs)) {
-      settings.activityAlertDebounceMs = Math.max(3000, Math.min(300000, uiSettings.activityAlertDebounceMs!));
-    }
-
-    // Load keyboard shortcuts
+    // Step 5: Load keyboard shortcuts (separate from schema validation)
+    const uiSettings = raw.ui ?? {};
     if (uiSettings.shortcuts && typeof uiSettings.shortcuts === 'object') {
       ShortcutsRegistry.loadShortcutsFromSettings(uiSettings.shortcuts);
     } else {
@@ -243,12 +224,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Font size
   fontSizeInput.addEventListener('change', () => {
     const nextValue = Number(fontSizeInput.value);
-    if (!Number.isFinite(nextValue)) {
-      applySettings();
-      return;
-    }
-
-    settings.fontSize = Math.max(10, Math.min(24, Math.round(nextValue)));
+    const result = validateField('fontSize', nextValue);
+    settings.fontSize = result.sanitizedValue as number;
     applySettings();
     applyCallback();
     scheduleSettingsSave();
@@ -256,7 +233,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   // Font family
   fontFamilyInput.addEventListener('change', () => {
-    settings.fontFamily = fontFamilyInput.value.trim() || getDefaultFontFamily(bridge.platform);
+    const result = validateField('fontFamily', fontFamilyInput.value);
+    settings.fontFamily = (result.sanitizedValue as string) || getDefaultFontFamily(bridge.platform);
     applySettings();
     applyCallback();
     scheduleSettingsSave();
@@ -265,12 +243,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Pane width
   function updatePaneWidth(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    if (!Number.isFinite(parsedValue)) {
-      applySettings();
-      return;
-    }
-
-    settings.paneWidth = Math.max(520, Math.min(2000, Math.round(parsedValue / 10) * 10));
+    const result = validateField('paneWidth', parsedValue);
+    settings.paneWidth = result.sanitizedValue as number;
     applySettings();
     applyCallback();
     scheduleSettingsSave();
@@ -287,12 +261,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Pane opacity
   function updatePaneOpacity(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    if (!Number.isFinite(parsedValue)) {
-      applySettings();
-      return;
-    }
-
-    settings.paneOpacity = Math.max(0.55, Math.min(1, Number(parsedValue.toFixed(2))));
+    const result = validateField('paneOpacity', parsedValue);
+    settings.paneOpacity = result.sanitizedValue as number;
     applySettings();
     scheduleSettingsSave();
   }
@@ -308,12 +278,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Pane mask opacity
   function updatePaneMaskOpacity(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    if (!Number.isFinite(parsedValue)) {
-      applySettings();
-      return;
-    }
-
-    settings.paneMaskOpacity = Math.max(0, Math.min(1, Number(parsedValue.toFixed(2))));
+    const result = validateField('paneMaskOpacity', parsedValue);
+    settings.paneMaskOpacity = result.sanitizedValue as number;
     applySettings();
     scheduleSettingsSave();
   }
@@ -332,7 +298,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     if (!btn) return;
     const value = btn.dataset.value as BreathingIntensity | undefined;
     if (!value) return;
-    settings.breathingIntensity = value;
+
+    const result = validateField('breathingIntensity', value);
+    settings.breathingIntensity = result.sanitizedValue as BreathingIntensity;
     applySettings();
     scheduleSettingsSave();
   });
@@ -368,14 +336,17 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Activity alert debounce time
   debounceInput.addEventListener('change', () => {
     const seconds = Number(debounceInput.value);
+    // Convert to milliseconds for validation
+    const msValue = seconds * 1000;
+    const result = validateField('activityAlertDebounceMs', msValue);
     // Browser sanitises non-numeric input on <input type="number"> to "",
-    // which Number("") converts to 0 (not NaN).  Treat 0 / negative / NaN
+    // which Number("") converts to 0 (not NaN). Treat 0 / negative / NaN
     // as invalid so the field reverts to the current settings value.
-    if (!Number.isFinite(seconds) || seconds <= 0) {
+    if (result.error && seconds <= 0) {
       applySettings();
       return;
     }
-    settings.activityAlertDebounceMs = Math.max(3000, Math.min(300000, seconds * 1000));
+    settings.activityAlertDebounceMs = result.sanitizedValue as number;
     applySettings();
     scheduleSettingsSave();
   });
