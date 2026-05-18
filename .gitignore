@@ -15,3 +15,4 @@ src-tauri/gen/schemas/macOS-schema.json
 .claude
 .gstack/
 .build-env.sh
+e2e/.cache/

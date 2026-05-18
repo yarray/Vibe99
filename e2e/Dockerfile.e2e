@@ -42,15 +42,29 @@ WORKDIR /app
 COPY . /app/Vibe99
 
 WORKDIR /app/Vibe99
+
+# 5.5 恢复增量编译缓存（从上次构建的 image 提取）
+COPY e2e/.cache /tmp/docker-cache
+RUN mkdir -p /root/.cargo/registry /root/.cargo/git && \
+    if [ -f /tmp/docker-cache/cargo-registry.tar.gz ]; then \
+        tar -xzf /tmp/docker-cache/cargo-registry.tar.gz -C /root/.cargo/; \
+    fi && \
+    if [ -f /tmp/docker-cache/cargo-target.tar.gz ]; then \
+        tar -xzf /tmp/docker-cache/cargo-target.tar.gz -C /app/Vibe99/src-tauri/; \
+    fi && \
+    rm -rf /tmp/docker-cache
+
 RUN npm install \
     && npm cache clean --force \
-    && npm run tauri:build-dev \
-    && rm -f src-tauri/target/debug/vibe99 \
-    && rm -rf src-tauri/target/debug/incremental \
-    && rm -rf src-tauri/target/debug/.fingerprint \
-    && rm -rf src-tauri/target/debug/build \
-    && rm -rf /root/.cargo/registry/cache \
-    && rm -rf /tmp/*
+    && npm run tauri:build-dev
+
+# 清理编译产物但保留增量缓存
+RUN rm -f src-tauri/target/debug/vibe99
+
+# 5.7 保存增量编译缓存（供下次构建使用）
+RUN tar -czf /tmp/cargo-target.tar.gz -C /app/Vibe99/src-tauri target && \
+    tar -czf /tmp/cargo-registry.tar.gz -C /root/.cargo registry && \
+    tar -czf /tmp/cargo-git.tar.gz -C /root/.cargo git
 
 # 6. 安装 e2e 依赖
 WORKDIR /app/Vibe99/e2e
