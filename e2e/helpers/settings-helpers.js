@@ -67,7 +67,7 @@ export async function resetSettings() {
               paneOpacity: 0.8,
               paneMaskOpacity: 0.75,
               paneWidth: 720,
-              breathingAlertEnabled: true,
+              breathingIntensity: 'mild',
               activityAlertDebounceMs: 30000,
             },
           },
