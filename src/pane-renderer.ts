@@ -41,19 +41,13 @@ export interface PaneRendererDeps {
 }
 
 export interface PaneRenderer {
-  /** @deprecated Use ensureSessions() instead. Will be removed in Step 5. */
-  ensurePaneNodes: () => void;
   /** Ensure sessions are synchronized with Layout's pane collection. */
   ensureSessions: () => void;
   renderPanes: (refit?: boolean) => void;
   fitTerminal: (paneId: string, force?: boolean) => void;
   write: (paneId: string, data: string) => void;
-  focusTerminal: (paneId: string) => void;
-  blurTerminal: (paneId: string) => void;
   clearTerminal: (paneId: string) => void;
   writeln: (paneId: string, text: string) => void;
-  changePaneShell: (paneId: string, profileId: string, previousProfileId?: string | null) => void;
-  restartPaneTerminal: (paneId: string) => void;
   entryNeedsTabRefresh: (paneId: string) => boolean;
   setAlerted: (paneId: string, alerted: boolean) => void;
   /** Check whether the pane's root element has the alert CSS class. */
@@ -61,11 +55,6 @@ export interface PaneRenderer {
   rootContains: (paneId: string, el: Node) => boolean;
   hasSelection: (paneId: string) => boolean;
   isSessionReady: (paneId: string) => boolean;
-  setSessionReady: (paneId: string, ready: boolean) => void;
-  getShellChangeTime: (paneId: string) => number | null;
-  isShellChanging: (paneId: string) => boolean;
-  /** @deprecated Use closeSession() instead. Will be removed in Step 5. */
-  destroyPane: (paneId: string) => void;
   /** Close a session for a specific pane. */
   closeSession: (paneId: string, options?: { destroyPty?: boolean }) => void;
   getRecentOutput: (paneId: string, maxLines?: number) => string;
@@ -182,7 +171,7 @@ export function createPaneRenderer({
 
   // -- Pane lifecycle -----------------------------------------------------------
 
-  function ensurePaneNodes(): void {
+  function ensureSessions(): void {
     if (workbench) {
       workbench.ensureSessions();
       return;
@@ -210,11 +199,6 @@ export function createPaneRenderer({
     }
   }
 
-  function ensureSessions(): void {
-    // New API name for the same operation
-    ensurePaneNodes();
-  }
-
   // -- Rendering ----------------------------------------------------------------
 
   function renderPanes(refit = false): void {
@@ -224,7 +208,7 @@ export function createPaneRenderer({
     const previewWidth = getPreviewWidth(stageWidth, currentPanes.length);
     const focusedIndex = paneState.getFocusedIndex();
 
-    ensurePaneNodes();
+    ensureSessions();
     paneActivityWatcher.setFocus(paneState.getFocusedPaneId());
 
     currentPanes.forEach((pane, index) => {
@@ -251,17 +235,6 @@ export function createPaneRenderer({
 
   // -- Per-pane operations ------------------------------------------------------
 
-  function destroyPane(paneId: string): void {
-    if (workbench) {
-      workbench.closeSession(paneId, { destroyPty: true });
-      return;
-    }
-    const session = sessionMap!.get(paneId);
-    if (!session) return;
-    session.close({ destroyPty: true });
-    sessionMap!.delete(paneId);
-  }
-
   function closeSession(paneId: string, options: { destroyPty?: boolean } = {}): void {
     if (workbench) {
       workbench.closeSession(paneId, options);
@@ -274,46 +247,9 @@ export function createPaneRenderer({
     sessionMap!.delete(paneId);
   }
 
-  function changePaneShell(paneId: string, profileId: string, previousProfileId?: string | null): void {
-    const session = resolveSession(paneId);
-    if (!session) return;
-
-    const prevProfileId = previousProfileId ?? paneState.getPaneById(paneId)?.shellProfileId ?? null;
-
-    // DON'T update paneState yet - wait for PTY to start successfully first
-    // This prevents bad profiles from polluting the layout
-    session.changeShell(profileId, prevProfileId);
-
-    // After the PTY starts, update the state if successful, otherwise keep old profile
-    // The error message is already written to the terminal by initializePty
-    const checkResult = (): void => {
-      requestAnimationFrame(() => {
-        if (!session.isShellChanging()) {
-          if (session.isReady()) {
-            // PTY started successfully - now update the state and save layout
-            paneState.setPaneShellProfile(paneId, profileId);
-            scheduleWindowLayoutSave();
-          }
-          // If not ready, the error was already written to terminal
-          // and we keep the previous profileId in state
-        } else {
-          checkResult();
-        }
-      });
-    };
-    checkResult();
-  }
-
-  function restartPaneTerminal(paneId: string): void {
-    const session = resolveSession(paneId);
-    if (!session) return;
-    session.restart();
-  }
-
   // -- Public API ---------------------------------------------------------------
 
   return {
-    ensurePaneNodes,
     ensureSessions,
     renderPanes,
     fitTerminal: (paneId, force = false) => {
@@ -326,16 +262,6 @@ export function createPaneRenderer({
       if (!session) return;
       session.write(data);
     },
-    focusTerminal: (paneId) => {
-      const session = resolveSession(paneId);
-      if (!session) return;
-      session.focus();
-    },
-    blurTerminal: (paneId) => {
-      const session = resolveSession(paneId);
-      if (!session) return;
-      session.blur();
-    },
     clearTerminal: (paneId) => {
       const session = resolveSession(paneId);
       if (!session) return;
@@ -346,8 +272,6 @@ export function createPaneRenderer({
       if (!session) return;
       session.writeLine(text);
     },
-    changePaneShell,
-    restartPaneTerminal,
     entryNeedsTabRefresh,
     setAlerted: (paneId, alerted) => {
       const session = resolveSession(paneId);
@@ -374,22 +298,6 @@ export function createPaneRenderer({
       if (!session) return false;
       return session.isReady();
     },
-    setSessionReady: (paneId, ready) => {
-      const session = resolveSession(paneId);
-      if (!session) return;
-      session.setReady(ready);
-    },
-    getShellChangeTime: (paneId) => {
-      const session = resolveSession(paneId);
-      if (!session) return null;
-      return session.shellChangeTime();
-    },
-    isShellChanging: (paneId) => {
-      const session = resolveSession(paneId);
-      if (!session) return false;
-      return session.isShellChanging();
-    },
-    destroyPane,
     closeSession,
     getRecentOutput: (paneId, maxLines = 20) => {
       const session = resolveSession(paneId);
