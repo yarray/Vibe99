@@ -227,6 +227,12 @@ export function createPaneRenderer({
     ensurePaneNodes();
     paneActivityWatcher.setFocus(paneState.getFocusedPaneId());
 
+    // Collect sessions that need fitting, then batch-fit in next animation frame.
+    // This ensures CSS layout changes (e.g., pane width, position) have been
+    // processed before xterm.js measures container dimensions. Without this,
+    // fitAddon.fit() reads stale layout values, causing visual artifacts.
+    const sessionsToFit: TerminalSession[] = [];
+
     currentPanes.forEach((pane, index) => {
       const session = resolveSession(pane.id);
       if (!session) return;
@@ -244,9 +250,19 @@ export function createPaneRenderer({
       session.setAccent(accentColor);
 
       if (refit || session.needsFit()) {
-        session.fit({ force: true });
+        sessionsToFit.push(session);
       }
     });
+
+    // Batch-fit all affected sessions in the next animation frame, after
+    // CSS layout updates have been applied.
+    if (sessionsToFit.length > 0) {
+      requestAnimationFrame(() => {
+        for (const session of sessionsToFit) {
+          session.fit({ force: true });
+        }
+      });
+    }
   }
 
   // -- Per-pane operations ------------------------------------------------------
