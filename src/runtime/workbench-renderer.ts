@@ -276,20 +276,21 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     if (!session) return true;
 
     if (reason === 'killed') {
-      paneRenderer!.setSessionReady(paneId, false);
+      session.setReady(false);
       return true;
     }
 
     const graceMs = 3000;
-    const recentShellChange = paneRenderer!.getShellChangeTime(paneId) && (Date.now() - paneRenderer!.getShellChangeTime(paneId)! < graceMs);
-    if (paneRenderer!.isShellChanging(paneId) || recentShellChange) {
-      paneRenderer!.setSessionReady(paneId, false);
+    const shellTime = session.shellChangeTime();
+    const recentShellChange = shellTime && (Date.now() - shellTime < graceMs);
+    if (session.isShellChanging() || recentShellChange) {
+      session.setReady(false);
       paneRenderer!.writeln(paneId, '');
       paneRenderer!.writeln(paneId, `\x1b[38;5;204m[shell exited with code ${exitCode}]\x1b[0m`);
       return true;
     }
 
-    paneRenderer!.setSessionReady(paneId, false);
+    session.setReady(false);
     paneRenderer!.writeln(paneId, '');
     paneRenderer!.writeln(paneId, `\x1b[38;5;244m[process exited with code ${exitCode}]\x1b[0m`);
 
@@ -320,7 +321,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       if (newFocusedPaneId) {
         requestAnimationFrame(() => {
           setMode('terminal');
-          paneRenderer?.focusTerminal(newFocusedPaneId);
+          workbench!.session(newFocusedPaneId)?.focus();
         });
       }
     }
@@ -813,7 +814,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
     layoutManager.setWindowLayoutId(targetLayout.id);
     paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
-    paneRenderer?.ensurePaneNodes();
+    paneRenderer?.ensureSessions();
 
     layoutManager.updateLayoutsIndicator();
     render(true);
