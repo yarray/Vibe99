@@ -195,6 +195,32 @@ export interface TerminalSession {
 
   /** Set the session-ready flag and notify. */
   setReady(ready: boolean): void;
+
+  // -- Exited state --------------------------------------------------------------
+
+  /** Whether the terminal process has exited and is showing the exited overlay. */
+  isExited(): boolean;
+
+  /**
+   * Show the exited/crashed overlay on top of the terminal.
+   * Preserves terminal buffer content for diagnostic purposes.
+   * Idempotent — calling multiple times with different options updates the overlay.
+   */
+  showExitedState(options: ExitedStateOptions): void;
+
+  /**
+   * Hide the exited overlay and reset exited state.
+   * Called before restarting the terminal.
+   */
+  hideExitedState(): void;
+}
+
+/** Options for showing the terminal exited state overlay. */
+export interface ExitedStateOptions {
+  /** Process exit code. */
+  exitCode: number;
+  /** Exit reason from the backend (e.g. "exited", "killed"). */
+  reason: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -315,6 +341,8 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   let _accent = accentColor;
   let _shellChanging = false;
   let _shellChangeTime: number | undefined;
+  let _exited = false;
+  let _exitOverlay: HTMLElement | null = null;
 
   // ---------------------------------------------------------------------------
   // DOM construction
@@ -658,6 +686,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     _shellChanging = true;
     _shellChangeTime = Date.now();
     _sessionReady = false;
+    hideExitedState();
     terminal.clear();
     initializePty(currentProfileId).finally(() => {
       _shellChanging = false;
@@ -671,8 +700,8 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     _shellChanging = true;
     _shellChangeTime = Date.now();
     _sessionReady = false;
+    hideExitedState();
     terminal.clear();
-    // Pass the requested profileId directly - don't read from pane snapshot yet
     initializePty(profileId).finally(() => {
       _shellChanging = false;
       if (!_sessionReady) {
@@ -734,6 +763,58 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     _sessionReady = ready;
   }
 
+  function isExited(): boolean {
+    return _exited;
+  }
+
+  function showExitedState(options: ExitedStateOptions): void {
+    _exited = true;
+    paneEl.classList.add('is-exited');
+
+    if (_exitOverlay) {
+      _exitOverlay.remove();
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'terminal-exit-overlay';
+
+    const card = document.createElement('div');
+    card.className = 'terminal-exit-card';
+
+    const title = document.createElement('div');
+    title.className = 'terminal-exit-title';
+    title.textContent = 'Terminal exited';
+
+    const message = document.createElement('div');
+    message.className = 'terminal-exit-message';
+    message.textContent = `The shell or remote session ended (exit code ${options.exitCode}).`;
+
+    const restartBtn = document.createElement('button');
+    restartBtn.type = 'button';
+    restartBtn.className = 'terminal-exit-restart-btn';
+    restartBtn.textContent = 'Restart Terminal';
+    restartBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      restart();
+    });
+
+    card.append(title, message, restartBtn);
+    overlay.append(card);
+
+    surface.append(overlay);
+    _exitOverlay = overlay;
+  }
+
+  function hideExitedState(): void {
+    _exited = false;
+    paneEl.classList.remove('is-exited');
+
+    if (_exitOverlay) {
+      _exitOverlay.remove();
+      _exitOverlay = null;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
@@ -793,6 +874,11 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     setNeedsFit,
     getRecentOutput,
     setReady,
+
+    // Exited state
+    isExited,
+    showExitedState,
+    hideExitedState,
   };
 
   return session;
