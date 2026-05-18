@@ -2,7 +2,7 @@
 
 This directory contains end-to-end tests for Vibe99, powered by [WebdriverIO](https://webdriver.io/) and [`tauri-driver`](https://github.com/tauri-apps/tauri/tree/dev/tooling/webdriver).
 
-The `Dockerfile.e2e` builds an image that pre-compiles Vibe99. The pre-compiled artifacts populate the Cargo target directory — this is not for testing directly, but to serve as a **warm baseline** so subsequent incremental builds (after `git fetch`) are fast.
+The `Dockerfile.e2e` builds an image that pre-compiles Vibe99. The pre-compiled artifacts populate the Cargo target directory — this is not for testing directly, but to serve as a **warm baseline** so subsequent incremental builds are fast.
 
 ## Quick Start
 
@@ -18,31 +18,26 @@ The image (~2–3 GB) contains Ubuntu 22.04, Node.js 22, Rust stable, `tauri-dri
 
 ### 2. Run e2e tests
 
-Fetch the latest code inside the container and run the test suite (`npm run test:e2e` handles building automatically):
+Mount local source to `/mnt/source` — rsync copies source files into the container while preserving the pre-compiled `target/` cache:
 
 ```bash
-docker run --rm --privileged vibe99-builder \
-  bash -c "git fetch origin && git checkout <branch> && npm run test:e2e"
+docker run --rm --privileged \
+  -v /path/to/Vibe99:/mnt/source:ro \
+  vibe99-builder \
+  bash -c "rsync -a --exclude src-tauri/target --exclude node_modules /mnt/source/ /app/Vibe99/ && npm run test:e2e"
 ```
 
 > **Note:** `--privileged` is required because WebKitWebDriver needs access to file descriptor operations that Docker's default seccomp profile blocks.
 
 The WDIO config (`wdio.conf.js`) automatically builds the binary if needed, starts Xvfb (virtual display), and launches `tauri-driver` before running specs.
 
-#### Quick smoke test
-
-Fetch latest code and run only the smoke spec:
-
-```bash
-docker run --rm --privileged vibe99-builder \
-  bash -c "git fetch origin && git checkout <branch> && npm run test:e2e -- smoke"
-```
-
 #### Run a specific test
 
 ```bash
-docker run --rm --privileged vibe99-builder \
-  bash -c "git fetch origin && git checkout <branch> && npm run test:e2e -- layout"
+docker run --rm --privileged \
+  -v /path/to/Vibe99:/mnt/source:ro \
+  vibe99-builder \
+  bash -c "rsync -a --exclude src-tauri/target --exclude node_modules /mnt/source/ /app/Vibe99/ && npm run test:e2e -- layout"
 ```
 
 See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
@@ -52,12 +47,12 @@ See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
 The pre-compiled Cargo artifacts in the image are **only** for warming the incremental-build cache.
 
 1. Image is built once with a full compile — this warms the Cargo cache
-2. Each test run does `git fetch` to get the latest code, then runs `npm run test:e2e` (which handles building)
+2. Each test run mounts local source to `/mnt/source`, rsync copies it in (preserving `target/`), then runs `npm run test:e2e`
 3. Only changed files are recompiled — incremental builds are fast
 
 ### Running with local source
 
-If you need to test local (uncommitted) changes, mount source to `/mnt/source` and let `rsync` copy it into the container without overwriting the pre-compiled `target/`:
+Mount source to `/mnt/source` and let `rsync` copy it into the container without overwriting the pre-compiled `target/`:
 
 ```bash
 docker run --rm --privileged \
