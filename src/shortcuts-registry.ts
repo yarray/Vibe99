@@ -30,20 +30,6 @@ export interface ShortcutOverride {
   modifiers: string[];
 }
 
-export interface ShortcutsRegistry {
-  DEFAULT_SHORTCUTS: Record<string, LegacyShortcut>;
-  getActiveKeymap(): KeymapEntry[];
-  getKeyboardShortcuts(): Record<string, LegacyShortcut>;
-  updateKeyboardShortcut(id: string, shortcut: ShortcutOverride): void;
-  parseShortcutEvent(event: KeyboardEvent): ShortcutOverride;
-  formatShortcut(shortcut: ShortcutOverride, platform?: string): string;
-  shortcutsConflict(s1: ShortcutOverride, s2: ShortcutOverride): boolean;
-  findConflict(newShortcut: ShortcutOverride, excludeId?: string | null): string | null;
-  resetShortcutsToDefaults(): void;
-  loadShortcutsFromSettings(settings: Record<string, unknown>): void;
-  getShortcutsForSave(): Record<string, ShortcutOverride>;
-}
-
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -105,11 +91,7 @@ for (const row of customizableRows()) {
   };
 }
 
-/**
- * Public for tests / external introspection — same shape as the old constant
- * even though it's now derived from the keymap table.
- */
-export const DEFAULT_SHORTCUTS: Record<string, LegacyShortcut> = { ...DEFAULTS_BY_ID };
+const DEFAULT_SHORTCUTS: Record<string, LegacyShortcut> = { ...DEFAULTS_BY_ID };
 
 // ---------------------------------------------------------------------------
 // Overrides & active keymap
@@ -207,7 +189,7 @@ export function formatShortcut(shortcut: ShortcutOverride, platform: string = 'l
   return formatChord(legacyToChord(shortcut), platform);
 }
 
-export function shortcutsConflict(s1: ShortcutOverride, s2: ShortcutOverride): boolean {
+function shortcutsConflict(s1: ShortcutOverride, s2: ShortcutOverride): boolean {
   return normalizeLegacyKey(s1.key) === normalizeLegacyKey(s2.key) &&
     JSON.stringify([...s1.modifiers].sort()) === JSON.stringify([...s2.modifiers].sort());
 }
