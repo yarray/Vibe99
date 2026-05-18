@@ -137,21 +137,99 @@ describe('Terminal/PTY lifecycle', () => {
     );
   });
 
-  // Destructive tests — these modify pane count sequentially.
-  // After this test: 2 panes remain.
-  it('removes pane when shell process exits', async () => {
+  // Destructive tests — these modify pane state sequentially.
+  // Pane exits now preserve the pane and show an exit overlay instead of closing.
+  it('shows exit overlay when shell process exits instead of closing pane', async () => {
     await focusPaneByIndex(2);
     await browser.pause(300);
 
-    // Verify pane 2 is responsive
     await executeCommand('echo BEFORE_EXIT', 2);
     await waitForTerminalOutput('BEFORE_EXIT', 2, 10000);
 
-    // Send exit with leading newline to clear any pending shell state
     await clearCapturedOutput(2);
     await writeToTerminal(2, '\r\nexit\r\n');
 
-    await waitForPaneCount(2, 15000);
+    await browser.pause(3000);
+    expect(await getPaneCount()).toBe(3);
+
+    const hasExitedClass = await browser.execute((idx) => {
+      const panes = document.querySelectorAll('.pane');
+      return panes[idx]?.classList.contains('is-exited') ?? false;
+    }, 2);
+    expect(hasExitedClass).toBe(true);
+
+    const overlayVisible = await browser.execute((idx) => {
+      const panes = document.querySelectorAll('.pane');
+      const pane = panes[idx];
+      if (!pane) return false;
+      const overlay = pane.querySelector('.terminal-exit-overlay');
+      return overlay != null;
+    }, 2);
+    expect(overlayVisible).toBe(true);
+
+    const restartBtnExists = await browser.execute((idx) => {
+      const panes = document.querySelectorAll('.pane');
+      const pane = panes[idx];
+      if (!pane) return false;
+      const btn = pane.querySelector('.terminal-exit-restart-btn');
+      return btn != null;
+    }, 2);
+    expect(restartBtnExists).toBe(true);
+  });
+
+  it('restarts terminal via overlay restart button after exit', async () => {
+    const hasExitedClassBefore = await browser.execute((idx) => {
+      const panes = document.querySelectorAll('.pane');
+      return panes[idx]?.classList.contains('is-exited') ?? false;
+    }, 2);
+    expect(hasExitedClassBefore).toBe(true);
+
+    await browser.execute((idx) => {
+      const panes = document.querySelectorAll('.pane');
+      const pane = panes[idx];
+      if (!pane) return;
+      const btn = pane.querySelector('.terminal-exit-restart-btn');
+      if (btn) btn.click();
+    }, 2);
+
+    await waitForCondition(
+      async () => {
+        const hasExited = await browser.execute((idx) => {
+          const panes = document.querySelectorAll('.pane');
+          return panes[idx]?.classList.contains('is-exited') ?? false;
+        }, 2);
+        return !hasExited;
+      },
+      10000,
+      500,
+    );
+
+    const overlayGone = await browser.execute((idx) => {
+      const panes = document.querySelectorAll('.pane');
+      const pane = panes[idx];
+      if (!pane) return false;
+      return pane.querySelector('.terminal-exit-overlay') == null;
+    }, 2);
+    expect(overlayGone).toBe(true);
+
+    expect(await getPaneCount()).toBe(3);
+
+    await waitForTerminalReady(2);
+    await executeCommand('echo AFTER_RESTART', 2);
+    await waitForTerminalOutput('AFTER_RESTART', 2, 10000);
+  });
+
+  // After this test: 2 panes remain.
+  it('allows manual pane close after terminal exit', async () => {
+    await focusPaneByIndex(2);
+    await browser.pause(300);
+    await writeToTerminal(2, '\r\nexit\r\n');
+    await browser.pause(3000);
+
+    await closePaneByIndex(2);
+    await browser.pause(500);
+
+    await waitForPaneCount(2, 10000);
     expect(await getPaneCount()).toBe(2);
   });
 
