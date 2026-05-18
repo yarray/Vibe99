@@ -21,6 +21,8 @@ import { getDefaultFontFamily } from '../settings';
 import type { Bridge } from '../bridge';
 import type { Pane } from '../pane-state';
 import type { SettingsManager } from '../settings';
+import type { TerminalTheme } from '../domain/theme';
+import { createDefaultTerminalTheme } from '../domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -64,6 +66,8 @@ export interface TerminalSessionDeps {
   onCwdChanged: CwdChangeCallback;
   onTabRefreshNeeded: TabRefreshCallback;
   onSessionReadyChange?: (paneId: string, ready: boolean) => void;
+  /** Function to create terminal theme with given accent color. */
+  terminalTheme: (accent: string) => TerminalTheme;
 }
 
 /** The full public API surface returned by `createTerminalSession`. */
@@ -210,15 +214,6 @@ interface InternalTerminalSession extends TerminalSession {
 // Helpers
 // ---------------------------------------------------------------------------
 
-interface TerminalTheme {
-  background: string;
-  foreground: string;
-  cursor: string;
-  cursorAccent: string;
-  selectionBackground: string;
-  [colorName: string]: string;
-}
-
 function extractPathFromOsc7(data: string): string | null {
   const prefix = 'file://';
   if (!data.startsWith(prefix)) {
@@ -238,32 +233,6 @@ function extractPathFromOsc7(data: string): string | null {
   } catch {
     return null;
   }
-}
-
-function createTerminalTheme(accent: string): TerminalTheme {
-  return {
-    background: '#11111100',
-    foreground: '#d9d4c7',
-    cursor: accent,
-    cursorAccent: '#111111',
-    selectionBackground: `${accent}44`,
-    black: '#111111',
-    red: '#ff6b57',
-    green: '#98c379',
-    yellow: '#e5c07b',
-    blue: '#61afef',
-    magenta: '#c678dd',
-    cyan: '#56b6c2',
-    white: '#d9d4c7',
-    brightBlack: '#5a6374',
-    brightRed: '#ff8578',
-    brightGreen: '#b0d98b',
-    brightYellow: '#f0d58a',
-    brightBlue: '#7eb7ff',
-    brightMagenta: '#d9a5e8',
-    brightCyan: '#7fd8e6',
-    brightWhite: '#ffffff',
-  };
 }
 
 function isWindowsCtrlVPasteHotkey(
@@ -310,6 +279,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     onContextMenu,
     onCwdChanged,
     onTabRefreshNeeded,
+    terminalTheme,
   } = deps;
 
   const pane = getPaneSnapshot();
@@ -368,7 +338,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     fontSize: settingsManager.settings.fontSize,
     lineHeight: 1.2,
     scrollback: 5000,
-    theme: createTerminalTheme(accentColor),
+    theme: terminalTheme(accentColor),
   });
 
   const fitAddon = new FitAddon();
@@ -697,7 +667,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     }
     _accent = color;
     paneEl.style.setProperty('--pane-accent', color);
-    terminal.options.theme = createTerminalTheme(color);
+    terminal.options.theme = terminalTheme(color);
   }
 
   function setAlerted(_alerted: boolean): void {
