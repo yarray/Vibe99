@@ -19,8 +19,6 @@
 
 ### Changed
 
-- **Tighten PaneRenderer to pure render adapter (VIB-293):** Removed all session runtime operations from `PaneRenderer`: `ensurePaneNodes`, `destroyPane`, `focusTerminal`, `blurTerminal`, `restartPaneTerminal`, `changePaneShell`, `setSessionReady`, `getShellChangeTime`, `isShellChanging`. Callers in `workbench-renderer.ts` now use `Workbench.session()` / `TerminalSession` methods directly. Inlined `ensurePaneNodes` logic into `ensureSessions`. PaneRenderer now only exposes render coordination (layout, CSS classes, fit scheduling) and data pipeline (write, writeln) methods.
-
 - **Merge command dispatcher into Workbench (VIB-292):** Moved `command-dispatcher.ts` into `workbench.ts` so `Workbench.dispatch(command)` becomes the unified command entry point. All PaneRenderer dependencies in command handlers replaced with direct TerminalSession/Layout calls. `workbench-renderer.ts` no longer creates an independent dispatcher. Deleted `src/runtime/command-dispatcher.ts`.
 
 ### Fixed
