@@ -55,7 +55,20 @@ The pre-compiled Cargo artifacts in the image are **only** for warming the incre
 2. Each test run does `git fetch` to get the latest code, then runs `npm run test:e2e` (which handles building)
 3. Only changed files are recompiled — incremental builds are fast
 
-Do **not** mount local source via `-v` — that bypasses the warm Cargo cache and forces a full rebuild every time.
+### Running with local source
+
+If you need to test local (uncommitted) changes, mount source to `/mnt/source` and let `rsync` copy it into the container without overwriting the pre-compiled `target/`:
+
+```bash
+docker run --rm --privileged \
+  -v /path/to/Vibe99:/mnt/source:ro \
+  vibe99-builder \
+  bash -c "rsync -a --exclude src-tauri/target --exclude node_modules /mnt/source/ /app/Vibe99/ && npm run test:e2e"
+```
+
+This preserves the image's `src-tauri/target/` (Cargo cache) and `node_modules/` while syncing your local source changes.
+
+> **Important:** Do **not** mount local source directly to `/app/Vibe99` (`-v /local/Vibe99:/app/Vibe99`) — that overwrites the pre-compiled `target/` and forces a full rebuild every time.
 
 ## How it works
 

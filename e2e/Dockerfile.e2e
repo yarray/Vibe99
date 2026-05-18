@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
     curl wget git file xz-utils ca-certificates \
     xvfb xauth webkit2gtk-driver \
+    rsync \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Node.js 22

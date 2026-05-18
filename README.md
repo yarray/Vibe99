@@ -212,6 +212,15 @@ docker run --rm --privileged vibe99-builder \
   bash -c "git fetch origin && git checkout <branch> && npm run test:e2e -- <spec_name>"
 ```
 
+Test local source (preserves pre-compiled `target/` for incremental builds):
+
+``` bash
+docker run --rm --privileged \
+  -v /path/to/Vibe99:/mnt/source:ro \
+  vibe99-builder \
+  bash -c "rsync -a --exclude src-tauri/target --exclude node_modules /mnt/source/ /app/Vibe99/ && npm run test:e2e"
+```
+
 If image does not exist, build it:
 
 ``` bash
