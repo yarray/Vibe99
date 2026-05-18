@@ -513,11 +513,21 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     terminal.options.fontSize = settingsManager.settings.fontSize;
     terminal.options.fontFamily =
       settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform);
+
+    const prevCols = terminal.cols;
     fitAddon.fit();
 
     const cols = Math.max(20, terminal.cols || 80);
     const rows = Math.max(8, terminal.rows || 24);
     const nextSizeKey = `${cols}x${rows}`;
+
+    // Workaround for xterm.js resize artifacts: force a full redraw by
+    // temporarily expanding then shrinking back. This clears rendering
+    // cache that can cause distorted content in scrollback after resize.
+    if (_sessionReady && cols !== prevCols) {
+      terminal.resize(cols + 1, rows);
+      terminal.resize(cols, rows);
+    }
 
     if (_sessionReady && nextSizeKey !== _sizeKey) {
       bridge.resizeTerminal({ paneId, cols, rows });

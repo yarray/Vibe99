@@ -22,7 +22,7 @@ export interface AppSettings {
 export interface SettingsManagerDeps {
   bridge: Bridge;
   reportError: (error: unknown) => void;
-  applyCallback: () => void;
+  applyCallback: (refit?: boolean) => void;
   paneActivityWatcher: {
     setGlobalEnabled: (enabled: boolean) => void;
     setSettleMs: (ms: number) => void;
@@ -263,36 +263,30 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // Pane width
-  // During slider drag (input event), we only update CSS for smooth visual feedback.
-  // The expensive terminal resize is deferred until the slider is released (change event).
-  // This prevents xterm.js buffer corruption from rapid resize operations.
-  function updatePaneWidthCSS(nextValue: string): void {
+  // During slider drag (input event), we update pane positions for real-time feedback,
+  // but skip the expensive terminal resize to prevent buffer corruption.
+  // When the slider is released (change event), we trigger the full resize.
+  function updatePaneWidth(nextValue: string, refit = false): void {
     const parsedValue = Number(nextValue);
     if (!Number.isFinite(parsedValue)) {
       return;
     }
     settings.paneWidth = Math.max(520, Math.min(2000, Math.round(parsedValue / 10) * 10));
-    // Only apply CSS, don't trigger terminal resize
-    document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
+    applySettings();
+    applyCallback(refit);
     scheduleSettingsSave();
   }
 
-  function updatePaneWidthWithResize(nextValue: string): void {
-    updatePaneWidthCSS(nextValue);
-    // Now trigger the terminal resize
-    applyCallback();
-  }
-
   paneWidthRange.addEventListener('input', () => {
-    updatePaneWidthCSS(paneWidthRange.value);
+    updatePaneWidth(paneWidthRange.value, false); // Drag: update layout only, no resize
   });
 
   paneWidthRange.addEventListener('change', () => {
-    updatePaneWidthWithResize(paneWidthRange.value);
+    updatePaneWidth(paneWidthRange.value, true); // Release: trigger full resize
   });
 
   paneWidthInput.addEventListener('change', () => {
-    updatePaneWidthWithResize(paneWidthInput.value);
+    updatePaneWidth(paneWidthInput.value, true); // Direct input: trigger full resize
   });
 
   // Pane opacity

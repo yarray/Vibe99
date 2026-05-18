@@ -253,7 +253,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   const settingsManager = createSettingsManager({
     bridge,
     reportError,
-    applyCallback: () => render(true),
+    applyCallback: (refit = true) => render(refit),
     paneActivityWatcher,
     onBreathingIntensityChange: (intensity) => {
       applyBreathingIntensity(intensity);
