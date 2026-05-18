@@ -263,46 +263,36 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   });
 
   // Pane width
-  // Debounce terminal resize to avoid buffer corruption from rapid resize operations.
-  // During slider drag, we update CSS immediately for smooth feedback, but only trigger
-  // the expensive terminal refit after the user stops dragging.
-  let paneWidthResizeTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function updatePaneWidth(nextValue: string, immediate = false): void {
+  // During slider drag (input event), we only update CSS for smooth visual feedback.
+  // The expensive terminal resize is deferred until the slider is released (change event).
+  // This prevents xterm.js buffer corruption from rapid resize operations.
+  function updatePaneWidthCSS(nextValue: string): void {
     const parsedValue = Number(nextValue);
     if (!Number.isFinite(parsedValue)) {
-      applySettings();
       return;
     }
-
     settings.paneWidth = Math.max(520, Math.min(2000, Math.round(parsedValue / 10) * 10));
-    applySettings();
+    // Only apply CSS, don't trigger terminal resize
+    document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
     scheduleSettingsSave();
+  }
 
-    // Clear pending resize if any
-    if (paneWidthResizeTimer !== null) {
-      clearTimeout(paneWidthResizeTimer);
-      paneWidthResizeTimer = null;
-    }
-
-    if (immediate) {
-      // For direct input (not slider), apply immediately
-      applyCallback();
-    } else {
-      // For slider drag, debounce the terminal resize
-      paneWidthResizeTimer = setTimeout(() => {
-        applyCallback();
-        paneWidthResizeTimer = null;
-      }, 150); // Wait 150ms after user stops dragging
-    }
+  function updatePaneWidthWithResize(nextValue: string): void {
+    updatePaneWidthCSS(nextValue);
+    // Now trigger the terminal resize
+    applyCallback();
   }
 
   paneWidthRange.addEventListener('input', () => {
-    updatePaneWidth(paneWidthRange.value, false);
+    updatePaneWidthCSS(paneWidthRange.value);
+  });
+
+  paneWidthRange.addEventListener('change', () => {
+    updatePaneWidthWithResize(paneWidthRange.value);
   });
 
   paneWidthInput.addEventListener('change', () => {
-    updatePaneWidth(paneWidthInput.value);
+    updatePaneWidthWithResize(paneWidthInput.value);
   });
 
   // Pane opacity
