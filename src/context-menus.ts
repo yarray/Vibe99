@@ -22,18 +22,13 @@ import type { AppCommand, CommandResult } from './domain/commands';
 // Exported types
 // ---------------------------------------------------------------------------
 
-/** Adapter interface for the shared state consumed by context menus. */
+/** Read-only state consumed by context menus. Mutation goes through dispatch. */
 export interface ContextMenuState {
   getPaneIndex: (paneId: string) => number;
   getFocusedPaneId: () => string | null;
   getPanels: () => Pane[];
-  setPanels: (panes: Pane[]) => void;
-  setFocusedPaneId: (id: string) => void;
-  recordPaneVisit: (paneId: string) => void;
-  render: () => void;
   registerModal: (closeFn: () => void) => void;
   unregisterModal: (closeFn: () => void) => void;
-  clearPaneCycleState: () => void;
   scheduleSave: () => void;
 }
 
@@ -383,16 +378,14 @@ function showTabContextMenu(
   state: ContextMenuState,
   bridge: Bridge,
   handleMenuAction: HandleMenuActionFn,
+  dispatch: (command: AppCommand) => CommandResult,
 ): void {
   const paneIndex = state.getPaneIndex(paneId);
   if (paneIndex === -1) {
     return;
   }
 
-  state.clearPaneCycleState();
-  state.setFocusedPaneId(paneId);
-  state.recordPaneVisit(paneId);
-  state.render();
+  dispatch({ type: 'pane.focus', paneId, focusTerminal: false });
 
   const panes = state.getPanels();
   const pane = panes[paneIndex];
@@ -708,7 +701,7 @@ export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
     showTerminalContextMenu: (paneId: string, event: MouseEvent): void =>
       showTerminalContextMenu(paneId, event, state, bridge, shellProfileManager, boundHandleMenuAction, dispatch),
     showTabContextMenu: (paneId: string, event: MouseEvent): void =>
-      showTabContextMenu(paneId, event, state, bridge, boundHandleMenuAction),
+      showTabContextMenu(paneId, event, state, bridge, boundHandleMenuAction, dispatch),
     showColorPicker: (paneId: string): void =>
       showColorPicker(paneId, state, bridge, dispatch, boundHandleMenuAction),
     setPaneColor: (paneId: string, color: string): void => setPaneColor(paneId, color, dispatch),

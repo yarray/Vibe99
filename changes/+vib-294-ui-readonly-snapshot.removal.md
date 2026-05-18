@@ -1,0 +1,1 @@
+UI modules (tab-bar, context-menus, command-palette-entries) now only read state through read-only getters and execute business actions through `dispatch()`. Removed direct `PaneState` and `PaneRenderer` dependencies from UI layer; keyboard copy/paste now dispatches `terminal.copy`/`terminal.paste` instead of calling session methods directly.
