@@ -1,0 +1,1 @@
+Added `src/domain/theme.ts` with a Theme contract for CSS tokens, terminal colors, and animation tokens. Terminal theme creation has been moved out of `terminal-session.ts` into the theme domain, and `TerminalSessionDeps` now accepts a `terminalTheme` function for theme injection.

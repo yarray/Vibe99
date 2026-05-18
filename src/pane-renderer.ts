@@ -9,6 +9,7 @@ import {
   type ContextMenuCallback,
 } from './runtime/terminal-session';
 import type { Workbench } from './runtime/workbench';
+import { createDefaultTerminalTheme } from './domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -175,6 +176,7 @@ export function createPaneRenderer({
           tabBar.renderTabs();
         }
       },
+      terminalTheme: createDefaultTerminalTheme,
     });
 
     return session;

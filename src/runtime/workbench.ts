@@ -19,6 +19,7 @@ import type { TabBar, TabBarLocalState } from '../tab-bar.js';
 import type { Bridge } from '../bridge.js';
 import type { TerminalSession } from './terminal-session.js';
 import { createTerminalSession, type TerminalSessionDeps } from './terminal-session.js';
+import { createDefaultTerminalTheme } from '../domain/theme.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -165,6 +166,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
           tabBar.renderTabs();
         }
       },
+      terminalTheme: createDefaultTerminalTheme,
     });
 
     return session;

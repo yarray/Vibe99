@@ -51,6 +51,7 @@ import { createSettingsManager } from '../settings';
 import { createTabBar } from '../tab-bar';
 import type { TabBarLocalState } from '../tab-bar';
 import type { ShellProfile, EditingShellProfile } from '../shell-profiles';
+import { createDefaultTerminalTheme } from '../domain/theme';
 
 // ---------------------------------------------------------------------------
 // Dependencies injected by the bootstrap entry
@@ -345,6 +346,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       onContextMenu: (session, event) => {
         void contextMenus?.showTerminalContextMenu(session.paneId, event);
       },
+      terminalTheme: createDefaultTerminalTheme,
     },
     stageEl,
     paneActivityWatcher: {
