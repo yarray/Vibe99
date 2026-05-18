@@ -339,13 +339,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     // Convert to milliseconds for validation
     const msValue = seconds * 1000;
     const result = validateField('activityAlertDebounceMs', msValue);
-    // Browser sanitises non-numeric input on <input type="number"> to "",
-    // which Number("") converts to 0 (not NaN). Treat 0 / negative / NaN
-    // as invalid so the field reverts to the current settings value.
-    if (result.error && seconds <= 0) {
-      applySettings();
-      return;
-    }
+    // Apply the sanitized value (zod clamps out-of-range values to min/max)
+    // and let applySettings() update the input to display the clamped value.
     settings.activityAlertDebounceMs = result.sanitizedValue as number;
     applySettings();
     scheduleSettingsSave();
