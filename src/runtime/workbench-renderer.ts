@@ -286,44 +286,15 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       paneRenderer!.setSessionReady(paneId, false);
       paneRenderer!.writeln(paneId, '');
       paneRenderer!.writeln(paneId, `\x1b[38;5;204m[shell exited with code ${exitCode}]\x1b[0m`);
+      session.showExitedState({ exitCode, reason });
       return true;
     }
 
     paneRenderer!.setSessionReady(paneId, false);
     paneRenderer!.writeln(paneId, '');
     paneRenderer!.writeln(paneId, `\x1b[38;5;244m[process exited with code ${exitCode}]\x1b[0m`);
+    session.showExitedState({ exitCode, reason });
 
-    const paneIndex = paneState.getPaneIndex(paneId);
-    if (paneIndex === -1) return true;
-
-    if (paneState.getPanes().length === 1) {
-      return true; // keep window open
-    }
-
-    // Close pane locally (destroyPty: false — unlike the normal pane.close command)
-    const currentPanes = paneState.getPanes();
-    const closingPane = currentPanes[paneIndex];
-    if (closingPane.id === tabBarState.renamingPaneId) tabBarState.renamingPaneId = null;
-    if (closingPane.id === tabBarState.dragState?.paneId) {
-      tabBarState.dragState = null;
-      document.body.classList.remove('is-dragging-tabs');
-    }
-    if (closingPane.id === tabBarState.pendingTabFocus?.paneId) {
-      window.clearTimeout(tabBarState.pendingTabFocus.timerId);
-      tabBarState.pendingTabFocus = null;
-    }
-    const wasFocused = closingPane.id === paneState.getFocusedPaneId();
-    paneState.closePane(paneIndex);
-    render(true);
-    if (wasFocused) {
-      const newFocusedPaneId = paneState.getFocusedPaneId();
-      if (newFocusedPaneId) {
-        requestAnimationFrame(() => {
-          setMode('terminal');
-          paneRenderer?.focusTerminal(newFocusedPaneId);
-        });
-      }
-    }
     return true;
   }
 
