@@ -2,29 +2,35 @@
  * Command Dispatcher — translates AppCommand values into side effects.
  *
  * This is the single point where domain commands meet the runtime
- * infrastructure (PaneState, PaneRenderer, Bridge, etc.).
+ * infrastructure (PaneState, Layout, Workbench, Bridge, etc.).
  * UI modules dispatch commands; they never call PaneState or
  * PaneRenderer directly.
  *
  * @module runtime/command-dispatcher
  */
 
-import type { AppCommand, CommandResult } from '../domain/commands.js';
+import type { AppCommand, CommandResult, WorkbenchMode } from '../domain/commands.js';
 import type { PaneState, Pane } from '../pane-state.js';
 import type { PaneRenderer } from '../pane-renderer.js';
 import type { TabBar, TabBarLocalState } from '../tab-bar.js';
 import type { Bridge } from '../bridge.js';
+import type { TerminalSession } from './terminal-session.js';
 
 export interface CommandDispatcherDeps {
   paneState: PaneState;
   paneRenderer: PaneRenderer | null;
   tabBar: TabBar;
-  setMode: (mode: string) => void;
-  getCurrentMode: () => string;
+  setMode: (mode: WorkbenchMode) => void;
+  getCurrentMode: () => WorkbenchMode;
   scheduleSave: () => void;
   state: TabBarLocalState;
   bridge: Bridge;
   render: (refit?: boolean) => void;
+  setPaneActivityAlertEnabled: (paneId: string, enabled: boolean) => void;
+  /** Get a terminal session by pane ID */
+  getSession: (paneId: string) => TerminalSession | null;
+  /** Query whether a pane is currently in the alerted state */
+  isAlerted: (paneId: string) => boolean;
 }
 
 function ok(value?: unknown): CommandResult {
@@ -38,7 +44,7 @@ function fail(reason?: string): CommandResult {
 export function createCommandDispatcher(deps: CommandDispatcherDeps): {
   dispatch: (command: AppCommand) => CommandResult;
 } {
-  const { paneState, paneRenderer, tabBar, setMode, getCurrentMode, scheduleSave, state, bridge, render } = deps;
+  const { paneState, paneRenderer, tabBar, setMode, getCurrentMode, scheduleSave, state, bridge, render, setPaneActivityAlertEnabled, getSession, isAlerted } = deps;
 
   function dispatch(command: AppCommand): CommandResult {
     switch (command.type) {
@@ -99,12 +105,19 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
         return ok();
       }
 
-      case 'pane.rename': {
+      case 'pane.rename.start': {
         const idx = paneState.getPaneIndex(command.paneId);
         if (idx !== -1) {
           if (getCurrentMode() === 'nav') setMode('terminal');
           tabBar.beginRenamePane(idx);
         }
+        return ok();
+      }
+
+      case 'pane.rename.commit': {
+        const idx = paneState.getPaneIndex(command.paneId);
+        if (idx === -1) return fail('not-found');
+        tabBar.commitRenamePane(command.paneId, command.title ?? '');
         return ok();
       }
 
@@ -131,6 +144,7 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
       case 'pane.toggleActivityAlert': {
         const next = paneState.togglePaneBreathingMonitor(command.paneId);
         scheduleSave();
+        setPaneActivityAlertEnabled(command.paneId, next);
         return ok(next);
       }
 
@@ -156,44 +170,31 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
       // -- Terminal commands ----------------------------------------------------
 
       case 'terminal.copy': {
-        const node = paneRenderer?.getNode(command.paneId);
-        if (!node) return fail('not-found');
-        const selection = node.terminal.getSelection();
-        if (!selection) return fail('no-selection');
-        bridge.writeClipboardText(selection);
+        const session = getSession(command.paneId);
+        if (!session) return fail('not-found');
+        const success = session.copySelection();
+        if (!success) return fail('no-selection');
         return ok();
       }
 
       case 'terminal.paste': {
-        const session = paneRenderer?.getNode(command.paneId);
-        if (!session?.sessionReady) return fail('not-ready');
-        void (async () => {
-          const text = await bridge.readClipboardText();
-          if (!text) return;
-          if (bridge.platform === 'win32') {
-            session.terminal.paste(text);
-          } else {
-            bridge.writeTerminal({ paneId: command.paneId, data: text });
-          }
-        })();
+        const session = getSession(command.paneId);
+        if (!session) return fail('not-found');
+        void session.paste();
         return ok();
       }
 
       case 'terminal.pasteImage': {
-        const imgSession = paneRenderer?.getNode(command.paneId);
-        if (!imgSession?.sessionReady) return fail('not-ready');
-        void (async () => {
-          const snapshot = await bridge.getClipboardSnapshot();
-          if (!snapshot.hasImage) return;
-          bridge.writeTerminal({ paneId: command.paneId, data: '\x16' });
-        })();
+        const session = getSession(command.paneId);
+        if (!session) return fail('not-found');
+        void session.pasteImage();
         return ok();
       }
 
       case 'terminal.selectAll': {
-        const selNode = paneRenderer?.getNode(command.paneId);
-        if (!selNode) return fail('not-found');
-        selNode.terminal.selectAll();
+        const session = getSession(command.paneId);
+        if (!session) return fail('not-found');
+        session.selectAll();
         return ok();
       }
 
@@ -210,12 +211,14 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
       // -- Query commands -------------------------------------------------------
 
       case 'query.terminal.hasSelection': {
-        const hasSelection = paneRenderer?.hasSelection(command.paneId) ?? false;
+        const session = getSession(command.paneId);
+        const hasSelection = session?.hasSelection() ?? false;
         return ok(hasSelection);
       }
 
       case 'query.terminal.isReady': {
-        const isReady = paneRenderer?.isSessionReady(command.paneId) ?? false;
+        const session = getSession(command.paneId);
+        const isReady = session?.isReady() ?? false;
         return ok(isReady);
       }
 
@@ -268,7 +271,11 @@ export function createCommandDispatcher(deps: CommandDispatcherDeps): {
         const panes = paneState.getPanes();
         const litIds = panes
           .map((p: Pane) => p.id)
-          .filter((id: string) => paneRenderer?.getNode(id)?.root.classList.contains('has-pending-activity'));
+          .filter((id: string) => {
+            if (isAlerted(id)) return true;
+            // Fallback: check DOM class for test harnesses that set it directly
+            return paneRenderer?.hasAlertClass(id) ?? false;
+          });
         if (litIds.length === 0) return fail('no-lit');
         const focusedId = paneState.getFocusedPaneId();
         const focusedIndex = focusedId !== null ? litIds.indexOf(focusedId) : -1;

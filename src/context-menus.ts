@@ -9,7 +9,7 @@
 // and decoupled from the renderer.
 //
 // UI modules only interact through commands - no direct access to
-// PaneNode, xterm instances, or internal state.
+// xterm instances, or internal state.
 
 import { icon } from './icons';
 import * as ColorsRegistry from './colors-registry';
@@ -82,7 +82,6 @@ export interface ContextMenusDeps {
   shellProfileManager: ShellProfileManagerLike;
   reportError: (error: unknown) => void;
   dispatch: (command: AppCommand) => CommandResult;
-  beginRenamePane: (paneIndex: number) => void;
 }
 
 /** Public API surface returned by `createContextMenus`. */
@@ -604,7 +603,6 @@ interface HandleMenuActionDeps {
   shellProfileManager: ShellProfileManagerLike;
   reportError: (error: unknown) => void;
   dispatch: (command: AppCommand) => CommandResult;
-  beginRenamePane: (paneIndex: number) => void;
 }
 
 function handleMenuAction(
@@ -612,7 +610,7 @@ function handleMenuAction(
   paneId: string,
   deps: HandleMenuActionDeps,
 ): void {
-  const { state, bridge, shellProfileManager, dispatch, beginRenamePane } = deps;
+  const { state, bridge, shellProfileManager, dispatch } = deps;
 
   if (action === 'terminal-copy') {
     copyTerminalSelection(paneId, dispatch);
@@ -645,10 +643,7 @@ function handleMenuAction(
   }
 
   if (action === 'tab-rename') {
-    const paneIndex = state.getPaneIndex(paneId);
-    if (paneIndex !== -1) {
-      beginRenamePane(paneIndex);
-    }
+    dispatch({ type: 'pane.rename.start', paneId });
     return;
   }
 
@@ -697,15 +692,14 @@ function handleMenuAction(
  * @param deps.shellProfileManager - Shell profile manager
  * @param deps.reportError - Error reporting function
  * @param deps.dispatch - Command dispatcher
- * @param deps.beginRenamePane - Begin renaming a pane
  * @returns Context menu manager API
  */
 export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
-  const { state, bridge, shellProfileManager, dispatch, beginRenamePane } = deps;
+  const { state, bridge, shellProfileManager, dispatch } = deps;
 
   // Bind handleMenuAction with all dependencies
   const boundHandleMenuAction = (action: string, paneId: string): void =>
-    handleMenuAction(action, paneId, { state, bridge, shellProfileManager, reportError: deps.reportError, dispatch, beginRenamePane });
+    handleMenuAction(action, paneId, { state, bridge, shellProfileManager, reportError: deps.reportError, dispatch });
 
   return {
     showContextMenu: (items: MenuItem[], x: number, y: number, paneId: string): void =>

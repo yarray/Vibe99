@@ -506,10 +506,10 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     _needsFit = false;
   }
 
-  async function initializePty(): Promise<void> {
+  async function initializePty(requestedProfileId?: string | null): Promise<void> {
     fitInternal(true);
-    const snapshot = getPaneSnapshot();
-    const profileId = snapshot?.shellProfileId ?? null;
+    // Use the requested profileId if provided, otherwise read from pane snapshot
+    const profileId = requestedProfileId ?? getPaneSnapshot()?.shellProfileId ?? null;
     try {
       await bridge.createTerminal({
         paneId,
@@ -638,7 +638,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     _shellChangeTime = Date.now();
     _sessionReady = false;
     terminal.clear();
-    initializePty().finally(() => {
+    initializePty(currentProfileId).finally(() => {
       _shellChanging = false;
     });
   }
@@ -651,11 +651,12 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     _shellChangeTime = Date.now();
     _sessionReady = false;
     terminal.clear();
-    initializePty().finally(() => {
+    // Pass the requested profileId directly - don't read from pane snapshot yet
+    initializePty(profileId).finally(() => {
       _shellChanging = false;
       if (!_sessionReady) {
-        // Revert is handled by the caller (pane-renderer) via paneState
-        // We just notify that the shell change finished.
+        // PTY failed to start - caller should handle state revert
+        // The error message was already written to the terminal
       }
     });
   }

@@ -40,8 +40,8 @@ export interface CloseSessionOptions {
  * Dependencies injected into `createWorkbench`.
  */
 export interface WorkbenchDeps {
-  /** The active Layout aggregate root */
-  layout: Layout;
+  /** The active Layout aggregate root, or a function returning the current one. */
+  layout: Layout | (() => Layout);
 
   /** Terminal session dependencies (passed through to createTerminalSession) */
   terminalSessionDeps: Omit<
@@ -66,6 +66,8 @@ export interface WorkbenchDeps {
     noteData: (paneId: string) => void;
     setFocus: (paneId: string | null) => void;
     setPaneEnabled: (paneId: string, enabled: boolean) => void;
+    isAlerted: (paneId: string) => boolean;
+    alertedPaneIds: () => string[];
   };
 
   /** Pane alert strategy */
@@ -111,6 +113,16 @@ export interface Workbench {
    * Render all panes - coordinate DOM, focus state, and terminal fit.
    */
   render(options?: WorkbenchRenderOptions): void;
+
+  /**
+   * Query whether a pane is currently in the alerted state.
+   */
+  isAlerted(paneId: string): boolean;
+
+  /**
+   * Get all pane IDs that are currently in the alerted state.
+   */
+  alertedPaneIds(): string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +147,11 @@ function needsTabRefresh(pane: PaneEntity, entryNeedsTabRefresh: (paneId: string
  * @returns Workbench instance
  */
 export function createWorkbench(deps: WorkbenchDeps): Workbench {
-  const { layout, terminalSessionDeps, stageEl, paneActivityWatcher, paneAlert, tabBar, entryNeedsTabRefresh } = deps;
+  const { layout: layoutInput, terminalSessionDeps, stageEl, paneActivityWatcher, paneAlert, tabBar, entryNeedsTabRefresh } = deps;
+
+  const resolveLayout = typeof layoutInput === 'function'
+    ? (layoutInput as () => Layout)
+    : () => layoutInput;
 
   // Internal session map: paneId -> TerminalSession
   const sessionMap = new Map<string, TerminalSession>();
@@ -171,6 +187,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
   }
 
   function ensureSessions(): void {
+    const layout = resolveLayout();
     const currentPanes = layout.panes();
     const activeIds = new Set(currentPanes.map((pane) => pane.id));
 
@@ -211,6 +228,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
   function render(options: WorkbenchRenderOptions = {}): void {
     const { refit = false } = options;
+    const layout = resolveLayout();
 
     ensureSessions();
     paneActivityWatcher.setFocus(layout.focusedPaneId());
@@ -242,7 +260,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
   return {
     layout(): Layout {
-      return layout;
+      return resolveLayout();
     },
 
     session(paneId: string): TerminalSession | null {
@@ -252,5 +270,13 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
     ensureSessions,
     closeSession,
     render,
+
+    isAlerted(paneId: string): boolean {
+      return paneActivityWatcher.isAlerted(paneId);
+    },
+
+    alertedPaneIds(): string[] {
+      return paneActivityWatcher.alertedPaneIds();
+    },
   };
 }

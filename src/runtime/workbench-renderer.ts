@@ -33,9 +33,11 @@ import { createLayoutModal } from '../layout-modal';
 import { createModalStack } from '../modal-stack';
 import { createFullscreenManager } from '../fullscreen-manager';
 import { createCommandDispatcher } from './command-dispatcher.js';
-import type { CommandResult } from '../domain/commands.js';
+import type { CommandResult, WorkbenchMode } from '../domain/commands.js';
 import type { AppCommand } from '../domain/commands.js';
 import { createCommandPaletteEntries } from '../command-palette-entries';
+import { createWorkbench } from './workbench.js';
+import type { Workbench } from './workbench.js';
 
 import * as ShortcutsRegistry from '../shortcuts-registry';
 import * as ShortcutsUI from '../shortcuts-ui';
@@ -120,8 +122,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   // -- Mutable bootstrap state ------------------------------------------------
 
-  let currentMode: string = 'terminal';
+  let currentMode: WorkbenchMode = 'terminal';
   let paneRenderer: PaneRenderer | null = null;
+  let workbench: Workbench | null = null;
   let enterNavSourcePaneId: string | null = null;
   let layoutRestoreComplete = false;
   let layoutFocusNotice: { layoutId: string } | null = null;
@@ -268,8 +271,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   }
 
   function handleTerminalExit({ paneId, exitCode, reason }: { paneId: string; exitCode: number; reason: string }): boolean {
-    const node = paneRenderer?.getNode(paneId);
-    if (!node) return true;
+    const session = workbench!.session(paneId);
+    if (!session) return true;
 
     if (reason === 'killed') {
       paneRenderer!.setSessionReady(paneId, false);
@@ -327,6 +330,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   let dispatch: (command: AppCommand) => CommandResult;
 
+
   const tabBar = createTabBar({
     paneState,
     state: tabBarState,
@@ -337,6 +341,55 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     reportError,
     tabsListEl,
     setIcon,
+  });
+
+  workbench = createWorkbench({
+    layout: () => paneState.getLayout(),
+    terminalSessionDeps: {
+      bridge,
+      settingsManager,
+      activityWatcher: {
+        noteResize: (paneId) => paneActivityWatcher.noteResize(paneId),
+        noteData: (paneId) => paneActivityWatcher.noteData(paneId),
+        forget: (paneId) => paneActivityWatcher.forget(paneId),
+      },
+      reportError,
+      getPaneSnapshot: (paneId: string) => paneState.getPaneById(paneId),
+      onPaneClick: (paneId: string, opts?: { focusTerminal?: boolean }) => {
+        return dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal });
+      },
+      onTitleChange: (paneId: string, title: string) => paneState.setPaneTerminalTitle(paneId, title),
+      onCwdChanged: (paneId: string, newCwd: string) => {
+        const pane = paneState.getPaneById(paneId);
+        if (!pane || pane.cwd === newCwd) return;
+        paneState.setPaneCwd(paneId, newCwd);
+        layoutManager.scheduleWindowLayoutSave(5000);
+      },
+      onTabRefreshNeeded: (paneId: string) => {
+        const pane = paneState.getPaneById(paneId);
+        if (pane && pane.title === null) {
+          tabBar.renderTabs();
+        }
+      },
+      onContextMenu: (session, event) => {
+        void contextMenus?.showTerminalContextMenu(session.paneId, event);
+      },
+    },
+    stageEl,
+    paneActivityWatcher: {
+      noteResize: (paneId) => paneActivityWatcher.noteResize(paneId),
+      noteData: (paneId) => paneActivityWatcher.noteData(paneId),
+      setFocus: (id) => paneActivityWatcher.setFocus(id),
+      setPaneEnabled: (paneId, enabled) => paneActivityWatcher.setPaneEnabled(paneId, enabled),
+      isAlerted: (paneId) => paneActivityWatcher.isAlerted(paneId),
+      alertedPaneIds: () => paneActivityWatcher.alertedPaneIds(),
+    },
+    paneAlert,
+    tabBar,
+    entryNeedsTabRefresh: (paneId: string) => {
+      const pane = paneState.getPaneById(paneId);
+      return Boolean(pane && pane.title === null);
+    },
   });
 
   paneRenderer = createPaneRenderer({
@@ -364,6 +417,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       paneState.setPaneCwd(paneId, newCwd);
       layoutManager.scheduleWindowLayoutSave(5000);
     },
+    workbench: workbench!,
   });
 
   dispatch = createCommandDispatcher({
@@ -376,6 +430,18 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     getCurrentMode: () => currentMode,
     state: tabBarState,
     bridge,
+    setPaneActivityAlertEnabled: (paneId, enabled) => {
+      paneActivityWatcher.setPaneEnabled(paneId, enabled);
+      if (!enabled) {
+        paneRenderer?.setAlerted(paneId, false);
+      }
+    },
+    getSession: (paneId: string) => {
+      return workbench!.session(paneId);
+    },
+    isAlerted: (paneId: string) => {
+      return paneActivityWatcher.isAlerted(paneId);
+    },
   }).dispatch;
 
   let shellProfileManager: ReturnType<typeof createShellProfileManager> | null = null;
@@ -441,7 +507,6 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     shellProfileManager,
     reportError,
     dispatch,
-    beginRenamePane: (index) => tabBar.beginRenamePane(index),
   });
 
   // Track auto-save state for E2E testing
@@ -512,6 +577,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     getCurrentMode: () => currentMode,
     setMode,
     toggleFloatWindow: () => { void floatWindowManager.toggle(); },
+    dispatch,
   });
 
   const fullscreenManager = createFullscreenManager({
@@ -555,7 +621,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     console.error(error);
   }
 
-  function setMode(next: string): void {
+  function setMode(next: WorkbenchMode): void {
     if (currentMode === next) return;
     currentMode = next;
     document.body.classList.toggle('is-navigation-mode', currentMode === 'nav');
@@ -662,8 +728,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     cycleToNextLitPane: () => dispatch({ type: 'focus.nextLit' }),
     navigateLeft: () => dispatch({ type: 'focus.left' }),
     navigateRight: () => dispatch({ type: 'focus.right' }),
-    copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); return id ? paneRenderer?.copySelection(id) : false; },
-    pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) await paneRenderer?.pasteInto(id); },
+    copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); return id ? workbench!.session(id)?.copySelection() ?? false : false; },
+    pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) await workbench!.session(id)?.paste(); },
     moveFocus: (delta) => dispatch({ type: delta > 0 ? 'focus.next' : 'focus.prev' }),
     focusPane: (paneId, opts) => dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }),
     cancelNavigationMode,
@@ -677,7 +743,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     getPaneCount: () => paneState.getPanes().length,
     getPaneIdAt: (index: number) => paneState.getPanes()[index]?.id,
     requestClosePane: (paneId: string) => dispatch({ type: 'pane.requestClose', paneId }),
-    startInlineRename: (paneId: string) => dispatch({ type: 'pane.rename', paneId }),
+    startInlineRename: (paneId: string) => dispatch({ type: 'pane.rename.start', paneId }),
     openKeymapHelpModal,
     openLayoutsModal: () => layoutModal.openLayoutsModal(),
   });

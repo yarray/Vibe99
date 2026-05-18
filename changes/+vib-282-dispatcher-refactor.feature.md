@@ -1,0 +1,1 @@
+Refactor `command-dispatcher.ts` to operate through domain interfaces instead of directly accessing xterm instances or DOM classes. Terminal commands now use `TerminalSession` methods via a session accessor, and `focus.nextLit` uses runtime alert state queries from `PaneActivityWatcher` instead of reading DOM classes.

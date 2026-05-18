@@ -156,7 +156,7 @@ interface TauriGlobal {
     getCurrentWebview: () => TauriWebview;
   };
   webviewWindow: {
-    WebviewWindow: typeof import('@tauri-apps/api/webviewWindow').WebviewWindow;
+    WebviewWindow: TauriWebviewWindowClass;
   };
   event?: {
     emitTo?: (target: string, event: string) => Promise<void>;
@@ -184,6 +184,21 @@ interface TauriWindow {
   setFullscreen: (fullscreen: boolean) => Promise<void>;
   outerPosition: () => Promise<{ x: number; y: number }>;
   innerSize: () => Promise<{ width: number; height: number }>;
+}
+
+/**
+ * Minimal subset of the Tauri WebviewWindow class used internally.
+ * Avoids importing the full type from @tauri-apps/api.
+ */
+interface TauriWebviewWindow extends TauriWindow {
+  once: (event: string, handler: () => void) => Promise<() => void>;
+}
+
+interface TauriWebviewWindowClass {
+  getByLabel(label: string): Promise<TauriWebviewWindow | null>;
+  getCurrent(): TauriWebviewWindow;
+  getAll(): Promise<TauriWebviewWindow[]>;
+  new(label: string, options?: Record<string, unknown>): TauriWebviewWindow;
 }
 
 /**

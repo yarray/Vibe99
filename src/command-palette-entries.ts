@@ -6,6 +6,7 @@ import type { Bridge } from './bridge';
 import type { SettingsManager } from './settings';
 import type { ModalStack } from './modal-stack';
 import type { ShellProfileManager, ShellProfile } from './shell-profiles';
+import type { AppCommand, CommandResult, WorkbenchMode } from './domain/commands';
 import * as ShortcutsUI from './shortcuts-ui';
 
 // ---------------------------------------------------------------------------
@@ -54,9 +55,10 @@ export interface CommandPaletteEntriesDeps {
   settingsPanelEl: HTMLElement;
   statusLabelEl: HTMLElement;
   statusHintEl: HTMLElement;
-  getCurrentMode: () => string;
-  setMode: (mode: string) => void;
+  getCurrentMode: () => WorkbenchMode;
+  setMode: (mode: WorkbenchMode) => void;
   toggleFloatWindow: () => void;
+  dispatch: (command: AppCommand) => CommandResult;
 }
 
 /** Public API surface returned by createCommandPaletteEntries. */
@@ -93,6 +95,7 @@ export function createCommandPaletteEntries({
   getCurrentMode,
   setMode,
   toggleFloatWindow,
+  dispatch,
 }: CommandPaletteEntriesDeps): CommandPaletteEntries {
   function openTabSwitcher(): void {
     contextMenus?.hideContextMenu();
@@ -143,8 +146,8 @@ export function createCommandPaletteEntries({
       } else if (commandId === 'change-color') {
         contextMenus?.showColorPicker(paneState.getFocusedPaneId());
       } else if (commandId === 'rename-pane') {
-        const index = paneState.getPaneIndex(paneState.getFocusedPaneId() ?? '');
-        if (index !== -1) tabBar.beginRenamePane(index);
+        const paneId = paneState.getFocusedPaneId();
+        if (paneId) dispatch({ type: 'pane.rename.start', paneId });
       } else if (commandId === 'toggle-float') {
         toggleFloatWindow();
       } else if (commandId === 'profile-settings') {
@@ -154,10 +157,10 @@ export function createCommandPaletteEntries({
         modalStack.register(closeKeyboardShortcutsModal);
         ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
       } else if (commandId === 'layout-default') {
-        bridge.openLayoutWindow('default').catch(() => {});
+        dispatch({ type: 'layout.activate', layoutId: 'default' });
       } else if (commandId.startsWith('layout-open:')) {
         const layoutId = commandId.slice('layout-open:'.length);
-        bridge.openLayoutWindow(layoutId).catch(() => {});
+        dispatch({ type: 'layout.activate', layoutId });
       } else if (commandId === 'layout-manage') {
         layoutModal.openLayoutsModal();
       }
@@ -176,8 +179,9 @@ export function createCommandPaletteEntries({
 
     const items: PaletteItem[] = profiles.map((p) => ({ id: p.id, label: p.name || p.id }));
     openCommandPalette(items, (profileId: string) => {
-      paneRenderer?.changePaneShell(paneState.getFocusedPaneId() ?? '', profileId);
-      focusPane(paneState.getFocusedPaneId());
+      const paneId = paneState.getFocusedPaneId();
+      if (paneId) dispatch({ type: 'terminal.changeShell', paneId, profileId });
+      focusPane(paneId);
     }, {
       placeholder: 'Select a profile…',
       emptyText: 'No matching profiles',
