@@ -98,14 +98,17 @@ export const webglEnabledSchema = z
 
 /**
  * Activity alert debounce: 3000-300000 ms, integer
+ *
+ * Out-of-range values are clamped rather than rejected so that UI input
+ * always receives a usable sanitized value instead of falling back to the
+ * schema default (30000ms).
  */
 export const activityAlertDebounceMsSchema = z
   .number({
     invalid_type_error: 'Activity alert debounce must be a number',
   })
   .int({ message: 'Activity alert debounce must be an integer' })
-  .min(3000, { message: 'Activity alert debounce must be at least 3000ms' })
-  .max(300000, { message: 'Activity alert debounce must be at most 300000ms' })
+  .transform((val) => Math.max(3000, Math.min(300000, val)))
   .default(30000);
 
 // ---------------------------------------------------------------------------
