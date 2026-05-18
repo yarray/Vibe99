@@ -32,7 +32,6 @@ import { createLayoutManager } from '../layout-manager';
 import { createLayoutModal } from '../layout-modal';
 import { createModalStack } from '../modal-stack';
 import { createFullscreenManager } from '../fullscreen-manager';
-import { createCommandDispatcher } from './command-dispatcher.js';
 import type { CommandResult, WorkbenchMode } from '../domain/commands.js';
 import type { AppCommand } from '../domain/commands.js';
 import { createCommandPaletteEntries } from '../command-palette-entries';
@@ -52,6 +51,7 @@ import { createSettingsManager } from '../settings';
 import { createTabBar } from '../tab-bar';
 import type { TabBarLocalState } from '../tab-bar';
 import type { ShellProfile, EditingShellProfile } from '../shell-profiles';
+import { createDefaultTerminalTheme } from '../domain/theme';
 
 // ---------------------------------------------------------------------------
 // Dependencies injected by the bootstrap entry
@@ -276,21 +276,22 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     if (!session) return true;
 
     if (reason === 'killed') {
-      paneRenderer!.setSessionReady(paneId, false);
+      session.setReady(false);
       return true;
     }
 
     const graceMs = 3000;
-    const recentShellChange = paneRenderer!.getShellChangeTime(paneId) && (Date.now() - paneRenderer!.getShellChangeTime(paneId)! < graceMs);
-    if (paneRenderer!.isShellChanging(paneId) || recentShellChange) {
-      paneRenderer!.setSessionReady(paneId, false);
+    const shellTime = session.shellChangeTime();
+    const recentShellChange = shellTime && (Date.now() - shellTime < graceMs);
+    if (session.isShellChanging() || recentShellChange) {
+      session.setReady(false);
       paneRenderer!.writeln(paneId, '');
       paneRenderer!.writeln(paneId, `\x1b[38;5;204m[shell exited with code ${exitCode}]\x1b[0m`);
       session.showExitedState({ exitCode, reason });
       return true;
     }
 
-    paneRenderer!.setSessionReady(paneId, false);
+    session.setReady(false);
     paneRenderer!.writeln(paneId, '');
     paneRenderer!.writeln(paneId, `\x1b[38;5;244m[process exited with code ${exitCode}]\x1b[0m`);
     session.showExitedState({ exitCode, reason });
@@ -304,7 +305,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
 
   const tabBar = createTabBar({
-    paneState,
+    getPanes: () => paneState.getPanes(),
+    getFocusedIndex: () => paneState.getFocusedIndex(),
+    getPaneIndex: (paneId) => paneState.getPaneIndex(paneId),
     state: tabBarState,
     getPaneLabel: (pane) => pane.title ?? pane.terminalTitle ?? '',
     getTextColorForBackground,
@@ -346,6 +349,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       onContextMenu: (session, event) => {
         void contextMenus?.showTerminalContextMenu(session.paneId, event);
       },
+      terminalTheme: createDefaultTerminalTheme,
     },
     stageEl,
     paneActivityWatcher: {
@@ -358,9 +362,22 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     },
     paneAlert,
     tabBar,
+    tabBarState,
     entryNeedsTabRefresh: (paneId: string) => {
       const pane = paneState.getPaneById(paneId);
       return Boolean(pane && pane.title === null);
+    },
+    paneState,
+    setMode,
+    getCurrentMode: () => currentMode,
+    scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
+    bridge,
+    render,
+    setPaneActivityAlertEnabled: (paneId, enabled) => {
+      paneActivityWatcher.setPaneEnabled(paneId, enabled);
+      if (!enabled) {
+        paneRenderer?.setAlerted(paneId, false);
+      }
     },
   });
 
@@ -392,29 +409,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     workbench: workbench!,
   });
 
-  dispatch = createCommandDispatcher({
-    paneState,
-    paneRenderer,
-    tabBar,
-    scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
-    render,
-    setMode,
-    getCurrentMode: () => currentMode,
-    state: tabBarState,
-    bridge,
-    setPaneActivityAlertEnabled: (paneId, enabled) => {
-      paneActivityWatcher.setPaneEnabled(paneId, enabled);
-      if (!enabled) {
-        paneRenderer?.setAlerted(paneId, false);
-      }
-    },
-    getSession: (paneId: string) => {
-      return workbench!.session(paneId);
-    },
-    isAlerted: (paneId: string) => {
-      return paneActivityWatcher.isAlerted(paneId);
-    },
-  }).dispatch;
+  dispatch = (command: AppCommand) => workbench!.dispatch(command);
 
   let shellProfileManager: ReturnType<typeof createShellProfileManager> | null = null;
   let contextMenus: ReturnType<typeof createContextMenus> | null = null;
@@ -453,24 +448,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   contextMenus = createContextMenus({
     state: {
       getPanels: () => paneState.getPanes(),
-      setPanels: (newPanes) => {
-        newPanes.forEach((p) => {
-          const existing = paneState.getPaneById(p.id);
-          if (existing && p.customColor !== existing.customColor) {
-            if (p.customColor === undefined) {
-              paneState.clearPaneColor(p.id);
-            } else {
-              paneState.setPaneColor(p.id, p.customColor);
-            }
-          }
-        });
-      },
       getPaneIndex: (paneId) => paneState.getPaneIndex(paneId),
       getFocusedPaneId: () => paneState.getFocusedPaneId(),
-      setFocusedPaneId: (id) => paneState.focusPane(id),
-      clearPaneCycleState: () => {},
-      recordPaneVisit: (paneId) => paneState.recordPaneVisit(paneId),
-      render: () => render(),
       scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
       registerModal: (closeFn) => modalStack.register(closeFn),
       unregisterModal: (closeFn) => modalStack.unregister(closeFn),
@@ -541,8 +520,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   (window as any).__floatWindowManager = floatWindowManager;
 
   const commandPaletteEntries = createCommandPaletteEntries({
-    paneState,
-    paneRenderer,
+    getPanes: () => paneState.getPanes(),
+    getFocusedPaneId: () => paneState.getFocusedPaneId(),
     tabBar,
     layoutManager,
     layoutModal,
@@ -713,8 +692,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     cycleToNextLitPane: () => dispatch({ type: 'focus.nextLit' }),
     navigateLeft: () => dispatch({ type: 'focus.left' }),
     navigateRight: () => dispatch({ type: 'focus.right' }),
-    copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); return id ? workbench!.session(id)?.copySelection() ?? false : false; },
-    pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) await workbench!.session(id)?.paste(); },
+    copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); if (id) dispatch({ type: 'terminal.copy', paneId: id }); },
+    pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) dispatch({ type: 'terminal.paste', paneId: id }); },
     moveFocus: (delta) => dispatch({ type: delta > 0 ? 'focus.next' : 'focus.prev' }),
     focusPane: (paneId, opts) => dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }),
     cancelNavigationMode,
@@ -792,7 +771,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
     layoutManager.setWindowLayoutId(targetLayout.id);
     paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
-    paneRenderer?.ensurePaneNodes();
+    paneRenderer?.ensureSessions();
 
     layoutManager.updateLayoutsIndicator();
     render(true);

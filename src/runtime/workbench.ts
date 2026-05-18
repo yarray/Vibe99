@@ -1,20 +1,25 @@
 /**
- * Workbench Session Coordination
+ * Workbench Session Coordination + Command Dispatch
  *
  * Workbench owns the active Layout and the TerminalSession collection for a
  * single window. It coordinates session lifecycle with Layout state and
- * orchestrates rendering.
+ * orchestrates rendering. It also serves as the single entry point for all
+ * user-intent commands via `dispatch()`.
  *
  * Workbench is a window-level entity, not a global application state.
  *
  * @module runtime/workbench
  */
 
+import type { AppCommand, CommandResult, WorkbenchMode } from '../domain/commands.js';
 import type { Layout } from '../domain/layout.js';
 import type { Pane as PaneEntity } from '../domain/pane.js';
-import type { Pane } from '../pane-state';
+import type { PaneState, Pane } from '../pane-state';
+import type { TabBar, TabBarLocalState } from '../tab-bar.js';
+import type { Bridge } from '../bridge.js';
 import type { TerminalSession } from './terminal-session.js';
 import { createTerminalSession, type TerminalSessionDeps } from './terminal-session.js';
+import { createDefaultTerminalTheme } from '../domain/theme.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -36,19 +41,13 @@ export interface CloseSessionOptions {
   destroyPty?: boolean;
 }
 
-/**
- * Dependencies injected into `createWorkbench`.
- */
 export interface WorkbenchDeps {
-  /** The active Layout aggregate root, or a function returning the current one. */
   layout: Layout | (() => Layout);
 
-  /** Terminal session dependencies (passed through to createTerminalSession) */
   terminalSessionDeps: Omit<
     TerminalSessionDeps,
     'getPaneSnapshot' | 'onPaneClick' | 'onTitleChange' | 'onContextMenu' | 'onCwdChanged' | 'onTabRefreshNeeded'
   > & {
-    /** Get pane snapshot - returns legacy Pane type for compatibility with terminal-session */
     getPaneSnapshot: (paneId: string) => Pane | null;
     onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
     onTitleChange: (paneId: string, title: string) => void;
@@ -57,10 +56,8 @@ export interface WorkbenchDeps {
     onContextMenu: (session: TerminalSession, event: MouseEvent) => Promise<void> | void;
   };
 
-  /** Stage element for appending pane DOM */
   stageEl: HTMLElement;
 
-  /** Activity watcher interface */
   paneActivityWatcher: {
     noteResize: (paneId: string) => void;
     noteData: (paneId: string) => void;
@@ -70,68 +67,58 @@ export interface WorkbenchDeps {
     alertedPaneIds: () => string[];
   };
 
-  /** Pane alert strategy */
   paneAlert: {
     attach: () => void;
+    setAlerted: (root: HTMLElement, alerted: boolean) => void;
   };
 
-  /** Tab bar for refresh coordination */
-  tabBar: {
-    renderTabs: () => void;
-  };
-
-  /** Helper to check if entry needs tab refresh */
+  tabBar: TabBar;
+  tabBarState: TabBarLocalState;
   entryNeedsTabRefresh: (paneId: string) => boolean;
+
+  paneState: PaneState;
+  setMode: (mode: WorkbenchMode) => void;
+  getCurrentMode: () => WorkbenchMode;
+  scheduleSave: () => void;
+  bridge: Bridge;
+  render: (refit?: boolean) => void;
+  setPaneActivityAlertEnabled: (paneId: string, enabled: boolean) => void;
 }
 
-/**
- * Workbench interface - coordinates Layout and TerminalSession collection.
- */
 export interface Workbench {
-  /**
-   * Get the active Layout.
-   */
   layout(): Layout;
 
-  /**
-   * Get a TerminalSession by pane ID.
-   */
   session(paneId: string): TerminalSession | null;
 
-  /**
-   * Ensure sessions are synchronized with Layout's pane collection.
-   * Creates sessions for new panes, closes sessions for removed panes.
-   */
   ensureSessions(): void;
 
-  /**
-   * Close a session for a specific pane.
-   */
   closeSession(paneId: string, options?: CloseSessionOptions): void;
 
-  /**
-   * Render all panes - coordinate DOM, focus state, and terminal fit.
-   */
   render(options?: WorkbenchRenderOptions): void;
 
-  /**
-   * Query whether a pane is currently in the alerted state.
-   */
   isAlerted(paneId: string): boolean;
 
-  /**
-   * Get all pane IDs that are currently in the alerted state.
-   */
   alertedPaneIds(): string[];
+
+  dispatch(command: AppCommand): CommandResult;
+}
+
+// ---------------------------------------------------------------------------
+// Command result helpers
+// ---------------------------------------------------------------------------
+
+function ok(value?: unknown): CommandResult {
+  return { ok: true, value };
+}
+
+function fail(reason?: string): CommandResult {
+  return { ok: false, reason };
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Check if a pane session needs a tab bar refresh.
- */
 function needsTabRefresh(pane: PaneEntity, entryNeedsTabRefresh: (paneId: string) => boolean): boolean {
   return entryNeedsTabRefresh(pane.id);
 }
@@ -140,14 +127,12 @@ function needsTabRefresh(pane: PaneEntity, entryNeedsTabRefresh: (paneId: string
 // Factory
 // ---------------------------------------------------------------------------
 
-/**
- * Creates a Workbench that coordinates Layout and TerminalSession lifecycle.
- *
- * @param deps - Workbench dependencies
- * @returns Workbench instance
- */
 export function createWorkbench(deps: WorkbenchDeps): Workbench {
-  const { layout: layoutInput, terminalSessionDeps, stageEl, paneActivityWatcher, paneAlert, tabBar, entryNeedsTabRefresh } = deps;
+  const {
+    layout: layoutInput, terminalSessionDeps, stageEl, paneActivityWatcher,
+    paneAlert, tabBar, tabBarState, entryNeedsTabRefresh,
+    paneState, setMode, getCurrentMode, scheduleSave, bridge, render: externalRender, setPaneActivityAlertEnabled,
+  } = deps;
 
   const resolveLayout = typeof layoutInput === 'function'
     ? (layoutInput as () => Layout)
@@ -181,6 +166,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
           tabBar.renderTabs();
         }
       },
+      terminalTheme: createDefaultTerminalTheme,
     });
 
     return session;
@@ -255,6 +241,329 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
   }
 
   // ---------------------------------------------------------------------------
+  // Command dispatch
+  // ---------------------------------------------------------------------------
+
+  function changePaneShell(paneId: string, profileId: string): void {
+    const session = sessionMap.get(paneId);
+    if (!session) return;
+    const prevProfileId = paneState.getPaneById(paneId)?.shellProfileId ?? null;
+    session.changeShell(profileId, prevProfileId);
+    const checkResult = (): void => {
+      requestAnimationFrame(() => {
+        if (!session.isShellChanging()) {
+          if (session.isReady()) {
+            paneState.setPaneShellProfile(paneId, profileId);
+            scheduleSave();
+          }
+        } else {
+          checkResult();
+        }
+      });
+    };
+    checkResult();
+  }
+
+  function focusSession(paneId: string): void {
+    const session = sessionMap.get(paneId);
+    if (session) session.focus();
+  }
+
+  function blurSession(paneId: string): void {
+    const session = sessionMap.get(paneId);
+    if (session) session.blur();
+  }
+
+  function setSessionAlerted(paneId: string, alerted: boolean): void {
+    const session = sessionMap.get(paneId);
+    if (session) paneAlert.setAlerted(session.root, alerted);
+  }
+
+  function hasSessionAlertClass(paneId: string): boolean {
+    const session = sessionMap.get(paneId);
+    return session?.root.classList.contains('has-pending-activity') ?? false;
+  }
+
+  function dispatch(command: AppCommand): CommandResult {
+    switch (command.type) {
+      case 'pane.create': {
+        const newPaneId = paneState.addPane(command.shellProfileId ?? null);
+        setMode('terminal');
+        document.body.classList.remove('is-navigation-mode');
+        externalRender(true);
+        return ok(newPaneId);
+      }
+
+      case 'pane.close': {
+        const currentPanes = paneState.getPanes();
+        if (currentPanes.length === 1) return fail('last-pane');
+        const index = paneState.getPaneIndex(command.paneId);
+        if (index === -1) return fail('not-found');
+
+        const closingPane = currentPanes[index];
+        if (closingPane.id === tabBarState.renamingPaneId) tabBarState.renamingPaneId = null;
+        if (closingPane.id === tabBarState.dragState?.paneId) {
+          tabBarState.dragState = null;
+          document.body.classList.remove('is-dragging-tabs');
+        }
+        if (closingPane.id === tabBarState.pendingTabFocus?.paneId) {
+          window.clearTimeout(tabBarState.pendingTabFocus.timerId);
+          tabBarState.pendingTabFocus = null;
+        }
+
+        closeSession(command.paneId, { destroyPty: true });
+
+        const wasFocused = closingPane.id === paneState.getFocusedPaneId();
+        paneState.closePane(index);
+        externalRender(true);
+
+        if (wasFocused) {
+          const newFocusedPaneId = paneState.getFocusedPaneId();
+          if (newFocusedPaneId) {
+            requestAnimationFrame(() => {
+              setMode('terminal');
+              focusSession(newFocusedPaneId);
+            });
+          }
+        }
+        return ok();
+      }
+
+      case 'pane.focus': {
+        const { focusTerminal = true } = command;
+        paneState.focusPane(command.paneId);
+        setMode('terminal');
+        externalRender();
+        setSessionAlerted(command.paneId, false);
+        if (focusTerminal) focusSession(command.paneId);
+        return ok();
+      }
+
+      case 'pane.rename.start': {
+        const idx = paneState.getPaneIndex(command.paneId);
+        if (idx !== -1) {
+          if (getCurrentMode() === 'nav') setMode('terminal');
+          tabBar.beginRenamePane(idx);
+        }
+        return ok();
+      }
+
+      case 'pane.rename.commit': {
+        const idx = paneState.getPaneIndex(command.paneId);
+        if (idx === -1) return fail('not-found');
+        paneState.setPaneTitle(command.paneId, command.title ?? null);
+        tabBarState.renamingPaneId = null;
+        tabBar.renderTabs();
+        dispatch({ type: 'pane.focus', paneId: command.paneId, focusTerminal: true });
+        return ok();
+      }
+
+      case 'pane.move': {
+        paneState.reorderPane(command.paneId, command.index);
+        externalRender();
+        return ok();
+      }
+
+      case 'pane.setColor': {
+        paneState.setPaneColor(command.paneId, command.color);
+        scheduleSave();
+        externalRender();
+        return ok();
+      }
+
+      case 'pane.clearColor': {
+        paneState.clearPaneColor(command.paneId);
+        scheduleSave();
+        externalRender();
+        return ok();
+      }
+
+      case 'pane.toggleActivityAlert': {
+        const next = paneState.togglePaneBreathingMonitor(command.paneId);
+        scheduleSave();
+        setPaneActivityAlertEnabled(command.paneId, next);
+        return ok(next);
+      }
+
+      case 'pane.requestClose': {
+        if (tabBarState.pendingClosePaneId === command.paneId) {
+          const index = paneState.getPaneIndex(command.paneId);
+          if (index !== -1) {
+            tabBarState.pendingClosePaneId = null;
+            dispatch({ type: 'pane.close', paneId: command.paneId });
+            const currentPanes = paneState.getPanes();
+            if (getCurrentMode() === 'nav' && currentPanes.length > 0) {
+              const focusedId = paneState.getFocusedPaneId();
+              if (focusedId) dispatch({ type: 'pane.focus', paneId: focusedId, focusTerminal: true });
+            }
+          }
+        } else {
+          tabBarState.pendingClosePaneId = command.paneId;
+          externalRender();
+        }
+        return ok();
+      }
+
+      case 'terminal.copy': {
+        const session = sessionMap.get(command.paneId);
+        if (!session) return fail('not-found');
+        const success = session.copySelection();
+        if (!success) return fail('no-selection');
+        return ok();
+      }
+
+      case 'terminal.paste': {
+        const session = sessionMap.get(command.paneId);
+        if (!session) return fail('not-found');
+        void session.paste();
+        return ok();
+      }
+
+      case 'terminal.pasteImage': {
+        const session = sessionMap.get(command.paneId);
+        if (!session) return fail('not-found');
+        void session.pasteImage();
+        return ok();
+      }
+
+      case 'terminal.selectAll': {
+        const session = sessionMap.get(command.paneId);
+        if (!session) return fail('not-found');
+        session.selectAll();
+        return ok();
+      }
+
+      case 'terminal.restart': {
+        const session = sessionMap.get(command.paneId);
+        if (session) session.restart();
+        return ok();
+      }
+
+      case 'terminal.changeShell': {
+        changePaneShell(command.paneId, command.profileId);
+        return ok();
+      }
+
+      case 'query.terminal.hasSelection': {
+        const session = sessionMap.get(command.paneId);
+        const hasSelection = session?.hasSelection() ?? false;
+        return ok(hasSelection);
+      }
+
+      case 'query.terminal.isReady': {
+        const session = sessionMap.get(command.paneId);
+        const isReady = session?.isReady() ?? false;
+        return ok(isReady);
+      }
+
+      case 'focus.next': {
+        paneState.moveFocus(1);
+        externalRender();
+        return ok();
+      }
+
+      case 'focus.prev': {
+        paneState.moveFocus(-1);
+        externalRender();
+        return ok();
+      }
+
+      case 'focus.left': {
+        const panes = paneState.getPanes();
+        if (panes.length === 0) return fail('too-few');
+        const nextIndex = paneState.getFocusedIndex() - 1;
+        if (nextIndex < 0) return ok();
+        paneState.focusPane(panes[nextIndex].id);
+        externalRender();
+        return ok();
+      }
+
+      case 'focus.right': {
+        const panes = paneState.getPanes();
+        if (panes.length === 0) return fail('too-few');
+        const nextIndex = paneState.getFocusedIndex() + 1;
+        if (nextIndex >= panes.length) return ok();
+        paneState.focusPane(panes[nextIndex].id);
+        externalRender();
+        return ok();
+      }
+
+      case 'focus.recent': {
+        const currentPanes = paneState.getPanes();
+        if (currentPanes.length < 2) return fail('too-few');
+        const targetId = paneState.cycleToRecentPane({ reverse: command.reverse });
+        if (!targetId) return fail('no-target');
+        setMode('terminal');
+        externalRender();
+        focusSession(targetId);
+        return ok(targetId);
+      }
+
+      case 'focus.nextLit': {
+        const panes = paneState.getPanes();
+        const litIds = panes
+          .map((p: Pane) => p.id)
+          .filter((id: string) => {
+            if (paneActivityWatcher.isAlerted(id)) return true;
+            return hasSessionAlertClass(id);
+          });
+        if (litIds.length === 0) return fail('no-lit');
+        const focusedId = paneState.getFocusedPaneId();
+        const focusedIndex = focusedId !== null ? litIds.indexOf(focusedId) : -1;
+        const nextIndex = focusedIndex >= 0 ? (focusedIndex + 1) % litIds.length : 0;
+        return dispatch({ type: 'pane.focus', paneId: litIds[nextIndex] });
+      }
+
+      case 'focus.at': {
+        const panes = paneState.getPanes();
+        if (panes.length === 0 || command.index < 0 || command.index >= panes.length) return fail('out-of-range');
+        paneState.focusPane(panes[command.index].id);
+        externalRender();
+        return ok();
+      }
+
+      case 'focus.blur': {
+        const paneId = paneState.getFocusedPaneId();
+        if (paneId) blurSession(paneId);
+        return ok();
+      }
+
+      case 'focus.refocus': {
+        const paneId = paneState.getFocusedPaneId();
+        if (!paneId) return fail('no-focus');
+        setMode('terminal');
+        focusSession(paneId);
+        return ok();
+      }
+
+      case 'focus.commit': {
+        paneState.commitPaneCycle();
+        return ok();
+      }
+
+      case 'mode.set': {
+        setMode(command.mode);
+        return ok();
+      }
+
+      case 'layout.save': {
+        scheduleSave();
+        return ok();
+      }
+
+      case 'layout.activate': {
+        void bridge.openLayoutWindow(command.layoutId).catch(() => {});
+        return ok();
+      }
+
+      default: {
+        const _exhaustive: never = command;
+        return fail(`unknown-command: ${(_exhaustive as AppCommand).type}`);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
@@ -278,5 +587,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
     alertedPaneIds(): string[] {
       return paneActivityWatcher.alertedPaneIds();
     },
+
+    dispatch,
   };
 }

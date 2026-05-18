@@ -1,0 +1,1 @@
+Merge `command-dispatcher.ts` into `workbench.ts` so `Workbench.dispatch(command)` becomes the unified command entry point. All PaneRenderer dependencies in command handlers replaced with direct TerminalSession/Layout calls. Deleted `src/runtime/command-dispatcher.ts`.

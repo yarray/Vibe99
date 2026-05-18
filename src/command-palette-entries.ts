@@ -1,6 +1,5 @@
 import { openCommandPalette, type PaletteItem } from './command-palette';
-import type { PaneState } from './pane-state';
-import type { PaneRenderer } from './pane-renderer';
+import type { Pane } from './pane-state';
 import type { TabBar } from './tab-bar';
 import type { Bridge } from './bridge';
 import type { SettingsManager } from './settings';
@@ -37,8 +36,8 @@ export interface ContextMenusForPalette {
 
 /** Dependencies injected into createCommandPaletteEntries. */
 export interface CommandPaletteEntriesDeps {
-  paneState: PaneState;
-  paneRenderer: PaneRenderer | null;
+  getPanes: () => Pane[];
+  getFocusedPaneId: () => string | null;
   tabBar: TabBar;
   layoutManager: LayoutManagerForPalette;
   layoutModal: LayoutModalForPalette;
@@ -74,8 +73,8 @@ export interface CommandPaletteEntries {
 // ---------------------------------------------------------------------------
 
 export function createCommandPaletteEntries({
-  paneState,
-  paneRenderer,
+  getPanes,
+  getFocusedPaneId,
   tabBar,
   layoutManager,
   layoutModal,
@@ -104,7 +103,7 @@ export function createCommandPaletteEntries({
       closeSettingsPanel();
     }
 
-    const items: PaletteItem[] = paneState.getPanes().map((pane) => ({
+    const items: PaletteItem[] = getPanes().map((pane) => ({
       id: pane.id,
       label: (pane.title ?? pane.terminalTitle ?? '') || pane.id,
       accent: pane.customColor || pane.accent,
@@ -144,9 +143,9 @@ export function createCommandPaletteEntries({
       } else if (commandId === 'change-profile') {
         openProfileSwitcher();
       } else if (commandId === 'change-color') {
-        contextMenus?.showColorPicker(paneState.getFocusedPaneId());
+        contextMenus?.showColorPicker(getFocusedPaneId());
       } else if (commandId === 'rename-pane') {
-        const paneId = paneState.getFocusedPaneId();
+        const paneId = getFocusedPaneId();
         if (paneId) dispatch({ type: 'pane.rename.start', paneId });
       } else if (commandId === 'toggle-float') {
         toggleFloatWindow();
@@ -179,7 +178,7 @@ export function createCommandPaletteEntries({
 
     const items: PaletteItem[] = profiles.map((p) => ({ id: p.id, label: p.name || p.id }));
     openCommandPalette(items, (profileId: string) => {
-      const paneId = paneState.getFocusedPaneId();
+      const paneId = getFocusedPaneId();
       if (paneId) dispatch({ type: 'terminal.changeShell', paneId, profileId });
       focusPane(paneId);
     }, {
@@ -204,7 +203,7 @@ export function createCommandPaletteEntries({
       const items: PaletteItem[] = profiles.map((p) => ({ id: p.id, label: p.name || p.id }));
       openCommandPalette(items, (profileId: string) => {
         addPane(profileId);
-        focusPane(paneState.getFocusedPaneId());
+        focusPane(getFocusedPaneId());
       }, {
         placeholder: 'Select a profile for new pane…',
         emptyText: 'No matching profiles',

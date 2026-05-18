@@ -8,7 +8,7 @@
  * xterm instances, or internal state.
  */
 
-import type { Pane, PaneState } from './pane-state';
+import type { Pane } from './pane-state';
 import type { IconName } from './icons';
 import type { AppCommand, CommandResult } from './domain/commands';
 
@@ -45,7 +45,10 @@ interface DragMeta {
 }
 
 export interface TabBarDeps {
-  paneState: PaneState;
+  /** Read-only pane accessors — no mutation allowed. */
+  getPanes: () => Pane[];
+  getFocusedIndex: () => number;
+  getPaneIndex: (paneId: string) => number;
   state: TabBarLocalState;
   getPaneLabel: (pane: Pane) => string;
   getTextColorForBackground: (hexColor: string) => string;
@@ -69,7 +72,9 @@ export interface TabBar {
 // ---------------------------------------------------------------------------
 
 export function createTabBar({
-  paneState,
+  getPanes,
+  getFocusedIndex,
+  getPaneIndex,
   state,
   getPaneLabel,
   getTextColorForBackground,
@@ -82,7 +87,7 @@ export function createTabBar({
   let isRenderingTabs = false;
 
   function beginRenamePane(index: number): void {
-    const panes = paneState.getPanes();
+    const panes = getPanes();
     const pane = panes[index];
     if (!pane) {
       return;
@@ -110,13 +115,7 @@ export function createTabBar({
   function commitRenamePane(paneId: string, nextTitle: string): void {
     const trimmedTitle = nextTitle.trim();
     state.renamingPaneId = null;
-    // Set the title via paneState, then focus the pane
-    if (trimmedTitle) {
-      paneState.setPaneTitle(paneId, trimmedTitle);
-    } else {
-      paneState.setPaneTitle(paneId, null);
-    }
-    dispatch({ type: 'pane.focus', paneId, focusTerminal: true });
+    dispatch({ type: 'pane.rename.commit', paneId, title: trimmedTitle || null });
   }
 
   function clearPendingTabFocus(): void {
@@ -142,7 +141,7 @@ export function createTabBar({
   function activateTabPointerUp(paneId: string): void {
     if (state.pendingTabFocus?.paneId === paneId) {
       clearPendingTabFocus();
-      const paneIndex = paneState.getPaneIndex(paneId);
+      const paneIndex = getPaneIndex(paneId);
       if (paneIndex !== -1) {
         beginRenamePane(paneIndex);
       }
@@ -157,7 +156,7 @@ export function createTabBar({
       return;
     }
 
-    const panes = paneState.getPanes();
+    const panes = getPanes();
     const pane = panes[index];
     if (!pane) {
       return;
@@ -326,7 +325,7 @@ export function createTabBar({
     setIcon(close, 'x', 14);
     close.setAttribute('aria-label', `Close tab ${pane.id}`);
 
-    const panes = paneState.getPanes();
+    const panes = getPanes();
     close.disabled = panes.length === 1;
 
     // Show pending close state
@@ -350,8 +349,8 @@ export function createTabBar({
       return;
     }
     isRenderingTabs = true;
-    const panes = paneState.getPanes();
-    const focusedIndex = paneState.getFocusedIndex();
+    const panes = getPanes();
+    const focusedIndex = getFocusedIndex();
     const draggedPaneId = state.dragState?.paneId ?? null;
     const ds = state.dragState;
     let slot = 0;
