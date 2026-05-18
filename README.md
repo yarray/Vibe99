@@ -215,7 +215,7 @@ docker run --rm --privileged vibe99-builder \
 If image does not exist, build it:
 
 ``` bash
-docker build -f e2e/Dockerfile.e2e -t vibe99-builder:latest .
+docker buildx build -f e2e/Dockerfile.e2e -t vibe99-builder:latest .
 ```
 
 Details see [e2e/README.md](./e2e/README.md).

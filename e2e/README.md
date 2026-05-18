@@ -11,7 +11,7 @@ The `Dockerfile.e2e` builds an image that pre-compiles Vibe99. The pre-compiled 
 From the **project root**:
 
 ```bash
-docker build -f e2e/Dockerfile.e2e -t vibe99-builder .
+docker buildx build -f e2e/Dockerfile.e2e -t vibe99-builder .
 ```
 
 The image (~2–3 GB) contains Ubuntu 22.04, Node.js 22, Rust stable, `tauri-driver`, pre-compiled Cargo artifacts, and all e2e dependencies.
