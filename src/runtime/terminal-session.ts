@@ -74,15 +74,6 @@ export interface TerminalSession {
   /** Root DOM element for the pane. */
   readonly root: HTMLElement;
 
-  /** Terminal host element (contains the xterm canvas). */
-  readonly terminalHost: HTMLElement & { _xterm?: Terminal };
-
-  /** Underlying xterm.js Terminal instance. */
-  readonly terminal: Terminal;
-
-  /** FitAddon instance. */
-  readonly fitAddon: FitAddon;
-
   /** Current working directory. */
   cwd: string;
 
@@ -195,6 +186,24 @@ export interface TerminalSession {
 
   /** Set the session-ready flag and notify. */
   setReady(ready: boolean): void;
+}
+
+/**
+ * Internal interface that extends the public TerminalSession with
+ * implementation details needed only within terminal-session.ts.
+ *
+ * This interface is NOT exported and should only be used internally
+ * by the factory function.
+ */
+interface InternalTerminalSession extends TerminalSession {
+  /** Terminal host element (contains the xterm canvas). Internal use only. */
+  terminalHost: HTMLElement & { _xterm?: Terminal };
+
+  /** Underlying xterm.js Terminal instance. Internal use only. */
+  terminal: Terminal;
+
+  /** FitAddon instance. Internal use only. */
+  fitAddon: FitAddon;
 }
 
 // ---------------------------------------------------------------------------
@@ -738,7 +747,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   // Public API
   // ---------------------------------------------------------------------------
 
-  const session: TerminalSession = {
+  const session: InternalTerminalSession = {
     paneId,
     root: paneEl,
     terminalHost,
