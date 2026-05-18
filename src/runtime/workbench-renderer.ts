@@ -32,7 +32,6 @@ import { createLayoutManager } from '../layout-manager';
 import { createLayoutModal } from '../layout-modal';
 import { createModalStack } from '../modal-stack';
 import { createFullscreenManager } from '../fullscreen-manager';
-import { createCommandDispatcher } from './command-dispatcher.js';
 import type { CommandResult, WorkbenchMode } from '../domain/commands.js';
 import type { AppCommand } from '../domain/commands.js';
 import { createCommandPaletteEntries } from '../command-palette-entries';
@@ -387,9 +386,22 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     },
     paneAlert,
     tabBar,
+    tabBarState,
     entryNeedsTabRefresh: (paneId: string) => {
       const pane = paneState.getPaneById(paneId);
       return Boolean(pane && pane.title === null);
+    },
+    paneState,
+    setMode,
+    getCurrentMode: () => currentMode,
+    scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
+    bridge,
+    render,
+    setPaneActivityAlertEnabled: (paneId, enabled) => {
+      paneActivityWatcher.setPaneEnabled(paneId, enabled);
+      if (!enabled) {
+        paneRenderer?.setAlerted(paneId, false);
+      }
     },
   });
 
@@ -421,29 +433,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     workbench: workbench!,
   });
 
-  dispatch = createCommandDispatcher({
-    paneState,
-    paneRenderer,
-    tabBar,
-    scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
-    render,
-    setMode,
-    getCurrentMode: () => currentMode,
-    state: tabBarState,
-    bridge,
-    setPaneActivityAlertEnabled: (paneId, enabled) => {
-      paneActivityWatcher.setPaneEnabled(paneId, enabled);
-      if (!enabled) {
-        paneRenderer?.setAlerted(paneId, false);
-      }
-    },
-    getSession: (paneId: string) => {
-      return workbench!.session(paneId);
-    },
-    isAlerted: (paneId: string) => {
-      return paneActivityWatcher.isAlerted(paneId);
-    },
-  }).dispatch;
+  dispatch = (command: AppCommand) => workbench!.dispatch(command);
 
   let shellProfileManager: ReturnType<typeof createShellProfileManager> | null = null;
   let contextMenus: ReturnType<typeof createContextMenus> | null = null;

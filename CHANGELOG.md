@@ -17,6 +17,10 @@
 
 - **E2E Hook system tests (VIB-249):** Added `e2e/tests/hooks.spec.js` with 22 test cases covering hook modal open/close (5), hook CRUD — create (4), edit (3), delete (2) — enable/disable toggle (3), `{{var}}` template rendering with variable hints (3), and event trigger integration (2).
 
+### Changed
+
+- **Merge command dispatcher into Workbench (VIB-292):** Moved `command-dispatcher.ts` into `workbench.ts` so `Workbench.dispatch(command)` becomes the unified command entry point. All PaneRenderer dependencies in command handlers replaced with direct TerminalSession/Layout calls. `workbench-renderer.ts` no longer creates an independent dispatcher. Deleted `src/runtime/command-dispatcher.ts`.
+
 ### Fixed
 
 - **Knip configuration cleanup (VIB-286):** Removed redundant knip entries (`src/renderer.ts`, unnecessary `ignoreDependencies`/`ignoreBinaries`) after verifying they are auto-detected. Replaced `@tauri-apps/api/webviewWindow` type import in `src/bridge.ts` with minimal local interfaces (`TauriWebviewWindow`, `TauriWebviewWindowClass`) to eliminate implicit external type dependency. `npm run knip` now outputs zero issues.
