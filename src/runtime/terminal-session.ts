@@ -22,7 +22,6 @@ import type { Bridge } from '../bridge';
 import type { Pane } from '../pane-state';
 import type { SettingsManager } from '../settings';
 import type { TerminalTheme } from '../domain/theme';
-import { createDefaultTerminalTheme } from '../domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
