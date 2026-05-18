@@ -337,12 +337,14 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   debounceInput.addEventListener('change', () => {
     const seconds = Number(debounceInput.value);
     // Convert to milliseconds for validation
-    const msValue = seconds * 1000;
+    let msValue = seconds * 1000;
+    // Clamp to valid range so out-of-range inputs snap to min/max
+    msValue = Math.max(3000, Math.min(300000, msValue));
     const result = validateField('activityAlertDebounceMs', msValue);
-    // Browser sanitises non-numeric input on <input type="number"> to "",
-    // which Number("") converts to 0 (not NaN). Treat 0 / negative / NaN
-    // as invalid so the field reverts to the current settings value.
-    if (result.error && seconds <= 0) {
+    // Revert for truly invalid input (NaN, etc.) — browser sanitises
+    // non-numeric input to "" → Number("") = 0 → clamped to 3000, so
+    // the only case that reaches here is NaN.
+    if (result.error) {
       applySettings();
       return;
     }
