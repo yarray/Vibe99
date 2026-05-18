@@ -33,6 +33,11 @@ export interface LayoutSnapshot {
  * Owns pane collection order, focus, MRU, and cycle state.
  */
 export interface Layout {
+  // Identity
+  id: string;
+  name: string;
+  rename(name: string): void;
+
   // Read accessors
   panes(): readonly Pane[];
   focusedPane(): Pane | null;
@@ -72,6 +77,10 @@ interface PaneCycleState {
 
 /** Internal mutable state of a layout. */
 interface LayoutState {
+  id: string;
+  name: string;
+  activation?: string;
+  themeId?: string;
   panes: Pane[];
   focusedPaneId: string | null;
   mruPaneIds: string[];
@@ -109,6 +118,10 @@ function syncMruOrder(state: LayoutState): void {
  */
 export function createLayout(snapshot: LayoutSnapshot): Layout {
   const state: LayoutState = {
+    id: snapshot.id,
+    name: snapshot.name,
+    activation: snapshot.activation,
+    themeId: snapshot.themeId,
     panes: snapshot.panes.map((p) => createPane(p)),
     focusedPaneId: snapshot.focusedPaneId,
     mruPaneIds: [...snapshot.mruPaneIds],
@@ -118,6 +131,14 @@ export function createLayout(snapshot: LayoutSnapshot): Layout {
   syncMruOrder(state);
 
   return {
+    id: state.id,
+    get name(): string {
+      return state.name;
+    },
+    rename(newName: string): void {
+      state.name = newName;
+    },
+
     panes(): readonly Pane[] {
       return [...state.panes];
     },
@@ -267,11 +288,13 @@ export function createLayout(snapshot: LayoutSnapshot): Layout {
 
     snapshot(): LayoutSnapshot {
       return {
-        id: '',
-        name: '',
+        id: state.id,
+        name: state.name,
         panes: state.panes.map((p) => p.snapshot()),
         focusedPaneId: state.focusedPaneId,
         mruPaneIds: [...state.mruPaneIds],
+        activation: state.activation,
+        themeId: state.themeId,
       };
     },
   };
