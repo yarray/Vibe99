@@ -48,7 +48,7 @@ const DEFAULT_RESIZE_SETTLE_MS = 1500;
 
 /** Options bag for createPaneActivityWatcher. */
 export interface PaneActivityWatcherOptions {
-  /** Quiet period before alerting (ms). Default: 1500. */
+  /** Quiet period before alerting (ms). Default: 30000. */
   settleMs?: number;
   /** Silence required to end the post-resize quiet window (ms). Default: 1500. */
   resizeSettleMs?: number;

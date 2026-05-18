@@ -1,0 +1,1 @@
+Activity alerts now properly respect OS window focus when float window is open, only fire on visible buffer changes (ignoring escape sequences and cursor movements), and clear when new content arrives after the alert has fired. Breathing intensity setting now immediately toggles global activity alert detection.
