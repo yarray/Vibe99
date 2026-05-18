@@ -351,7 +351,10 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
       case 'pane.rename.commit': {
         const idx = paneState.getPaneIndex(command.paneId);
         if (idx === -1) return fail('not-found');
-        tabBar.commitRenamePane(command.paneId, command.title ?? '');
+        paneState.setPaneTitle(command.paneId, command.title ?? null);
+        tabBarState.renamingPaneId = null;
+        tabBar.renderTabs();
+        dispatch({ type: 'pane.focus', paneId: command.paneId, focusTerminal: true });
         return ok();
       }
 

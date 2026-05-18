@@ -336,7 +336,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
 
   const tabBar = createTabBar({
-    paneState,
+    getPanes: () => paneState.getPanes(),
+    getFocusedIndex: () => paneState.getFocusedIndex(),
+    getPaneIndex: (paneId) => paneState.getPaneIndex(paneId),
     state: tabBarState,
     getPaneLabel: (pane) => pane.title ?? pane.terminalTitle ?? '',
     getTextColorForBackground,
@@ -477,24 +479,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   contextMenus = createContextMenus({
     state: {
       getPanels: () => paneState.getPanes(),
-      setPanels: (newPanes) => {
-        newPanes.forEach((p) => {
-          const existing = paneState.getPaneById(p.id);
-          if (existing && p.customColor !== existing.customColor) {
-            if (p.customColor === undefined) {
-              paneState.clearPaneColor(p.id);
-            } else {
-              paneState.setPaneColor(p.id, p.customColor);
-            }
-          }
-        });
-      },
       getPaneIndex: (paneId) => paneState.getPaneIndex(paneId),
       getFocusedPaneId: () => paneState.getFocusedPaneId(),
-      setFocusedPaneId: (id) => paneState.focusPane(id),
-      clearPaneCycleState: () => {},
-      recordPaneVisit: (paneId) => paneState.recordPaneVisit(paneId),
-      render: () => render(),
       scheduleSave: () => layoutManager.scheduleWindowLayoutSave(),
       registerModal: (closeFn) => modalStack.register(closeFn),
       unregisterModal: (closeFn) => modalStack.unregister(closeFn),
@@ -565,8 +551,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   (window as any).__floatWindowManager = floatWindowManager;
 
   const commandPaletteEntries = createCommandPaletteEntries({
-    paneState,
-    paneRenderer,
+    getPanes: () => paneState.getPanes(),
+    getFocusedPaneId: () => paneState.getFocusedPaneId(),
     tabBar,
     layoutManager,
     layoutModal,
@@ -737,8 +723,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     cycleToNextLitPane: () => dispatch({ type: 'focus.nextLit' }),
     navigateLeft: () => dispatch({ type: 'focus.left' }),
     navigateRight: () => dispatch({ type: 'focus.right' }),
-    copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); return id ? workbench!.session(id)?.copySelection() ?? false : false; },
-    pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) await workbench!.session(id)?.paste(); },
+    copyTerminalSelection: () => { const id = paneState.getFocusedPaneId(); if (id) dispatch({ type: 'terminal.copy', paneId: id }); },
+    pasteIntoTerminal: async () => { const id = paneState.getFocusedPaneId(); if (id) dispatch({ type: 'terminal.paste', paneId: id }); },
     moveFocus: (delta) => dispatch({ type: delta > 0 ? 'focus.next' : 'focus.prev' }),
     focusPane: (paneId, opts) => dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal }),
     cancelNavigationMode,
