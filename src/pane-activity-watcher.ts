@@ -22,11 +22,11 @@
 // Disabling either one immediately clears any pending timer and active
 // alert for the affected pane(s).
 //
-// The watcher fires `onAlert(paneId)` once per "quiet period after burst",
-// and `onClear(paneId)` whenever the alerted state ends (focus, forget,
-// disable, or programmatic clear). Output that arrives before the user has
-// *ever* focused a pane is ignored, so newly-spawned panes don't pulse
-// from their own startup banner.
+// The watcher fires `onAlert(paneId)` once per unseen activity period and
+// leaves the pane alerted until explicit user/runtime acknowledgement
+// (focus, forget, disable, or programmatic clear). Output that arrives
+// before the user has *ever* focused a pane is ignored, so newly-spawned
+// panes don't pulse from their own startup banner.
 
 const DEFAULT_SETTLE_MS = 30000;
 // After a resize, ignore incoming chunks until the pane has been silent
@@ -48,7 +48,7 @@ const DEFAULT_RESIZE_SETTLE_MS = 1500;
 
 /** Options bag for createPaneActivityWatcher. */
 export interface PaneActivityWatcherOptions {
-  /** Quiet period before alerting (ms). Default: 1500. */
+  /** Quiet period before alerting (ms). Default: 30000. */
   settleMs?: number;
   /** Silence required to end the post-resize quiet window (ms). Default: 1500. */
   resizeSettleMs?: number;
@@ -200,12 +200,9 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
         armResizeSettle(s);
         return;
       }
-      // If already alerted and new content arrives, cancel the alert
-      // and restart the quiet timer. This handles the case where the
-      // breathing light is already on but new real content arrives.
+      // If already alerted, stay alerted until explicit acknowledgement.
       if (s.alerted) {
-        s.alerted = false;
-        onClear?.(paneId);
+        return;
       }
       if (s.timer !== null) clearTimeout(s.timer);
       s.timer = setTimeout(() => {

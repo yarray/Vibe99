@@ -257,6 +257,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     paneActivityWatcher,
     onBreathingIntensityChange: (intensity) => {
       applyBreathingIntensity(intensity);
+      paneActivityWatcher.setGlobalEnabled(intensity !== 'none');
     },
     onToggleFloatWindow: () => floatWindowManager.toggle(),
     getFloatWindowOpen: () => floatWindowManager.isOpen(),
@@ -533,6 +534,19 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   let cachedFloatWindowState: Record<string, any> = {};
 
+  // Derive ignoreFocus from live state — no manual flag to keep in sync.
+  function syncIgnoreFocus(): void {
+    paneActivityWatcher.setIgnoreFocus(floatWindowManager.isOpen() && !document.hasFocus());
+  }
+
+  window.addEventListener('focus', () => {
+    syncIgnoreFocus();
+    // Window regained focus — clear any alert on the focused pane
+    // because the user can now see it.
+    paneActivityWatcher.setFocus(paneState.getFocusedPaneId());
+  });
+  window.addEventListener('blur', () => syncIgnoreFocus());
+
   const floatWindowManager = createFloatWindowManager({
     tauri: (window as any).__TAURI__,
     currentWindowLabel: bridge.currentWindowLabel,
@@ -543,10 +557,10 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       dispatch({ type: 'pane.focus', paneId, focusTerminal: true });
     },
     onOpen: () => {
-      paneActivityWatcher.setIgnoreFocus(true);
+      syncIgnoreFocus();
       floatWindowManager.sync();
     },
-    onClose: () => paneActivityWatcher.setIgnoreFocus(false),
+    onClose: () => syncIgnoreFocus(),
     persistFloatState: (state) => {
       cachedFloatWindowState = state;
       void bridge.saveFloatWindowState(state).catch(reportError);

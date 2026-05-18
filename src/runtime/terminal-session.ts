@@ -483,6 +483,28 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     return true;
   });
 
+  // -- Visible activity fingerprint --
+  // Only note activity if the visible buffer actually changes. This prevents
+  // spurious alerts from non-visible output (e.g., escape sequences, cursor
+  // movements) while still catching real content changes.
+  const snapshot = (): string[] => {
+    const { active: buf } = terminal.buffer;
+    const y = buf.viewportY;
+    return Array.from({ length: terminal.rows }, (_, i) => {
+      const line = buf.getLine(y + i);
+      return line ? `${line.isWrapped ? 1 : 0}:${line.translateToString(true)}` : '';
+    });
+  };
+
+  let last = snapshot();
+
+  function noteVisibleTerminalActivity(): void {
+    const next = snapshot();
+    if (next.length === last.length && !next.some((l, i) => l !== last[i])) return;
+    last = next;
+    activityWatcher.noteData(paneId);
+  }
+
   // ---------------------------------------------------------------------------
   // Session implementation
   // ---------------------------------------------------------------------------
@@ -541,8 +563,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   }
 
   function write(data: string): void {
-    terminal.write(data);
-    activityWatcher.noteData(paneId);
+    terminal.write(data, noteVisibleTerminalActivity);
   }
 
   function writeLine(text: string): void {
