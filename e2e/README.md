@@ -9,7 +9,7 @@ Powered by [WebdriverIO](https://webdriver.io/) and [`tauri-driver`](https://git
 From the **project root**:
 
 ```bash
-docker buildx build -f e2e/Dockerfile.e2e -t vibe99-builder .
+docker build -f e2e/Dockerfile.e2e -t vibe99-builder .
 ```
 
 ### 2. Run e2e tests
@@ -19,6 +19,12 @@ docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder
 ```
 
 > **Note:** `--privileged` is required because WebKitWebDriver needs access to file descriptor operations that Docker's default seccomp profile blocks.
+
+#### Quick smoke test
+
+```bash
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder smoke
+```
 
 #### Run a specific test
 

@@ -202,6 +202,12 @@ Vibe99/
 docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder
 ```
 
+Quick smoke test:
+
+``` bash
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder smoke
+```
+
 Run specific spec:
 
 ``` bash
@@ -211,7 +217,7 @@ docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder <spec_name>
 Build image (first time):
 
 ``` bash
-docker buildx build -f e2e/Dockerfile.e2e -t vibe99-builder:latest .
+docker build -f e2e/Dockerfile.e2e -t vibe99-builder:latest .
 ```
 
 Details see [e2e/README.md](./e2e/README.md).
