@@ -18,13 +18,10 @@ The image (~2–3 GB) contains Ubuntu 22.04, Node.js 22, Rust stable, `tauri-dri
 
 ### 2. Run e2e tests
 
-Mount local source to `/mnt/source` — rsync copies source files into the container while preserving the pre-compiled `target/` cache:
+The entrypoint auto-syncs local source from `/mnt/source` (preserving the pre-compiled `target/` cache):
 
 ```bash
-docker run --rm --privileged \
-  -v /path/to/Vibe99:/mnt/source:ro \
-  vibe99-builder \
-  bash -c "rsync -a --exclude src-tauri/target --exclude node_modules /mnt/source/ /app/Vibe99/ && npm run test:e2e"
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder npm run test:e2e
 ```
 
 > **Note:** `--privileged` is required because WebKitWebDriver needs access to file descriptor operations that Docker's default seccomp profile blocks.
@@ -34,10 +31,7 @@ The WDIO config (`wdio.conf.js`) automatically builds the binary if needed, star
 #### Run a specific test
 
 ```bash
-docker run --rm --privileged \
-  -v /path/to/Vibe99:/mnt/source:ro \
-  vibe99-builder \
-  bash -c "rsync -a --exclude src-tauri/target --exclude node_modules /mnt/source/ /app/Vibe99/ && npm run test:e2e -- layout"
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder npm run test:e2e -- layout
 ```
 
 See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
@@ -47,23 +41,14 @@ See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
 The pre-compiled Cargo artifacts in the image are **only** for warming the incremental-build cache.
 
 1. Image is built once with a full compile — this warms the Cargo cache
-2. Each test run mounts local source to `/mnt/source`, rsync copies it in (preserving `target/`), then runs `npm run test:e2e`
+2. Each test run mounts local source to `/mnt/source`, the entrypoint rsyncs it in (preserving `target/`), then runs the given command
 3. Only changed files are recompiled — incremental builds are fast
 
-### Running with local source
+### How it works
 
-Mount source to `/mnt/source` and let `rsync` copy it into the container without overwriting the pre-compiled `target/`:
+The entrypoint (`docker-entrypoint.sh`) checks for `/mnt/source` — if present, it rsyncs contents into `/app/Vibe99` while excluding `src-tauri/target/` and `node_modules/`. Then it executes the provided command. This keeps the image's pre-compiled cache intact across runs.
 
-```bash
-docker run --rm --privileged \
-  -v /path/to/Vibe99:/mnt/source:ro \
-  vibe99-builder \
-  bash -c "rsync -a --exclude src-tauri/target --exclude node_modules /mnt/source/ /app/Vibe99/ && npm run test:e2e"
-```
-
-This preserves the image's `src-tauri/target/` (Cargo cache) and `node_modules/` while syncing your local source changes.
-
-> **Important:** Do **not** mount local source directly to `/app/Vibe99` (`-v /local/Vibe99:/app/Vibe99`) — that overwrites the pre-compiled `target/` and forces a full rebuild every time.
+> **Important:** Do **not** mount local source directly to `/app/Vibe99` — that overwrites the pre-compiled `target/` and forces a full rebuild every time.
 
 ## How it works
 

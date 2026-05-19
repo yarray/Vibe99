@@ -60,3 +60,8 @@ RUN npm install \
 
 WORKDIR /app/Vibe99
 CMD ["/bin/bash"]
+
+# 7. Entrypoint：自动 rsync /mnt/source 到 workspace（保留 target/）
+COPY e2e/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
