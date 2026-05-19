@@ -17,6 +17,7 @@ import type { Pane } from './pane-state';
 import type { Bridge, ClipboardSnapshot, Platform } from './bridge';
 import type { ShellProfile } from './shell-profiles';
 import type { AppCommand, CommandResult } from './domain/commands';
+import { getAllThemes } from './domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -345,6 +346,15 @@ function showTerminalContextMenu(
     const hasSelectionResult = dispatch({ type: 'query.terminal.hasSelection', paneId });
     const hasSelection = hasSelectionResult.ok && !!hasSelectionResult.value;
 
+    // Build theme submenu
+    const allThemes = getAllThemes();
+    const currentThemeId = pane?.themeId ?? null;
+    const themeChildren: MenuChildItem[] = allThemes.map((theme) => ({
+      label: theme.name,
+      action: `terminal-change-theme:${theme.id}`,
+      isDefault: theme.id === currentThemeId,
+    }));
+
     const items: MenuItem[] = [
       { label: 'Copy', action: 'terminal-copy', disabled: !hasSelection, shortcut: getCopyShortcut(bridge.platform) },
       { label: 'Paste', action: 'terminal-paste', disabled: !clipboardSnapshot.text, shortcut: getPasteShortcut(bridge.platform) },
@@ -353,6 +363,7 @@ function showTerminalContextMenu(
       { label: 'Restart Terminal', action: 'terminal-restart' },
       { type: 'separator' },
       { label: 'Change Color...', action: 'terminal-change-color' },
+      { label: 'Change Theme', children: themeChildren },
       {
         label: breathingOn ? 'Disable Alert' : 'Enable Alert',
         action: 'pane-toggle-breathing',
@@ -391,8 +402,18 @@ function showTabContextMenu(
   const pane = panes[paneIndex];
   const hasCustomColor = pane && pane.customColor !== undefined;
 
+  // Build theme submenu
+  const allThemes = getAllThemes();
+  const currentThemeId = pane?.themeId ?? null;
+  const themeChildren: MenuChildItem[] = allThemes.map((theme) => ({
+    label: theme.name,
+    action: `terminal-change-theme:${theme.id}`,
+    isDefault: theme.id === currentThemeId,
+  }));
+
   const items: MenuItem[] = [
     { label: 'Change Color...', action: 'tab-change-color' },
+    { label: 'Change Theme', children: themeChildren },
     { type: 'separator' },
     { label: 'Rename Tab', action: 'tab-rename' },
     { label: 'Close Tab', action: 'tab-close', disabled: panes.length <= 1 },
@@ -663,6 +684,12 @@ function handleMenuAction(
 
   if (action === 'pane-toggle-breathing') {
     dispatch({ type: 'pane.toggleActivityAlert', paneId });
+    return;
+  }
+
+  if (action.startsWith('terminal-change-theme:')) {
+    const themeId = action.slice('terminal-change-theme:'.length);
+    dispatch({ type: 'pane.setTheme', paneId, themeId });
     return;
   }
 

@@ -339,6 +339,14 @@ export function getDefaultTheme(): Theme {
   return theme;
 }
 
+/**
+ * Get all registered themes.
+ * @returns An array of all registered themes.
+ */
+export function getAllThemes(): Theme[] {
+  return Array.from(themes.values());
+}
+
 // Initialize with the default theme loaded from JSON
 registerTheme(parseTheme(defaultDarkData));
 
