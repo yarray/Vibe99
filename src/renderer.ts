@@ -1,6 +1,12 @@
 import { createBridge } from './bridge';
 import { createWorkbenchRenderer } from './runtime/workbench-renderer';
+import { loadBuiltinThemes } from './domain/theme-presets';
 import '@xterm/xterm/css/xterm.css';
+
+// ---------------------------------------------------------------------------
+// Themes — load built-in presets before any terminal is created
+// ---------------------------------------------------------------------------
+loadBuiltinThemes();
 
 // ---------------------------------------------------------------------------
 // DOM refs

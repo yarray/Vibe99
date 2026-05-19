@@ -32,6 +32,7 @@ export interface Pane {
   accent: string;
   customColor?: string;
   shellProfileId: string | null;
+  themeId: string | null;
   breathingMonitor?: boolean;
 }
 
@@ -43,6 +44,7 @@ export interface SessionPaneEntry {
   accent: string;
   customColor?: string;
   shellProfileId: string | null;
+  themeId: string | null;
   breathingMonitor: boolean;
 }
 
@@ -94,6 +96,7 @@ export interface PaneState {
   setPaneColor: (paneId: string, color: string) => boolean;
   clearPaneColor: (paneId: string) => boolean;
   setPaneShellProfile: (paneId: string, profileId: string | null) => boolean;
+  setPaneTheme: (paneId: string, themeId: string | null) => boolean;
   setPaneTerminalTitle: (paneId: string, terminalTitle: string) => boolean;
   togglePaneBreathingMonitor: (paneId: string) => boolean;
   setDefaultCwd: (cwd: string, tabTitle: string) => void;
@@ -124,6 +127,7 @@ function paneToLegacy(pane: PaneEntity): Pane {
     accent: pane.accent(),
     customColor: pane.customColor(),
     shellProfileId: pane.shellProfileId(),
+    themeId: pane.themeId(),
     breathingMonitor: pane.breathingMonitorEnabled(),
   };
 }
@@ -141,6 +145,7 @@ function snapshotToLegacy(snapshot: PaneSnapshot): Pane {
     accent: snapshot.accent,
     customColor: snapshot.customColor,
     shellProfileId: snapshot.shellProfileId,
+    themeId: snapshot.themeId,
     breathingMonitor: snapshot.breathingMonitor,
   };
 }
@@ -376,6 +381,15 @@ export function createPaneState({
     return true;
   };
 
+  const setPaneTheme = (paneId: string, themeId: string | null): boolean => {
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
+
+    pane.setTheme(themeId);
+    notifyChange();
+    return true;
+  };
+
   const setPaneTerminalTitle = (paneId: string, terminalTitle: string): boolean => {
     const pane = layout.panes().find((p) => p.id === paneId);
     if (!pane) return false;
@@ -440,6 +454,7 @@ export function createPaneState({
           accent: snapshot.accent,
           customColor: snapshot.customColor,
           shellProfileId: snapshot.shellProfileId,
+          themeId: snapshot.themeId,
           breathingMonitor: snapshot.breathingMonitor,
         };
       }),
@@ -468,6 +483,7 @@ export function createPaneState({
           && p.customColor
             || undefined,
         shellProfileId: (typeof p.shellProfileId === 'string' && p.shellProfileId) || null,
+        themeId: (typeof p.themeId === 'string' && p.themeId) || null,
         breathingMonitor: p.breathingMonitor !== false,
       }));
 
@@ -542,6 +558,7 @@ export function createPaneState({
     setPaneColor,
     clearPaneColor,
     setPaneShellProfile,
+    setPaneTheme,
     setPaneTerminalTitle,
     togglePaneBreathingMonitor,
     setDefaultCwd,

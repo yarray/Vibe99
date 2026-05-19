@@ -379,6 +379,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
         paneRenderer?.setAlerted(paneId, false);
       }
     },
+    getShellProfiles: () => shellProfiles,
   });
 
   paneRenderer = createPaneRenderer({
