@@ -706,6 +706,8 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     const theme = themeId ? getTheme(themeId) : null;
     const themeFn = theme ? ((accent: string) => theme.terminalTheme(accent)) : terminalTheme;
     terminal.options.theme = themeFn(_accent);
+    // Force xterm.js to re-render the entire buffer with the new theme
+    terminal.refresh(0, terminal.rows);
   }
 
   function setAlerted(_alerted: boolean): void {
