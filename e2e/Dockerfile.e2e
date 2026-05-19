@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Vibe99 E2E Builder Image
 # 包含完整编译环境 + e2e 测试所需依赖
 # 用法见 README
@@ -37,42 +36,26 @@ RUN mkdir -p /root/.cargo && \
     echo "registry = 'https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git'" >> /root/.cargo/config.toml
 
 # 4. tauri-driver（e2e WebDriver bridge）
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    cargo install tauri-driver
+RUN cargo install tauri-driver
 
 # 5. 复制本地源码并预编译
 WORKDIR /app
 COPY . /app/Vibe99
 
 WORKDIR /app/Vibe99
-
-# 5.1 npm install（npm 缓存复用）
-RUN --mount=type=cache,target=/root/.npm \
-    npm install \
-    && npm cache clean --force
-
-# 5.2 cargo build（target/ + registry 缓存复用，首次全量，后续增量）
-RUN --mount=type=cache,target=/app/Vibe99/src-tauri/target \
-    --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    npm run tauri:build-dev \
+RUN npm install \
+    && npm cache clean --force \
+    && npm run tauri:build-dev \
     && rm -f src-tauri/target/debug/vibe99 \
-    && mkdir -p /tmp/cargo-warm \
-    && cp -a /app/Vibe99/src-tauri/target /tmp/cargo-warm/target \
-    && cp -a /root/.cargo/registry /tmp/cargo-warm/registry \
-    && cp -a /root/.cargo/git /tmp/cargo-warm/git
-
-# 5.3 将编译缓存写入镜像层（供 docker run 时增量编译使用）
-RUN cp -a /tmp/cargo-warm/target /app/Vibe99/src-tauri/target \
-    && cp -a /tmp/cargo-warm/registry /root/.cargo/registry \
-    && cp -a /tmp/cargo-warm/git /root/.cargo/git \
-    && rm -rf /tmp/cargo-warm
+    && rm -rf src-tauri/target/debug/incremental \
+    && rm -rf src-tauri/target/debug/.fingerprint \
+    && rm -rf src-tauri/target/debug/build \
+    && rm -rf /root/.cargo/registry/cache \
+    && rm -rf /tmp/*
 
 # 6. 安装 e2e 依赖
 WORKDIR /app/Vibe99/e2e
-RUN --mount=type=cache,target=/root/.npm \
-    npm install \
+RUN npm install \
     && npm cache clean --force
 
 WORKDIR /app/Vibe99
