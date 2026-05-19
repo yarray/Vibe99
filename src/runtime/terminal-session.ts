@@ -706,6 +706,23 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     const theme = themeId ? getTheme(themeId) : null;
     const themeFn = theme ? ((accent: string) => theme.terminalTheme(accent)) : terminalTheme;
     terminal.options.theme = themeFn(_accent);
+
+    // Update pane-surface background to match theme background
+    const surface = paneEl.querySelector('.pane-surface') as HTMLElement | null;
+    if (surface) {
+      const terminalTheme = themeFn(_accent);
+      const bgColor = terminalTheme.background;
+      // Check if background is transparent (alpha channel is 00 or very low)
+      const isTransparent = bgColor.length === 9 && bgColor.slice(7) === '00';
+      if (isTransparent) {
+        // Use default surface background for transparent themes
+        surface.style.background = '';
+      } else {
+        // Use theme background color (strip alpha if present for opacity handling)
+        surface.style.background = bgColor.slice(0, 7);
+      }
+    }
+
     // Force xterm.js to re-render the entire buffer with the new theme
     terminal.refresh(0, terminal.rows);
   }
