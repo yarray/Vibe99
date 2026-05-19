@@ -347,6 +347,14 @@ registerTheme(parseTheme(defaultDarkData));
 // ---------------------------------------------------------------------------
 
 /**
+ * Get all registered themes.
+ * @returns Array of all registered themes.
+ */
+export function listThemes(): Theme[] {
+  return Array.from(themes.values());
+}
+
+/**
  * Create a terminal theme with the given accent color using the default theme.
  * This is a convenience function for backward compatibility.
  *

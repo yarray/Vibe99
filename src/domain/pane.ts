@@ -23,6 +23,7 @@ export interface PaneSnapshot {
   accent: string;
   customColor?: string;
   shellProfileId: string | null;
+  themeId: string | null;
   breathingMonitor: boolean;
 }
 
@@ -39,6 +40,7 @@ export interface Pane {
   accent(): string;
   customColor(): string | undefined;
   shellProfileId(): string | null;
+  themeId(): string | null;
   breathingMonitorEnabled(): boolean;
 
   // Write operations
@@ -48,6 +50,7 @@ export interface Pane {
   setShellProfile(profileId: string | null): void;
   setCustomColor(color: string): void;
   clearCustomColor(): void;
+  setTheme(themeId: string | null): void;
   setBreathingMonitor(enabled: boolean): void;
 
   // Snapshot
@@ -70,6 +73,7 @@ interface PaneState {
   accent: string;
   customColor?: string;
   shellProfileId: string | null;
+  themeId: string | null;
   breathingMonitor: boolean;
 }
 
@@ -114,6 +118,10 @@ export function createPane(snapshot: PaneSnapshot): Pane {
       return state.shellProfileId;
     },
 
+    themeId(): string | null {
+      return state.themeId;
+    },
+
     breathingMonitorEnabled(): boolean {
       return state.breathingMonitor;
     },
@@ -143,6 +151,10 @@ export function createPane(snapshot: PaneSnapshot): Pane {
       state.customColor = undefined;
     },
 
+    setTheme(themeId: string | null): void {
+      state.themeId = themeId;
+    },
+
     setBreathingMonitor(enabled: boolean): void {
       state.breathingMonitor = enabled;
     },
@@ -157,6 +169,7 @@ export function createPane(snapshot: PaneSnapshot): Pane {
         accent: state.accent,
         customColor: state.customColor,
         shellProfileId: state.shellProfileId,
+        themeId: state.themeId,
         breathingMonitor: state.breathingMonitor,
       };
     },
@@ -181,6 +194,7 @@ export function createDefaultPane(
     cwd: defaults.cwd,
     accent: defaults.accent,
     shellProfileId: null,
+    themeId: null,
     breathingMonitor: true,
   });
 }

@@ -83,6 +83,7 @@ export interface WorkbenchDeps {
   bridge: Bridge;
   render: (refit?: boolean) => void;
   setPaneActivityAlertEnabled: (paneId: string, enabled: boolean) => void;
+  getShellProfiles: () => { id: string; themeId?: string }[];
 }
 
 export interface Workbench {
@@ -132,6 +133,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
     layout: layoutInput, terminalSessionDeps, stageEl, paneActivityWatcher,
     paneAlert, tabBar, tabBarState, entryNeedsTabRefresh,
     paneState, setMode, getCurrentMode, scheduleSave, bridge, render: externalRender, setPaneActivityAlertEnabled,
+    getShellProfiles,
   } = deps;
 
   const resolveLayout = typeof layoutInput === 'function'
@@ -233,6 +235,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
       session.root.classList.toggle('is-focused', isFocused);
       session.setAccent(accentColor);
+      session.setTheme(pane.themeId());
 
       if (refit || session.needsFit()) {
         session.fit({ force: true });
@@ -288,6 +291,16 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
     switch (command.type) {
       case 'pane.create': {
         const newPaneId = paneState.addPane(command.shellProfileId ?? null);
+
+        // Set themeId from profile if specified
+        if (command.shellProfileId) {
+          const profiles = getShellProfiles();
+          const profile = profiles.find((p) => p.id === command.shellProfileId);
+          if (profile?.themeId) {
+            paneState.setPaneTheme(newPaneId, profile.themeId);
+          }
+        }
+
         setMode('terminal');
         document.body.classList.remove('is-navigation-mode');
         externalRender(true);
@@ -383,6 +396,13 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         scheduleSave();
         setPaneActivityAlertEnabled(command.paneId, next);
         return ok(next);
+      }
+
+      case 'pane.setTheme': {
+        paneState.setPaneTheme(command.paneId, command.themeId);
+        scheduleSave();
+        externalRender();
+        return ok();
       }
 
       case 'pane.requestClose': {

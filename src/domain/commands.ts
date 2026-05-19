@@ -78,6 +78,12 @@ export interface PaneToggleActivityAlertCommand {
   paneId: string;
 }
 
+export interface PaneSetThemeCommand {
+  type: 'pane.setTheme';
+  paneId: string;
+  themeId: string | null;
+}
+
 export interface PaneRequestCloseCommand {
   type: 'pane.requestClose';
   paneId: string;
@@ -214,6 +220,7 @@ export type AppCommand =
   | PaneSetColorCommand
   | PaneClearColorCommand
   | PaneToggleActivityAlertCommand
+  | PaneSetThemeCommand
   | PaneRequestCloseCommand
   | TerminalCopyCommand
   | TerminalPasteCommand

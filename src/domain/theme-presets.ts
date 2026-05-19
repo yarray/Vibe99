@@ -12,6 +12,7 @@ import { parseTheme, registerTheme, replaceTheme, hasTheme } from './theme';
 import redTintData from '../themes/red-tint.json';
 import blueTintData from '../themes/blue-tint.json';
 import greenTintData from '../themes/green-tint.json';
+import lightTintData from '../themes/light-tint.json';
 import defaultDarkData from '../themes/default-dark.json';
 
 /** Built-in theme JSON data in registration order. */
@@ -20,6 +21,7 @@ const builtinThemes = [
   redTintData,
   blueTintData,
   greenTintData,
+  lightTintData,
 ];
 
 /**
