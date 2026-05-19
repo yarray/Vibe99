@@ -198,21 +198,23 @@ Vibe99/
 
 ## E2E Testing
 
-Using docker
-
 ``` bash
-docker run --rm --privileged vibe99-builder \
-  bash -c "git fetch origin && git checkout <branch> && npm run test:e2e"
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder
 ```
 
-Run specific spec
+Quick smoke test:
 
 ``` bash
-docker run --rm --privileged vibe99-builder \
-  bash -c "git fetch origin && git checkout <branch> && npm run test:e2e -- <spec_name>"
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder smoke
 ```
 
-If image does not exist, build it:
+Run specific spec:
+
+``` bash
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder <spec_name>
+```
+
+Build image (first time):
 
 ``` bash
 docker build -f e2e/Dockerfile.e2e -t vibe99-builder:latest .

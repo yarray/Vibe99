@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
     curl wget git file xz-utils ca-certificates \
     xvfb xauth webkit2gtk-driver \
+    rsync \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Node.js 22
@@ -58,4 +59,9 @@ RUN npm install \
     && npm cache clean --force
 
 WORKDIR /app/Vibe99
-CMD ["/bin/bash"]
+CMD ["npm", "run", "test:e2e"]
+
+# 7. Entrypoint：自动 rsync /mnt/source 到 workspace（保留 target/）
+COPY e2e/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
