@@ -1,0 +1,36 @@
+{
+  "name": "Test Environment",
+  "background": "#151d2a",
+  "foreground": "#d4dce8",
+  "cursorColor": "#61afef",
+  "selectionBackground": "#61afef44",
+  "black": "#0a0a1a",
+  "red": "#ff6b57",
+  "green": "#98c379",
+  "yellow": "#e5c07b",
+  "blue": "#61afef",
+  "purple": "#c678dd",
+  "cyan": "#56b6c2",
+  "white": "#d4dce8",
+  "brightBlack": "#303a5a",
+  "brightRed": "#ff8578",
+  "brightGreen": "#b0d98b",
+  "brightYellow": "#f0d58a",
+  "brightBlue": "#7eb7ff",
+  "brightPurple": "#d9a5e8",
+  "brightCyan": "#7fd8e6",
+  "brightWhite": "#ffffff",
+  "vibe99": {
+    "id": "blue-tint",
+    "tags": ["tinted", "test"],
+    "cssTokens": {
+      "pane-opacity": "0.85",
+      "pane-bg-mask-opacity": "0.85",
+      "pane-width": "720px"
+    },
+    "animationTokens": {
+      "breathing-glow": "inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)",
+      "breathing-intense": "inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)"
+    }
+  }
+}
