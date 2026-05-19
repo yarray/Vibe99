@@ -69,6 +69,202 @@ export interface Theme {
   animationTokens(): Record<string, string>;
 }
 
+/**
+ * Light theme for Vibe99.
+ */
+const lightTheme: Theme = {
+  id: 'light',
+  name: 'Light',
+
+  cssTokens(): Record<string, string> {
+    return {
+      'pane-opacity': '0.95',
+      'pane-bg-mask-opacity': '0.9',
+      'pane-width': '720px',
+    };
+  },
+
+  terminalTheme(accent: string): TerminalTheme {
+    return {
+      background: '#ffffff00',
+      foreground: '#333333',
+      cursor: accent,
+      cursorAccent: '#ffffff',
+      selectionBackground: `${accent}44`,
+      black: '#000000',
+      red: '#cd3131',
+      green: '#00bc00',
+      yellow: '#949800',
+      blue: '#0451a5',
+      magenta: '#bc05bc',
+      cyan: '#0598bc',
+      white: '#555555',
+      brightBlack: '#666666',
+      brightRed: '#cd3131',
+      brightGreen: '#14ce14',
+      brightYellow: '#b5ba00',
+      brightBlue: '#0451a5',
+      brightMagenta: '#bc05bc',
+      brightCyan: '#0598bc',
+      brightWhite: '#a5a5a5',
+    };
+  },
+
+  animationTokens(): Record<string, string> {
+    return {
+      'breathing-glow': 'inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)',
+      'breathing-intense': 'inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)',
+    };
+  },
+};
+
+/**
+ * Blue-tinted theme for production servers.
+ */
+const blueTheme: Theme = {
+  id: 'blue',
+  name: 'Blue',
+
+  cssTokens(): Record<string, string> {
+    return {
+      'pane-opacity': '0.85',
+      'pane-bg-mask-opacity': '0.8',
+      'pane-width': '720px',
+    };
+  },
+
+  terminalTheme(accent: string): TerminalTheme {
+    return {
+      background: '#0a1f3300',
+      foreground: '#d9d4c7',
+      cursor: accent,
+      cursorAccent: '#0a1f33',
+      selectionBackground: `${accent}44`,
+      black: '#0a1f33',
+      red: '#ff6b57',
+      green: '#98c379',
+      yellow: '#e5c07b',
+      blue: '#61afef',
+      magenta: '#c678dd',
+      cyan: '#56b6c2',
+      white: '#d9d4c7',
+      brightBlack: '#1a3a5c',
+      brightRed: '#ff8578',
+      brightGreen: '#b0d98b',
+      brightYellow: '#f0d58a',
+      brightBlue: '#7eb7ff',
+      brightMagenta: '#d9a5e8',
+      brightCyan: '#7fd8e6',
+      brightWhite: '#ffffff',
+    };
+  },
+
+  animationTokens(): Record<string, string> {
+    return {
+      'breathing-glow': 'inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)',
+      'breathing-intense': 'inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)',
+    };
+  },
+};
+
+/**
+ * Green-tinted theme for testing environments.
+ */
+const greenTheme: Theme = {
+  id: 'green',
+  name: 'Green',
+
+  cssTokens(): Record<string, string> {
+    return {
+      'pane-opacity': '0.85',
+      'pane-bg-mask-opacity': '0.8',
+      'pane-width': '720px',
+    };
+  },
+
+  terminalTheme(accent: string): TerminalTheme {
+    return {
+      background: '#0a2a1a00',
+      foreground: '#d9d4c7',
+      cursor: accent,
+      cursorAccent: '#0a2a1a',
+      selectionBackground: `${accent}44`,
+      black: '#0a2a1a',
+      red: '#ff6b57',
+      green: '#98c379',
+      yellow: '#e5c07b',
+      blue: '#61afef',
+      magenta: '#c678dd',
+      cyan: '#56b6c2',
+      white: '#d9d4c7',
+      brightBlack: '#1a4a2a',
+      brightRed: '#ff8578',
+      brightGreen: '#b0d98b',
+      brightYellow: '#f0d58a',
+      brightBlue: '#7eb7ff',
+      brightMagenta: '#d9a5e8',
+      brightCyan: '#7fd8e6',
+      brightWhite: '#ffffff',
+    };
+  },
+
+  animationTokens(): Record<string, string> {
+    return {
+      'breathing-glow': 'inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)',
+      'breathing-intense': 'inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)',
+    };
+  },
+};
+
+/**
+ * Red-tinted theme for production servers (alert).
+ */
+const redTheme: Theme = {
+  id: 'red',
+  name: 'Red',
+
+  cssTokens(): Record<string, string> {
+    return {
+      'pane-opacity': '0.85',
+      'pane-bg-mask-opacity': '0.8',
+      'pane-width': '720px',
+    };
+  },
+
+  terminalTheme(accent: string): TerminalTheme {
+    return {
+      background: '#2a0a0a00',
+      foreground: '#d9d4c7',
+      cursor: accent,
+      cursorAccent: '#2a0a0a',
+      selectionBackground: `${accent}44`,
+      black: '#2a0a0a',
+      red: '#ff6b57',
+      green: '#98c379',
+      yellow: '#e5c07b',
+      blue: '#61afef',
+      magenta: '#c678dd',
+      cyan: '#56b6c2',
+      white: '#d9d4c7',
+      brightBlack: '#4a1a1a',
+      brightRed: '#ff8578',
+      brightGreen: '#b0d98b',
+      brightYellow: '#f0d58a',
+      brightBlue: '#7eb7ff',
+      brightMagenta: '#d9a5e8',
+      brightCyan: '#7fd8e6',
+      brightWhite: '#ffffff',
+    };
+  },
+
+  animationTokens(): Record<string, string> {
+    return {
+      'breathing-glow': 'inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)',
+      'breathing-intense': 'inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)',
+    };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Default Theme Implementation
 // ---------------------------------------------------------------------------
@@ -155,12 +351,24 @@ export function getDefaultTheme(): Theme {
   return defaultTheme;
 }
 
-// Initialize with the default theme
+// Initialize with default themes
 registerTheme(defaultTheme);
+registerTheme(lightTheme);
+registerTheme(blueTheme);
+registerTheme(greenTheme);
+registerTheme(redTheme);
 
 // ---------------------------------------------------------------------------
 // Convenience Functions
 // ---------------------------------------------------------------------------
+
+/**
+ * Get all registered themes.
+ * @returns Array of all registered themes.
+ */
+export function listThemes(): Theme[] {
+  return Array.from(themes.values());
+}
 
 /**
  * Create a terminal theme with the given accent color using the default theme.

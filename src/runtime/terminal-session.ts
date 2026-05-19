@@ -21,7 +21,8 @@ import { getDefaultFontFamily } from '../settings';
 import type { Bridge } from '../bridge';
 import type { Pane } from '../pane-state';
 import type { SettingsManager } from '../settings';
-import type { TerminalTheme } from '../domain/theme';
+import type { TerminalTheme, Theme } from '../domain/theme';
+import { getTheme, getDefaultTheme } from '../domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -158,6 +159,9 @@ export interface TerminalSession {
 
   /** Update the accent color (terminal theme + CSS variable). */
   setAccent(color: string): void;
+
+  /** Update the terminal theme. */
+  setTheme(themeId: string | null): void;
 
   /** Toggle the alert breathing state. */
   setAlerted(alerted: boolean): void;
@@ -698,6 +702,12 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     terminal.options.theme = terminalTheme(color);
   }
 
+  function setTheme(themeId: string | null): void {
+    const theme = themeId ? getTheme(themeId) : null;
+    const themeFn = theme ? ((accent: string) => theme.terminalTheme(accent)) : terminalTheme;
+    terminal.options.theme = themeFn(_accent);
+  }
+
   function setAlerted(_alerted: boolean): void {
     // Alert state is managed externally via paneAlert; this is a hook.
     // The actual implementation is handled by pane-renderer because it
@@ -839,6 +849,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
 
     // Visual state
     setAccent,
+    setTheme,
     setAlerted,
 
     // DOM helpers
