@@ -23,6 +23,8 @@
 
 ### Fixed
 
+- **Activity alert debounce: non-numeric input revert (VIB-302):** Added `.positive()` to the zod schema so that 0 / NaN input surfaces as a parse error instead of being silently clamped to the 3 s minimum. Simplified the debounce handler to a single `validateField` → `result.error` check, removing the redundant pre-validation layer that had accumulated across VIB-273 and the initial patch.
+
 - **Knip configuration cleanup (VIB-286):** Removed redundant knip entries (`src/renderer.ts`, unnecessary `ignoreDependencies`/`ignoreBinaries`) after verifying they are auto-detected. Replaced `@tauri-apps/api/webviewWindow` type import in `src/bridge.ts` with minimal local interfaces (`TauriWebviewWindow`, `TauriWebviewWindowClass`) to eliminate implicit external type dependency. `npm run knip` now outputs zero issues.
 
 - **E2E Dockerfile: replace git clone with COPY and npm ci with npm install (VIB-274):** Changed `RUN git clone https://github.com/yarray/Vibe99.git` to `COPY . /app/Vibe99` so the image uses the local build context instead of fetching remote source. Replaced all `npm ci` with `npm install` to avoid failures when `package-lock.json` is absent in the build context.

@@ -97,17 +97,21 @@ export const webglEnabledSchema = z
   .default(true);
 
 /**
- * Activity alert debounce: 3000-300000 ms, integer
+ * Activity alert debounce: 3000-300000 ms, positive integer
  *
- * Out-of-range values are clamped rather than rejected so that UI input
- * always receives a usable sanitized value instead of falling back to the
- * schema default (30000ms).
+ * `.positive()` rejects 0 and NaN before the transform runs, so invalid
+ * input (empty / non-numeric) surfaces as a parse error rather than being
+ * silently clamped to the minimum.  The handler can then revert to the
+ * current value on error.
+ *
+ * Out-of-range but positive values are clamped by the transform.
  */
 export const activityAlertDebounceMsSchema = z
   .number({
     invalid_type_error: 'Activity alert debounce must be a number',
   })
   .int({ message: 'Activity alert debounce must be an integer' })
+  .positive({ message: 'Activity alert debounce must be positive' })
   .transform((val) => Math.max(3000, Math.min(300000, val)))
   .default(30000);
 
