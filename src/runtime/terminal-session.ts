@@ -705,15 +705,21 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   function setTheme(themeId: string | null): void {
     const theme = themeId ? getTheme(themeId) : null;
     const themeFn = theme ? ((accent: string) => theme.terminalTheme(accent)) : terminalTheme;
-    terminal.options.theme = themeFn(_accent);
+    const newTheme = themeFn(_accent);
+
+    // Check if background is transparent (alpha channel is 00)
+    const bgColor = newTheme.background;
+    const isTransparent = bgColor.length === 9 && bgColor.slice(7) === '00';
+
+    // Update allowTransparency based on theme background
+    // When allowTransparency is true, xterm.js ignores the theme background color
+    // and renders the canvas transparently. For opaque themes, we need to set it to false.
+    terminal.options.allowTransparency = isTransparent;
+    terminal.options.theme = newTheme;
 
     // Update pane-surface background to match theme background
     const surface = paneEl.querySelector('.pane-surface') as HTMLElement | null;
     if (surface) {
-      const terminalTheme = themeFn(_accent);
-      const bgColor = terminalTheme.background;
-      // Check if background is transparent (alpha channel is 00 or very low)
-      const isTransparent = bgColor.length === 9 && bgColor.slice(7) === '00';
       if (isTransparent) {
         // Use default surface background for transparent themes
         surface.style.background = '';
