@@ -335,14 +335,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   // Activity alert debounce time
   debounceInput.addEventListener('change', () => {
-    const seconds = Number(debounceInput.value);
-    // Convert to milliseconds for validation
-    const msValue = seconds * 1000;
+    const msValue = Number(debounceInput.value) * 1000;
     const result = validateField('activityAlertDebounceMs', msValue);
-    // Browser sanitises non-numeric input on <input type="number"> to "",
-    // which Number("") converts to 0 (not NaN). Treat 0 / negative / NaN
-    // as invalid so the field reverts to the current settings value.
-    if (result.error && seconds <= 0) {
+    if (result.error) {
       applySettings();
       return;
     }
