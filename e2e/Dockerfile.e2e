@@ -59,7 +59,7 @@ RUN npm install \
     && npm cache clean --force
 
 WORKDIR /app/Vibe99
-CMD ["/bin/bash"]
+CMD ["npm", "run", "test:e2e"]
 
 # 7. Entrypoint：自动 rsync /mnt/source 到 workspace（保留 target/）
 COPY e2e/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

@@ -201,13 +201,13 @@ Vibe99/
 Using docker
 
 ``` bash
-docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder npm run test:e2e
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder
 ```
 
 Run specific spec
 
 ``` bash
-docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder npm run test:e2e -- <spec_name>
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder <spec_name>
 ```
 
 If image does not exist, build it:

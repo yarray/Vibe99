@@ -18,10 +18,10 @@ The image (~2–3 GB) contains Ubuntu 22.04, Node.js 22, Rust stable, `tauri-dri
 
 ### 2. Run e2e tests
 
-The entrypoint auto-syncs local source from `/mnt/source` (preserving the pre-compiled `target/` cache):
+The entrypoint auto-syncs local source from `/mnt/source` (preserving the pre-compiled `target/` cache), then runs `npm run test:e2e`:
 
 ```bash
-docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder npm run test:e2e
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder
 ```
 
 > **Note:** `--privileged` is required because WebKitWebDriver needs access to file descriptor operations that Docker's default seccomp profile blocks.
@@ -30,8 +30,10 @@ The WDIO config (`wdio.conf.js`) automatically builds the binary if needed, star
 
 #### Run a specific test
 
+Pass the spec name as an argument:
+
 ```bash
-docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder npm run test:e2e -- layout
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-builder layout
 ```
 
 See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
@@ -41,12 +43,12 @@ See `npm run test:e2e -- --help` for all options (`--spec`, `--grep`, `-v`).
 The pre-compiled Cargo artifacts in the image are **only** for warming the incremental-build cache.
 
 1. Image is built once with a full compile — this warms the Cargo cache
-2. Each test run mounts local source to `/mnt/source`, the entrypoint rsyncs it in (preserving `target/`), then runs the given command
+2. Each test run mounts local source to `/mnt/source`, the entrypoint rsyncs it in (preserving `target/`), then runs `npm run test:e2e`
 3. Only changed files are recompiled — incremental builds are fast
 
 ### How it works
 
-The entrypoint (`docker-entrypoint.sh`) checks for `/mnt/source` — if present, it rsyncs contents into `/app/Vibe99` while excluding `src-tauri/target/` and `node_modules/`. Then it executes the provided command. This keeps the image's pre-compiled cache intact across runs.
+The entrypoint (`docker-entrypoint.sh`) checks for `/mnt/source` — if present, it rsyncs contents into `/app/Vibe99` while excluding `src-tauri/target/` and `node_modules/`. Then it runs `npm run test:e2e`, forwarding any arguments as spec filters (e.g. `layout` → `npm run test:e2e -- layout`).
 
 > **Important:** Do **not** mount local source directly to `/app/Vibe99` — that overwrites the pre-compiled `target/` and forces a full rebuild every time.
 
