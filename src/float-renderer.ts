@@ -31,6 +31,11 @@ interface PhysicalPosition {
   y: number;
 }
 
+interface LogicalPosition {
+  x: number;
+  y: number;
+}
+
 interface TauriWindow {
   label: string;
   setSize: (size: { type: string; width: number; height: number }) => Promise<void>;
@@ -178,7 +183,12 @@ closeBtnEl.addEventListener('click', async (event) => {
     const win = tauri.window.getCurrentWindow();
     try {
       const pos = await win.outerPosition();
-      emitToParent(USER_CLOSED_EVENT, { x: pos.x, y: pos.y });
+      const dpr = window.devicePixelRatio || 1;
+      const logicalPos: LogicalPosition = {
+        x: Math.round(pos.x / dpr),
+        y: Math.round(pos.y / dpr),
+      };
+      emitToParent(USER_CLOSED_EVENT, logicalPos);
     } catch { /* best effort */ }
     void win.close();
   }
@@ -199,9 +209,16 @@ async function setupListeners(): Promise<void> {
     render(e.payload.panes);
   });
 
-  // Track window position changes and report to parent for persistence
+  // Track window position changes and report to parent for persistence.
+  // tauri://move reports physical pixels; convert to logical using our own DPI
+  // so positions are consistent across monitors with different scales.
+  const dpr = window.devicePixelRatio || 1;
   const unlistenMoved = await win.listen<PhysicalPosition>('tauri://move', (e) => {
-    emitToParent(MOVED_EVENT, { x: e.payload.x, y: e.payload.y });
+    const logicalPos: LogicalPosition = {
+      x: Math.round(e.payload.x / dpr),
+      y: Math.round(e.payload.y / dpr),
+    };
+    emitToParent(MOVED_EVENT, logicalPos);
   });
 
   // Notify parent that we are ready to receive events

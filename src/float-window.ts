@@ -11,7 +11,8 @@
  * Persistence: float window open state and position are saved to localStorage
  * keyed by layout ID.
  *   - open:true is saved immediately when the float window opens (sync).
- *   - Position is tracked via tauri://move events from the float renderer.
+ *   - Position is tracked via tauri://move events from the float renderer,
+ *     converted to logical coordinates using the float window's own DPI.
  *   - open:false is saved only when the USER explicitly closes (X or toggle).
  *   - Parent window close skips the save so open:true is preserved.
  */
@@ -20,7 +21,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
-interface PhysicalPosition {
+interface LogicalPosition {
   x: number;
   y: number;
 }
@@ -188,7 +189,7 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
 
     // Float window X button closed by user → save open:false + position
     if (!unlistenUserClosed) {
-      const unlisten = await webview.listen<PhysicalPosition>(USER_CLOSED_EVENT, (e) => {
+      const unlisten = await webview.listen<LogicalPosition>(USER_CLOSED_EVENT, (e) => {
         const layoutId = getLayoutId();
         if (layoutId) {
           saveStateForLayout(layoutId, { open: false, x: e.payload.x, y: e.payload.y }, persistFloatState);
@@ -199,9 +200,9 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       unlistenUserClosed = () => { unlisten(); };
     }
 
-    // Float window moved → save new position (sent from float-renderer via tauri://move)
+    // Float window moved → save new position (sent from float-renderer as logical coordinates)
     if (!unlistenMoved) {
-      const unlisten = await webview.listen<PhysicalPosition>(MOVED_EVENT, (e) => {
+      const unlisten = await webview.listen<LogicalPosition>(MOVED_EVENT, (e) => {
         const layoutId = getLayoutId();
         if (layoutId) {
           saveStateForLayout(layoutId, { open: true, x: e.payload.x, y: e.payload.y }, persistFloatState);
@@ -265,12 +266,11 @@ export function createFloatWindowManager(deps: FloatWindowDeps): FloatWindowMana
       };
 
       // Pass saved position in constructor to avoid flash.
-      // tauri://move reports physical pixels; WebviewWindow constructor
-      // expects logical pixels, so convert via devicePixelRatio.
+      // Position is stored as logical coordinates (converted by float-renderer
+      // using its own devicePixelRatio), so use directly.
       if (savedState && savedState.x != null && savedState.y != null) {
-        const dpr = window.devicePixelRatio || 1;
-        windowOptions.x = Math.round(savedState.x / dpr);
-        windowOptions.y = Math.round(savedState.y / dpr);
+        windowOptions.x = savedState.x;
+        windowOptions.y = savedState.y;
       }
 
       const { WebviewWindow } = tauri.webviewWindow;
