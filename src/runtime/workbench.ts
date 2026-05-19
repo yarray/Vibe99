@@ -230,8 +230,10 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
       const isFocused = index === focusedIndex;
       const accentColor = pane.customColor() || pane.accent();
+      const themeId = pane.themeId();
 
       session.root.classList.toggle('is-focused', isFocused);
+      session.setTheme(themeId ?? null);
       session.setAccent(accentColor);
 
       if (refit || session.needsFit()) {
@@ -383,6 +385,20 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         scheduleSave();
         setPaneActivityAlertEnabled(command.paneId, next);
         return ok(next);
+      }
+
+      case 'pane.setTheme': {
+        paneState.setPaneTheme(command.paneId, command.themeId);
+        scheduleSave();
+        externalRender();
+        return ok();
+      }
+
+      case 'pane.clearTheme': {
+        paneState.clearPaneTheme(command.paneId);
+        scheduleSave();
+        externalRender();
+        return ok();
       }
 
       case 'pane.requestClose': {

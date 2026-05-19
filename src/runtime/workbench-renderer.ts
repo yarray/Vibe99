@@ -51,7 +51,7 @@ import { createSettingsManager } from '../settings';
 import { createTabBar } from '../tab-bar';
 import type { TabBarLocalState } from '../tab-bar';
 import type { ShellProfile, EditingShellProfile } from '../shell-profiles';
-import { createDefaultTerminalTheme } from '../domain/theme';
+import { createDefaultTerminalTheme, getTheme } from '../domain/theme';
 
 // ---------------------------------------------------------------------------
 // Dependencies injected by the bootstrap entry
@@ -350,6 +350,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
         void contextMenus?.showTerminalContextMenu(session.paneId, event);
       },
       terminalTheme: createDefaultTerminalTheme,
+      getTheme,
     },
     stageEl,
     paneActivityWatcher: {
@@ -406,6 +407,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       paneState.setPaneCwd(paneId, newCwd);
       layoutManager.scheduleWindowLayoutSave(5000);
     },
+    getTheme,
     workbench: workbench!,
   });
 

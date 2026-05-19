@@ -33,6 +33,7 @@ export interface Pane {
   customColor?: string;
   shellProfileId: string | null;
   breathingMonitor?: boolean;
+  themeId?: string;
 }
 
 /** Serialized pane entry as stored in session / layout data. */
@@ -44,6 +45,7 @@ export interface SessionPaneEntry {
   customColor?: string;
   shellProfileId: string | null;
   breathingMonitor: boolean;
+  themeId?: string;
 }
 
 /** Full session payload produced by `buildSessionData` and consumed by `restoreSession`. */
@@ -96,6 +98,8 @@ export interface PaneState {
   setPaneShellProfile: (paneId: string, profileId: string | null) => boolean;
   setPaneTerminalTitle: (paneId: string, terminalTitle: string) => boolean;
   togglePaneBreathingMonitor: (paneId: string) => boolean;
+  setPaneTheme: (paneId: string, themeId: string) => boolean;
+  clearPaneTheme: (paneId: string) => boolean;
   setDefaultCwd: (cwd: string, tabTitle: string) => void;
 
   // Session operations
@@ -125,6 +129,7 @@ function paneToLegacy(pane: PaneEntity): Pane {
     customColor: pane.customColor(),
     shellProfileId: pane.shellProfileId(),
     breathingMonitor: pane.breathingMonitorEnabled(),
+    themeId: pane.themeId(),
   };
 }
 
@@ -142,6 +147,7 @@ function snapshotToLegacy(snapshot: PaneSnapshot): Pane {
     customColor: snapshot.customColor,
     shellProfileId: snapshot.shellProfileId,
     breathingMonitor: snapshot.breathingMonitor,
+    themeId: snapshot.themeId,
   };
 }
 
@@ -385,6 +391,24 @@ export function createPaneState({
     return true;
   };
 
+  const setPaneTheme = (paneId: string, themeId: string): boolean => {
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
+
+    pane.setTheme(themeId);
+    notifyChange();
+    return true;
+  };
+
+  const clearPaneTheme = (paneId: string): boolean => {
+    const pane = layout.panes().find((p) => p.id === paneId);
+    if (!pane) return false;
+
+    pane.setTheme(null);
+    notifyChange();
+    return true;
+  };
+
   const togglePaneBreathingMonitor = (paneId: string): boolean => {
     const pane = layout.panes().find((p) => p.id === paneId);
     if (!pane) return false;
@@ -441,6 +465,7 @@ export function createPaneState({
           customColor: snapshot.customColor,
           shellProfileId: snapshot.shellProfileId,
           breathingMonitor: snapshot.breathingMonitor,
+          themeId: snapshot.themeId,
         };
       }),
       focusedPaneIndex: focusedIndex >= 0 ? focusedIndex : 0,
@@ -469,6 +494,7 @@ export function createPaneState({
             || undefined,
         shellProfileId: (typeof p.shellProfileId === 'string' && p.shellProfileId) || null,
         breathingMonitor: p.breathingMonitor !== false,
+        themeId: (typeof p.themeId === 'string' && p.themeId) || undefined,
       }));
 
     if (validSnapshots.length === 0) {
@@ -544,6 +570,8 @@ export function createPaneState({
     setPaneShellProfile,
     setPaneTerminalTitle,
     togglePaneBreathingMonitor,
+    setPaneTheme,
+    clearPaneTheme,
     setDefaultCwd,
 
     // Session operations

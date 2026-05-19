@@ -21,7 +21,7 @@ import { getDefaultFontFamily } from '../settings';
 import type { Bridge } from '../bridge';
 import type { Pane } from '../pane-state';
 import type { SettingsManager } from '../settings';
-import type { TerminalTheme } from '../domain/theme';
+import type { TerminalTheme, Theme } from '../domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -67,6 +67,8 @@ export interface TerminalSessionDeps {
   onSessionReadyChange?: (paneId: string, ready: boolean) => void;
   /** Function to create terminal theme with given accent color. */
   terminalTheme: (accent: string) => TerminalTheme;
+  /** Function to get a theme by id for per-pane theming. */
+  getTheme?: (id: string) => Theme | undefined;
 }
 
 /** The full public API surface returned by `createTerminalSession`. */
@@ -158,6 +160,9 @@ export interface TerminalSession {
 
   /** Update the accent color (terminal theme + CSS variable). */
   setAccent(color: string): void;
+
+  /** Set the theme for this terminal session. Pass null to clear. */
+  setTheme(themeId: string | null): void;
 
   /** Toggle the alert breathing state. */
   setAlerted(alerted: boolean): void;
@@ -305,6 +310,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     onCwdChanged,
     onTabRefreshNeeded,
     terminalTheme,
+    getTheme,
   } = deps;
 
   const pane = getPaneSnapshot();
@@ -317,6 +323,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   let _sizeKey = '';
   let _needsFit = true;
   let _accent = accentColor;
+  let _currentThemeId: string | null = null;
   let _shellChanging = false;
   let _shellChangeTime: number | undefined;
   let _exited = false;
@@ -367,6 +374,16 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     scrollback: 5000,
     theme: terminalTheme(accentColor),
   });
+
+  // Apply per-pane theme if present
+  const initialThemeId = pane?.themeId;
+  if (initialThemeId && getTheme) {
+    const theme = getTheme(initialThemeId);
+    if (theme) {
+      _currentThemeId = initialThemeId;
+      terminal.options.theme = theme.terminalTheme(accentColor);
+    }
+  }
 
   const fitAddon = new FitAddon();
   const webLinksAddon = new WebLinksAddon((event: MouseEvent, uri: string) => {
@@ -689,13 +706,44 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     });
   }
 
+  function applyTerminalTheme(accent: string): void {
+    if (_currentThemeId && getTheme) {
+      const theme = getTheme(_currentThemeId);
+      if (theme) {
+        terminal.options.theme = theme.terminalTheme(accent);
+        return;
+      }
+    }
+    terminal.options.theme = terminalTheme(accent);
+  }
+
+  function clearTheme(): void {
+    if (_currentThemeId === null) {
+      return;
+    }
+    _currentThemeId = null;
+    applyTerminalTheme(_accent);
+  }
+
   function setAccent(color: string): void {
     if (_accent === color) {
       return;
     }
     _accent = color;
     paneEl.style.setProperty('--pane-accent', color);
-    terminal.options.theme = terminalTheme(color);
+    applyTerminalTheme(color);
+  }
+
+  function setTheme(themeId: string | null): void {
+    if (themeId === null) {
+      clearTheme();
+      return;
+    }
+    if (_currentThemeId === themeId) {
+      return;
+    }
+    _currentThemeId = themeId;
+    applyTerminalTheme(_accent);
   }
 
   function setAlerted(_alerted: boolean): void {
@@ -839,6 +887,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
 
     // Visual state
     setAccent,
+    setTheme,
     setAlerted,
 
     // DOM helpers

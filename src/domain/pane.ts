@@ -24,6 +24,7 @@ export interface PaneSnapshot {
   customColor?: string;
   shellProfileId: string | null;
   breathingMonitor: boolean;
+  themeId?: string;
 }
 
 /**
@@ -40,6 +41,7 @@ export interface Pane {
   customColor(): string | undefined;
   shellProfileId(): string | null;
   breathingMonitorEnabled(): boolean;
+  themeId(): string | undefined;
 
   // Write operations
   rename(title: string | null): void;
@@ -49,6 +51,7 @@ export interface Pane {
   setCustomColor(color: string): void;
   clearCustomColor(): void;
   setBreathingMonitor(enabled: boolean): void;
+  setTheme(themeId: string | null): void;
 
   // Snapshot
   snapshot(): PaneSnapshot;
@@ -71,6 +74,7 @@ interface PaneState {
   customColor?: string;
   shellProfileId: string | null;
   breathingMonitor: boolean;
+  themeId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +122,10 @@ export function createPane(snapshot: PaneSnapshot): Pane {
       return state.breathingMonitor;
     },
 
+    themeId(): string | undefined {
+      return state.themeId;
+    },
+
     // Write operations
     rename(title: string | null): void {
       state.title = title;
@@ -147,6 +155,10 @@ export function createPane(snapshot: PaneSnapshot): Pane {
       state.breathingMonitor = enabled;
     },
 
+    setTheme(themeId: string | null): void {
+      state.themeId = themeId ?? undefined;
+    },
+
     // Snapshot - returns a new immutable copy
     snapshot(): PaneSnapshot {
       return {
@@ -158,6 +170,7 @@ export function createPane(snapshot: PaneSnapshot): Pane {
         customColor: state.customColor,
         shellProfileId: state.shellProfileId,
         breathingMonitor: state.breathingMonitor,
+        themeId: state.themeId,
       };
     },
   };

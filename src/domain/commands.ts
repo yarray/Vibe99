@@ -83,6 +83,17 @@ export interface PaneRequestCloseCommand {
   paneId: string;
 }
 
+export interface PaneSetThemeCommand {
+  type: 'pane.setTheme';
+  paneId: string;
+  themeId: string;
+}
+
+export interface PaneClearThemeCommand {
+  type: 'pane.clearTheme';
+  paneId: string;
+}
+
 // ---------------------------------------------------------------------------
 // Terminal commands
 // ---------------------------------------------------------------------------
@@ -215,6 +226,8 @@ export type AppCommand =
   | PaneClearColorCommand
   | PaneToggleActivityAlertCommand
   | PaneRequestCloseCommand
+  | PaneSetThemeCommand
+  | PaneClearThemeCommand
   | TerminalCopyCommand
   | TerminalPasteCommand
   | TerminalPasteImageCommand

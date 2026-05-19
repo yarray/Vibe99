@@ -9,7 +9,7 @@ import {
   type ContextMenuCallback,
 } from './runtime/terminal-session';
 import type { Workbench } from './runtime/workbench';
-import { createDefaultTerminalTheme } from './domain/theme';
+import { createDefaultTerminalTheme, getTheme } from './domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -39,6 +39,8 @@ export interface PaneRendererDeps {
   onPaneCwdChanged: (paneId: string, cwd: string) => void;
   /** When provided, session ownership is delegated to this Workbench. */
   workbench?: Workbench;
+  /** Optional function to get a theme by id for per-pane theming. */
+  getTheme?: (id: string) => import('./domain/theme').Theme | undefined;
 }
 
 export interface PaneRenderer {
@@ -96,8 +98,10 @@ export function createPaneRenderer({
   getPaneLabel,
   onPaneCwdChanged,
   workbench,
+  getTheme: getThemeDep,
 }: PaneRendererDeps): PaneRenderer {
   const sessionMap = workbench ? null : new Map<string, TerminalSession>();
+  const lastThemeIdMap = new Map<string, string | undefined>();
 
   function resolveSession(paneId: string): TerminalSession | undefined {
     if (workbench) return workbench.session(paneId) ?? undefined;
@@ -166,6 +170,7 @@ export function createPaneRenderer({
         }
       },
       terminalTheme: createDefaultTerminalTheme,
+      getTheme: getThemeDep,
     });
 
     return session;
@@ -219,6 +224,8 @@ export function createPaneRenderer({
       const left = getPaneLeft(index, previewWidth, focusedIndex);
       const isFocused = index === focusedIndex;
       const accentColor = pane.customColor || pane.accent;
+      const themeId = pane.themeId;
+      const lastThemeId = lastThemeIdMap.get(pane.id);
 
       session.root.classList.toggle('is-focused', isFocused);
       session.root.classList.toggle('is-navigation-target', isFocused && getMode() === 'nav');
@@ -226,6 +233,11 @@ export function createPaneRenderer({
       session.root.style.left = `${left}px`;
       session.root.style.zIndex = String(index + 1);
       session.root.style.height = `${stageHeight}px`;
+
+      if (themeId !== lastThemeId) {
+        lastThemeIdMap.set(pane.id, themeId);
+        session.setTheme(themeId ?? null);
+      }
 
       session.setAccent(accentColor);
 

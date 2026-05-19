@@ -238,6 +238,8 @@ export function createLayout(snapshot: LayoutSnapshot): Layout {
       if (patch.customColor === undefined && 'customColor' in patch) pane.clearCustomColor();
       if (patch.shellProfileId !== undefined) pane.setShellProfile(patch.shellProfileId);
       if (patch.breathingMonitor !== undefined) pane.setBreathingMonitor(patch.breathingMonitor);
+      if (patch.themeId !== undefined) pane.setTheme(patch.themeId);
+      if (patch.themeId === undefined && 'themeId' in patch) pane.setTheme(null);
 
       return true;
     },
