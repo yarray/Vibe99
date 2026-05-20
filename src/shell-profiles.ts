@@ -12,6 +12,7 @@
 // xterm instances, or internal state.
 
 import { icon } from './icons';
+import { createCustomSelect, type CustomSelect } from './custom-select';
 import type { AppCommand, CommandResult } from './domain/commands';
 import { listThemes, type Theme } from './domain/theme';
 
@@ -486,23 +487,28 @@ export function createShellProfileManager({
     ];
 
     const themes = listThemes();
-    const themeOptions = themes.map((t: Theme) => `<option value="${t.id}">${t.name}</option>`).join('');
+    const themeSelectOptions = [
+      { value: '', label: 'Default (use global theme)' },
+      ...themes.map((t: Theme) => ({ value: t.id, label: t.name })),
+    ];
 
-    const inputs: Record<string, HTMLInputElement | HTMLSelectElement> = {};
+    const inputs: Record<string, HTMLInputElement | HTMLSelectElement | CustomSelect> = {};
     for (const field of fields) {
       const label = document.createElement('label');
       label.textContent = field.label;
       label.setAttribute('for', `modal-shell-edit-${field.key}`);
 
-      let input: HTMLInputElement | HTMLSelectElement;
       if (field.key === 'themeId') {
-        input = document.createElement('select');
-        input.id = `modal-shell-edit-${field.key}`;
-        input.innerHTML = `<option value="">Default (use global theme)</option>${themeOptions}`;
-        (input as HTMLSelectElement).value = editingShellProfile.themeId ?? '';
-        inputs[field.key] = input;
+        const cs = createCustomSelect({
+          options: themeSelectOptions,
+          value: editingShellProfile.themeId ?? '',
+          placeholder: 'Default (use global theme)',
+          onChange: () => {},
+        });
+        inputs[field.key] = cs;
+        editor.append(label, cs.el);
       } else {
-        input = document.createElement('input');
+        const input = document.createElement('input');
         input.id = `modal-shell-edit-${field.key}`;
         input.type = 'text';
         input.value = editingShellProfile[field.key] ?? '';
@@ -518,9 +524,8 @@ export function createShellProfileManager({
             }
           });
         }
+        editor.append(label, input);
       }
-
-      editor.append(label, input);
     }
 
     const actions = document.createElement('div');
@@ -546,7 +551,7 @@ export function createShellProfileManager({
         name: (inputs.name as HTMLInputElement).value.trim(),
         command: (inputs.command as HTMLInputElement).value.trim(),
         args: splitArgs((inputs.args as HTMLInputElement).value.trim()),
-        themeId: (inputs.themeId as HTMLSelectElement).value || undefined,
+        themeId: (inputs.themeId as CustomSelect).value() || undefined,
       };
 
       if (!profile.id || !profile.command) {
