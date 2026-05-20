@@ -1,0 +1,1 @@
+Added Rust-side global hotkey support via tauri-plugin-global-shortcut. New commands: `hotkey_register`, `hotkey_unregister`, `hotkey_list`, `hotkey_register_all`. Shortcut presses emit `hotkey:pressed` events with `shortcut` and `layoutId` payload.
