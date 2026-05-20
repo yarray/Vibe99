@@ -126,9 +126,9 @@ function render(panes: FloatPaneInfo[]): void {
     if (!block) {
       block = document.createElement('div');
       block.className = 'float-block';
-      block.addEventListener('click', () => handleBlockClick(pane.id));
       containerEl.append(block);
     }
+    block.dataset.paneId = pane.id;
     block.style.backgroundColor = pane.accent;
     block.style.setProperty('--block-glow', pane.accent);
     block.classList.toggle('is-alerted', pane.alerted);
@@ -154,6 +154,16 @@ function adjustWindowSize(): void {
 function handleBlockClick(paneId: string): void {
   emitToParent(FOCUS_PANE_EVENT, { paneId });
 }
+
+// Delegated click: reads data-pane-id from the target block so the handler
+// always resolves the correct pane even when blocks are reused after a
+// mid-array insertion.
+containerEl.addEventListener('click', (event) => {
+  const block = (event.target as HTMLElement).closest('.float-block');
+  if (block instanceof HTMLElement && block.dataset.paneId) {
+    handleBlockClick(block.dataset.paneId);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Drag support
