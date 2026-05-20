@@ -18,6 +18,8 @@ pub struct SettingsState {
 const DEFAULT_FONT_SIZE: u32 = 13;
 const DEFAULT_PANE_OPACITY: f64 = 0.8;
 const DEFAULT_PANE_WIDTH: u32 = 720;
+const DEFAULT_QUAKE_ANIMATION_DURATION: u32 = 200;
+const DEFAULT_QUAKE_HEIGHT_PERCENT: u32 = 60;
 
 // ----------------------------------------------------------------
 // Shell profile types
@@ -398,12 +400,52 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
     let activity_alert_debounce_ms =
         (activity_alert_debounce_ms.round()).clamp(3000.0, 300_000.0) as u64;
 
+    // Quake mode settings
+    let quake_mode = ui.get("quakeMode").and_then(|v| v.as_object());
+
+    let quake_enabled = quake_mode
+        .and_then(|o| o.get("enabled"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let quake_animation_duration = get_number(
+        quake_mode.unwrap_or(&Value::Null),
+        "animationDuration",
+        DEFAULT_QUAKE_ANIMATION_DURATION as f64,
+    );
+    let quake_animation_duration =
+        quake_animation_duration.round().clamp(100.0, 500.0) as u32;
+
+    let quake_screen_position = quake_mode
+        .and_then(|o| o.get("screenPosition"))
+        .and_then(|v| v.as_str())
+        .filter(|s| *s == "top" || *s == "bottom")
+        .unwrap_or("top");
+
+    let quake_height_percent = get_number(
+        quake_mode.unwrap_or(&Value::Null),
+        "heightPercent",
+        DEFAULT_QUAKE_HEIGHT_PERCENT as f64,
+    );
+    let quake_height_percent =
+        quake_height_percent.round().clamp(30.0, 100.0) as u32;
+
     let font_family = ui
         .get("fontFamily")
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("");
+
+    // Preserve layoutHotkeys if present
+    let layout_hotkeys = ui
+        .get("layoutHotkeys")
+        .and_then(|v| v.as_object())
+        .map(|o| {
+            o.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.clone())))
+                .collect::<serde_json::Map<String, String>>()
+        });
 
     let mut result = serde_json::json!({
         "fontSize": font_size,
@@ -414,6 +456,12 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         "webglEnabled": webgl_enabled,
         "breathingIntensity": breathing_intensity,
         "activityAlertDebounceMs": activity_alert_debounce_ms,
+        "quakeMode": {
+            "enabled": quake_enabled,
+            "animationDuration": quake_animation_duration,
+            "screenPosition": quake_screen_position,
+            "heightPercent": quake_height_percent,
+        },
     });
 
     if !font_family.is_empty() {
@@ -429,6 +477,14 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
             .as_object_mut()
             .unwrap()
             .insert("shortcuts".into(), Value::Object(shortcuts.clone()));
+    }
+
+    // Preserve layoutHotkeys if present
+    if let Some(hotkeys) = layout_hotkeys {
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("layoutHotkeys".into(), Value::Object(hotkeys));
     }
 
     result
@@ -536,6 +592,12 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
                     "webglEnabled": true,
                     "breathingIntensity": "mild",
                     "activityAlertDebounceMs": 30000,
+                    "quakeMode": {
+                        "enabled": false,
+                        "animationDuration": DEFAULT_QUAKE_ANIMATION_DURATION,
+                        "screenPosition": "top",
+                        "heightPercent": DEFAULT_QUAKE_HEIGHT_PERCENT,
+                    },
                 },
                 "shell": {
                     "profiles": [],
