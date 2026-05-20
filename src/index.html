@@ -138,6 +138,53 @@
               <span class="settings-row-hint">›</span>
             </div>
           </div>
+
+          <div class="settings-divider"></div>
+
+          <div class="settings-section">
+            <div class="settings-row settings-clickable-row" id="layout-hotkeys-settings-btn" role="button" tabindex="0" aria-label="Configure layout hotkeys">
+              <span>Layout Hotkeys</span>
+              <span class="settings-row-hint">›</span>
+            </div>
+          </div>
+
+          <div class="settings-divider"></div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">Quake Mode</div>
+
+            <div class="settings-row settings-clickable-row" id="quake-mode-row" role="button" tabindex="0" aria-label="Toggle Quake mode">
+              <span>Enable Quake Mode</span>
+              <span id="quake-mode-dot" class="settings-toggle-dot"></span>
+            </div>
+            <input id="quake-mode-toggle" type="checkbox" style="display:none" />
+
+            <label class="settings-row" for="quake-animation-duration-range">
+              <span>Animation Duration</span>
+            </label>
+            <div class="settings-dual">
+              <input id="quake-animation-duration-range" type="range" min="100" max="500" step="10" value="200" />
+              <input class="settings-number" id="quake-animation-duration-input" type="number" min="100" max="500" step="10" value="200" />
+              <span class="settings-unit">ms</span>
+            </div>
+
+            <div class="settings-row">
+              <span>Position</span>
+              <div class="settings-segmented" id="quake-position-segments" role="radiogroup" aria-label="Quake mode position">
+                <button class="settings-segmented-btn" data-value="top" role="radio" aria-checked="true">Top</button>
+                <button class="settings-segmented-btn" data-value="bottom" role="radio" aria-checked="false">Bottom</button>
+              </div>
+            </div>
+
+            <label class="settings-row" for="quake-height-range">
+              <span>Height</span>
+            </label>
+            <div class="settings-dual">
+              <input id="quake-height-range" type="range" min="30" max="100" step="1" value="60" />
+              <input class="settings-number" id="quake-height-input" type="number" min="30" max="100" step="1" value="60" />
+              <span class="settings-unit">%</span>
+            </div>
+          </div>
         </section>
       </header>
 

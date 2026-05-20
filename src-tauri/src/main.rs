@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tauri::Manager;
 use vibe99_lib::commands::context_menu;
 use vibe99_lib::commands::hook;
+use vibe99_lib::commands::hotkey::{self, HotkeyState};
 use vibe99_lib::commands::layout;
 use vibe99_lib::commands::settings;
 use vibe99_lib::commands::shell_profile;
@@ -11,6 +12,8 @@ use vibe99_lib::commands::terminal::{self, AppState};
 use vibe99_lib::commands::wsl as wsl_cmd;
 use vibe99_lib::pty::PtyManager;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use tauri::Emitter;
+use tauri_plugin_global_shortcut::ShortcutState;
 
 /// Parse `--layout <id>` from the command-line arguments.
 fn parse_layout_arg() -> Option<String> {
@@ -34,12 +37,34 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let state = app.state::<HotkeyState>();
+                        let guard = state.bindings.lock();
+                        if let Ok(bindings) = guard {
+                            if let Some(layout_id) = bindings.get(&shortcut.to_string()) {
+                                let _ = app.emit(
+                                    "hotkey:pressed",
+                                    serde_json::json!({
+                                        "shortcut": shortcut.to_string(),
+                                        "layoutId": layout_id,
+                                    }),
+                                );
+                            }
+                        }
+                    }
+                })
+                .build(),
+        )
         .manage(AppState {
             pty: Arc::new(PtyManager::new()),
         })
         .manage(settings::SettingsState {
             lock: std::sync::Mutex::new(()),
         })
+        .manage(HotkeyState::default())
         .invoke_handler(tauri::generate_handler![
             terminal::terminal_create,
             terminal::terminal_write,
@@ -71,6 +96,10 @@ fn main() {
             wsl_cmd::wsl_redetect,
             wsl_cmd::wsl_convert_path,
             wsl_cmd::wsl_cwd,
+            hotkey::hotkey_register,
+            hotkey::hotkey_unregister,
+            hotkey::hotkey_list,
+            hotkey::hotkey_register_all,
         ])
         .setup(move |app| {
             if let Some(layout_id) = &layout_id_arg {

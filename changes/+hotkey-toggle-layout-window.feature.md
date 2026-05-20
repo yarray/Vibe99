@@ -1,0 +1,1 @@
+Frontend hotkey event handling: listen to `hotkey:pressed` Tauri events, toggle layout window show/hide on bound shortcut press. On startup, restore all saved `layoutHotkeys` bindings from settings. Sync hotkey registrations when settings change.

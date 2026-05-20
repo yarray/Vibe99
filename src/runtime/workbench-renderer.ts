@@ -40,6 +40,7 @@ import type { Workbench } from './workbench.js';
 
 import * as ShortcutsRegistry from '../shortcuts-registry';
 import * as ShortcutsUI from '../shortcuts-ui';
+import * as LayoutHotkeysUI from '../layout-hotkeys-ui';
 import * as ColorsRegistry from '../colors-registry';
 import { createPaneState } from '../pane-state';
 import { setIcon } from '../icons';
@@ -48,6 +49,7 @@ import { createDispatcher } from '../input/dispatcher';
 
 import { renderHintBar } from '../hint-bar';
 import { createSettingsManager } from '../settings';
+import { createHotkeyHandler } from '../hotkey-handler';
 import { createTabBar } from '../tab-bar';
 import type { TabBarLocalState } from '../tab-bar';
 import type { ShellProfile, EditingShellProfile } from '../shell-profiles';
@@ -71,6 +73,7 @@ export interface WorkbenchRendererDeps {
   hooksSettingsBtn: HTMLElement;
   layoutsSettingsBtn: HTMLElement;
   keyboardShortcutsSettingsBtn: HTMLElement;
+  layoutHotkeysSettingsBtn: HTMLElement;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +100,7 @@ export interface WorkbenchRenderer {
   onShellProfilesSettingsClick: () => void;
   onHooksSettingsClick: () => void;
   onKeyboardShortcutsSettingsClick: () => void;
+  onLayoutHotkeysSettingsClick: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +122,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     hooksSettingsBtn,
     layoutsSettingsBtn,
     keyboardShortcutsSettingsBtn,
+    layoutHotkeysSettingsBtn,
   } = deps;
 
   // -- Mutable bootstrap state ------------------------------------------------
@@ -262,6 +267,12 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     onToggleFloatWindow: () => floatWindowManager.toggle(),
     getFloatWindowOpen: () => floatWindowManager.isOpen(),
     requestAppRestart: () => window.location.reload(),
+  });
+
+  const hotkeyHandler = createHotkeyHandler({
+    bridge,
+    reportError,
+    isMainWindow: () => windowContext.kind === 'main',
   });
 
   // -- Inline helpers ---------------------------------------------------------
@@ -474,6 +485,14 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     }
   };
 
+  // Sync hotkeys when settings change
+  const originalScheduleSettingsSave = settingsManager.scheduleSettingsSave.bind(settingsManager);
+  settingsManager.scheduleSettingsSave = function(): void {
+    originalScheduleSettingsSave();
+    const next = settingsManager.settings.layoutHotkeys ?? {};
+    void hotkeyHandler.sync(next).catch(reportError);
+  };
+
   // Expose internals for E2E testing
   (window as any).__vibe99_test = {
     bridge,
@@ -684,6 +703,18 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
   }
 
+  function openLayoutHotkeysModal(): void {
+    LayoutHotkeysUI.openLayoutHotkeysModal(bridge, {
+      getLayouts: () => layoutManager.getLayouts(),
+      getLayoutHotkeys: () => settingsManager.settings.layoutHotkeys,
+      setLayoutHotkey: (layoutId: string, hotkey: import('../domain/settings-schema').LayoutHotkey | null) => {
+        settingsManager.settings.layoutHotkeys[layoutId] = hotkey;
+        settingsManager.scheduleSettingsSave();
+      },
+      scheduleSettingsSave: () => settingsManager.scheduleSettingsSave(),
+    });
+  }
+
   // -- Keyboard dispatcher ----------------------------------------------------
 
   const keyboardActions = createActions({
@@ -742,6 +773,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     shellProfileManager?.loadShellProfiles();
     hookManager.loadHooks();
 
+    await hotkeyHandler.init(settingsManager.settings.layoutHotkeys ?? {});
+
     await layoutManager.refreshLayouts();
     let layouts = layoutManager.getLayouts();
     let defaultLayoutId = layoutManager.getDefaultLayoutId();
@@ -788,6 +821,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   function dispose(): void {
     layoutManager.flushWindowLayoutSave();
     settingsManager.flushSettingsSave();
+    hotkeyHandler.dispose();
     clearLayoutWindowBinding(layoutManager.getWindowLayoutId() ?? undefined, bridge.currentWindowLabel);
     removeTerminalDataListener();
     removeTerminalExitListener();
@@ -867,6 +901,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     },
     onKeyboardShortcutsSettingsClick: () => {
       openShortcutsModal();
+    },
+    onLayoutHotkeysSettingsClick: () => {
+      openLayoutHotkeysModal();
     },
   };
 }
