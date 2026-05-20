@@ -23,6 +23,58 @@ export const breathingIntensitySchema = z.enum(['none', 'mild', 'intense']);
 export type BreathingIntensity = z.infer<typeof breathingIntensitySchema>;
 
 // ---------------------------------------------------------------------------
+// Layout Hotkeys Schema
+// ---------------------------------------------------------------------------
+
+/**
+ * Layout hotkey: a keyboard shortcut that opens a specific layout
+ */
+export const layoutHotkeySchema = z.object({
+  key: z.string(),
+  modifiers: z.array(z.string()).default([]),
+});
+
+export type LayoutHotkey = z.infer<typeof layoutHotkeySchema>;
+
+/**
+ * Layout hotkeys: mapping from layout ID to hotkey configuration
+ */
+export const layoutHotkeysSchema = z.record(layoutHotkeySchema.nullable()).default({});
+export type LayoutHotkeys = z.infer<typeof layoutHotkeysSchema>;
+
+// ---------------------------------------------------------------------------
+// Quake Mode Schema
+// ---------------------------------------------------------------------------
+
+/**
+ * Quake mode position: top or bottom of screen
+ */
+export const quakeModePositionSchema = z.enum(['top', 'bottom']);
+export type QuakeModePosition = z.infer<typeof quakeModePositionSchema>;
+
+/**
+ * Quake mode settings
+ */
+export const quakeModeSchema = z.object({
+  enabled: z.boolean().default(false),
+  animationDuration: z
+    .number({ error: 'Animation duration must be a number' })
+    .int({ message: 'Animation duration must be an integer' })
+    .min(100, { message: 'Animation duration must be at least 100ms' })
+    .max(500, { message: 'Animation duration must be at most 500ms' })
+    .default(200),
+  position: quakeModePositionSchema.default('top'),
+  height: z
+    .number({ error: 'Height must be a number' })
+    .int({ message: 'Height must be an integer' })
+    .min(30, { message: 'Height must be at least 30%' })
+    .max(100, { message: 'Height must be at most 100%' })
+    .default(60),
+});
+
+export type QuakeMode = z.infer<typeof quakeModeSchema>;
+
+// ---------------------------------------------------------------------------
 // Individual Field Schemas
 // ---------------------------------------------------------------------------
 
@@ -402,6 +454,8 @@ export interface LegacySettingsInput {
     breathingIntensity?: unknown;
     activityAlertDebounceMs?: unknown;
     shortcuts?: Record<string, unknown>;
+    layoutHotkeys?: Record<string, unknown>;
+    quakeMode?: unknown;
   }>;
 }
 
@@ -444,6 +498,16 @@ export function migrateLegacySettings(raw: LegacySettingsInput): Partial<AppSett
   // Migrate breathingAlertEnabled → breathingIntensity
   if (ui.breathingAlertEnabled !== undefined && result.breathingIntensity === undefined) {
     result.breathingIntensity = ui.breathingAlertEnabled ? 'intense' : 'none';
+  }
+
+  // Copy layout hotkeys (if present and valid)
+  if (ui.layoutHotkeys !== undefined && typeof ui.layoutHotkeys === 'object' && ui.layoutHotkeys !== null) {
+    result.layoutHotkeys = ui.layoutHotkeys as LayoutHotkeys;
+  }
+
+  // Copy quake mode settings (if present and valid)
+  if (ui.quakeMode !== undefined && typeof ui.quakeMode === 'object' && ui.quakeMode !== null) {
+    result.quakeMode = ui.quakeMode as QuakeMode;
   }
 
   return result;
