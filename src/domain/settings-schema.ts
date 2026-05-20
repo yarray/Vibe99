@@ -39,8 +39,18 @@ export type QuakeScreenPosition = z.infer<typeof quakeScreenPositionSchema>;
  * - Single keys: "F1", "F2", etc.
  * - Modifiers: "CommandOrControl+Shift+T", "Ctrl+Alt+T", etc.
  */
+// ---------------------------------------------------------------------------
+// Layout Hotkey Schema (VIB-313)
+// ---------------------------------------------------------------------------
+
+export const layoutHotkeySchema = z.object({
+  key: z.string(),
+  modifiers: z.array(z.string()),
+});
+export type LayoutHotkey = z.infer<typeof layoutHotkeySchema>;
+
 export const layoutHotkeysSchema = z
-  .record(z.string())
+  .record(layoutHotkeySchema.nullable())
   .default({});
 
 /**

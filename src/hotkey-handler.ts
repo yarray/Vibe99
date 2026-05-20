@@ -13,7 +13,8 @@
  */
 
 import * as QuakeAnimation from './quake-animation';
-import type { Bridge, LayoutData } from './bridge';
+import type { Bridge } from './bridge';
+import type { LayoutHotkey } from './domain/settings-schema';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,28 +85,28 @@ interface QuakeSettings {
  * Hotkey handler dependencies
  */
 export interface HotkeyHandlerDeps {
-  /** The Tauri global API */
+  /** The Tauri global API (from window.__TAURI__) */
   tauri: TauriGlobalForHotkey;
   /** The bridge for Layout operations */
   bridge: Bridge;
   /** Function to get current quake mode settings */
   getQuakeSettings: () => QuakeSettings | null;
-  /** Optional callback when window is shown */
-  onWindowShown?: (layoutId: string) => void;
-  /** Optional callback when window is hidden */
-  onWindowHidden?: (layoutId: string) => void;
+  /** Function to report errors */
+  reportError: (error: unknown) => void;
+  /** Check if this is the main window */
+  isMainWindow: () => boolean;
 }
 
 /**
  * Hotkey handler interface
  */
 export interface HotkeyHandler {
-  /** Start listening for hotkey events */
-  start: () => Promise<void>;
-  /** Stop listening for hotkey events */
-  stop: () => void;
-  /** Check if currently listening */
-  isListening: () => boolean;
+  /** Initialize hotkey handler with layout hotkeys */
+  init: (layoutHotkeys: Record<string, LayoutHotkey | null>) => Promise<void>;
+  /** Sync hotkey registrations when settings change */
+  sync: (layoutHotkeys: Record<string, LayoutHotkey | null>) => Promise<void>;
+  /** Stop listening and clean up */
+  dispose: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +153,7 @@ async function handleHotkeyPressed(
   deps: HotkeyHandlerDeps,
 ): Promise<void> {
   const { layoutId } = event;
-  const { bridge, getQuakeSettings, onWindowShown, onWindowHidden } = deps;
+  const { bridge, getQuakeSettings } = deps;
 
   const quakeSettings = getQuakeSettings();
   const quakeConfig = quakeSettings
@@ -173,7 +174,6 @@ async function handleHotkeyPressed(
         await existingWindow.hide();
       }
       setWindowVisible(layoutId, false);
-      onWindowHidden?.(layoutId);
     } else {
       // Show the window
       if (quakeConfig.enabled) {
@@ -184,13 +184,11 @@ async function handleHotkeyPressed(
       }
       await existingWindow.setFocus();
       setWindowVisible(layoutId, true);
-      onWindowShown?.(layoutId);
     }
   } else {
     // Window doesn't exist, create it using the bridge
     await bridge.layouts.openWindow(layoutId);
     setWindowVisible(layoutId, true);
-    onWindowShown?.(layoutId);
   }
 }
 
@@ -205,8 +203,16 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
   let unlisten: (() => void) | null = null;
   let listening = false;
 
+  /**
+   * Convert LayoutHotkey to accelerator string for Tauri
+   */
+  function layoutHotkeyToAccelerator(hotkey: LayoutHotkey): string {
+    const modifiers = hotkey.modifiers.join('+');
+    return modifiers ? `${modifiers}+${hotkey.key}` : hotkey.key;
+  }
+
   return {
-    async start(): Promise<void> {
+    async init(layoutHotkeys: Record<string, LayoutHotkey | null>): Promise<void> {
       if (listening) return;
 
       const webview = deps.tauri.webview.getCurrentWebview();
@@ -220,60 +226,65 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
       );
 
       listening = true;
+
+      // Register all layout hotkeys
+      const bindings: Array<{ shortcut: string; layoutId: string }> = [];
+      for (const [layoutId, hotkey] of Object.entries(layoutHotkeys)) {
+        if (hotkey) {
+          bindings.push({
+            shortcut: layoutHotkeyToAccelerator(hotkey),
+            layoutId,
+          });
+        }
+      }
+
+      if (bindings.length > 0) {
+        try {
+          await deps.bridge.hotkey.registerAll(bindings);
+        } catch (err) {
+          deps.reportError(err);
+        }
+      }
     },
 
-    stop(): void {
+    async sync(layoutHotkeys: Record<string, LayoutHotkey | null>): Promise<void> {
+      // Re-register all hotkeys from settings
+      const bindings: Array<{ shortcut: string; layoutId: string }> = [];
+      for (const [layoutId, hotkey] of Object.entries(layoutHotkeys)) {
+        if (hotkey) {
+          bindings.push({
+            shortcut: layoutHotkeyToAccelerator(hotkey),
+            layoutId,
+          });
+        }
+      }
+
+      try {
+        await deps.bridge.hotkey.registerAll(bindings);
+      } catch (err) {
+        deps.reportError(err);
+      }
+    },
+
+    dispose(): void {
       if (unlisten) {
         unlisten();
         unlisten = null;
       }
       listening = false;
     },
-
-    isListening(): boolean {
-      return listening;
-    },
   };
 }
 
 // ---------------------------------------------------------------------------
-// Initialization Helper
+// Visibility State Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Initialize hotkey handling for the app
- *
- * This helper creates and starts a hotkey handler with standard setup.
- * Call this during app initialization to enable global hotkey support.
- *
- * @param tauri - The Tauri global API
- * @param bridge - The bridge for Layout operations
- * @param getQuakeSettings - Function to get current quake settings
- * @returns The hotkey handler instance
- */
-export async function initializeHotkeyHandler(
-  tauri: TauriGlobalForHotkey,
-  bridge: Bridge,
-  getQuakeSettings: () => QuakeSettings | null,
-): Promise<HotkeyHandler> {
-  const handler = createHotkeyHandler({
-    tauri,
-    bridge,
-    getQuakeSettings,
-  });
-
-  await handler.start();
-  return handler;
-}
 
 /**
  * Update visibility state for a Layout window
  *
  * Call this when a window is shown/hidden through other means (not hotkey)
  * to keep our tracking in sync.
- *
- * @param layoutId - The Layout ID
- * @param visible - Whether the window is visible
  */
 export function updateWindowVisibilityState(layoutId: string, visible: boolean): void {
   setWindowVisible(layoutId, visible);
@@ -281,9 +292,6 @@ export function updateWindowVisibilityState(layoutId: string, visible: boolean):
 
 /**
  * Get the visibility state for a Layout window
- *
- * @param layoutId - The Layout ID
- * @returns Whether the window is tracked as visible
  */
 export function getWindowVisibilityState(layoutId: string): boolean {
   return isWindowVisible(layoutId);
@@ -291,8 +299,6 @@ export function getWindowVisibilityState(layoutId: string): boolean {
 
 /**
  * Clear all visibility state
- *
- * Call this when the app is shutting down or when all windows are closed.
  */
 export function clearWindowVisibilityState(): void {
   windowVisibilityState.clear();

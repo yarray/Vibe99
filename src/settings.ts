@@ -4,9 +4,9 @@ import { showConfirmDialog } from './confirm-dialog';
 import {
   type AppSettingsUi,
   type BreathingIntensity,
-  type LayoutHotkeys,
+  type LayoutHotkey,
   type QuakeMode,
-  type QuakeModePosition,
+  type QuakeScreenPosition,
   ConsoleValidationReporter,
   getDefaultSettings,
   migrateLegacySettings,
@@ -181,12 +181,12 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     quakeAnimationDurationInput.value = String(settings.quakeMode.animationDuration);
     quakePositionSegments.querySelectorAll('.settings-segmented-btn').forEach((btn) => {
       const value = (btn as HTMLElement).dataset.value ?? '';
-      const isActive = value === settings.quakeMode.position;
+      const isActive = value === settings.quakeMode.screenPosition;
       btn.classList.toggle('is-active', isActive);
       btn.setAttribute('aria-checked', String(isActive));
     });
-    quakeHeightRange.value = String(settings.quakeMode.height);
-    quakeHeightInput.value = String(settings.quakeMode.height);
+    quakeHeightRange.value = String(settings.quakeMode.heightPercent);
+    quakeHeightInput.value = String(settings.quakeMode.heightPercent);
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -404,8 +404,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     const value = btn.dataset.value as QuakeModePosition | undefined;
     if (!value) return;
 
-    const result = validateField('quakeMode.position', value);
-    settings.quakeMode.position = result.sanitizedValue as QuakeModePosition;
+    const result = validateField('quakeMode.screenPosition', value);
+    settings.quakeMode.screenPosition = result.sanitizedValue as QuakeScreenPosition;
     applySettings();
     scheduleSettingsSave();
   });
@@ -413,8 +413,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Quake mode height
   function updateQuakeHeight(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    const result = validateField('quakeMode.height', parsedValue);
-    settings.quakeMode.height = result.sanitizedValue as number;
+    const result = validateField('quakeMode.heightPercent', parsedValue);
+    settings.quakeMode.heightPercent = result.sanitizedValue as number;
     applySettings();
     scheduleSettingsSave();
   }
