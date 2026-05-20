@@ -1,0 +1,1 @@
+Keyboard shortcut settings UI now shows proper names and descriptions for all shortcuts, including "New Pane with Profile" and "Open Layouts". Fixed inconsistent terminology (Tab vs Pane) and improved clarity of navigation mode labels.
