@@ -23,6 +23,55 @@ export const breathingIntensitySchema = z.enum(['none', 'mild', 'intense']);
 export type BreathingIntensity = z.infer<typeof breathingIntensitySchema>;
 
 // ---------------------------------------------------------------------------
+// Quake Mode Schema (VIB-313)
+// ---------------------------------------------------------------------------
+
+/**
+ * Quake mode screen position: top or bottom of screen
+ */
+export const quakeScreenPositionSchema = z.enum(['top', 'bottom']);
+export type QuakeScreenPosition = z.infer<typeof quakeScreenPositionSchema>;
+
+/**
+ * Layout hotkey bindings: map layoutId to shortcut string
+ *
+ * Shortcut strings follow Electron/Tauri accelerator format:
+ * - Single keys: "F1", "F2", etc.
+ * - Modifiers: "CommandOrControl+Shift+T", "Ctrl+Alt+T", etc.
+ */
+export const layoutHotkeysSchema = z
+  .record(z.string())
+  .default({});
+
+/**
+ * Quake mode configuration
+ *
+ * Controls the behavior of the Quake-style dropdown terminal:
+ * - enabled: whether Quake mode is active
+ * - animationDuration: slide animation duration in milliseconds (100-500ms)
+ * - screenPosition: which edge of the screen to slide from (top/bottom)
+ * - heightPercent: percentage of screen height the window should occupy (30-100%)
+ */
+export const quakeModeSchema = z.object({
+  enabled: z.boolean({ error: 'Quake mode enabled must be a boolean' }).default(false),
+  animationDuration: z
+    .number({ error: 'Animation duration must be a number' })
+    .int({ message: 'Animation duration must be an integer' })
+    .min(100, { message: 'Animation duration must be at least 100ms' })
+    .max(500, { message: 'Animation duration must be at most 500ms' })
+    .default(200),
+  screenPosition: quakeScreenPositionSchema.default('top'),
+  heightPercent: z
+    .number({ error: 'Height percent must be a number' })
+    .int({ message: 'Height percent must be an integer' })
+    .min(30, { message: 'Height percent must be at least 30%' })
+    .max(100, { message: 'Height percent must be at most 100%' })
+    .default(60),
+});
+
+export type QuakeMode = z.infer<typeof quakeModeSchema>;
+
+// ---------------------------------------------------------------------------
 // Individual Field Schemas
 // ---------------------------------------------------------------------------
 
@@ -119,6 +168,10 @@ export const appSettingsSchema = z.object({
   webglEnabled: webglEnabledSchema,
   breathingIntensity: breathingIntensitySchema.default('mild'),
   activityAlertDebounceMs: activityAlertDebounceMsSchema,
+  // Quake mode settings (VIB-313)
+  quakeMode: quakeModeSchema.default({}),
+  // Layout hotkey bindings (VIB-313)
+  layoutHotkeys: layoutHotkeysSchema,
 });
 
 /**
