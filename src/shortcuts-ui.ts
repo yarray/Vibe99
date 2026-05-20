@@ -35,21 +35,23 @@ interface ShortcutsModalOverlay extends HTMLDivElement {
  */
 function getShortcutActionName(actionId: string): string {
   const names: Record<string, string> = {
-    'new-tab': 'New Tab',
-    'navigation-mode': 'Navigation Mode',
+    'new-tab': 'New Pane',
+    'new-tab-profile': 'New Pane with Profile',
+    'navigation-mode': 'Enter Navigation Mode',
     'copy': 'Copy',
     'paste': 'Paste',
     'navigate-left': 'Navigate Left',
     'navigate-right': 'Navigate Right',
-    'nav-left': 'Focus Previous',
-    'nav-right': 'Focus Next',
-    'focus-first': 'Focus First',
-    'focus-last': 'Focus Last',
+    'nav-left': 'Focus Previous Pane',
+    'nav-right': 'Focus Next Pane',
+    'focus-first': 'Focus First Pane',
+    'focus-last': 'Focus Last Pane',
     'jump-to': 'Jump to Pane',
-    'new-pane': 'New Pane',
+    'new-pane': 'New Pane (Navigation Mode)',
     'close-pane': 'Close Pane',
     'rename-pane': 'Rename Pane',
     'cycle-lit': 'Cycle Alerted Panes',
+    'layout-dropdown': 'Open Layouts',
   };
   return names[actionId] || actionId;
 }
@@ -60,7 +62,8 @@ function getShortcutActionName(actionId: string): string {
 function getShortcutActionDescription(actionId: string): string {
   const descriptions: Record<string, string> = {
     'new-tab': 'Create a new terminal pane',
-    'navigation-mode': 'Enter keyboard navigation mode',
+    'new-tab-profile': 'Create a new pane with profile selection',
+    'navigation-mode': 'Enter keyboard navigation mode for pane management',
     'copy': 'Copy selected text to clipboard',
     'paste': 'Paste clipboard content to terminal',
     'navigate-left': 'Switch to the pane on the left',
@@ -70,10 +73,11 @@ function getShortcutActionDescription(actionId: string): string {
     'focus-first': 'Jump to first pane (navigation mode)',
     'focus-last': 'Jump to last pane (navigation mode)',
     'jump-to': 'Jump to pane 1-9 (navigation mode)',
-    'new-pane': 'Create a new terminal pane (navigation mode)',
+    'new-pane': 'Create a new pane (navigation mode)',
     'close-pane': 'Close current pane (navigation mode)',
     'rename-pane': 'Rename current pane (navigation mode)',
     'cycle-lit': 'Cycle focus through panes with background activity alerts',
+    'layout-dropdown': 'Open layouts menu to manage saved layouts',
   };
   return descriptions[actionId] || '';
 }
