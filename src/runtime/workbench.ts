@@ -477,13 +477,21 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
       }
 
       case 'focus.next': {
-        paneState.moveFocus(1);
+        const moved = paneState.moveFocus(1);
+        if (moved) {
+          const id = paneState.getFocusedPaneId();
+          if (id) { setMode('terminal'); focusSession(id); }
+        }
         externalRender();
         return ok();
       }
 
       case 'focus.prev': {
-        paneState.moveFocus(-1);
+        const moved = paneState.moveFocus(-1);
+        if (moved) {
+          const id = paneState.getFocusedPaneId();
+          if (id) { setMode('terminal'); focusSession(id); }
+        }
         externalRender();
         return ok();
       }
@@ -494,6 +502,8 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         const nextIndex = paneState.getFocusedIndex() - 1;
         if (nextIndex < 0) return ok();
         paneState.focusPane(panes[nextIndex].id);
+        setMode('terminal');
+        focusSession(panes[nextIndex].id);
         externalRender();
         return ok();
       }
@@ -504,6 +514,8 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         const nextIndex = paneState.getFocusedIndex() + 1;
         if (nextIndex >= panes.length) return ok();
         paneState.focusPane(panes[nextIndex].id);
+        setMode('terminal');
+        focusSession(panes[nextIndex].id);
         externalRender();
         return ok();
       }
@@ -538,6 +550,8 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         const panes = paneState.getPanes();
         if (panes.length === 0 || command.index < 0 || command.index >= panes.length) return fail('out-of-range');
         paneState.focusPane(panes[command.index].id);
+        setMode('terminal');
+        focusSession(panes[command.index].id);
         externalRender();
         return ok();
       }
