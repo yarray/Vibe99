@@ -23,52 +23,49 @@ export const breathingIntensitySchema = z.enum(['none', 'mild', 'intense']);
 export type BreathingIntensity = z.infer<typeof breathingIntensitySchema>;
 
 // ---------------------------------------------------------------------------
-// Layout Hotkeys Schema
+// Quake Mode Schema (VIB-313)
 // ---------------------------------------------------------------------------
 
 /**
- * Layout hotkey: a keyboard shortcut that opens a specific layout
+ * Quake mode screen position: top or bottom of screen
  */
-export const layoutHotkeySchema = z.object({
-  key: z.string(),
-  modifiers: z.array(z.string()).default([]),
-});
-
-export type LayoutHotkey = z.infer<typeof layoutHotkeySchema>;
+export const quakeScreenPositionSchema = z.enum(['top', 'bottom']);
+export type QuakeScreenPosition = z.infer<typeof quakeScreenPositionSchema>;
 
 /**
- * Layout hotkeys: mapping from layout ID to hotkey configuration
+ * Layout hotkey bindings: map layoutId to shortcut string
+ *
+ * Shortcut strings follow Electron/Tauri accelerator format:
+ * - Single keys: "F1", "F2", etc.
+ * - Modifiers: "CommandOrControl+Shift+T", "Ctrl+Alt+T", etc.
  */
-export const layoutHotkeysSchema = z.record(layoutHotkeySchema.nullable()).default({});
-export type LayoutHotkeys = z.infer<typeof layoutHotkeysSchema>;
-
-// ---------------------------------------------------------------------------
-// Quake Mode Schema
-// ---------------------------------------------------------------------------
+export const layoutHotkeysSchema = z
+  .record(z.string())
+  .default({});
 
 /**
- * Quake mode position: top or bottom of screen
- */
-export const quakeModePositionSchema = z.enum(['top', 'bottom']);
-export type QuakeModePosition = z.infer<typeof quakeModePositionSchema>;
-
-/**
- * Quake mode settings
+ * Quake mode configuration
+ *
+ * Controls the behavior of the Quake-style dropdown terminal:
+ * - enabled: whether Quake mode is active
+ * - animationDuration: slide animation duration in milliseconds (100-500ms)
+ * - screenPosition: which edge of the screen to slide from (top/bottom)
+ * - heightPercent: percentage of screen height the window should occupy (30-100%)
  */
 export const quakeModeSchema = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean({ error: 'Quake mode enabled must be a boolean' }).default(false),
   animationDuration: z
     .number({ error: 'Animation duration must be a number' })
     .int({ message: 'Animation duration must be an integer' })
     .min(100, { message: 'Animation duration must be at least 100ms' })
     .max(500, { message: 'Animation duration must be at most 500ms' })
     .default(200),
-  position: quakeModePositionSchema.default('top'),
-  height: z
-    .number({ error: 'Height must be a number' })
-    .int({ message: 'Height must be an integer' })
-    .min(30, { message: 'Height must be at least 30%' })
-    .max(100, { message: 'Height must be at most 100%' })
+  screenPosition: quakeScreenPositionSchema.default('top'),
+  heightPercent: z
+    .number({ error: 'Height percent must be a number' })
+    .int({ message: 'Height percent must be an integer' })
+    .min(30, { message: 'Height percent must be at least 30%' })
+    .max(100, { message: 'Height percent must be at most 100%' })
     .default(60),
 });
 
@@ -153,56 +150,6 @@ export const activityAlertDebounceMsSchema = z
   .default(30000);
 
 // ---------------------------------------------------------------------------
-// Layout Hotkeys Schema
-// ---------------------------------------------------------------------------
-
-/**
- * Layout hotkeys: Record<layoutId, hotkeyString>
- * e.g. { "layout-1": "F1", "layout-2": "CommandOrControl+Shift+T" }
- */
-export const layoutHotkeysSchema = z
-  .record(z.string(), z.string())
-  .default({});
-
-// ---------------------------------------------------------------------------
-// Quake Mode Schema
-// ---------------------------------------------------------------------------
-
-/**
- * Screen position for Quake mode dropdown.
- */
-export const screenPositionSchema = z.enum(['top', 'bottom']).default('top');
-
-/**
- * Quake mode configuration.
- * - enabled: whether Quake mode is active
- * - animationDuration: animation time in ms (100-500)
- * - screenPosition: where the dropdown appears (top or bottom)
- * - heightPercent: height of the dropdown as a percentage (30-100)
- */
-export const quakeModeSchema = z
-  .object({
-    enabled: z.boolean().default(false),
-    animationDuration: z
-      .number({ error: 'Animation duration must be a number' })
-      .int({ message: 'Animation duration must be an integer' })
-      .transform((val) => Math.max(100, Math.min(500, val)))
-      .default(200),
-    screenPosition: screenPositionSchema,
-    heightPercent: z
-      .number({ error: 'Height percent must be a number' })
-      .int({ message: 'Height percent must be an integer' })
-      .transform((val) => Math.max(30, Math.min(100, val)))
-      .default(60),
-  })
-  .default({
-    enabled: false,
-    animationDuration: 200,
-    screenPosition: 'top',
-    heightPercent: 60,
-  });
-
-// ---------------------------------------------------------------------------
 // Complete Settings Schema
 // ---------------------------------------------------------------------------
 
@@ -221,8 +168,10 @@ export const appSettingsSchema = z.object({
   webglEnabled: webglEnabledSchema,
   breathingIntensity: breathingIntensitySchema.default('mild'),
   activityAlertDebounceMs: activityAlertDebounceMsSchema,
+  // Quake mode settings (VIB-313)
+  quakeMode: quakeModeSchema.default({}),
+  // Layout hotkey bindings (VIB-313)
   layoutHotkeys: layoutHotkeysSchema,
-  quakeMode: quakeModeSchema,
 });
 
 /**
@@ -454,8 +403,6 @@ export interface LegacySettingsInput {
     breathingIntensity?: unknown;
     activityAlertDebounceMs?: unknown;
     shortcuts?: Record<string, unknown>;
-    layoutHotkeys?: Record<string, unknown>;
-    quakeMode?: unknown;
   }>;
 }
 
@@ -498,16 +445,6 @@ export function migrateLegacySettings(raw: LegacySettingsInput): Partial<AppSett
   // Migrate breathingAlertEnabled → breathingIntensity
   if (ui.breathingAlertEnabled !== undefined && result.breathingIntensity === undefined) {
     result.breathingIntensity = ui.breathingAlertEnabled ? 'intense' : 'none';
-  }
-
-  // Copy layout hotkeys (if present and valid)
-  if (ui.layoutHotkeys !== undefined && typeof ui.layoutHotkeys === 'object' && ui.layoutHotkeys !== null) {
-    result.layoutHotkeys = ui.layoutHotkeys as LayoutHotkeys;
-  }
-
-  // Copy quake mode settings (if present and valid)
-  if (ui.quakeMode !== undefined && typeof ui.quakeMode === 'object' && ui.quakeMode !== null) {
-    result.quakeMode = ui.quakeMode as QuakeMode;
   }
 
   return result;
