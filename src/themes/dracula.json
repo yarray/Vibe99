@@ -1,0 +1,36 @@
+{
+  "name": "Dracula",
+  "background": "#282a36",
+  "foreground": "#f8f8f2",
+  "cursorColor": "#f8f8f2",
+  "selectionBackground": "#44475a",
+  "black": "#21222c",
+  "red": "#ff5555",
+  "green": "#50fa7b",
+  "yellow": "#f1fa8c",
+  "blue": "#bd93f9",
+  "purple": "#ff79c6",
+  "cyan": "#8be9fd",
+  "white": "#f8f8f2",
+  "brightBlack": "#6272a4",
+  "brightRed": "#ff6e6e",
+  "brightGreen": "#69ff94",
+  "brightYellow": "#ffffa5",
+  "brightBlue": "#d6acff",
+  "brightPurple": "#ff92df",
+  "brightCyan": "#a4ffff",
+  "brightWhite": "#ffffff",
+  "vibe99": {
+    "id": "dracula",
+    "tags": ["dark"],
+    "cssTokens": {
+      "pane-opacity": "0.8",
+      "pane-bg-mask-opacity": "0.75",
+      "pane-width": "720px"
+    },
+    "animationTokens": {
+      "breathing-glow": "inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)",
+      "breathing-intense": "inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)"
+    }
+  }
+}

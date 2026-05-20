@@ -1,0 +1,36 @@
+{
+  "name": "Catppuccin Mocha",
+  "background": "#1e1e2e",
+  "foreground": "#cdd6f4",
+  "cursorColor": "#f5e0dc",
+  "selectionBackground": "#585b70",
+  "black": "#45475a",
+  "red": "#f38ba8",
+  "green": "#a6e3a1",
+  "yellow": "#f9e2af",
+  "blue": "#89b4fa",
+  "purple": "#f5c2e7",
+  "cyan": "#94e2d5",
+  "white": "#a6adc8",
+  "brightBlack": "#585b70",
+  "brightRed": "#f37799",
+  "brightGreen": "#89d88b",
+  "brightYellow": "#ebd391",
+  "brightBlue": "#74a8fc",
+  "brightPurple": "#f2aede",
+  "brightCyan": "#6bd7ca",
+  "brightWhite": "#bac2de",
+  "vibe99": {
+    "id": "catppuccin-mocha",
+    "tags": ["dark"],
+    "cssTokens": {
+      "pane-opacity": "0.8",
+      "pane-bg-mask-opacity": "0.75",
+      "pane-width": "720px"
+    },
+    "animationTokens": {
+      "breathing-glow": "inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)",
+      "breathing-intense": "inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)"
+    }
+  }
+}

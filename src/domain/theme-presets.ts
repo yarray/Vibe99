@@ -9,19 +9,25 @@
  */
 
 import { parseTheme, registerTheme, replaceTheme, hasTheme } from './theme';
-import redTintData from '../themes/red-tint.json';
-import blueTintData from '../themes/blue-tint.json';
-import greenTintData from '../themes/green-tint.json';
-import lightTintData from '../themes/light-tint.json';
 import defaultDarkData from '../themes/default-dark.json';
+import lightTintData from '../themes/light-tint.json';
+import solarizedDarkData from '../themes/solarized-dark.json';
+import solarizedLightData from '../themes/solarized-light.json';
+import draculaData from '../themes/dracula.json';
+import catppuccinMochaData from '../themes/catppuccin-mocha.json';
+import atomOneLightData from '../themes/atom-one-light.json';
+import githubLightData from '../themes/github-light.json';
 
 /** Built-in theme JSON data in registration order. */
 const builtinThemes = [
   defaultDarkData,
-  redTintData,
-  blueTintData,
-  greenTintData,
   lightTintData,
+  solarizedDarkData,
+  solarizedLightData,
+  draculaData,
+  catppuccinMochaData,
+  atomOneLightData,
+  githubLightData,
 ];
 
 /**

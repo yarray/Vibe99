@@ -1,0 +1,36 @@
+{
+  "name": "GitHub Light",
+  "background": "#ffffff",
+  "foreground": "#1f2328",
+  "cursorColor": "#0969da",
+  "selectionBackground": "#1f2328",
+  "black": "#24292f",
+  "red": "#cf222e",
+  "green": "#116329",
+  "yellow": "#4d2d00",
+  "blue": "#0969da",
+  "purple": "#8250df",
+  "cyan": "#1b7c83",
+  "white": "#6e7781",
+  "brightBlack": "#57606a",
+  "brightRed": "#a40e26",
+  "brightGreen": "#1a7f37",
+  "brightYellow": "#633c01",
+  "brightBlue": "#218bff",
+  "brightPurple": "#a475f9",
+  "brightCyan": "#3192aa",
+  "brightWhite": "#8c959f",
+  "vibe99": {
+    "id": "github-light",
+    "tags": ["light"],
+    "cssTokens": {
+      "pane-opacity": "0.95",
+      "pane-bg-mask-opacity": "0.9",
+      "pane-width": "720px"
+    },
+    "animationTokens": {
+      "breathing-glow": "inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)",
+      "breathing-intense": "inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)"
+    }
+  }
+}
