@@ -104,6 +104,48 @@ let currentPanes: FloatPaneInfo[] = [];
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Calculate relative luminance (WCAG formula) for a hex color.
+ */
+function calculateLuminance(hexColor: string): number {
+  const r = parseInt(hexColor.slice(1, 3), 16);
+  const g = parseInt(hexColor.slice(3, 5), 16);
+  const b = parseInt(hexColor.slice(5, 7), 16);
+
+  const srgbToLinear = (c: number): number => {
+    const normalized = c / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4);
+  };
+
+  const R = srgbToLinear(r);
+  const G = srgbToLinear(g);
+  const B = srgbToLinear(b);
+
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+
+/**
+ * Calculate luminance-based white mix ratio for a given color's glow.
+ * Low-luminance colors get more white mixed into their glow to achieve
+ * consistent visual prominence across all colors.
+ * Returns the percentage of accent color to keep (100% = pure accent, lower = more white).
+ */
+function getLuminanceBasedGlowMix(hexColor: string): string {
+  const luminance = calculateLuminance(hexColor);
+
+  // For bright colors (luminance >= 0.5), use 100% pure accent (original behavior)
+  if (luminance >= 0.5) {
+    return '100';
+  }
+
+  // For low-luminance colors, mix in more white for better visibility
+  // Map luminance 0-0.5 to mix ratio 40%-100% (dark colors get more white mixed in)
+  const mixRatio = Math.max(40, Math.min(100, 40 + (luminance / 0.5) * 60));
+  return mixRatio.toFixed(0);
+}
+
 function computeWidth(paneCount: number): number {
   if (paneCount === 0) return MIN_WIDTH;
   return paneCount * BLOCK_SIZE + (paneCount - 1) * BLOCK_GAP + PADDING_X * 2 + WRAPPER_PAD_X;
@@ -138,6 +180,10 @@ function render(panes: FloatPaneInfo[]): void {
     block.style.setProperty('--block-glow', pane.accent);
     block.classList.toggle('is-alerted', pane.alerted);
     block.title = pane.id;
+
+    // Apply luminance-based glow mix ratio for consistent visual prominence
+    const glowMix = getLuminanceBasedGlowMix(pane.accent);
+    block.style.setProperty('--breath-glow-mix', glowMix);
   }
 
   // Remove excess blocks
