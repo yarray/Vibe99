@@ -344,14 +344,11 @@ function showTerminalContextMenu(
     const pane = panes[state.getPaneIndex(paneId)];
     const currentThemeId = pane?.themeId ?? null;
 
-    const themeChildren: MenuChildItem[] = [
-      { label: 'Default', action: 'pane-set-theme:', isDefault: currentThemeId === null },
-      ...themes.map((t: Theme) => ({
-        label: t.name,
-        action: `pane-set-theme:${t.id}`,
-        isDefault: currentThemeId === t.id,
-      })),
-    ];
+    const themeChildren: MenuChildItem[] = themes.map((t: Theme) => ({
+      label: t.name,
+      action: `pane-set-theme:${t.id}`,
+      isDefault: !currentThemeId && t.id === 'default-dark' || currentThemeId === t.id,
+    }));
 
     const breathingOn = pane && pane.breathingMonitor !== false;
 
@@ -416,14 +413,11 @@ function showTabContextMenu(
   const themes = listThemes();
   const currentThemeId = pane?.themeId ?? null;
 
-  const themeChildren: MenuChildItem[] = [
-    { label: 'Default', action: 'pane-set-theme:', isDefault: currentThemeId === null },
-    ...themes.map((t: Theme) => ({
-      label: t.name,
-      action: `pane-set-theme:${t.id}`,
-      isDefault: currentThemeId === t.id,
-    })),
-  ];
+  const themeChildren: MenuChildItem[] = themes.map((t: Theme) => ({
+    label: t.name,
+    action: `pane-set-theme:${t.id}`,
+    isDefault: !currentThemeId && t.id === 'default-dark' || currentThemeId === t.id,
+  }));
 
   const items: MenuItem[] = [
     { label: 'Change Color...', action: 'tab-change-color' },
