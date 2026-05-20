@@ -495,6 +495,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     // Window regained focus — clear any alert on the focused pane
     // because the user can now see it.
     paneActivityWatcher.setFocus(paneState.getFocusedPaneId());
+    // Refresh all activity snapshots so stale fingerprints (from resize
+    // reflow, clear, etc.) don't cause false positives on the next write.
+    paneRenderer?.refreshActivitySnapshots();
   });
   window.addEventListener('blur', () => syncIgnoreFocus());
 

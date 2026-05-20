@@ -49,6 +49,8 @@ export interface PaneRenderer {
   write: (paneId: string, data: string) => void;
   clearTerminal: (paneId: string) => void;
   writeln: (paneId: string, text: string) => void;
+  /** Refresh all activity fingerprint snapshots to current buffer state. */
+  refreshActivitySnapshots: () => void;
   entryNeedsTabRefresh: (paneId: string) => boolean;
   setAlerted: (paneId: string, alerted: boolean) => void;
   /** Check whether the pane's root element has the alert CSS class. */
@@ -274,6 +276,11 @@ export function createPaneRenderer({
       const session = resolveSession(paneId);
       if (!session) return;
       session.writeLine(text);
+    },
+    refreshActivitySnapshots: () => {
+      for (const session of sessionMap!.values()) {
+        session.refreshActivitySnapshot();
+      }
     },
     entryNeedsTabRefresh,
     setAlerted: (paneId, alerted) => {

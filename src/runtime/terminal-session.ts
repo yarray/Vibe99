@@ -113,6 +113,9 @@ export interface TerminalSession {
   /** Clear the terminal buffer. */
   clear(): void;
 
+  /** Refresh the activity fingerprint snapshot to the current buffer state. */
+  refreshActivitySnapshot(): void;
+
   // -- Sizing --------------------------------------------------------------------
 
   /**
@@ -598,6 +601,10 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     terminal.clear();
   }
 
+  function refreshActivitySnapshot(): void {
+    last = snapshot();
+  }
+
   function fit(options: { force?: boolean } = {}): void {
     fitInternal(options.force);
   }
@@ -898,6 +905,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     shellChangeTime,
     needsFit,
     setNeedsFit,
+    refreshActivitySnapshot,
     getRecentOutput,
     setReady,
 
