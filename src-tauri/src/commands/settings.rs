@@ -401,29 +401,29 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         (activity_alert_debounce_ms.round()).clamp(3000.0, 300_000.0) as u64;
 
     // Quake mode settings
-    let quake_mode = ui.get("quakeMode").and_then(|v| v.as_object());
+    let quake_mode_val = ui.get("quakeMode");
 
-    let quake_enabled = quake_mode
-        .and_then(|o| o.get("enabled"))
+    let quake_enabled = quake_mode_val
+        .and_then(|v| v.get("enabled"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
     let quake_animation_duration = get_number(
-        quake_mode.unwrap_or(&Value::Null),
+        quake_mode_val.unwrap_or(&Value::Null),
         "animationDuration",
         DEFAULT_QUAKE_ANIMATION_DURATION as f64,
     );
     let quake_animation_duration =
         quake_animation_duration.round().clamp(100.0, 500.0) as u32;
 
-    let quake_screen_position = quake_mode
-        .and_then(|o| o.get("screenPosition"))
+    let quake_screen_position = quake_mode_val
+        .and_then(|v| v.get("screenPosition"))
         .and_then(|v| v.as_str())
         .filter(|s| *s == "top" || *s == "bottom")
         .unwrap_or("top");
 
     let quake_height_percent = get_number(
-        quake_mode.unwrap_or(&Value::Null),
+        quake_mode_val.unwrap_or(&Value::Null),
         "heightPercent",
         DEFAULT_QUAKE_HEIGHT_PERCENT as f64,
     );
@@ -443,8 +443,8 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         .and_then(|v| v.as_object())
         .map(|o| {
             o.iter()
-                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.clone())))
-                .collect::<serde_json::Map<String, String>>()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), Value::String(s.to_string()))))
+                .collect::<serde_json::Map<String, Value>>()
         });
 
     let mut result = serde_json::json!({
