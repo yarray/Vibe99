@@ -533,6 +533,9 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     if (_sessionReady && nextSizeKey !== _sizeKey) {
       bridge.resizeTerminal({ paneId, cols, rows });
       activityWatcher.noteResize(paneId);
+      // Refresh the snapshot so the reflowed buffer doesn't cause a false
+      // positive on the next write.
+      last = snapshot();
     }
 
     _sizeKey = nextSizeKey;
