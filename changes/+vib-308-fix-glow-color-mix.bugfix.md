@@ -1,0 +1,1 @@
+Fix float window breathing animation glow not rendering due to invalid CSS color-mix() percentage value (missing % suffix).

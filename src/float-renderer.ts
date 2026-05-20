@@ -137,13 +137,13 @@ function getLuminanceBasedGlowMix(hexColor: string): string {
 
   // For bright colors (luminance >= 0.5), use 100% pure accent (original behavior)
   if (luminance >= 0.5) {
-    return '100';
+    return '100%';
   }
 
   // For low-luminance colors, mix in more white for better visibility
   // Map luminance 0-0.5 to mix ratio 40%-100% (dark colors get more white mixed in)
   const mixRatio = Math.max(40, Math.min(100, 40 + (luminance / 0.5) * 60));
-  return mixRatio.toFixed(0);
+  return mixRatio.toFixed(0) + '%';
 }
 
 function computeWidth(paneCount: number): number {
