@@ -4,6 +4,9 @@ import { showConfirmDialog } from './confirm-dialog';
 import {
   type AppSettingsUi,
   type BreathingIntensity,
+  type LayoutHotkeys,
+  type QuakeMode,
+  type QuakeModePosition,
   ConsoleValidationReporter,
   getDefaultSettings,
   migrateLegacySettings,
@@ -126,6 +129,14 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const floatWindowDot = document.getElementById('float-window-dot') as HTMLElement;
   const floatWindowRow = document.getElementById('float-window-row') as HTMLElement;
   const debounceInput = document.getElementById('activity-alert-debounce-input') as HTMLInputElement;
+  const quakeModeToggle = document.getElementById('quake-mode-toggle') as HTMLInputElement;
+  const quakeModeDot = document.getElementById('quake-mode-dot') as HTMLElement;
+  const quakeModeRow = document.getElementById('quake-mode-row') as HTMLElement;
+  const quakeAnimationDurationRange = document.getElementById('quake-animation-duration-range') as HTMLInputElement;
+  const quakeAnimationDurationInput = document.getElementById('quake-animation-duration-input') as HTMLInputElement;
+  const quakePositionSegments = document.getElementById('quake-position-segments') as HTMLElement;
+  const quakeHeightRange = document.getElementById('quake-height-range') as HTMLInputElement;
+  const quakeHeightInput = document.getElementById('quake-height-input') as HTMLInputElement;
 
   const settings: AppSettings = {
     ...getDefaultSettings(),
@@ -162,6 +173,20 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     // Apply debounce setting (input is in seconds)
     debounceInput.value = String(settings.activityAlertDebounceMs / 1000);
     paneActivityWatcher.setSettleMs(settings.activityAlertDebounceMs);
+
+    // Quake mode settings
+    quakeModeToggle.checked = settings.quakeMode.enabled;
+    quakeModeDot.classList.toggle('is-active', settings.quakeMode.enabled);
+    quakeAnimationDurationRange.value = String(settings.quakeMode.animationDuration);
+    quakeAnimationDurationInput.value = String(settings.quakeMode.animationDuration);
+    quakePositionSegments.querySelectorAll('.settings-segmented-btn').forEach((btn) => {
+      const value = (btn as HTMLElement).dataset.value ?? '';
+      const isActive = value === settings.quakeMode.position;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-checked', String(isActive));
+    });
+    quakeHeightRange.value = String(settings.quakeMode.height);
+    quakeHeightInput.value = String(settings.quakeMode.height);
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -344,6 +369,62 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     settings.activityAlertDebounceMs = result.sanitizedValue as number;
     applySettings();
     scheduleSettingsSave();
+  });
+
+  // Quake mode toggle
+  quakeModeRow.addEventListener('click', () => {
+    const newValue = !settings.quakeMode.enabled;
+    settings.quakeMode.enabled = newValue;
+    quakeModeToggle.checked = newValue;
+    quakeModeDot.classList.toggle('is-active', newValue);
+    scheduleSettingsSave();
+  });
+
+  // Quake mode animation duration
+  function updateQuakeAnimationDuration(nextValue: string): void {
+    const parsedValue = Number(nextValue);
+    const result = validateField('quakeMode.animationDuration', parsedValue);
+    settings.quakeMode.animationDuration = result.sanitizedValue as number;
+    applySettings();
+    scheduleSettingsSave();
+  }
+
+  quakeAnimationDurationRange.addEventListener('input', () => {
+    updateQuakeAnimationDuration(quakeAnimationDurationRange.value);
+  });
+
+  quakeAnimationDurationInput.addEventListener('change', () => {
+    updateQuakeAnimationDuration(quakeAnimationDurationInput.value);
+  });
+
+  // Quake mode position
+  quakePositionSegments.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.settings-segmented-btn') as HTMLElement | null;
+    if (!btn) return;
+    const value = btn.dataset.value as QuakeModePosition | undefined;
+    if (!value) return;
+
+    const result = validateField('quakeMode.position', value);
+    settings.quakeMode.position = result.sanitizedValue as QuakeModePosition;
+    applySettings();
+    scheduleSettingsSave();
+  });
+
+  // Quake mode height
+  function updateQuakeHeight(nextValue: string): void {
+    const parsedValue = Number(nextValue);
+    const result = validateField('quakeMode.height', parsedValue);
+    settings.quakeMode.height = result.sanitizedValue as number;
+    applySettings();
+    scheduleSettingsSave();
+  }
+
+  quakeHeightRange.addEventListener('input', () => {
+    updateQuakeHeight(quakeHeightRange.value);
+  });
+
+  quakeHeightInput.addEventListener('change', () => {
+    updateQuakeHeight(quakeHeightInput.value);
   });
 
   return {

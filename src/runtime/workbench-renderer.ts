@@ -40,6 +40,7 @@ import type { Workbench } from './workbench.js';
 
 import * as ShortcutsRegistry from '../shortcuts-registry';
 import * as ShortcutsUI from '../shortcuts-ui';
+import * as LayoutHotkeysUI from '../layout-hotkeys-ui';
 import * as ColorsRegistry from '../colors-registry';
 import { createPaneState } from '../pane-state';
 import { setIcon } from '../icons';
@@ -71,6 +72,7 @@ export interface WorkbenchRendererDeps {
   hooksSettingsBtn: HTMLElement;
   layoutsSettingsBtn: HTMLElement;
   keyboardShortcutsSettingsBtn: HTMLElement;
+  layoutHotkeysSettingsBtn: HTMLElement;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +99,7 @@ export interface WorkbenchRenderer {
   onShellProfilesSettingsClick: () => void;
   onHooksSettingsClick: () => void;
   onKeyboardShortcutsSettingsClick: () => void;
+  onLayoutHotkeysSettingsClick: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +121,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     hooksSettingsBtn,
     layoutsSettingsBtn,
     keyboardShortcutsSettingsBtn,
+    layoutHotkeysSettingsBtn,
   } = deps;
 
   // -- Mutable bootstrap state ------------------------------------------------
@@ -684,6 +688,18 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
   }
 
+  function openLayoutHotkeysModal(): void {
+    LayoutHotkeysUI.openLayoutHotkeysModal(bridge, {
+      getLayouts: () => layoutManager.getLayouts(),
+      getLayoutHotkeys: () => settingsManager.settings.layoutHotkeys,
+      setLayoutHotkey: (layoutId: string, hotkey: import('../domain/settings-schema').LayoutHotkey | null) => {
+        settingsManager.settings.layoutHotkeys[layoutId] = hotkey;
+        settingsManager.scheduleSettingsSave();
+      },
+      scheduleSettingsSave: () => settingsManager.scheduleSettingsSave(),
+    });
+  }
+
   // -- Keyboard dispatcher ----------------------------------------------------
 
   const keyboardActions = createActions({
@@ -867,6 +883,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     },
     onKeyboardShortcutsSettingsClick: () => {
       openShortcutsModal();
+    },
+    onLayoutHotkeysSettingsClick: () => {
+      openLayoutHotkeysModal();
     },
   };
 }

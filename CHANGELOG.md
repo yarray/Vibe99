@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Layout hotkeys and Quake mode settings UI** (VIB-314):
+  - Settings schema extended with `layoutHotkeys` and `quakeMode` fields.
+  - Layout Hotkeys configuration modal with hotkey recording and conflict detection.
+  - Quake mode settings: enabled toggle, animation duration (100-500ms), position (top/bottom), height (30-100%).
+  - New module: `src/layout-hotkeys-ui.ts`.
+  - Settings page UI updated in `src/index.html` and `src/settings.ts`.
+
 - **Theme data layer**: JSON-driven theme files with Windows Terminal color scheme compatibility.
   - `src/themes/default-dark.json` — existing default theme as data.
   - `src/themes/red-tint.json` — red tinted background (production identifier).
