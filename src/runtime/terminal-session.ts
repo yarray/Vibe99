@@ -325,6 +325,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   let _shellChangeTime: number | undefined;
   let _exited = false;
   let _exitOverlay: HTMLElement | null = null;
+  let _themeId: string | null = null;
 
   // ---------------------------------------------------------------------------
   // DOM construction
@@ -693,17 +694,8 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     });
   }
 
-  function setAccent(color: string): void {
-    if (_accent === color) {
-      return;
-    }
-    _accent = color;
-    paneEl.style.setProperty('--pane-accent', color);
-    terminal.options.theme = terminalTheme(color);
-  }
-
-  function setTheme(themeId: string | null): void {
-    const theme = themeId ? getTheme(themeId) : null;
+  function applyTerminalTheme(): void {
+    const theme = _themeId ? getTheme(_themeId) : null;
     const themeFn = theme ? ((accent: string) => theme.terminalTheme(accent)) : terminalTheme;
     const newTheme = themeFn(_accent);
 
@@ -717,20 +709,37 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     terminal.options.allowTransparency = isTransparent;
     terminal.options.theme = newTheme;
 
-    // Update pane-surface background to match theme background
+    // Surface and viewport background: use theme color without alpha so
+    // the gap between the xterm canvas edge and the container is invisible.
+    const bgSolid = bgColor.slice(0, 7);
     const surface = paneEl.querySelector('.pane-surface') as HTMLElement | null;
     if (surface) {
-      if (isTransparent) {
-        // Use default surface background for transparent themes
-        surface.style.background = '';
-      } else {
-        // Use theme background color (strip alpha if present for opacity handling)
-        surface.style.background = bgColor.slice(0, 7);
-      }
+      surface.style.background = bgSolid;
+    }
+    const viewport = paneEl.querySelector('.xterm-viewport') as HTMLElement | null;
+    if (viewport) {
+      viewport.style.backgroundColor = bgSolid;
     }
 
     // Force xterm.js to re-render the entire buffer with the new theme
     terminal.refresh(0, terminal.rows);
+  }
+
+  function setAccent(color: string): void {
+    if (_accent === color) {
+      return;
+    }
+    _accent = color;
+    paneEl.style.setProperty('--pane-accent', color);
+    applyTerminalTheme();
+  }
+
+  function setTheme(themeId: string | null): void {
+    if (_themeId === themeId) {
+      return;
+    }
+    _themeId = themeId;
+    applyTerminalTheme();
   }
 
   function setAlerted(_alerted: boolean): void {
