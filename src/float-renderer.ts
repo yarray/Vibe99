@@ -131,9 +131,9 @@ function render(panes: FloatPaneInfo[]): void {
     if (!block) {
       block = document.createElement('div');
       block.className = 'float-block';
-      block.addEventListener('click', () => handleBlockClick(pane.id));
       containerEl.append(block);
     }
+    block.onclick = () => handleBlockClick(pane.id);
     block.style.backgroundColor = pane.accent;
     block.style.setProperty('--block-glow', pane.accent);
     block.classList.toggle('is-alerted', pane.alerted);
