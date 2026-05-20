@@ -40,6 +40,9 @@ pub struct ShellProfile {
     /// Arguments passed to the shell (e.g. ["-il"]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,
+    /// Optional per-profile terminal theme id.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub theme_id: String,
 }
 
 impl ShellProfile {
@@ -88,12 +91,19 @@ impl ShellProfile {
                     .collect()
             })
             .unwrap_or_default();
+        let theme_id = obj
+            .get("themeId")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .unwrap_or("")
+            .to_string();
 
         Some(Self {
             id: id.to_string(),
             name,
             command: command.to_string(),
             args,
+            theme_id,
         })
     }
 }
