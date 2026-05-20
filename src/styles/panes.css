@@ -80,8 +80,7 @@
 
 .pane-surface {
   position: absolute;
-  inset: 0 6px;
-  background: rgba(0, 0, 0, 0.08);
+  inset: 0;
 }
 
 .pane.is-focused {

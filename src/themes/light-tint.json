@@ -1,0 +1,36 @@
+{
+  "name": "Light",
+  "background": "#ffffff",
+  "foreground": "#333333",
+  "cursorColor": "#333333",
+  "selectionBackground": "#33333344",
+  "black": "#000000",
+  "red": "#cd3131",
+  "green": "#00bc00",
+  "yellow": "#949800",
+  "blue": "#0451a5",
+  "purple": "#bc05bc",
+  "cyan": "#0598bc",
+  "white": "#555555",
+  "brightBlack": "#666666",
+  "brightRed": "#cd3131",
+  "brightGreen": "#14ce14",
+  "brightYellow": "#b5ba00",
+  "brightBlue": "#0451a5",
+  "brightPurple": "#bc05bc",
+  "brightCyan": "#0598bc",
+  "brightWhite": "#a5a5a5",
+  "vibe99": {
+    "id": "light-tint",
+    "tags": ["tinted", "light"],
+    "cssTokens": {
+      "pane-opacity": "0.95",
+      "pane-bg-mask-opacity": "0.9",
+      "pane-width": "720px"
+    },
+    "animationTokens": {
+      "breathing-glow": "inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)",
+      "breathing-intense": "inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)"
+    }
+  }
+}

@@ -21,7 +21,8 @@ import { getDefaultFontFamily } from '../settings';
 import type { Bridge } from '../bridge';
 import type { Pane } from '../pane-state';
 import type { SettingsManager } from '../settings';
-import type { TerminalTheme } from '../domain/theme';
+import type { TerminalTheme, Theme } from '../domain/theme';
+import { getTheme, getDefaultTheme } from '../domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -158,6 +159,9 @@ export interface TerminalSession {
 
   /** Update the accent color (terminal theme + CSS variable). */
   setAccent(color: string): void;
+
+  /** Update the terminal theme. */
+  setTheme(themeId: string | null): void;
 
   /** Toggle the alert breathing state. */
   setAlerted(alerted: boolean): void;
@@ -321,6 +325,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   let _shellChangeTime: number | undefined;
   let _exited = false;
   let _exitOverlay: HTMLElement | null = null;
+  let _themeId: string | null = null;
 
   // ---------------------------------------------------------------------------
   // DOM construction
@@ -689,13 +694,52 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     });
   }
 
+  function applyTerminalTheme(): void {
+    const theme = _themeId ? getTheme(_themeId) : null;
+    const themeFn = theme ? ((accent: string) => theme.terminalTheme(accent)) : terminalTheme;
+    const newTheme = themeFn(_accent);
+
+    // Check if background is transparent (alpha channel is 00)
+    const bgColor = newTheme.background;
+    const isTransparent = bgColor.length === 9 && bgColor.slice(7) === '00';
+
+    // Update allowTransparency based on theme background
+    // When allowTransparency is true, xterm.js ignores the theme background color
+    // and renders the canvas transparently. For opaque themes, we need to set it to false.
+    terminal.options.allowTransparency = isTransparent;
+    terminal.options.theme = newTheme;
+
+    // Surface and viewport background: use theme color without alpha so
+    // the gap between the xterm canvas edge and the container is invisible.
+    const bgSolid = bgColor.slice(0, 7);
+    const surface = paneEl.querySelector('.pane-surface') as HTMLElement | null;
+    if (surface) {
+      surface.style.background = bgSolid;
+    }
+    const viewport = paneEl.querySelector('.xterm-viewport') as HTMLElement | null;
+    if (viewport) {
+      viewport.style.backgroundColor = bgSolid;
+    }
+
+    // Force xterm.js to re-render the entire buffer with the new theme
+    terminal.refresh(0, terminal.rows);
+  }
+
   function setAccent(color: string): void {
     if (_accent === color) {
       return;
     }
     _accent = color;
     paneEl.style.setProperty('--pane-accent', color);
-    terminal.options.theme = terminalTheme(color);
+    applyTerminalTheme();
+  }
+
+  function setTheme(themeId: string | null): void {
+    if (_themeId === themeId) {
+      return;
+    }
+    _themeId = themeId;
+    applyTerminalTheme();
   }
 
   function setAlerted(_alerted: boolean): void {
@@ -839,6 +883,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
 
     // Visual state
     setAccent,
+    setTheme,
     setAlerted,
 
     // DOM helpers

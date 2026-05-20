@@ -165,7 +165,7 @@
 
 .shell-profile-editor input:focus {
   border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.08);
   outline: none;
 }
 

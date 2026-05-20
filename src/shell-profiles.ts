@@ -12,7 +12,9 @@
 // xterm instances, or internal state.
 
 import { icon } from './icons';
+import { createCustomSelect, type CustomSelect } from './custom-select';
 import type { AppCommand, CommandResult } from './domain/commands';
+import { listThemes, type Theme } from './domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -24,6 +26,7 @@ export interface ShellProfile {
   name: string;
   command: string;
   args: string[];
+  themeId?: string;
 }
 
 /** Shape of the profile being edited in the modal. */
@@ -32,6 +35,7 @@ export interface EditingShellProfile {
   name: string;
   command: string;
   args: string;
+  themeId: string;
   isNew: boolean;
 }
 
@@ -258,6 +262,7 @@ export function createShellProfileManager({
         name: '',
         command: '',
         args: '',
+        themeId: '',
         isNew: true
       });
       state.setSelectedShellProfileId(null);
@@ -280,6 +285,7 @@ export function createShellProfileManager({
         name: firstProfile.name || '',
         command: firstProfile.command,
         args: formatArgs(firstProfile.args ?? []),
+        themeId: firstProfile.themeId || '',
         isNew: false
       });
     } else {
@@ -379,6 +385,7 @@ export function createShellProfileManager({
             name: profile.name || '',
             command: profile.command,
             args: formatArgs(profile.args ?? []),
+            themeId: profile.themeId || '',
             isNew: false
           });
           renderModalShellProfiles();
@@ -461,7 +468,7 @@ export function createShellProfileManager({
   }
 
   interface EditorField {
-    key: 'name' | 'id' | 'command' | 'args';
+    key: 'name' | 'id' | 'command' | 'args' | 'themeId';
     label: string;
     placeholder: string;
   }
@@ -476,32 +483,49 @@ export function createShellProfileManager({
       { key: 'id', label: 'ID', placeholder: 'e.g. zsh' },
       { key: 'command', label: 'Command', placeholder: '/bin/zsh' },
       { key: 'args', label: 'Arguments', placeholder: '-il' },
+      { key: 'themeId', label: 'Theme', placeholder: 'Default (use global theme)' },
     ];
 
-    const inputs: Record<string, HTMLInputElement> = {};
+    const themes = listThemes();
+    const themeSelectOptions = [
+      { value: '', label: 'Default (use global theme)' },
+      ...themes.map((t: Theme) => ({ value: t.id, label: t.name })),
+    ];
+
+    const inputs: Record<string, HTMLInputElement | HTMLSelectElement | CustomSelect> = {};
     for (const field of fields) {
       const label = document.createElement('label');
       label.textContent = field.label;
       label.setAttribute('for', `modal-shell-edit-${field.key}`);
 
-      const input = document.createElement('input');
-      input.id = `modal-shell-edit-${field.key}`;
-      input.type = 'text';
-      input.value = editingShellProfile[field.key] ?? '';
-      input.placeholder = field.placeholder;
-      input.dataset.field = field.key;
-      inputs[field.key] = input;
-
-      if (field.key === 'name' && editingShellProfile.isNew) {
-        input.addEventListener('input', () => {
-          const idInput = inputs.id;
-          if (input.value.trim()) {
-            idInput.value = input.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          }
+      if (field.key === 'themeId') {
+        const cs = createCustomSelect({
+          options: themeSelectOptions,
+          value: editingShellProfile.themeId ?? '',
+          placeholder: 'Default (use global theme)',
+          onChange: () => {},
         });
-      }
+        inputs[field.key] = cs;
+        editor.append(label, cs.el);
+      } else {
+        const input = document.createElement('input');
+        input.id = `modal-shell-edit-${field.key}`;
+        input.type = 'text';
+        input.value = editingShellProfile[field.key] ?? '';
+        input.placeholder = field.placeholder;
+        input.dataset.field = field.key;
+        inputs[field.key] = input;
 
-      editor.append(label, input);
+        if (field.key === 'name' && editingShellProfile.isNew) {
+          input.addEventListener('input', () => {
+            const idInput = inputs.id as HTMLInputElement;
+            if (input.value.trim()) {
+              idInput.value = input.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            }
+          });
+        }
+        editor.append(label, input);
+      }
     }
 
     const actions = document.createElement('div');
@@ -523,10 +547,11 @@ export function createShellProfileManager({
     save.textContent = 'Save';
     save.addEventListener('click', () => {
       const profile: ShellProfile = {
-        id: inputs.id.value.trim(),
-        name: inputs.name.value.trim(),
-        command: inputs.command.value.trim(),
-        args: splitArgs(inputs.args.value.trim()),
+        id: (inputs.id as HTMLInputElement).value.trim(),
+        name: (inputs.name as HTMLInputElement).value.trim(),
+        command: (inputs.command as HTMLInputElement).value.trim(),
+        args: splitArgs((inputs.args as HTMLInputElement).value.trim()),
+        themeId: (inputs.themeId as CustomSelect).value() || undefined,
       };
 
       if (!profile.id || !profile.command) {
@@ -546,6 +571,7 @@ export function createShellProfileManager({
           name: profile.name,
           command: profile.command,
           args: formatArgs(profile.args),
+          themeId: profile.themeId || '',
           isNew: false
         });
         renderModalShellProfiles();
@@ -572,6 +598,7 @@ export function createShellProfileManager({
       name: `${profile.name || profile.id} (副本)`,
       command: profile.command,
       args: profile.args ? [...profile.args] : [],
+      themeId: profile.themeId,
     };
 
     bridge.addShellProfile(clonedProfile).then((config) => {
@@ -586,6 +613,7 @@ export function createShellProfileManager({
         name: clonedProfile.name,
         command: clonedProfile.command,
         args: formatArgs(clonedProfile.args ?? []),
+        themeId: clonedProfile.themeId || '',
         isNew: true // Treat as new so user can edit the ID
       });
       renderModalShellProfiles();

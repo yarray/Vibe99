@@ -228,6 +228,7 @@ export function createPaneRenderer({
       session.root.style.height = `${stageHeight}px`;
 
       session.setAccent(accentColor);
+      session.setTheme(pane.themeId);
 
       if (refit || session.needsFit()) {
         session.fit({ force: true });

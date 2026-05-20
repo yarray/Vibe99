@@ -17,6 +17,7 @@ import type { Pane } from './pane-state';
 import type { Bridge, ClipboardSnapshot, Platform } from './bridge';
 import type { ShellProfile } from './shell-profiles';
 import type { AppCommand, CommandResult } from './domain/commands';
+import { listThemes, type Theme } from './domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -337,8 +338,18 @@ function showTerminalContextMenu(
       isDefault: p.id === defaultShellProfileId,
     }));
 
+    // Build theme submenu
+    const themes = listThemes();
     const panes = state.getPanels();
     const pane = panes[state.getPaneIndex(paneId)];
+    const currentThemeId = pane?.themeId ?? null;
+
+    const themeChildren: MenuChildItem[] = themes.map((t: Theme) => ({
+      label: t.name,
+      action: `pane-set-theme:${t.id}`,
+      isDefault: !currentThemeId && t.id === 'default-dark' || currentThemeId === t.id,
+    }));
+
     const breathingOn = pane && pane.breathingMonitor !== false;
 
     // Query terminal state via dispatch
@@ -360,6 +371,13 @@ function showTerminalContextMenu(
       },
       { label: 'Select All', action: 'terminal-select-all', shortcut: getSelectAllShortcut(bridge.platform) },
     ];
+
+    if (themeChildren.length > 0) {
+      items.push(
+        { type: 'separator' },
+        { label: 'Change Theme', children: themeChildren },
+      );
+    }
 
     if (shellChildren.length > 0) {
       items.push(
@@ -391,12 +409,30 @@ function showTabContextMenu(
   const pane = panes[paneIndex];
   const hasCustomColor = pane && pane.customColor !== undefined;
 
+  // Build theme submenu
+  const themes = listThemes();
+  const currentThemeId = pane?.themeId ?? null;
+
+  const themeChildren: MenuChildItem[] = themes.map((t: Theme) => ({
+    label: t.name,
+    action: `pane-set-theme:${t.id}`,
+    isDefault: !currentThemeId && t.id === 'default-dark' || currentThemeId === t.id,
+  }));
+
   const items: MenuItem[] = [
     { label: 'Change Color...', action: 'tab-change-color' },
+  ];
+
+  if (themeChildren.length > 0) {
+    items.push({ label: 'Change Theme', children: themeChildren });
+  }
+
+  items.push(
     { type: 'separator' },
     { label: 'Rename Tab', action: 'tab-rename' },
     { label: 'Close Tab', action: 'tab-close', disabled: panes.length <= 1 },
-  ];
+  );
+
   showContextMenu(items, event.clientX, event.clientY, paneId, state, bridge, handleMenuAction);
 }
 
@@ -663,6 +699,12 @@ function handleMenuAction(
 
   if (action === 'pane-toggle-breathing') {
     dispatch({ type: 'pane.toggleActivityAlert', paneId });
+    return;
+  }
+
+  if (action.startsWith('pane-set-theme:')) {
+    const themeId = action.slice('pane-set-theme:'.length) || null;
+    dispatch({ type: 'pane.setTheme', paneId, themeId });
     return;
   }
 

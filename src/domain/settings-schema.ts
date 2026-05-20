@@ -30,10 +30,7 @@ export type BreathingIntensity = z.infer<typeof breathingIntensitySchema>;
  * Font size: 10-24 pixels, integer
  */
 export const fontSizeSchema = z
-  .number({
-    invalid_type_error: 'Font size must be a number',
-    required_error: 'Font size is required',
-  })
+  .number({ error: 'Font size must be a number' })
   .int({ message: 'Font size must be an integer' })
   .min(10, { message: 'Font size must be at least 10' })
   .max(24, { message: 'Font size must be at most 24' })
@@ -43,9 +40,7 @@ export const fontSizeSchema = z
  * Font family: non-empty string, trimmed
  */
 export const fontFamilySchema = z
-  .string({
-    invalid_type_error: 'Font family must be a string',
-  })
+  .string({ error: 'Font family must be a string' })
   .trim()
   .transform((val) => val || '') // Empty means use platform default
   .default('');
@@ -54,9 +49,7 @@ export const fontFamilySchema = z
  * Pane opacity: 0.55-1.0, 2 decimal places
  */
 export const paneOpacitySchema = z
-  .number({
-    invalid_type_error: 'Pane opacity must be a number',
-  })
+  .number({ error: 'Pane opacity must be a number' })
   .min(0.55, { message: 'Pane opacity must be at least 0.55' })
   .max(1.0, { message: 'Pane opacity must be at most 1.0' })
   .transform((val) => Math.round(val * 100) / 100) // 2 decimal places
@@ -66,9 +59,7 @@ export const paneOpacitySchema = z
  * Pane mask opacity: 0.0-1.0, 2 decimal places
  */
 export const paneMaskOpacitySchema = z
-  .number({
-    invalid_type_error: 'Pane mask opacity must be a number',
-  })
+  .number({ error: 'Pane mask opacity must be a number' })
   .min(0.0, { message: 'Pane mask opacity must be at least 0.0' })
   .max(1.0, { message: 'Pane mask opacity must be at most 1.0' })
   .transform((val) => Math.round(val * 100) / 100) // 2 decimal places
@@ -78,9 +69,7 @@ export const paneMaskOpacitySchema = z
  * Pane width: 520-2000 pixels, multiples of 10
  */
 export const paneWidthSchema = z
-  .number({
-    invalid_type_error: 'Pane width must be a number',
-  })
+  .number({ error: 'Pane width must be a number' })
   .int({ message: 'Pane width must be an integer' })
   .min(520, { message: 'Pane width must be at least 520' })
   .max(2000, { message: 'Pane width must be at most 2000' })
@@ -91,9 +80,7 @@ export const paneWidthSchema = z
  * WebGL enabled: boolean
  */
 export const webglEnabledSchema = z
-  .boolean({
-    invalid_type_error: 'WebGL enabled must be a boolean',
-  })
+  .boolean({ error: 'WebGL enabled must be a boolean' })
   .default(true);
 
 /**
@@ -107,9 +94,7 @@ export const webglEnabledSchema = z
  * Out-of-range but positive values are clamped by the transform.
  */
 export const activityAlertDebounceMsSchema = z
-  .number({
-    invalid_type_error: 'Activity alert debounce must be a number',
-  })
+  .number({ error: 'Activity alert debounce must be a number' })
   .int({ message: 'Activity alert debounce must be an integer' })
   .positive({ message: 'Activity alert debounce must be positive' })
   .transform((val) => Math.max(3000, Math.min(300000, val)))
@@ -193,7 +178,7 @@ export function validateAndSanitizeSettings(
 
     if (!fieldResult.success) {
       // Get the first error message
-      const errorMessage = fieldResult.error.errors?.[0]?.message ?? 'Invalid value';
+      const errorMessage = fieldResult.error.issues?.[0]?.message ?? 'Invalid value';
 
       issues.push({
         field: key,
@@ -261,7 +246,7 @@ export function validateField(
   const defaults = appSettingsSchema.parse({});
   const defaultValue = (defaults as Record<string, unknown>)[fieldName];
 
-  const errorMessage = result.error.errors?.[0]?.message ?? 'Invalid value';
+  const errorMessage = result.error.issues?.[0]?.message ?? 'Invalid value';
 
   return {
     field: fieldName,
