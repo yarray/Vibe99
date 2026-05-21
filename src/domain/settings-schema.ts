@@ -23,6 +23,76 @@ export const breathingIntensitySchema = z.enum(['none', 'mild', 'intense']);
 export type BreathingIntensity = z.infer<typeof breathingIntensitySchema>;
 
 // ---------------------------------------------------------------------------
+// Layout Hotkey UI Helper Type
+// ---------------------------------------------------------------------------
+
+/**
+ * Layout hotkey UI representation for keyboard event parsing.
+ *
+ * The persisted format is a simple shortcut string (e.g. "F1", "Ctrl+Shift+T").
+ * This object type is only used by the recording UI to capture modifier+key combos
+ * before converting to string format for storage.
+ */
+export interface LayoutHotkey {
+  key: string;
+  modifiers: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Layout Hotkeys Schema (persisted as Record<layoutId, shortcutString>)
+// ---------------------------------------------------------------------------
+
+/**
+ * Layout hotkeys: Record<layoutId, hotkeyString>
+ * e.g. { "layout-1": "F1", "layout-2": "CommandOrControl+Shift+T" }
+ */
+export const layoutHotkeysSchema = z
+  .record(z.string(), z.string())
+  .default({});
+
+export type LayoutHotkeys = z.infer<typeof layoutHotkeysSchema>;
+
+// ---------------------------------------------------------------------------
+// Quake Mode Schema (per-layout)
+// ---------------------------------------------------------------------------
+
+/**
+ * Quake position: top or bottom of screen
+ */
+export const quakePositionSchema = z.enum(['top', 'bottom']);
+export type QuakePosition = z.infer<typeof quakePositionSchema>;
+
+/**
+ * Per-layout quake configuration.
+ *
+ * Presence of a layoutId key in `quakeLayouts` means quake is enabled for
+ * that layout — no separate `enabled` boolean needed.
+ */
+export const quakeLayoutConfigSchema = z.object({
+  animationDuration: z
+    .number({ error: 'Animation duration must be a number' })
+    .int({ message: 'Animation duration must be an integer' })
+    .min(100, { message: 'Animation duration must be at least 100ms' })
+    .max(500, { message: 'Animation duration must be at most 500ms' })
+    .default(200),
+  position: quakePositionSchema.default('top'),
+  height: z
+    .number({ error: 'Height must be a number' })
+    .int({ message: 'Height must be an integer' })
+    .min(30, { message: 'Height must be at least 30%' })
+    .max(100, { message: 'Height must be at most 100%' })
+    .default(60),
+});
+
+export type QuakeLayoutConfig = z.infer<typeof quakeLayoutConfigSchema>;
+
+export const quakeLayoutsSchema = z
+  .record(z.string(), quakeLayoutConfigSchema)
+  .default({});
+
+export type QuakeLayouts = z.infer<typeof quakeLayoutsSchema>;
+
+// ---------------------------------------------------------------------------
 // Individual Field Schemas
 // ---------------------------------------------------------------------------
 
@@ -119,6 +189,8 @@ export const appSettingsSchema = z.object({
   webglEnabled: webglEnabledSchema,
   breathingIntensity: breathingIntensitySchema.default('mild'),
   activityAlertDebounceMs: activityAlertDebounceMsSchema,
+  layoutHotkeys: layoutHotkeysSchema,
+  quakeLayouts: quakeLayoutsSchema,
 });
 
 /**
@@ -244,7 +316,7 @@ export function validateField(
 
   // Get default by parsing an empty object
   const defaults = appSettingsSchema.parse({});
-  const defaultValue = (defaults as Record<string, unknown>)[fieldName];
+  const defaultValue = (defaults as Record<string, unknown>)[fieldName as string];
 
   const errorMessage = result.error.issues?.[0]?.message ?? 'Invalid value';
 

@@ -79,6 +79,8 @@ type RawSettingsFromStorage = {
     breathingIntensity?: unknown;
     activityAlertDebounceMs?: unknown;
     shortcuts?: Record<string, unknown>;
+    layoutHotkeys?: unknown;
+    quakeLayouts?: unknown;
   }>;
 };
 

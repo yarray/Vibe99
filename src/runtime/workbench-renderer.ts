@@ -48,6 +48,7 @@ import { createDispatcher } from '../input/dispatcher';
 
 import { renderHintBar } from '../hint-bar';
 import { createSettingsManager } from '../settings';
+import { createHotkeyHandler } from '../hotkey-handler';
 import { createTabBar } from '../tab-bar';
 import type { TabBarLocalState } from '../tab-bar';
 import type { ShellProfile, EditingShellProfile } from '../shell-profiles';
@@ -174,17 +175,11 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     modalStack,
     reportError,
     layoutsButtonEl,
-    onManageLayouts: () => layoutModal.openLayoutsModal(),
+    onManageLayouts: () => layoutModal!.openLayoutsModal(),
   });
   (window as any).layoutManager = layoutManager;
 
-  const layoutModal = createLayoutModal({
-    bridge,
-    paneState,
-    modalStack,
-    reportError,
-    layoutManager,
-  });
+  let layoutModal: ReturnType<typeof createLayoutModal> | null = null;
 
   const hookManager = createHookManager({
     bridge: bridge as any,
@@ -262,6 +257,21 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     onToggleFloatWindow: () => floatWindowManager.toggle(),
     getFloatWindowOpen: () => floatWindowManager.isOpen(),
     requestAppRestart: () => window.location.reload(),
+  });
+
+  layoutModal = createLayoutModal({
+    bridge,
+    paneState,
+    modalStack,
+    reportError,
+    layoutManager,
+    settingsManager,
+  });
+
+  const hotkeyHandler = createHotkeyHandler({
+    bridge,
+    reportError,
+    isMainWindow: () => windowContext.kind === 'main',
   });
 
   // -- Inline helpers ---------------------------------------------------------
@@ -472,6 +482,14 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     if (autoSaveEnabled) {
       return originalScheduleWindowLayoutSave(delay);
     }
+  };
+
+  // Sync hotkeys when settings change
+  const originalScheduleSettingsSave = settingsManager.scheduleSettingsSave.bind(settingsManager);
+  settingsManager.scheduleSettingsSave = function(): void {
+    originalScheduleSettingsSave();
+    const next = settingsManager.settings.layoutHotkeys ?? {};
+    void hotkeyHandler.sync(next).catch(reportError);
   };
 
   // Expose internals for E2E testing
@@ -745,6 +763,8 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     shellProfileManager?.loadShellProfiles();
     hookManager.loadHooks();
 
+    await hotkeyHandler.init(settingsManager.settings.layoutHotkeys ?? {});
+
     await layoutManager.refreshLayouts();
     let layouts = layoutManager.getLayouts();
     let defaultLayoutId = layoutManager.getDefaultLayoutId();
@@ -791,6 +811,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   function dispose(): void {
     layoutManager.flushWindowLayoutSave();
     settingsManager.flushSettingsSave();
+    hotkeyHandler.dispose();
     clearLayoutWindowBinding(layoutManager.getWindowLayoutId() ?? undefined, bridge.currentWindowLabel);
     removeTerminalDataListener();
     removeTerminalExitListener();

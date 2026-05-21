@@ -171,10 +171,12 @@ interface TauriWindow {
   label: string;
   unminimize: () => Promise<void>;
   show: () => Promise<void>;
+  hide: () => Promise<void>;
   setFocus: () => Promise<void>;
   close: () => Promise<void>;
   isFullscreen: () => Promise<boolean>;
   setFullscreen: (fullscreen: boolean) => Promise<void>;
+  isVisible: () => Promise<boolean>;
   outerPosition: () => Promise<{ x: number; y: number }>;
   innerSize: () => Promise<{ width: number; height: number }>;
 }
@@ -251,6 +253,7 @@ export interface LayoutsApi {
   rename: (layoutId: string, newName: string) => Promise<void>;
   openWindow: (layoutId: string) => Promise<void>;
   openInNewWindow: (layoutId: string) => Promise<void>;
+  toggleWindow: (layoutId: string) => Promise<void>;
   isFullscreen: (() => Promise<boolean>) | undefined;
   setFullscreen: ((fullscreen: boolean) => Promise<void>) | undefined;
   setAsDefault: (layoutId: string) => Promise<LayoutsListResult>;
@@ -263,6 +266,25 @@ export interface HookApi {
   update: (hookId: string, updates: Partial<HookData>) => Promise<HooksListResult>;
   execute: (command: string) => Promise<void>;
   shellQuote: (value: string) => Promise<string>;
+}
+
+/** Hotkey binding: shortcut string → layoutId */
+export interface HotkeyBinding {
+  shortcut: string;
+  layoutId: string;
+}
+
+export interface HotkeyApi {
+  register: (shortcut: string, layoutId: string) => Promise<void>;
+  unregister: (shortcut: string) => Promise<void>;
+  list: () => Promise<HotkeyBinding[]>;
+  registerAll: (bindings: HotkeyBinding[]) => Promise<void>;
+}
+
+/** Payload for hotkey:pressed event */
+export interface HotkeyPressedEvent {
+  shortcut: string;
+  layoutId: string;
 }
 
 /** Event listener unsubscribes with void return */
@@ -289,10 +311,12 @@ export interface Bridge {
   window: WindowApi;
   layouts: LayoutsApi;
   hooks: HookApi;
+  hotkey: HotkeyApi;
 
   // Event listeners
   onMenuAction: (handler: (event: MenuActionEvent) => void) => UnsubscribeFn;
   onLayoutFocusNotice: ((handler: () => void) => UnsubscribeFn) | undefined;
+  onHotkeyPressed: (handler: (event: HotkeyPressedEvent) => void) => UnsubscribeFn;
 
   // Lifecycle
   cwdReady: Promise<void>;
@@ -335,6 +359,7 @@ export interface Bridge {
   renameLayout: LayoutsApi['rename'];
   openLayoutWindow: LayoutsApi['openWindow'];
   openLayoutInNewWindow: LayoutsApi['openInNewWindow'];
+  toggleLayoutWindow: LayoutsApi['toggleWindow'];
   isWindowFullscreen: LayoutsApi['isFullscreen'];
   setWindowFullscreen: LayoutsApi['setFullscreen'];
   setLayoutAsDefault: LayoutsApi['setAsDefault'];
@@ -344,6 +369,11 @@ export interface Bridge {
   removeHook: HookApi['remove'];
   updateHook: HookApi['update'];
   executeHook: HookApi['execute'];
+
+  registerHotkey: HotkeyApi['register'];
+  unregisterHotkey: HotkeyApi['unregister'];
+  listHotkeys: HotkeyApi['list'];
+  registerAllHotkeys: HotkeyApi['registerAll'];
 }
 
 // ============================================================================
@@ -447,6 +477,7 @@ type FlatAliases = {
   renameLayout: unknown;
   openLayoutWindow: unknown;
   openLayoutInNewWindow: unknown;
+  toggleLayoutWindow: unknown;
   isWindowFullscreen: unknown;
   setWindowFullscreen: unknown;
   setLayoutAsDefault: unknown;
@@ -455,6 +486,10 @@ type FlatAliases = {
   removeHook: unknown;
   updateHook: unknown;
   executeHook: unknown;
+  registerHotkey: unknown;
+  unregisterHotkey: unknown;
+  listHotkeys: unknown;
+  registerAllHotkeys: unknown;
 };
 
 // ============================================================================
@@ -513,6 +548,7 @@ function createUnavailableBridge(): Bridge {
       rename: fail,
       openWindow: fail,
       openInNewWindow: fail,
+      toggleWindow: fail,
       isFullscreen: undefined,
       setFullscreen: undefined,
       setAsDefault: fail,
@@ -525,8 +561,15 @@ function createUnavailableBridge(): Bridge {
       execute: () => Promise.resolve(),
       shellQuote: (v: string) => Promise.resolve(v),
     },
+    hotkey: {
+      register: () => Promise.resolve(),
+      unregister: () => Promise.resolve(),
+      list: () => Promise.resolve([]),
+      registerAll: () => Promise.resolve(),
+    },
     onMenuAction: () => () => {},
     onLayoutFocusNotice: undefined,
+    onHotkeyPressed: () => () => {},
     cwdReady: Promise.resolve(),
 
     // Flat aliases (all point to the same grouped methods)
@@ -559,6 +602,7 @@ function createUnavailableBridge(): Bridge {
     renameLayout: fail,
     openLayoutWindow: fail,
     openLayoutInNewWindow: fail,
+    toggleLayoutWindow: fail,
     isWindowFullscreen: undefined,
     setWindowFullscreen: undefined,
     setLayoutAsDefault: fail,
@@ -567,6 +611,10 @@ function createUnavailableBridge(): Bridge {
     removeHook: () => Promise.resolve({ hooks: [] }),
     updateHook: () => Promise.resolve({ hooks: [] }),
     executeHook: () => Promise.resolve(),
+    registerHotkey: () => Promise.resolve(),
+    unregisterHotkey: () => Promise.resolve(),
+    listHotkeys: () => Promise.resolve([]),
+    registerAllHotkeys: () => Promise.resolve(),
     getWindowGeometry: () => Promise.resolve(null),
   };
 }
@@ -705,6 +753,31 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     }
   }
 
+  async function toggleLayoutWindow(layoutId: string): Promise<void> {
+    if (layoutId === windowLayoutId) {
+      return;
+    }
+
+    const boundLabel = getBoundLayoutWindowLabel(layoutId);
+    const label = boundLabel || getLayoutWindowLabel(layoutId);
+    const existing = await WebviewWindow.getByLabel(label);
+
+    if (existing) {
+      try {
+        const visible = await existing.isVisible();
+        if (visible) {
+          await existing.hide();
+          return;
+        }
+      } catch {
+        // Fall through to show
+      }
+      return focusWindow(existing);
+    }
+
+    return openLayoutWindow(layoutId);
+  }
+
   return {
     platform: getRuntimePlatform(),
     currentWindowLabel: currentWindow.label,
@@ -776,6 +849,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       rename: (layoutId: string, newName: string) => invoke('layout_rename', { layoutId, newName }),
       openWindow: (layoutId: string) => openLayoutWindow(layoutId),
       openInNewWindow: (layoutId: string) => openLayoutWindow(layoutId),
+      toggleWindow: (layoutId: string) => toggleLayoutWindow(layoutId),
       isFullscreen: () => getCurrentWindow().isFullscreen(),
       setFullscreen: (fullscreen: boolean) => getCurrentWindow().setFullscreen(fullscreen),
       setAsDefault: (layoutId: string) => invoke('layout_set_default', { layoutId }),
@@ -789,10 +863,21 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       execute: (command: string) => invoke('hook_execute', { command }),
       shellQuote: (value: string) => invoke<string>('shell_quote', { value }),
     },
+    hotkey: {
+      register: (shortcut: string, layoutId: string) =>
+        invoke('hotkey_register', { shortcut, layoutId }),
+      unregister: (shortcut: string) =>
+        invoke('hotkey_unregister', { shortcut }),
+      list: () => invoke<HotkeyBinding[]>('hotkey_list'),
+      registerAll: (bindings: HotkeyBinding[]) =>
+        invoke('hotkey_register_all', { bindings }),
+    },
     onMenuAction: (handler: (event: MenuActionEvent) => void) =>
       onTauriEvent<MenuActionEvent>('vibe99:menu-action', handler),
     onLayoutFocusNotice: (handler: () => void) =>
       onTauriEvent<void>(LAYOUT_FOCUS_NOTICE_EVENT, handler),
+    onHotkeyPressed: (handler: (event: HotkeyPressedEvent) => void) =>
+      onTauriEvent<HotkeyPressedEvent>('hotkey:pressed', handler),
     cwdReady: _cwdReady,
     getWindowGeometry,
   };
@@ -859,6 +944,7 @@ export function createBridge(
       renameLayout: partial.layouts.rename,
       openLayoutWindow: partial.layouts.openWindow,
       openLayoutInNewWindow: partial.layouts.openInNewWindow,
+      toggleLayoutWindow: partial.layouts.toggleWindow,
       isWindowFullscreen: partial.layouts.isFullscreen,
       setWindowFullscreen: partial.layouts.setFullscreen,
       setLayoutAsDefault: partial.layouts.setAsDefault,
@@ -867,6 +953,10 @@ export function createBridge(
       removeHook: partial.hooks.remove,
       updateHook: partial.hooks.update,
       executeHook: partial.hooks.execute,
+      registerHotkey: partial.hotkey.register,
+      unregisterHotkey: partial.hotkey.unregister,
+      listHotkeys: partial.hotkey.list,
+      registerAllHotkeys: partial.hotkey.registerAll,
     };
   } else if (tauriOrFallback && typeof tauriOrFallback === 'object') {
     // Assume it's a pre-configured fallback bridge (e.g., from window.vibe99)

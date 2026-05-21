@@ -1,0 +1,1 @@
+Move Global Hotkey and Quake Mode settings from standalone settings panel into Layout Editor inline fields. Quake mode is now per-layout (stored as `quakeLayouts` Record keyed by layout ID) instead of a global toggle. The standalone Layout Hotkeys modal is replaced by inline hotkey recording in each layout's editor panel.
