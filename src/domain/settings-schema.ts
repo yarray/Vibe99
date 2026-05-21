@@ -53,7 +53,7 @@ export const layoutHotkeysSchema = z
 export type LayoutHotkeys = z.infer<typeof layoutHotkeysSchema>;
 
 // ---------------------------------------------------------------------------
-// Quake Mode Schema
+// Quake Mode Schema (per-layout)
 // ---------------------------------------------------------------------------
 
 /**
@@ -63,10 +63,12 @@ export const quakeModePositionSchema = z.enum(['top', 'bottom']);
 export type QuakeModePosition = z.infer<typeof quakeModePositionSchema>;
 
 /**
- * Quake mode settings
+ * Per-layout quake configuration.
+ *
+ * Presence of a layoutId key in `quakeLayouts` means quake is enabled for
+ * that layout — no separate `enabled` boolean needed.
  */
-export const quakeModeSchema = z.object({
-  enabled: z.boolean().default(false),
+export const quakeLayoutConfigSchema = z.object({
   animationDuration: z
     .number({ error: 'Animation duration must be a number' })
     .int({ message: 'Animation duration must be an integer' })
@@ -82,7 +84,25 @@ export const quakeModeSchema = z.object({
     .default(60),
 });
 
-export type QuakeMode = z.infer<typeof quakeModeSchema>;
+export type QuakeLayoutConfig = z.infer<typeof quakeLayoutConfigSchema>;
+
+export const quakeLayoutsSchema = z
+  .record(z.string(), quakeLayoutConfigSchema)
+  .default({});
+
+export type QuakeLayouts = z.infer<typeof quakeLayoutsSchema>;
+
+// ---------------------------------------------------------------------------
+// Legacy QuakeMode type (for migration)
+// ---------------------------------------------------------------------------
+
+/** @deprecated Legacy global quake mode — kept for migration only */
+export interface LegacyQuakeMode {
+  enabled?: boolean;
+  animationDuration?: number;
+  position?: QuakeModePosition;
+  height?: number;
+}
 
 // ---------------------------------------------------------------------------
 // Individual Field Schemas
@@ -182,7 +202,7 @@ export const appSettingsSchema = z.object({
   breathingIntensity: breathingIntensitySchema.default('mild'),
   activityAlertDebounceMs: activityAlertDebounceMsSchema,
   layoutHotkeys: layoutHotkeysSchema,
-  quakeMode: quakeModeSchema,
+  quakeLayouts: quakeLayoutsSchema,
 });
 
 /**
@@ -416,6 +436,7 @@ export interface LegacySettingsInput {
     shortcuts?: Record<string, unknown>;
     layoutHotkeys?: Record<string, unknown>;
     quakeMode?: unknown;
+    quakeLayouts?: unknown;
   }>;
 }
 
@@ -465,9 +486,20 @@ export function migrateLegacySettings(raw: LegacySettingsInput): Partial<AppSett
     result.layoutHotkeys = ui.layoutHotkeys as LayoutHotkeys;
   }
 
-  // Copy quake mode settings (if present and valid)
+  // Migrate legacy global quakeMode → per-layout quakeLayouts
   if (ui.quakeMode !== undefined && typeof ui.quakeMode === 'object' && ui.quakeMode !== null) {
-    result.quakeMode = ui.quakeMode as QuakeMode;
+    const legacy = ui.quakeMode as LegacyQuakeMode;
+    if (legacy.enabled) {
+      result.quakeLayouts = {
+        default: {
+          animationDuration: legacy.animationDuration ?? 200,
+          position: legacy.position ?? 'top',
+          height: legacy.height ?? 60,
+        },
+      };
+    }
+  } else if (ui.quakeLayouts !== undefined && typeof ui.quakeLayouts === 'object' && ui.quakeLayouts !== null) {
+    result.quakeLayouts = ui.quakeLayouts as QuakeLayouts;
   }
 
   return result;

@@ -40,7 +40,6 @@ import type { Workbench } from './workbench.js';
 
 import * as ShortcutsRegistry from '../shortcuts-registry';
 import * as ShortcutsUI from '../shortcuts-ui';
-import * as LayoutHotkeysUI from '../layout-hotkeys-ui';
 import * as ColorsRegistry from '../colors-registry';
 import { createPaneState } from '../pane-state';
 import { setIcon } from '../icons';
@@ -73,7 +72,6 @@ export interface WorkbenchRendererDeps {
   hooksSettingsBtn: HTMLElement;
   layoutsSettingsBtn: HTMLElement;
   keyboardShortcutsSettingsBtn: HTMLElement;
-  layoutHotkeysSettingsBtn: HTMLElement;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +98,6 @@ export interface WorkbenchRenderer {
   onShellProfilesSettingsClick: () => void;
   onHooksSettingsClick: () => void;
   onKeyboardShortcutsSettingsClick: () => void;
-  onLayoutHotkeysSettingsClick: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +119,6 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     hooksSettingsBtn,
     layoutsSettingsBtn,
     keyboardShortcutsSettingsBtn,
-    layoutHotkeysSettingsBtn,
   } = deps;
 
   // -- Mutable bootstrap state ------------------------------------------------
@@ -179,17 +175,11 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     modalStack,
     reportError,
     layoutsButtonEl,
-    onManageLayouts: () => layoutModal.openLayoutsModal(),
+    onManageLayouts: () => layoutModal!.openLayoutsModal(),
   });
   (window as any).layoutManager = layoutManager;
 
-  const layoutModal = createLayoutModal({
-    bridge,
-    paneState,
-    modalStack,
-    reportError,
-    layoutManager,
-  });
+  let layoutModal: ReturnType<typeof createLayoutModal> | null = null;
 
   const hookManager = createHookManager({
     bridge: bridge as any,
@@ -267,6 +257,15 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     onToggleFloatWindow: () => floatWindowManager.toggle(),
     getFloatWindowOpen: () => floatWindowManager.isOpen(),
     requestAppRestart: () => window.location.reload(),
+  });
+
+  layoutModal = createLayoutModal({
+    bridge,
+    paneState,
+    modalStack,
+    reportError,
+    layoutManager,
+    settingsManager,
   });
 
   const hotkeyHandler = createHotkeyHandler({
@@ -703,22 +702,6 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
   }
 
-  function openLayoutHotkeysModal(): void {
-    LayoutHotkeysUI.openLayoutHotkeysModal(bridge, {
-      getLayouts: () => layoutManager.getLayouts(),
-      getLayoutHotkeys: () => settingsManager.settings.layoutHotkeys,
-      setLayoutHotkey: (layoutId: string, shortcut: string | null) => {
-        if (shortcut === null) {
-          delete settingsManager.settings.layoutHotkeys[layoutId];
-        } else {
-          settingsManager.settings.layoutHotkeys[layoutId] = shortcut;
-        }
-        settingsManager.scheduleSettingsSave();
-      },
-      scheduleSettingsSave: () => settingsManager.scheduleSettingsSave(),
-    });
-  }
-
   // -- Keyboard dispatcher ----------------------------------------------------
 
   const keyboardActions = createActions({
@@ -905,9 +888,6 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     },
     onKeyboardShortcutsSettingsClick: () => {
       openShortcutsModal();
-    },
-    onLayoutHotkeysSettingsClick: () => {
-      openLayoutHotkeysModal();
     },
   };
 }

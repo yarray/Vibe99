@@ -3,6 +3,8 @@ import type { Bridge, LayoutData, LayoutsListResult } from './bridge';
 import type { PaneState } from './pane-state';
 import type { ModalStack } from './modal-stack';
 import type { LayoutManager } from './layout-manager';
+import type { SettingsManager } from './settings';
+import type { LayoutHotkey, QuakeModePosition, QuakeLayoutConfig } from './domain/settings-schema';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -15,6 +17,7 @@ export interface LayoutModalDeps {
   modalStack: ModalStack;
   reportError: (error: unknown) => void;
   layoutManager: LayoutManager;
+  settingsManager: SettingsManager;
 }
 
 /** The public API surface returned by createLayoutModal. */
@@ -44,6 +47,7 @@ export function createLayoutModal({
   modalStack,
   reportError,
   layoutManager,
+  settingsManager,
 }: LayoutModalDeps): LayoutModal {
   let layoutModalPollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -423,6 +427,183 @@ export function createLayoutModal({
         panesList.appendChild(paneItem);
       }
       info.appendChild(panesList);
+
+      // -- Hotkey --
+      const hotkeySection = document.createElement('div');
+      hotkeySection.className = 'layout-section';
+
+      const hotkeyLabel = document.createElement('div');
+      hotkeyLabel.className = 'layout-section-title';
+      hotkeyLabel.textContent = 'Global Hotkey';
+      hotkeySection.appendChild(hotkeyLabel);
+
+      const hotkeyRow = document.createElement('div');
+      hotkeyRow.className = 'layout-hotkey-row';
+
+      const currentShortcut = settingsManager.settings.layoutHotkeys[selected.id] ?? null;
+
+      if (currentShortcut) {
+        const keysDisplay = document.createElement('div');
+        keysDisplay.className = 'shortcut-keys layout-hotkey-keys';
+        keysDisplay.textContent = formatShortcutForDisplay(currentShortcut, bridge.platform);
+        keysDisplay.addEventListener('click', () => {
+          startInlineHotkeyRecording(selected.id, hotkeyRow, () => renderModalLayouts(overlay), settingsManager);
+        });
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'shortcut-edit-btn';
+        clearBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        clearBtn.title = 'Clear hotkey';
+        clearBtn.addEventListener('click', () => {
+          delete settingsManager.settings.layoutHotkeys[selected.id];
+          settingsManager.scheduleSettingsSave();
+          renderModalLayouts(overlay);
+        });
+
+        hotkeyRow.append(keysDisplay, clearBtn);
+      } else {
+        const assignBtn = document.createElement('button');
+        assignBtn.type = 'button';
+        assignBtn.className = 'settings-btn layout-hotkey-assign-btn';
+        assignBtn.textContent = 'Assign Hotkey';
+        assignBtn.addEventListener('click', () => {
+          startInlineHotkeyRecording(selected.id, hotkeyRow, () => renderModalLayouts(overlay), settingsManager);
+        });
+        hotkeyRow.appendChild(assignBtn);
+      }
+      hotkeySection.appendChild(hotkeyRow);
+      info.appendChild(hotkeySection);
+
+      // -- Quake --
+      const quakeSection = document.createElement('div');
+      quakeSection.className = 'layout-section';
+
+      const quakeConfig: QuakeLayoutConfig | null = settingsManager.settings.quakeLayouts[selected.id] ?? null;
+
+      const saveQuakeConfig = (layoutId: string, config: QuakeLayoutConfig) => {
+        settingsManager.settings.quakeLayouts[layoutId] = { ...config };
+        settingsManager.scheduleSettingsSave();
+      };
+
+      const quakeToggleRow = document.createElement('div');
+      quakeToggleRow.className = 'settings-row settings-clickable-row layout-quake-toggle';
+      quakeToggleRow.setAttribute('role', 'button');
+      quakeToggleRow.setAttribute('tabindex', '0');
+      const quakeToggleLabel = document.createElement('span');
+      quakeToggleLabel.textContent = 'Quake Mode';
+      const quakeDot = document.createElement('span');
+      quakeDot.className = 'settings-toggle-dot';
+      if (quakeConfig) quakeDot.classList.add('is-active');
+      quakeToggleRow.append(quakeToggleLabel, quakeDot);
+      quakeSection.appendChild(quakeToggleRow);
+
+      const quakeDetails = document.createElement('div');
+      quakeDetails.className = 'layout-quake-details';
+      quakeDetails.style.display = quakeConfig ? '' : 'none';
+
+      const currentQuake = quakeConfig ?? { animationDuration: 200, position: 'top' as QuakeModePosition, height: 60 };
+
+      const posRow = document.createElement('div');
+      posRow.className = 'settings-row';
+      const posLabel = document.createElement('span');
+      posLabel.textContent = 'Position';
+      const posSegments = document.createElement('div');
+      posSegments.className = 'settings-segmented';
+      posSegments.setAttribute('role', 'radiogroup');
+      for (const pos of ['top', 'bottom'] as const) {
+        const btn = document.createElement('button');
+        btn.className = 'settings-segmented-btn';
+        btn.dataset.value = pos;
+        btn.setAttribute('role', 'radio');
+        btn.setAttribute('aria-checked', String(pos === currentQuake.position));
+        btn.textContent = pos === 'top' ? 'Top' : 'Bottom';
+        if (pos === currentQuake.position) btn.classList.add('is-active');
+        btn.addEventListener('click', () => {
+          currentQuake.position = pos;
+          posSegments.querySelectorAll('.settings-segmented-btn').forEach((b) => {
+            const v = (b as HTMLElement).dataset.value ?? '';
+            b.classList.toggle('is-active', v === pos);
+            b.setAttribute('aria-checked', String(v === pos));
+          });
+          saveQuakeConfig(selected.id, currentQuake);
+        });
+        posSegments.appendChild(btn);
+      }
+      posRow.append(posLabel, posSegments);
+      quakeDetails.appendChild(posRow);
+
+      const heightRow = document.createElement('div');
+      heightRow.className = 'settings-row';
+      const heightLabel = document.createElement('span');
+      heightLabel.textContent = 'Height';
+      heightRow.appendChild(heightLabel);
+      const heightDual = document.createElement('div');
+      heightDual.className = 'settings-dual';
+      const heightRange = document.createElement('input');
+      heightRange.type = 'range'; heightRange.min = '30'; heightRange.max = '100'; heightRange.step = '1';
+      heightRange.value = String(currentQuake.height);
+      const heightInput = document.createElement('input');
+      heightInput.className = 'settings-number'; heightInput.type = 'number'; heightInput.min = '30'; heightInput.max = '100'; heightInput.step = '1';
+      heightInput.value = String(currentQuake.height);
+      const heightUnit = document.createElement('span');
+      heightUnit.className = 'settings-unit'; heightUnit.textContent = '%';
+      heightRange.addEventListener('input', () => {
+        currentQuake.height = Math.max(30, Math.min(100, Number(heightRange.value)));
+        heightInput.value = String(currentQuake.height);
+        saveQuakeConfig(selected.id, currentQuake);
+      });
+      heightInput.addEventListener('change', () => {
+        currentQuake.height = Math.max(30, Math.min(100, Number(heightInput.value)));
+        heightRange.value = String(currentQuake.height);
+        heightInput.value = String(currentQuake.height);
+        saveQuakeConfig(selected.id, currentQuake);
+      });
+      heightDual.append(heightRange, heightInput, heightUnit);
+      quakeDetails.appendChild(heightDual);
+
+      const durRow = document.createElement('div');
+      durRow.className = 'settings-row';
+      const durLabel = document.createElement('span');
+      durLabel.textContent = 'Animation';
+      durRow.appendChild(durLabel);
+      const durDual = document.createElement('div');
+      durDual.className = 'settings-dual';
+      const durRange = document.createElement('input');
+      durRange.type = 'range'; durRange.min = '100'; durRange.max = '500'; durRange.step = '10';
+      durRange.value = String(currentQuake.animationDuration);
+      const durInput = document.createElement('input');
+      durInput.className = 'settings-number'; durInput.type = 'number'; durInput.min = '100'; durInput.max = '500'; durInput.step = '10';
+      durInput.value = String(currentQuake.animationDuration);
+      const durUnit = document.createElement('span');
+      durUnit.className = 'settings-unit'; durUnit.textContent = 'ms';
+      durRange.addEventListener('input', () => {
+        currentQuake.animationDuration = Math.max(100, Math.min(500, Math.round(Number(durRange.value) / 10) * 10));
+        durInput.value = String(currentQuake.animationDuration);
+        saveQuakeConfig(selected.id, currentQuake);
+      });
+      durInput.addEventListener('change', () => {
+        currentQuake.animationDuration = Math.max(100, Math.min(500, Math.round(Number(durInput.value) / 10) * 10));
+        durRange.value = String(currentQuake.animationDuration);
+        durInput.value = String(currentQuake.animationDuration);
+        saveQuakeConfig(selected.id, currentQuake);
+      });
+      durDual.append(durRange, durInput, durUnit);
+      quakeDetails.appendChild(durDual);
+
+      quakeSection.appendChild(quakeDetails);
+      info.appendChild(quakeSection);
+
+      quakeToggleRow.addEventListener('click', () => {
+        if (settingsManager.settings.quakeLayouts[selected.id]) {
+          delete settingsManager.settings.quakeLayouts[selected.id];
+        } else {
+          settingsManager.settings.quakeLayouts[selected.id] = { ...currentQuake };
+        }
+        settingsManager.scheduleSettingsSave();
+        renderModalLayouts(overlay);
+      });
+
       editorEl.appendChild(info);
     } else {
       const placeholder = document.createElement('div');
@@ -433,4 +614,131 @@ export function createLayoutModal({
   }
 
   return { openLayoutsModal };
+}
+
+// ---------------------------------------------------------------------------
+// Hotkey Recording Helpers
+// ---------------------------------------------------------------------------
+
+const MODIFIER_ORDER = ['ctrl', 'shift', 'alt'] as const;
+
+function layoutHotkeyToString(hotkey: LayoutHotkey): string {
+  const parts: string[] = [];
+  for (const mod of MODIFIER_ORDER) {
+    if (hotkey.modifiers.includes(mod)) parts.push(mod);
+  }
+  const key = hotkey.key.length === 1 ? hotkey.key.toUpperCase() : hotkey.key;
+  parts.push(key);
+  return parts.join('+');
+}
+
+function formatShortcutForDisplay(shortcut: string, platform: string): string {
+  return shortcut
+    .split('+')
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === 'ctrl') return platform === 'darwin' ? '⌘' : 'Ctrl';
+      if (lower === 'shift') return platform === 'darwin' ? '⇧' : 'Shift';
+      if (lower === 'alt') return platform === 'darwin' ? '⌥' : 'Alt';
+      if (part === ' ') return 'Space';
+      return part;
+    })
+    .join('+');
+}
+
+function parseKeyboardEvent(event: KeyboardEvent): LayoutHotkey {
+  const modifiers: string[] = [];
+  if (event.ctrlKey) modifiers.push('ctrl');
+  if (event.metaKey && !event.ctrlKey) modifiers.push('ctrl');
+  if (event.shiftKey) modifiers.push('shift');
+  if (event.altKey) modifiers.push('alt');
+  return { key: event.key, modifiers };
+}
+
+function normalizeShortcut(shortcut: string): string {
+  return shortcut.split('+').map((p) => p.toLowerCase()).sort().join('+');
+}
+
+function shortcutsConflict(a: string, b: string): boolean {
+  return normalizeShortcut(a) === normalizeShortcut(b);
+}
+
+function startInlineHotkeyRecording(
+  layoutId: string,
+  container: HTMLElement,
+  renderFn: () => void,
+  settingsManager: SettingsManager,
+): void {
+  const recorder = document.createElement('div');
+  recorder.className = 'shortcut-recorder-inline';
+  recorder.tabIndex = -1;
+
+  const keysHint = document.createElement('div');
+  keysHint.className = 'shortcut-recorder-inline-hint';
+  keysHint.textContent = 'Press keys…';
+
+  const conflictWarning = document.createElement('div');
+  conflictWarning.className = 'shortcut-conflict-warning';
+
+  const actions = document.createElement('div');
+  actions.className = 'shortcut-recorder-inline-actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'settings-btn';
+  cancelBtn.textContent = 'Cancel';
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'settings-btn';
+  saveBtn.textContent = 'Save';
+  saveBtn.disabled = true;
+  actions.append(cancelBtn, saveBtn);
+
+  recorder.append(keysHint, conflictWarning, actions);
+  container.replaceChildren(recorder);
+
+  let recordedShortcut: string | null = null;
+
+  const keydownHandler = (event: KeyboardEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === 'Escape') { cleanup(); return; }
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) return;
+
+    const parsed = parseKeyboardEvent(event);
+    const shortcut = layoutHotkeyToString(parsed);
+
+    keysHint.textContent = formatShortcutForDisplay(shortcut, navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'linux');
+
+    const settings = settingsManager.settings;
+    if (!settings) return;
+
+    const conflictingLayoutId = Object.entries(settings.layoutHotkeys as Record<string, string>)
+      .find(([id, s]) => id !== layoutId && s && shortcutsConflict(shortcut, s))?.[0];
+    if (conflictingLayoutId) {
+      conflictWarning.textContent = `Conflicts with layout "${conflictingLayoutId}"`;
+      saveBtn.disabled = true;
+      recordedShortcut = null;
+    } else {
+      conflictWarning.textContent = '';
+      saveBtn.disabled = false;
+      recordedShortcut = shortcut;
+    }
+  };
+
+  const cleanup = () => {
+    window.removeEventListener('keydown', keydownHandler, true);
+    renderFn();
+  };
+
+  cancelBtn.addEventListener('click', cleanup);
+  saveBtn.addEventListener('click', () => {
+    if (recordedShortcut) {
+      settingsManager.settings.layoutHotkeys[layoutId] = recordedShortcut;
+      settingsManager.scheduleSettingsSave();
+    }
+    renderFn();
+  });
+
+  window.addEventListener('keydown', keydownHandler, true);
+  recorder.focus();
 }
