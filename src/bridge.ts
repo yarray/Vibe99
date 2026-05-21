@@ -232,6 +232,7 @@ export interface ShellApi {
   add: (profile: ShellProfileData) => Promise<void>;
   remove: (profileId: string) => Promise<void>;
   setDefault: (profileId: string) => Promise<void>;
+  reorder: (profileIds: string[]) => Promise<ShellProfilesListResult>;
   detect: () => Promise<string[]>;
   redetectWsl: () => Promise<{ available: boolean; distributions: string[]; defaultShell: string | null }>;
 }
@@ -317,6 +318,7 @@ export interface Bridge {
 
   listShellProfiles: ShellApi['list'];
   addShellProfile: ShellApi['add'];
+  reorderShellProfiles: ShellApi['reorder'];
   removeShellProfile: ShellApi['remove'];
   setDefaultShellProfile: ShellApi['setDefault'];
   detectShellProfiles: ShellApi['detect'];
@@ -430,6 +432,7 @@ type FlatAliases = {
   saveFloatWindowState: unknown;
   listShellProfiles: unknown;
   addShellProfile: unknown;
+  reorderShellProfiles: unknown;
   removeShellProfile: unknown;
   setDefaultShellProfile: unknown;
   detectShellProfiles: unknown;
@@ -493,6 +496,7 @@ function createUnavailableBridge(): Bridge {
       add: fail,
       remove: fail,
       setDefault: fail,
+      reorder: fail,
       detect: () => Promise.resolve([]),
       redetectWsl: () => Promise.resolve({ available: false, distributions: [], defaultShell: null }),
     },
@@ -540,6 +544,7 @@ function createUnavailableBridge(): Bridge {
     saveFloatWindowState: () => Promise.resolve(),
     listShellProfiles: () => Promise.resolve({ profiles: [], defaultProfile: '' }),
     addShellProfile: fail,
+    reorderShellProfiles: fail,
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
@@ -754,6 +759,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       add: (profile: ShellProfileData) => invoke('shell_profile_add', { profile }),
       remove: (profileId: string) => invoke('shell_profile_remove', { profileId }),
       setDefault: (profileId: string) => invoke('shell_profile_set', { profileId }),
+      reorder: (profileIds: string[]) => invoke('shell_profiles_reorder', { profileIds }),
       detect: () => invoke('shell_profiles_detect'),
       redetectWsl: () => invoke('wsl_redetect'),
     },
@@ -838,6 +844,7 @@ export function createBridge(
       saveFloatWindowState: partial.settings.saveFloatWindowState,
       listShellProfiles: partial.shell.list,
       addShellProfile: partial.shell.add,
+      reorderShellProfiles: partial.shell.reorder,
       removeShellProfile: partial.shell.remove,
       setDefaultShellProfile: partial.shell.setDefault,
       detectShellProfiles: partial.shell.detect,

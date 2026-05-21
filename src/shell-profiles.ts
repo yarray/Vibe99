@@ -73,6 +73,7 @@ export interface ShellProfileBridge {
   listShellProfiles: () => Promise<ShellProfileConfigResult>;
   detectShellProfiles: () => Promise<ShellProfile[]>;
   addShellProfile: (profile: ShellProfile) => Promise<ShellProfileConfigResult>;
+  reorderShellProfiles: (profileIds: string[]) => Promise<ShellProfileConfigResult>;
   removeShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
   setDefaultShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
   redetectWsl: () => Promise<{ available: boolean; distributions: string[]; defaultShell: string | null }>;
@@ -633,13 +634,15 @@ export function createShellProfileManager({
     newProfiles.splice(targetIndex, 0, draggedProfile);
     state.setShellProfiles(newProfiles);
 
-    // Save the new order (add all profiles to persist order)
-    const userProfiles = newProfiles.filter(p => !detectedShellProfiles.some(dp => dp.id === p.id));
-    const savePromises = userProfiles.map(p => bridge.addShellProfile(p));
+    // Render immediately for visual feedback
+    renderModalShellProfiles();
 
-    Promise.all(savePromises).then(() => {
-      renderModalShellProfiles();
-    }).catch(reportError);
+    // Persist the new order
+    const userProfileIds = newProfiles
+      .filter(p => !detectedShellProfiles.some(dp => dp.id === p.id))
+      .map(p => p.id);
+
+    bridge.reorderShellProfiles(userProfileIds).catch(reportError);
   }
 
   // ----------------------------------------------------------------

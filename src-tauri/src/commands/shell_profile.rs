@@ -248,6 +248,56 @@ pub fn shell_profile_remove(app: AppHandle, profile_id: String) -> Result<ShellC
     })
 }
 
+/// Reorder shell profiles to match the given list of profile IDs.
+///
+/// Profiles whose IDs appear in the list are arranged in that order;
+/// any profiles not mentioned in the list retain their relative order
+/// and are appended at the end. This preserves auto-detected profiles
+/// that may not be part of the user's explicit ordering.
+#[tauri::command]
+pub fn shell_profiles_reorder(app: AppHandle, profile_ids: Vec<String>) -> Result<ShellConfig, String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let (mut config, mut shell_config) = read_shell_config(&app)?;
+
+    // Build the reordered list: first the explicitly ordered profiles,
+    // then any remaining ones in their original order.
+    let mut reordered: Vec<ShellProfile> = Vec::with_capacity(shell_config.profiles.len());
+    let mut remaining: Vec<ShellProfile> = shell_config.profiles;
+
+    for id in &profile_ids {
+        if let Some(pos) = remaining.iter().position(|p| &p.id == id) {
+            reordered.push(remaining.remove(pos));
+        }
+    }
+    // Append any profiles not in the reorder list (retain original order)
+    reordered.append(&mut remaining);
+
+    shell_config.profiles = reordered;
+
+    if let Some(obj) = config.as_object_mut() {
+        obj.insert(
+            "shell".to_string(),
+            serde_json::json!({
+                "profiles": shell_config.profiles,
+                "defaultProfile": shell_config.default_profile,
+            }),
+        );
+    }
+
+    let sanitized = sanitize_config(&config);
+    write_config(&app, &sanitized)?;
+
+    Ok(ShellConfig {
+        profiles: extract_profiles(&sanitized),
+        default_profile: extract_default_profile(&sanitized),
+    })
+}
+
 /// Detect available shells on the system and return them as profiles.
 ///
 /// These are shells found via environment probes (e.g. PowerShell, WSL)
