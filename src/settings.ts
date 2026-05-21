@@ -4,9 +4,8 @@ import { showConfirmDialog } from './confirm-dialog';
 import {
   type AppSettingsUi,
   type BreathingIntensity,
-  type LayoutHotkey,
   type QuakeMode,
-  type QuakeScreenPosition,
+  type QuakeModePosition,
   ConsoleValidationReporter,
   getDefaultSettings,
   migrateLegacySettings,
@@ -181,12 +180,12 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     quakeAnimationDurationInput.value = String(settings.quakeMode.animationDuration);
     quakePositionSegments.querySelectorAll('.settings-segmented-btn').forEach((btn) => {
       const value = (btn as HTMLElement).dataset.value ?? '';
-      const isActive = value === settings.quakeMode.screenPosition;
+      const isActive = value === settings.quakeMode.position;
       btn.classList.toggle('is-active', isActive);
       btn.setAttribute('aria-checked', String(isActive));
     });
-    quakeHeightRange.value = String(settings.quakeMode.heightPercent);
-    quakeHeightInput.value = String(settings.quakeMode.heightPercent);
+    quakeHeightRange.value = String(settings.quakeMode.height);
+    quakeHeightInput.value = String(settings.quakeMode.height);
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -383,8 +382,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Quake mode animation duration
   function updateQuakeAnimationDuration(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    const result = validateField('quakeMode.animationDuration', parsedValue);
-    settings.quakeMode.animationDuration = result.sanitizedValue as number;
+    settings.quakeMode.animationDuration = Math.max(100, Math.min(500, Math.round(parsedValue / 10) * 10));
     applySettings();
     scheduleSettingsSave();
   }
@@ -404,8 +402,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     const value = btn.dataset.value as QuakeModePosition | undefined;
     if (!value) return;
 
-    const result = validateField('quakeMode.screenPosition', value);
-    settings.quakeMode.screenPosition = result.sanitizedValue as QuakeScreenPosition;
+    settings.quakeMode.position = value;
     applySettings();
     scheduleSettingsSave();
   });
@@ -413,8 +410,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   // Quake mode height
   function updateQuakeHeight(nextValue: string): void {
     const parsedValue = Number(nextValue);
-    const result = validateField('quakeMode.heightPercent', parsedValue);
-    settings.quakeMode.heightPercent = result.sanitizedValue as number;
+    settings.quakeMode.height = Math.max(30, Math.min(100, parsedValue));
     applySettings();
     scheduleSettingsSave();
   }
