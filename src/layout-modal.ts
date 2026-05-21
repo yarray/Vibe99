@@ -4,7 +4,7 @@ import type { PaneState } from './pane-state';
 import type { ModalStack } from './modal-stack';
 import type { LayoutManager } from './layout-manager';
 import type { SettingsManager } from './settings';
-import type { LayoutHotkey, QuakeModePosition, QuakeLayoutConfig } from './domain/settings-schema';
+import type { LayoutHotkey, QuakePosition, QuakeLayoutConfig } from './domain/settings-schema';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -502,7 +502,7 @@ export function createLayoutModal({
       quakeDetails.className = 'layout-quake-details';
       quakeDetails.style.display = quakeConfig ? '' : 'none';
 
-      const currentQuake = quakeConfig ?? { animationDuration: 200, position: 'top' as QuakeModePosition, height: 60 };
+      const currentQuake = quakeConfig ?? { animationDuration: 200, position: 'top' as QuakePosition, height: 60 };
 
       const posRow = document.createElement('div');
       posRow.className = 'settings-row';

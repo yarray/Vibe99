@@ -57,10 +57,10 @@ export type LayoutHotkeys = z.infer<typeof layoutHotkeysSchema>;
 // ---------------------------------------------------------------------------
 
 /**
- * Quake mode position: top or bottom of screen
+ * Quake position: top or bottom of screen
  */
-export const quakeModePositionSchema = z.enum(['top', 'bottom']);
-export type QuakeModePosition = z.infer<typeof quakeModePositionSchema>;
+export const quakePositionSchema = z.enum(['top', 'bottom']);
+export type QuakePosition = z.infer<typeof quakePositionSchema>;
 
 /**
  * Per-layout quake configuration.
@@ -75,7 +75,7 @@ export const quakeLayoutConfigSchema = z.object({
     .min(100, { message: 'Animation duration must be at least 100ms' })
     .max(500, { message: 'Animation duration must be at most 500ms' })
     .default(200),
-  position: quakeModePositionSchema.default('top'),
+  position: quakePositionSchema.default('top'),
   height: z
     .number({ error: 'Height must be a number' })
     .int({ message: 'Height must be an integer' })
@@ -91,18 +91,6 @@ export const quakeLayoutsSchema = z
   .default({});
 
 export type QuakeLayouts = z.infer<typeof quakeLayoutsSchema>;
-
-// ---------------------------------------------------------------------------
-// Legacy QuakeMode type (for migration)
-// ---------------------------------------------------------------------------
-
-/** @deprecated Legacy global quake mode — kept for migration only */
-export interface LegacyQuakeMode {
-  enabled?: boolean;
-  animationDuration?: number;
-  position?: QuakeModePosition;
-  height?: number;
-}
 
 // ---------------------------------------------------------------------------
 // Individual Field Schemas
@@ -434,9 +422,6 @@ export interface LegacySettingsInput {
     breathingIntensity?: unknown;
     activityAlertDebounceMs?: unknown;
     shortcuts?: Record<string, unknown>;
-    layoutHotkeys?: Record<string, unknown>;
-    quakeMode?: unknown;
-    quakeLayouts?: unknown;
   }>;
 }
 
@@ -479,27 +464,6 @@ export function migrateLegacySettings(raw: LegacySettingsInput): Partial<AppSett
   // Migrate breathingAlertEnabled → breathingIntensity
   if (ui.breathingAlertEnabled !== undefined && result.breathingIntensity === undefined) {
     result.breathingIntensity = ui.breathingAlertEnabled ? 'intense' : 'none';
-  }
-
-  // Copy layout hotkeys (if present and valid)
-  if (ui.layoutHotkeys !== undefined && typeof ui.layoutHotkeys === 'object' && ui.layoutHotkeys !== null) {
-    result.layoutHotkeys = ui.layoutHotkeys as LayoutHotkeys;
-  }
-
-  // Migrate legacy global quakeMode → per-layout quakeLayouts
-  if (ui.quakeMode !== undefined && typeof ui.quakeMode === 'object' && ui.quakeMode !== null) {
-    const legacy = ui.quakeMode as LegacyQuakeMode;
-    if (legacy.enabled) {
-      result.quakeLayouts = {
-        default: {
-          animationDuration: legacy.animationDuration ?? 200,
-          position: legacy.position ?? 'top',
-          height: legacy.height ?? 60,
-        },
-      };
-    }
-  } else if (ui.quakeLayouts !== undefined && typeof ui.quakeLayouts === 'object' && ui.quakeLayouts !== null) {
-    result.quakeLayouts = ui.quakeLayouts as QuakeLayouts;
   }
 
   return result;
