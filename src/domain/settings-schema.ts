@@ -23,23 +23,33 @@ export const breathingIntensitySchema = z.enum(['none', 'mild', 'intense']);
 export type BreathingIntensity = z.infer<typeof breathingIntensitySchema>;
 
 // ---------------------------------------------------------------------------
-// Layout Hotkeys Schema
+// Layout Hotkey UI Helper Type
 // ---------------------------------------------------------------------------
 
 /**
- * Layout hotkey: a keyboard shortcut that opens a specific layout
+ * Layout hotkey UI representation for keyboard event parsing.
+ *
+ * The persisted format is a simple shortcut string (e.g. "F1", "Ctrl+Shift+T").
+ * This object type is only used by the recording UI to capture modifier+key combos
+ * before converting to string format for storage.
  */
-export const layoutHotkeySchema = z.object({
-  key: z.string(),
-  modifiers: z.array(z.string()).default([]),
-});
+export interface LayoutHotkey {
+  key: string;
+  modifiers: string[];
+}
 
-export type LayoutHotkey = z.infer<typeof layoutHotkeySchema>;
+// ---------------------------------------------------------------------------
+// Layout Hotkeys Schema (persisted as Record<layoutId, shortcutString>)
+// ---------------------------------------------------------------------------
 
 /**
- * Layout hotkeys: mapping from layout ID to hotkey configuration
+ * Layout hotkeys: Record<layoutId, hotkeyString>
+ * e.g. { "layout-1": "F1", "layout-2": "CommandOrControl+Shift+T" }
  */
-export const layoutHotkeysSchema = z.record(layoutHotkeySchema.nullable()).default({});
+export const layoutHotkeysSchema = z
+  .record(z.string(), z.string())
+  .default({});
+
 export type LayoutHotkeys = z.infer<typeof layoutHotkeysSchema>;
 
 // ---------------------------------------------------------------------------
@@ -151,56 +161,6 @@ export const activityAlertDebounceMsSchema = z
   .positive({ message: 'Activity alert debounce must be positive' })
   .transform((val) => Math.max(3000, Math.min(300000, val)))
   .default(30000);
-
-// ---------------------------------------------------------------------------
-// Layout Hotkeys Schema
-// ---------------------------------------------------------------------------
-
-/**
- * Layout hotkeys: Record<layoutId, hotkeyString>
- * e.g. { "layout-1": "F1", "layout-2": "CommandOrControl+Shift+T" }
- */
-export const layoutHotkeysSchema = z
-  .record(z.string(), z.string())
-  .default({});
-
-// ---------------------------------------------------------------------------
-// Quake Mode Schema
-// ---------------------------------------------------------------------------
-
-/**
- * Screen position for Quake mode dropdown.
- */
-export const screenPositionSchema = z.enum(['top', 'bottom']).default('top');
-
-/**
- * Quake mode configuration.
- * - enabled: whether Quake mode is active
- * - animationDuration: animation time in ms (100-500)
- * - screenPosition: where the dropdown appears (top or bottom)
- * - heightPercent: height of the dropdown as a percentage (30-100)
- */
-export const quakeModeSchema = z
-  .object({
-    enabled: z.boolean().default(false),
-    animationDuration: z
-      .number({ error: 'Animation duration must be a number' })
-      .int({ message: 'Animation duration must be an integer' })
-      .transform((val) => Math.max(100, Math.min(500, val)))
-      .default(200),
-    screenPosition: screenPositionSchema,
-    heightPercent: z
-      .number({ error: 'Height percent must be a number' })
-      .int({ message: 'Height percent must be an integer' })
-      .transform((val) => Math.max(30, Math.min(100, val)))
-      .default(60),
-  })
-  .default({
-    enabled: false,
-    animationDuration: 200,
-    screenPosition: 'top',
-    heightPercent: 60,
-  });
 
 // ---------------------------------------------------------------------------
 // Complete Settings Schema
@@ -348,7 +308,7 @@ export function validateField(
 
   // Get default by parsing an empty object
   const defaults = appSettingsSchema.parse({});
-  const defaultValue = (defaults as Record<string, unknown>)[fieldName];
+  const defaultValue = (defaults as Record<string, unknown>)[fieldName as string];
 
   const errorMessage = result.error.issues?.[0]?.message ?? 'Invalid value';
 

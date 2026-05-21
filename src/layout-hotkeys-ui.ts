@@ -3,6 +3,9 @@
  *
  * Handles the user interface for layout hotkey management,
  * including the modal dialog and recording functionality.
+ *
+ * Layout hotkeys are persisted as Record<layoutId, shortcutString>.
+ * The recording UI captures modifier+key combos and converts to string format.
  */
 
 import type { LayoutData } from './bridge';
@@ -19,8 +22,8 @@ export interface LayoutHotkeysBridge {
 
 export interface LayoutHotkeysDeps {
   getLayouts: () => LayoutData[];
-  getLayoutHotkeys: () => Record<string, LayoutHotkey | null>;
-  setLayoutHotkey: (layoutId: string, hotkey: LayoutHotkey | null) => void;
+  getLayoutHotkeys: () => Record<string, string>;
+  setLayoutHotkey: (layoutId: string, shortcut: string | null) => void;
   scheduleSettingsSave: () => void;
 }
 
@@ -33,61 +36,66 @@ interface LayoutHotkeysModalOverlay extends HTMLDivElement {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// String ↔ LayoutHotkey conversion
 // ---------------------------------------------------------------------------
 
-/**
- * Format a layout hotkey for display (e.g., "F1", "Ctrl+Alt+T")
- */
-function formatLayoutHotkey(hotkey: LayoutHotkey, platform: string): string {
-  const modifiers: string[] = [];
-  if (hotkey.modifiers.includes('ctrl')) {
-    modifiers.push(platform === 'darwin' ? '⌘' : 'Ctrl');
-  }
-  if (hotkey.modifiers.includes('shift')) {
-    modifiers.push(platform === 'darwin' ? '⇧' : 'Shift');
-  }
-  if (hotkey.modifiers.includes('alt')) {
-    modifiers.push(platform === 'darwin' ? '⌥' : 'Alt');
-  }
+const MODIFIER_ORDER = ['ctrl', 'shift', 'alt'] as const;
 
-  const key = hotkey.key === ' ' ? 'Space' : hotkey.key;
-  return [...modifiers, key].join('+');
+function layoutHotkeyToString(hotkey: LayoutHotkey): string {
+  const parts: string[] = [];
+  for (const mod of MODIFIER_ORDER) {
+    if (hotkey.modifiers.includes(mod)) {
+      parts.push(mod);
+    }
+  }
+  const key = hotkey.key.length === 1 ? hotkey.key.toUpperCase() : hotkey.key;
+  parts.push(key);
+  return parts.join('+');
 }
 
-/**
- * Parse a keyboard event to a LayoutHotkey
- */
+function formatShortcutForDisplay(shortcut: string, platform: string): string {
+  return shortcut
+    .split('+')
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === 'ctrl') return platform === 'darwin' ? '⌘' : 'Ctrl';
+      if (lower === 'shift') return platform === 'darwin' ? '⇧' : 'Shift';
+      if (lower === 'alt') return platform === 'darwin' ? '⌥' : 'Alt';
+      if (part === ' ') return 'Space';
+      return part;
+    })
+    .join('+');
+}
+
 function parseKeyboardEvent(event: KeyboardEvent): LayoutHotkey {
   const modifiers: string[] = [];
   if (event.ctrlKey) modifiers.push('ctrl');
-  if (event.metaKey && !event.ctrlKey) modifiers.push('ctrl'); // Cmd ≡ Ctrl
+  if (event.metaKey && !event.ctrlKey) modifiers.push('ctrl');
   if (event.shiftKey) modifiers.push('shift');
   if (event.altKey) modifiers.push('alt');
   return { key: event.key, modifiers };
 }
 
-/**
- * Check if two layout hotkeys conflict
- */
-function hotkeysConflict(a: LayoutHotkey, b: LayoutHotkey): boolean {
-  const normalizedKeyA = a.key.length === 1 ? a.key.toLowerCase() : a.key;
-  const normalizedKeyB = b.key.length === 1 ? b.key.toLowerCase() : b.key;
-  return normalizedKeyA === normalizedKeyB &&
-    JSON.stringify([...a.modifiers].sort()) === JSON.stringify([...b.modifiers].sort());
+function shortcutsConflict(a: string, b: string): boolean {
+  return normalizeShortcut(a) === normalizeShortcut(b);
 }
 
-/**
- * Find which layout has a conflicting hotkey
- */
+function normalizeShortcut(shortcut: string): string {
+  return shortcut
+    .split('+')
+    .map((p) => p.toLowerCase())
+    .sort()
+    .join('+');
+}
+
 function findConflictingLayout(
-  newHotkey: LayoutHotkey,
+  newShortcut: string,
   excludeLayoutId: string,
-  layoutHotkeys: Record<string, LayoutHotkey | null>
+  layoutHotkeys: Record<string, string>,
 ): string | null {
-  for (const [layoutId, hotkey] of Object.entries(layoutHotkeys)) {
-    if (layoutId === excludeLayoutId || hotkey === null) continue;
-    if (hotkeysConflict(newHotkey, hotkey)) {
+  for (const [layoutId, shortcut] of Object.entries(layoutHotkeys)) {
+    if (layoutId === excludeLayoutId || !shortcut) continue;
+    if (shortcutsConflict(newShortcut, shortcut)) {
       return layoutId;
     }
   }
@@ -98,12 +106,9 @@ function findConflictingLayout(
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * Open the layout hotkeys configuration modal dialog
- */
 export function openLayoutHotkeysModal(
   bridge: LayoutHotkeysBridge,
-  deps: LayoutHotkeysDeps
+  deps: LayoutHotkeysDeps,
 ): void {
   const { getLayouts, getLayoutHotkeys, setLayoutHotkey, scheduleSettingsSave } = deps;
   const overlay = document.createElement('div') as LayoutHotkeysModalOverlay;
@@ -137,7 +142,6 @@ export function openLayoutHotkeysModal(
 
   document.body.appendChild(overlay);
 
-  // Store reference to modal list for rendering
   overlay._modalLayoutsList = overlay.querySelector('#modal-layout-hotkeys-list') as HTMLDivElement;
 
   renderLayoutHotkeys();
@@ -181,12 +185,12 @@ export function openLayoutHotkeysModal(
       const binding = document.createElement('div');
       binding.className = 'shortcut-binding';
 
-      const hotkey = layoutHotkeys[layout.id];
+      const shortcut = layoutHotkeys[layout.id];
 
-      if (hotkey) {
+      if (shortcut) {
         const keys = document.createElement('div');
         keys.className = 'shortcut-keys';
-        keys.textContent = formatLayoutHotkey(hotkey, bridge.platform);
+        keys.textContent = formatShortcutForDisplay(shortcut, bridge.platform);
         keys.addEventListener('click', () => {
           startHotkeyRecording(layout.id);
         });
@@ -223,7 +227,7 @@ export function openLayoutHotkeysModal(
   }
 
   function startHotkeyRecording(layoutId: string): void {
-    const layout = getLayouts().find(l => l.id === layoutId);
+    const layout = getLayouts().find((l) => l.id === layoutId);
     if (!layout) return;
 
     const recorderOverlay = document.createElement('div');
@@ -246,7 +250,7 @@ export function openLayoutHotkeysModal(
 
     document.body.appendChild(recorderOverlay);
 
-    let recordedHotkey: LayoutHotkey | null = null;
+    let recordedShortcut: string | null = null;
     const keysDisplay = recorderOverlay.querySelector('#layout-hotkey-recorder-keys') as HTMLDivElement;
     const saveBtn = recorderOverlay.querySelector('#layout-hotkey-recorder-save') as HTMLButtonElement;
     const cancelBtn = recorderOverlay.querySelector('#layout-hotkey-recorder-cancel') as HTMLButtonElement;
@@ -255,38 +259,46 @@ export function openLayoutHotkeysModal(
       event.preventDefault();
       event.stopPropagation();
 
-      // Handle escape key
       if (event.key === 'Escape') {
         closeRecorder();
         return;
       }
 
-      // Ignore modifier-only keypresses
       if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
         return;
       }
 
-      // Parse the hotkey
       const parsed = parseKeyboardEvent(event);
+      const shortcut = layoutHotkeyToString(parsed);
 
-      // Update display
       keysDisplay.innerHTML = '';
-      const modifiers = [...parsed.modifiers, parsed.key];
-      for (const mod of modifiers) {
+      const displayParts = [...parsed.modifiers, parsed.key];
+      for (const part of displayParts) {
         const keyEl = document.createElement('div');
         keyEl.className = 'shortcut-recorder-key';
-        keyEl.textContent = mod === 'ctrl' ? (bridge.platform === 'darwin' ? '⌘' : 'Ctrl') :
-                           mod === 'shift' ? (bridge.platform === 'darwin' ? '⇧' : 'Shift') :
-                           mod === 'alt' ? (bridge.platform === 'darwin' ? '⌥' : 'Alt') :
-                           mod === ' ' ? 'Space' : mod;
+        keyEl.textContent =
+          part === 'ctrl'
+            ? bridge.platform === 'darwin'
+              ? '⌘'
+              : 'Ctrl'
+            : part === 'shift'
+              ? bridge.platform === 'darwin'
+                ? '⇧'
+                : 'Shift'
+              : part === 'alt'
+                ? bridge.platform === 'darwin'
+                  ? '⌥'
+                  : 'Alt'
+                : part === ' '
+                  ? 'Space'
+                  : part;
         keysDisplay.appendChild(keyEl);
       }
 
-      // Check for conflicts
-      const conflictLayoutId = findConflictingLayout(parsed, layoutId, getLayoutHotkeys());
+      const conflictLayoutId = findConflictingLayout(shortcut, layoutId, getLayoutHotkeys());
 
       if (conflictLayoutId) {
-        const conflictLayout = getLayouts().find(l => l.id === conflictLayoutId);
+        const conflictLayout = getLayouts().find((l) => l.id === conflictLayoutId);
         const conflictWarning = document.createElement('div');
         conflictWarning.className = 'shortcut-conflict-warning';
         conflictWarning.textContent = `Conflicts with "${conflictLayout?.name || conflictLayoutId}"`;
@@ -294,7 +306,7 @@ export function openLayoutHotkeysModal(
         saveBtn.disabled = true;
       } else {
         saveBtn.disabled = false;
-        recordedHotkey = parsed;
+        recordedShortcut = shortcut;
       }
     };
 
@@ -308,8 +320,8 @@ export function openLayoutHotkeysModal(
     cancelBtn.addEventListener('click', closeRecorder);
 
     saveBtn.addEventListener('click', () => {
-      if (recordedHotkey) {
-        setLayoutHotkey(layoutId, recordedHotkey);
+      if (recordedShortcut) {
+        setLayoutHotkey(layoutId, recordedShortcut);
         scheduleSettingsSave();
         renderLayoutHotkeys();
         closeRecorder();

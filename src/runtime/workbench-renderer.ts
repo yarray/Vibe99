@@ -707,8 +707,12 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     LayoutHotkeysUI.openLayoutHotkeysModal(bridge, {
       getLayouts: () => layoutManager.getLayouts(),
       getLayoutHotkeys: () => settingsManager.settings.layoutHotkeys,
-      setLayoutHotkey: (layoutId: string, hotkey: import('../domain/settings-schema').LayoutHotkey | null) => {
-        settingsManager.settings.layoutHotkeys[layoutId] = hotkey;
+      setLayoutHotkey: (layoutId: string, shortcut: string | null) => {
+        if (shortcut === null) {
+          delete settingsManager.settings.layoutHotkeys[layoutId];
+        } else {
+          settingsManager.settings.layoutHotkeys[layoutId] = shortcut;
+        }
         settingsManager.scheduleSettingsSave();
       },
       scheduleSettingsSave: () => settingsManager.scheduleSettingsSave(),
