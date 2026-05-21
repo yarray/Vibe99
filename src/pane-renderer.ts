@@ -278,6 +278,13 @@ export function createPaneRenderer({
       session.writeLine(text);
     },
     refreshActivitySnapshots: () => {
+      if (workbench) {
+        for (const pane of paneState.getPanes()) {
+          const session = workbench.session(pane.id);
+          if (session) session.refreshActivitySnapshot();
+        }
+        return;
+      }
       for (const session of sessionMap!.values()) {
         session.refreshActivitySnapshot();
       }

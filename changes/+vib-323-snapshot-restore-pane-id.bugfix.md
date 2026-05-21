@@ -1,0 +1,1 @@
+Fixed pane content loss when switching layouts: `restoreSession()` now preserves original pane IDs instead of renumbering, preventing `ensureSessions()` from destroying and recreating TerminalSessions with empty buffers. Also fixed `refreshActivitySnapshots` crash when workbench manages sessions.

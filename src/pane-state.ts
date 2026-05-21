@@ -472,7 +472,7 @@ export function createPaneState({
           p && typeof p.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.accent),
       )
       .map((p: SessionPaneEntry, index: number): PaneSnapshot => ({
-        id: `p${index + 1}`,
+        id: p.paneId || `p${index + 1}`,
         title: (typeof p.title === 'string' && p.title) || null,
         terminalTitle: defaultTabTitle,
         cwd: (typeof p.cwd === 'string' && p.cwd) || defaultCwd,
@@ -522,7 +522,11 @@ export function createPaneState({
       ].filter((id) => id !== ''),
     });
 
-    nextPaneNumber = validSnapshots.length + 1;
+    const maxRestoredPaneNum = validSnapshots.reduce((max, s) => {
+      const n = /^p(\d+)$/.test(s.id) ? parseInt(s.id.slice(1), 10) : 0;
+      return Math.max(max, n);
+    }, 0);
+    nextPaneNumber = Math.max(validSnapshots.length, maxRestoredPaneNum) + 1;
     notifyChange();
     return true;
   };
