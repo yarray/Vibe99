@@ -59,6 +59,7 @@ fn main() {
             shell_profile::shell_profile_add,
             shell_profile::shell_profile_remove,
             shell_profile::shell_profiles_detect,
+            shell_profile::shell_profiles_reorder,
             hook::hooks_list,
             hook::hook_add,
             hook::hook_remove,
