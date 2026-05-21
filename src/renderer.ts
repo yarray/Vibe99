@@ -25,7 +25,6 @@ const shellProfilesSettingsBtn = document.getElementById('shell-profiles-setting
 const hooksSettingsBtn = document.getElementById('hooks-settings-btn')!;
 const layoutsSettingsBtn = document.getElementById('layouts-settings-btn')!;
 const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts-settings-btn')!;
-const layoutHotkeysSettingsBtn = document.getElementById('layout-hotkeys-settings-btn')!;
 
 // ---------------------------------------------------------------------------
 // Bridge
@@ -59,7 +58,6 @@ const wb = createWorkbenchRenderer({
   hooksSettingsBtn,
   layoutsSettingsBtn,
   keyboardShortcutsSettingsBtn,
-  layoutHotkeysSettingsBtn,
 });
 
 // ---------------------------------------------------------------------------
@@ -131,9 +129,4 @@ hooksSettingsBtn.addEventListener('keydown', (e) => {
 keyboardShortcutsSettingsBtn.addEventListener('click', wb.onKeyboardShortcutsSettingsClick);
 keyboardShortcutsSettingsBtn.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); wb.onKeyboardShortcutsSettingsClick(); }
-});
-
-layoutHotkeysSettingsBtn.addEventListener('click', wb.onLayoutHotkeysSettingsClick);
-layoutHotkeysSettingsBtn.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); wb.onLayoutHotkeysSettingsClick(); }
 });
