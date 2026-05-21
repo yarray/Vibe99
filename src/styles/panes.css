@@ -250,9 +250,11 @@ body.is-dragging-tabs {
   border-color: #e04040;
 }
 
-.pane.is-exited::after {
-  opacity: 0;
-  animation: none;
+/* Higher specificity to ensure exited state overrides breathing alert */
+.pane.is-exited::after,
+.pane.is-exited.has-pending-activity::after {
+  opacity: 0 !important;
+  animation: none !important;
 }
 
 .terminal-exit-overlay {
