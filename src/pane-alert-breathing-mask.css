@@ -22,7 +22,8 @@
 }
 
 .pane.is-focused::after,
-.pane.is-navigation-target::after {
+.pane.is-navigation-target::after,
+.pane.is-exited::after {
   animation: none;
 }
 

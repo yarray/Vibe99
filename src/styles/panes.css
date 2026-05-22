@@ -250,9 +250,17 @@ body.is-dragging-tabs {
   border-color: #e04040;
 }
 
-.pane.is-exited::after {
-  opacity: 0;
-  animation: none;
+/* When exited and focused, hide the color card overlay */
+.pane.is-exited.is-focused::after,
+.pane.is-exited.has-pending-activity.is-focused::after {
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+/* When exited but NOT focused, keep the breathing animation off */
+.pane.is-exited:not(.is-focused)::after,
+.pane.is-exited:not(.is-focused).has-pending-activity::after {
+  animation: none !important;
 }
 
 .terminal-exit-overlay {
@@ -263,6 +271,12 @@ body.is-dragging-tabs {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  /* No background — let the color card effect show when not focused */
+  background: transparent;
+}
+
+/* Show background only when focused */
+.pane.is-focused .terminal-exit-overlay {
   background: rgba(0, 0, 0, 0.3);
 }
 

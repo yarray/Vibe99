@@ -1,0 +1,1 @@
+Fixed style conflict between terminal exit overlay and non-focus pane mask. The restart terminal overlay now properly overrides the breathing alert animation when a terminal exits, ensuring consistent visual behavior regardless of the pane's focus or activity state.
