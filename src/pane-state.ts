@@ -522,11 +522,10 @@ export function createPaneState({
       ].filter((id) => id !== ''),
     });
 
-    const maxRestoredPaneNum = validSnapshots.reduce((max, s) => {
-      const n = /^p(\d+)$/.test(s.id) ? parseInt(s.id.slice(1), 10) : 0;
-      return Math.max(max, n);
-    }, 0);
-    nextPaneNumber = Math.max(validSnapshots.length, maxRestoredPaneNum) + 1;
+    nextPaneNumber = validSnapshots.reduce(
+      (max, s) => Math.max(max, Number.parseInt(s.id.slice(1), 10) || 0),
+      0,
+    ) + 1;
     notifyChange();
     return true;
   };
