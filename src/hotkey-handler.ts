@@ -3,7 +3,7 @@ import type { Bridge, HotkeyBinding } from './bridge';
 export interface HotkeyHandlerDeps {
   bridge: Bridge;
   reportError: (error: unknown) => void;
-  isMainWindow: () => boolean;
+  windowLayoutId: string | null;
 }
 
 export interface HotkeyHandler {
@@ -13,7 +13,7 @@ export interface HotkeyHandler {
 }
 
 export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
-  const { bridge, reportError, isMainWindow } = deps;
+  const { bridge, reportError, windowLayoutId } = deps;
 
   let removeHotkeyListener: (() => void) | null = null;
 
@@ -24,9 +24,9 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
   }
 
   async function init(layoutHotkeys: Record<string, string>): Promise<void> {
-    if (!isMainWindow()) return;
-
     removeHotkeyListener = bridge.onHotkeyPressed((event) => {
+      // Only handle if this window is the target layout or main window
+      if (windowLayoutId !== null && event.layoutId !== windowLayoutId) return;
       bridge.layouts.toggleWindow(event.layoutId).catch(reportError);
     });
 
@@ -34,10 +34,12 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
   }
 
   async function sync(layoutHotkeys: Record<string, string>): Promise<void> {
-    if (!isMainWindow()) return;
     const bindings = toBindings(layoutHotkeys);
     if (bindings.length === 0) return;
-    await bridge.hotkey.registerAll(bindings).catch(reportError);
+    await bridge.hotkey.registerAll(bindings).catch((e) => {
+      console.error('[hotkey] registerAll failed', e);
+      reportError(e);
+    });
   }
 
   function dispose(): void {

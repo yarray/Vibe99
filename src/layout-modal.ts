@@ -401,53 +401,27 @@ export function createLayoutModal({
       actionsRow.appendChild(openInNewWindowBtn);
       info.appendChild(actionsRow);
 
-      const panesCount: number = selected.panes?.length ?? 0;
-      const paneCountLabel = document.createElement('div');
-      paneCountLabel.className = 'layout-pane-count-label';
-      paneCountLabel.textContent = `Panes (${panesCount})`;
-      info.appendChild(paneCountLabel);
-
-      const panesList = document.createElement('div');
-      panesList.className = 'layout-panes-list';
-      for (const pane of selected.panes ?? []) {
-        const paneItem = document.createElement('div');
-        paneItem.className = 'layout-pane-item';
-        const paneTitle = document.createElement('div');
-        paneTitle.className = 'layout-pane-title';
-        paneTitle.textContent = (pane.title as string | undefined) || 'Untitled';
-        paneItem.appendChild(paneTitle);
-        const paneDetails = document.createElement('div');
-        paneDetails.className = 'layout-pane-details';
-        const paneCwd = document.createElement('span');
-        paneCwd.className = 'layout-pane-cwd';
-        const shortCwd = pane.cwd?.replace(/^\/home\/[^\/]+/, '~') ?? pane.cwd ?? 'unknown';
-        paneCwd.textContent = shortCwd;
-        paneDetails.appendChild(paneCwd);
-        paneItem.appendChild(paneDetails);
-        panesList.appendChild(paneItem);
-      }
-      info.appendChild(panesList);
-
       // -- Hotkey --
       const hotkeySection = document.createElement('div');
       hotkeySection.className = 'layout-section';
 
-      const hotkeyLabel = document.createElement('div');
-      hotkeyLabel.className = 'layout-section-title';
-      hotkeyLabel.textContent = 'Global Hotkey';
-      hotkeySection.appendChild(hotkeyLabel);
-
       const hotkeyRow = document.createElement('div');
-      hotkeyRow.className = 'layout-hotkey-row';
+      hotkeyRow.className = 'settings-row';
+      const hotkeyLabel = document.createElement('span');
+      hotkeyLabel.textContent = 'Global Hotkey';
+      hotkeyRow.appendChild(hotkeyLabel);
+
+      const hotkeyActions = document.createElement('div');
+      hotkeyActions.className = 'layout-hotkey-actions';
 
       const currentShortcut = settingsManager.settings.layoutHotkeys[selected.id] ?? null;
 
       if (currentShortcut) {
         const keysDisplay = document.createElement('div');
-        keysDisplay.className = 'shortcut-keys layout-hotkey-keys';
+        keysDisplay.className = 'shortcut-keys';
         keysDisplay.textContent = formatShortcutForDisplay(currentShortcut, bridge.platform);
         keysDisplay.addEventListener('click', () => {
-          startInlineHotkeyRecording(selected.id, hotkeyRow, () => renderModalLayouts(overlay), settingsManager);
+          startInlineHotkeyRecording(selected.id, hotkeyActions, () => renderModalLayouts(overlay), settingsManager);
         });
 
         const clearBtn = document.createElement('button');
@@ -461,17 +435,18 @@ export function createLayoutModal({
           renderModalLayouts(overlay);
         });
 
-        hotkeyRow.append(keysDisplay, clearBtn);
+        hotkeyActions.append(keysDisplay, clearBtn);
       } else {
         const assignBtn = document.createElement('button');
         assignBtn.type = 'button';
         assignBtn.className = 'settings-btn layout-hotkey-assign-btn';
         assignBtn.textContent = 'Assign Hotkey';
         assignBtn.addEventListener('click', () => {
-          startInlineHotkeyRecording(selected.id, hotkeyRow, () => renderModalLayouts(overlay), settingsManager);
+          startInlineHotkeyRecording(selected.id, hotkeyActions, () => renderModalLayouts(overlay), settingsManager);
         });
-        hotkeyRow.appendChild(assignBtn);
+        hotkeyActions.appendChild(assignBtn);
       }
+      hotkeyRow.appendChild(hotkeyActions);
       hotkeySection.appendChild(hotkeyRow);
       info.appendChild(hotkeySection);
 
@@ -484,6 +459,7 @@ export function createLayoutModal({
       const saveQuakeConfig = (layoutId: string, config: QuakeLayoutConfig) => {
         settingsManager.settings.quakeLayouts[layoutId] = { ...config };
         settingsManager.scheduleSettingsSave();
+        bridge.applyQuake(layoutId, config).catch(() => {});
       };
 
       const quakeToggleRow = document.createElement('div');
@@ -539,7 +515,7 @@ export function createLayoutModal({
       heightLabel.textContent = 'Height';
       heightRow.appendChild(heightLabel);
       const heightDual = document.createElement('div');
-      heightDual.className = 'settings-dual';
+      heightDual.className = 'settings-dual settings-triple';
       const heightRange = document.createElement('input');
       heightRange.type = 'range'; heightRange.min = '30'; heightRange.max = '100'; heightRange.step = '1';
       heightRange.value = String(currentQuake.height);
@@ -560,7 +536,8 @@ export function createLayoutModal({
         saveQuakeConfig(selected.id, currentQuake);
       });
       heightDual.append(heightRange, heightInput, heightUnit);
-      quakeDetails.appendChild(heightDual);
+      heightRow.appendChild(heightDual);
+      quakeDetails.appendChild(heightRow);
 
       const durRow = document.createElement('div');
       durRow.className = 'settings-row';
@@ -568,7 +545,7 @@ export function createLayoutModal({
       durLabel.textContent = 'Animation';
       durRow.appendChild(durLabel);
       const durDual = document.createElement('div');
-      durDual.className = 'settings-dual';
+      durDual.className = 'settings-dual settings-triple';
       const durRange = document.createElement('input');
       durRange.type = 'range'; durRange.min = '100'; durRange.max = '500'; durRange.step = '10';
       durRange.value = String(currentQuake.animationDuration);
@@ -589,7 +566,8 @@ export function createLayoutModal({
         saveQuakeConfig(selected.id, currentQuake);
       });
       durDual.append(durRange, durInput, durUnit);
-      quakeDetails.appendChild(durDual);
+      durRow.appendChild(durDual);
+      quakeDetails.appendChild(durRow);
 
       quakeSection.appendChild(quakeDetails);
       info.appendChild(quakeSection);
@@ -597,12 +575,42 @@ export function createLayoutModal({
       quakeToggleRow.addEventListener('click', () => {
         if (settingsManager.settings.quakeLayouts[selected.id]) {
           delete settingsManager.settings.quakeLayouts[selected.id];
+          bridge.removeQuake(selected.id).catch(() => {});
         } else {
           settingsManager.settings.quakeLayouts[selected.id] = { ...currentQuake };
+          bridge.applyQuake(selected.id, { ...currentQuake }).catch(() => {});
         }
         settingsManager.scheduleSettingsSave();
         renderModalLayouts(overlay);
       });
+
+      // -- Panes list --
+      const panesCount: number = selected.panes?.length ?? 0;
+      const paneCountLabel = document.createElement('div');
+      paneCountLabel.className = 'layout-pane-count-label';
+      paneCountLabel.textContent = `Panes (${panesCount})`;
+      info.appendChild(paneCountLabel);
+
+      const panesList = document.createElement('div');
+      panesList.className = 'layout-panes-list';
+      for (const pane of selected.panes ?? []) {
+        const paneItem = document.createElement('div');
+        paneItem.className = 'layout-pane-item';
+        const paneTitle = document.createElement('div');
+        paneTitle.className = 'layout-pane-title';
+        paneTitle.textContent = (pane.title as string | undefined) || 'Untitled';
+        paneItem.appendChild(paneTitle);
+        const paneDetails = document.createElement('div');
+        paneDetails.className = 'layout-pane-details';
+        const paneCwd = document.createElement('span');
+        paneCwd.className = 'layout-pane-cwd';
+        const shortCwd = pane.cwd?.replace(/^\/home\/[^\/]+/, '~') ?? pane.cwd ?? 'unknown';
+        paneCwd.textContent = shortCwd;
+        paneDetails.appendChild(paneCwd);
+        paneItem.appendChild(paneDetails);
+        panesList.appendChild(paneItem);
+      }
+      info.appendChild(panesList);
 
       editorEl.appendChild(info);
     } else {
@@ -671,7 +679,6 @@ function startInlineHotkeyRecording(
 ): void {
   const recorder = document.createElement('div');
   recorder.className = 'shortcut-recorder-inline';
-  recorder.tabIndex = -1;
 
   const keysHint = document.createElement('div');
   keysHint.className = 'shortcut-recorder-inline-hint';
@@ -680,20 +687,17 @@ function startInlineHotkeyRecording(
   const conflictWarning = document.createElement('div');
   conflictWarning.className = 'shortcut-conflict-warning';
 
-  const actions = document.createElement('div');
-  actions.className = 'shortcut-recorder-inline-actions';
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
-  cancelBtn.className = 'settings-btn';
+  cancelBtn.className = 'shortcut-recorder-btn';
   cancelBtn.textContent = 'Cancel';
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
-  saveBtn.className = 'settings-btn';
+  saveBtn.className = 'shortcut-recorder-btn shortcut-recorder-save';
   saveBtn.textContent = 'Save';
   saveBtn.disabled = true;
-  actions.append(cancelBtn, saveBtn);
 
-  recorder.append(keysHint, conflictWarning, actions);
+  recorder.append(keysHint, conflictWarning, cancelBtn, saveBtn);
   container.replaceChildren(recorder);
 
   let recordedShortcut: string | null = null;
@@ -740,5 +744,5 @@ function startInlineHotkeyRecording(
   });
 
   window.addEventListener('keydown', keydownHandler, true);
-  recorder.focus();
+  keysHint.focus();
 }

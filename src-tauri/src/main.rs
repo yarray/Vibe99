@@ -11,25 +11,24 @@ use vibe99_lib::commands::shell_profile;
 use vibe99_lib::commands::terminal::{self, AppState};
 use vibe99_lib::commands::wsl as wsl_cmd;
 use vibe99_lib::pty::PtyManager;
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use tauri::Emitter;
 use tauri_plugin_global_shortcut::ShortcutState;
 
-/// Parse `--layout <id>` from the command-line arguments.
-fn parse_layout_arg() -> Option<String> {
+/// Resolve layout id from `--layout <id>` CLI arg or `VIBE99_LAYOUT` env var.
+fn resolve_layout_id() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
         if args[i] == "--layout" && i + 1 < args.len() {
             return Some(args[i + 1].clone());
         }
     }
-    None
+    std::env::var("VIBE99_LAYOUT").ok()
 }
 
 fn main() {
     vibe99_lib::windows::log_redirection_guard_status();
 
-    let layout_id_arg = parse_layout_arg();
+    let layout_id_arg = resolve_layout_id();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -104,13 +103,8 @@ fn main() {
         .setup(move |app| {
             if let Some(layout_id) = &layout_id_arg {
                 if let Some(window) = app.get_webview_window("main") {
-                    if let Ok(mut url) = window.url() {
-                        // Use set_query instead of query_pairs_mut to avoid origin issues.
-                        // Ensure proper encoding of the query parameter.
-                        let query = format!("layoutId={}", utf8_percent_encode(layout_id, NON_ALPHANUMERIC));
-                        url.set_query(Some(&query));
-                        let _ = window.navigate(url);
-                    }
+                    let escaped = layout_id.replace('\\', "\\\\").replace('\'', "\\'");
+                    let _ = window.eval(&format!("window.__VIBE99_LAYOUT_ID = '{escaped}'"));
                 }
             }
             Ok(())
