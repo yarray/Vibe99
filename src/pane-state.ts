@@ -53,6 +53,8 @@ export interface SessionData {
   version: number;
   panes: SessionPaneEntry[];
   focusedPaneIndex: number;
+  /** Monotonic counter for generating unique pane IDs (e.g. p1, p2, …). */
+  nextPaneNumber: number;
 }
 
 /** Dependencies injected into `createPaneState`. */
@@ -103,7 +105,7 @@ export interface PaneState {
 
   // Session operations
   buildSessionData: () => SessionData;
-  restoreSession: (session: { panes?: SessionPaneEntry[]; focusedPaneIndex?: number }) => boolean;
+  restoreSession: (session: { panes?: SessionPaneEntry[]; focusedPaneIndex?: number; nextPaneNumber?: number }) => boolean;
 
   // Domain access
   /** Get the underlying Layout aggregate root. */
@@ -459,12 +461,14 @@ export function createPaneState({
         };
       }),
       focusedPaneIndex: focusedIndex >= 0 ? focusedIndex : 0,
+      nextPaneNumber,
     };
   };
 
   const restoreSession = (session: {
     panes?: SessionPaneEntry[];
     focusedPaneIndex?: number;
+    nextPaneNumber?: number;
   }): boolean => {
     const validSnapshots: PaneSnapshot[] = (session.panes ?? [])
       .filter(
@@ -522,11 +526,7 @@ export function createPaneState({
       ].filter((id) => id !== ''),
     });
 
-    const maxRestoredPaneNum = validSnapshots.reduce((max, s) => {
-      const n = /^p(\d+)$/.test(s.id) ? parseInt(s.id.slice(1), 10) : 0;
-      return Math.max(max, n);
-    }, 0);
-    nextPaneNumber = Math.max(validSnapshots.length, maxRestoredPaneNum) + 1;
+    nextPaneNumber = session.nextPaneNumber ?? (validSnapshots.length + 1);
     notifyChange();
     return true;
   };

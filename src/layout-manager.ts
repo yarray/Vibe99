@@ -54,7 +54,7 @@ export interface LayoutManager {
   _setLayouts: (newLayouts: LayoutData[]) => void;
   _setDefaultLayoutId: (id: string) => void;
   createLayoutFromCurrentWindow: (layoutId: string, name: string) => Promise<LayoutData>;
-  restoreSession: (session: { panes?: SessionData['panes']; focusedPaneIndex?: number }) => boolean;
+  restoreSession: (session: { panes?: SessionData['panes']; focusedPaneIndex?: number; nextPaneNumber?: number }) => boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ export function createLayoutManager({
     return paneState.buildSessionData();
   }
 
-  function restoreSession(session: { panes?: SessionData['panes']; focusedPaneIndex?: number }): boolean {
+  function restoreSession(session: { panes?: SessionData['panes']; focusedPaneIndex?: number; nextPaneNumber?: number }): boolean {
     return paneState.restoreSession(session);
   }
 
@@ -109,6 +109,7 @@ export function createLayoutManager({
       panes: session.panes as unknown as LayoutData['panes'],
       focusedPaneIndex: session.focusedPaneIndex,
       windowGeometry: windowGeometry ?? undefined,
+      nextPaneNumber: session.nextPaneNumber,
     };
   }
 
@@ -189,7 +190,7 @@ export function createLayoutManager({
   async function switchLayout(layoutId: string): Promise<void> {
     const layout = layouts.find((l) => l.id === layoutId);
     if (!layout) return;
-    restoreSession({ panes: layout.panes as unknown as SessionData['panes'], focusedPaneIndex: layout.focusedPaneIndex });
+    restoreSession({ panes: layout.panes as unknown as SessionData['panes'], focusedPaneIndex: layout.focusedPaneIndex, nextPaneNumber: layout.nextPaneNumber });
     setWindowLayoutId(layoutId);
     flushWindowLayoutSave();
     updateLayoutsIndicator();

@@ -794,7 +794,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     }
 
     layoutManager.setWindowLayoutId(targetLayout.id);
-    paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
+    paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex, nextPaneNumber: targetLayout.nextPaneNumber });
     paneRenderer?.ensureSessions();
 
     layoutManager.updateLayoutsIndicator();
