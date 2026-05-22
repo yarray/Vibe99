@@ -133,6 +133,10 @@
   overflow: hidden;
 }
 
+body.is-quake-window .status-bar {
+  display: none;
+}
+
 #status-label {
   min-width: 0;
   white-space: nowrap;

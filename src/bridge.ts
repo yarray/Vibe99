@@ -184,6 +184,7 @@ interface TauriWindow {
   setPosition: (position: { type: string; x: number; y: number }) => Promise<void>;
   setAlwaysOnTop: (onTop: boolean) => Promise<void>;
   setDecorations: (decorations: boolean) => Promise<void>;
+  setShadow: (shadow: boolean) => Promise<void>;
   setSkipTaskbar: (skip: boolean) => Promise<void>;
   setResizable: (resizable: boolean) => Promise<void>;
 }
@@ -196,11 +197,28 @@ interface TauriMonitor {
   scaleFactor: number;
 }
 
+interface WindowFrameInsets {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+interface QuakeViewport {
+  leftInset: number;
+  topInset: number;
+  rightInset: number;
+  bottomInset: number;
+  width: number;
+  height: number;
+}
+
 /**
  * Minimal subset of the Tauri WebviewWindow class used internally.
  * Avoids importing the full type from @tauri-apps/api.
  */
 interface TauriWebviewWindow extends TauriWindow {
+  emit: (event: string, payload?: unknown) => Promise<void>;
   once: (event: string, handler: () => void) => Promise<() => void>;
 }
 
@@ -271,7 +289,7 @@ export interface LayoutsApi {
   isFullscreen: (() => Promise<boolean>) | undefined;
   setFullscreen: ((fullscreen: boolean) => Promise<void>) | undefined;
   setAsDefault: (layoutId: string) => Promise<LayoutsListResult>;
-  applyQuake: (layoutId: string, config: { position: string; height: number; animationDuration: number }) => Promise<void>;
+  applyQuake: (layoutId: string, config: { position: string; height: number }) => Promise<void>;
   removeQuake: (layoutId: string) => Promise<void>;
 }
 
@@ -333,6 +351,7 @@ export interface Bridge {
   onMenuAction: (handler: (event: MenuActionEvent) => void) => UnsubscribeFn;
   onLayoutFocusNotice: ((handler: () => void) => UnsubscribeFn) | undefined;
   onHotkeyPressed: (handler: (event: HotkeyPressedEvent) => void) => UnsubscribeFn;
+  listen: <T = unknown>(event: string, handler: (payload: T) => void) => UnsubscribeFn;
 
   // Lifecycle
   cwdReady: Promise<void>;
@@ -426,7 +445,6 @@ function basename(path: string): string {
 
 const LAYOUT_FOCUS_NOTICE_EVENT = 'vibe99:layout-focus-notice';
 const LAYOUT_WINDOW_BINDINGS_KEY = 'vibe99.layoutWindowBindings';
-
 type LayoutWindowBindings = Record<string, string>;
 
 function readLayoutWindowBindings(): LayoutWindowBindings {
@@ -589,6 +607,7 @@ function createUnavailableBridge(): Bridge {
     onMenuAction: () => () => {},
     onLayoutFocusNotice: undefined,
     onHotkeyPressed: () => () => {},
+    listen: () => () => {},
     cwdReady: Promise.resolve(),
 
     // Flat aliases (all point to the same grouped methods)
@@ -686,6 +705,34 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     return `layout-${safeLabel}`;
   }
 
+  async function getNativeWindowFrameInsets(label: string): Promise<WindowFrameInsets> {
+    try {
+      return await invoke<WindowFrameInsets>('window_frame_insets', { label });
+    } catch {
+      return { left: 0, top: 0, right: 0, bottom: 0 };
+    }
+  }
+
+  async function setNativeWindowSquareCorners(label: string, square: boolean): Promise<void> {
+    await invoke('window_set_square_corners', { label, square }).catch(() => {});
+  }
+
+  async function emitQuakeViewport(win: TauriWebviewWindow, viewport: QuakeViewport): Promise<void> {
+    console.debug('[quake] emit viewport', { targetLabel: win.label, viewport });
+    await win.emit('quake:viewport', viewport).catch(() => {});
+  }
+
+  function applyQuakeViewportToCurrentDocument(viewport: QuakeViewport): void {
+    const style = document.documentElement.style;
+    style.setProperty('--quake-left-inset', `${Math.max(0, viewport.leftInset)}px`);
+    style.setProperty('--quake-top-inset', `${Math.max(0, viewport.topInset)}px`);
+    style.setProperty('--quake-right-inset', `${Math.max(0, viewport.rightInset)}px`);
+    style.setProperty('--quake-bottom-inset', `${Math.max(0, viewport.bottomInset)}px`);
+    style.setProperty('--quake-width', `${Math.max(0, viewport.width)}px`);
+    style.setProperty('--quake-height', `${Math.max(0, viewport.height)}px`);
+    console.debug('[quake] viewport applied locally', viewport);
+  }
+
   /**
    * Get the current window's geometry information.
    * Returns position, size, and fullscreen state, or null if any property cannot be obtained.
@@ -718,29 +765,67 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
    * Apply quake mode to a layout window: stretch to monitor width,
    * set height as percentage, pin to top/bottom, remove decorations.
    */
-  async function applyQuake(
+  async function applyQuakeGeometry(
     layoutId: string,
-    config: { position: string; height: number; animationDuration: number },
-  ): Promise<void> {
-    const win = await findLayoutWindow(layoutId);
-    if (!win) return;
+    config: { position: string; height: number },
+  ): Promise<QuakeViewport | null> {
+    const win = layoutId === windowLayoutId ? currentWindow as TauriWebviewWindow : await findLayoutWindow(layoutId);
+    if (!win) return null;
 
     const monitor = await currentMonitor();
-    if (!monitor) return;
+    if (!monitor) return null;
 
+    const frame = await getNativeWindowFrameInsets(win.label);
+    const seamBleed = 1;
+    const scaleFactor = monitor.scaleFactor || 1;
     const quakeHeight = Math.round(monitor.size.height * config.height / 100);
+    const viewport = {
+      leftInset: (frame.left + seamBleed) / scaleFactor,
+      topInset: (frame.top + seamBleed) / scaleFactor,
+      rightInset: (frame.right + seamBleed) / scaleFactor,
+      bottomInset: (frame.bottom + seamBleed) / scaleFactor,
+      width: monitor.size.width / scaleFactor,
+      height: quakeHeight / scaleFactor,
+    };
+    const outerWidth = monitor.size.width + frame.left + frame.right + seamBleed * 2;
+    const outerHeight = quakeHeight + frame.top + frame.bottom + seamBleed * 2;
+    const x = monitor.position.x - frame.left - seamBleed;
     const y = config.position === 'bottom'
-      ? monitor.position.y + monitor.size.height - quakeHeight
-      : monitor.position.y;
+      ? monitor.position.y + monitor.size.height - quakeHeight - frame.top - seamBleed
+      : monitor.position.y - frame.top - seamBleed;
 
-    await Promise.all([
-      win.setDecorations(false),
-      win.setAlwaysOnTop(true),
-      win.setSkipTaskbar(true),
-      win.setResizable(false),
-      win.setSize({ type: 'Physical', width: monitor.size.width, height: quakeHeight }),
-      win.setPosition({ type: 'Physical', x: monitor.position.x, y }),
-    ]);
+    console.debug('[quake] apply', {
+      layoutId,
+      currentWindowLabel: currentWindow.label,
+      windowLayoutId,
+      targetLabel: win.label,
+      config,
+      monitor,
+      frame,
+      viewport,
+      outer: { x, y, width: outerWidth, height: outerHeight },
+    });
+
+    await win.setDecorations(false);
+    await win.setShadow(false).catch(() => {});
+    await setNativeWindowSquareCorners(win.label, true);
+    await win.setAlwaysOnTop(true);
+    await win.setSkipTaskbar(true);
+    await win.setResizable(false);
+    await win.setSize({ type: 'Physical', width: outerWidth, height: outerHeight });
+    await win.setPosition({ type: 'Physical', x, y });
+    if (win.label === currentWindow.label) {
+      applyQuakeViewportToCurrentDocument(viewport);
+    }
+    await emitQuakeViewport(win, viewport);
+    return viewport;
+  }
+
+  async function applyQuake(
+    layoutId: string,
+    config: { position: string; height: number },
+  ): Promise<void> {
+    await applyQuakeGeometry(layoutId, config);
   }
 
   /**
@@ -752,6 +837,8 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
 
     await Promise.all([
       win.setDecorations(true),
+      win.setShadow(true).catch(() => {}),
+      setNativeWindowSquareCorners(win.label, false),
       win.setAlwaysOnTop(false),
       win.setSkipTaskbar(false),
       win.setResizable(true),
@@ -761,7 +848,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
   /**
    * Check if a layout has quake config by loading settings.
    */
-  async function getQuakeConfig(layoutId: string): Promise<{ position: string; height: number; animationDuration: number } | null> {
+  async function getQuakeConfig(layoutId: string): Promise<{ position: string; height: number } | null> {
     try {
       const settings = await invoke<SettingsData>('settings_load');
       const ui = (settings as any)?.ui;
@@ -810,7 +897,14 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     const win = new WebviewWindow(label, {
       url,
       title: `Vibe99 - ${layoutId}`,
-      ...(quakeConfig ? {} : {
+      ...(quakeConfig ? {
+        decorations: false,
+        shadow: false,
+        alwaysOnTop: true,
+        resizable: false,
+        skipTaskbar: true,
+        visible: false,
+      } : {
         width: geom?.width ?? 1600,
         height: geom?.height ?? 920,
         minWidth: 960,
@@ -827,8 +921,11 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     const createdWin = await WebviewWindow.getByLabel(label);
     if (createdWin) {
       if (quakeConfig) {
-        await applyQuake(layoutId, quakeConfig);
+        const viewport = await applyQuakeGeometry(layoutId, quakeConfig);
         await createdWin.show();
+        if (viewport) {
+          await emitQuakeViewport(createdWin, viewport);
+        }
       } else if (geom?.fullscreen) {
         await createdWin.setFullscreen(true).catch(() => {});
       }
@@ -943,7 +1040,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       isFullscreen: () => getCurrentWindow().isFullscreen(),
       setFullscreen: (fullscreen: boolean) => getCurrentWindow().setFullscreen(fullscreen),
       setAsDefault: (layoutId: string) => invoke('layout_set_default', { layoutId }),
-      applyQuake: (layoutId: string, config: { position: string; height: number; animationDuration: number }) => applyQuake(layoutId, config),
+      applyQuake: (layoutId: string, config: { position: string; height: number }) => applyQuake(layoutId, config),
       removeQuake: (layoutId: string) => removeQuake(layoutId),
     },
     hooks: {
@@ -970,6 +1067,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       onTauriEvent<void>(LAYOUT_FOCUS_NOTICE_EVENT, handler),
     onHotkeyPressed: (handler: (event: HotkeyPressedEvent) => void) =>
       onTauriEvent<HotkeyPressedEvent>('hotkey:pressed', handler),
+    listen: onTauriEvent,
     cwdReady: _cwdReady,
     getWindowGeometry,
   };

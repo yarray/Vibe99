@@ -112,3 +112,15 @@ body::after {
   grid-template-rows: var(--tabs-height) 1fr var(--status-height);
   height: 100vh;
 }
+
+body.is-quake-window .app-shell {
+  grid-template-rows: var(--tabs-height) minmax(0, 1fr) 0;
+  width: var(--quake-width, 100vw);
+  height: var(--quake-height, 100vh);
+  padding:
+    var(--quake-top-inset, 0px)
+    var(--quake-right-inset, 0px)
+    var(--quake-bottom-inset, 0px)
+    var(--quake-left-inset, 0px);
+  overflow: hidden;
+}

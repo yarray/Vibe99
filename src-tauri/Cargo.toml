@@ -33,4 +33,10 @@ percent-encoding = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
-windows-sys = { version = "0.59", features = ["Win32_System_Threading", "Win32_System_SystemServices"] }
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+  "Win32_System_Threading",
+  "Win32_System_SystemServices",
+  "Win32_UI_WindowsAndMessaging",
+] }

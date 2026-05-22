@@ -29,7 +29,13 @@ const keyboardShortcutsSettingsBtn = document.getElementById('keyboard-shortcuts
 // ---------------------------------------------------------------------------
 // Bridge
 // ---------------------------------------------------------------------------
-const bridge = createBridge((window as any).__TAURI__ ?? (window as any).vibe99 ?? null, null);
+function resolveWindowLayoutId(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  return (window as any).__VIBE99_LAYOUT_ID ?? params.get('layoutId');
+}
+
+const windowLayoutId = resolveWindowLayoutId();
+const bridge = createBridge((window as any).__TAURI__ ?? (window as any).vibe99 ?? null, windowLayoutId);
 
 // E2E instrumentation: capture writeTerminal calls
 const _originalWriteTerminal = bridge.writeTerminal;

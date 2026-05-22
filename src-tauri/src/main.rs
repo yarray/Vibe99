@@ -9,6 +9,7 @@ use vibe99_lib::commands::layout;
 use vibe99_lib::commands::settings;
 use vibe99_lib::commands::shell_profile;
 use vibe99_lib::commands::terminal::{self, AppState};
+use vibe99_lib::commands::window;
 use vibe99_lib::commands::wsl as wsl_cmd;
 use vibe99_lib::pty::PtyManager;
 use tauri::Emitter;
@@ -99,6 +100,8 @@ fn main() {
             hotkey::hotkey_unregister,
             hotkey::hotkey_list,
             hotkey::hotkey_register_all,
+            window::window_frame_insets,
+            window::window_set_square_corners,
         ])
         .setup(move |app| {
             if let Some(layout_id) = &layout_id_arg {

@@ -478,7 +478,7 @@ export function createLayoutModal({
       quakeDetails.className = 'layout-quake-details';
       quakeDetails.style.display = quakeConfig ? '' : 'none';
 
-      const currentQuake = quakeConfig ?? { animationDuration: 200, position: 'top' as QuakePosition, height: 60 };
+      const currentQuake = quakeConfig ?? { position: 'top' as QuakePosition, height: 60 };
 
       const posRow = document.createElement('div');
       posRow.className = 'settings-row';
@@ -539,36 +539,6 @@ export function createLayoutModal({
       heightRow.appendChild(heightDual);
       quakeDetails.appendChild(heightRow);
 
-      const durRow = document.createElement('div');
-      durRow.className = 'settings-row';
-      const durLabel = document.createElement('span');
-      durLabel.textContent = 'Animation';
-      durRow.appendChild(durLabel);
-      const durDual = document.createElement('div');
-      durDual.className = 'settings-dual settings-triple';
-      const durRange = document.createElement('input');
-      durRange.type = 'range'; durRange.min = '100'; durRange.max = '500'; durRange.step = '10';
-      durRange.value = String(currentQuake.animationDuration);
-      const durInput = document.createElement('input');
-      durInput.className = 'settings-number'; durInput.type = 'number'; durInput.min = '100'; durInput.max = '500'; durInput.step = '10';
-      durInput.value = String(currentQuake.animationDuration);
-      const durUnit = document.createElement('span');
-      durUnit.className = 'settings-unit'; durUnit.textContent = 'ms';
-      durRange.addEventListener('input', () => {
-        currentQuake.animationDuration = Math.max(100, Math.min(500, Math.round(Number(durRange.value) / 10) * 10));
-        durInput.value = String(currentQuake.animationDuration);
-        saveQuakeConfig(selected.id, currentQuake);
-      });
-      durInput.addEventListener('change', () => {
-        currentQuake.animationDuration = Math.max(100, Math.min(500, Math.round(Number(durInput.value) / 10) * 10));
-        durRange.value = String(currentQuake.animationDuration);
-        durInput.value = String(currentQuake.animationDuration);
-        saveQuakeConfig(selected.id, currentQuake);
-      });
-      durDual.append(durRange, durInput, durUnit);
-      durRow.appendChild(durDual);
-      quakeDetails.appendChild(durRow);
-
       quakeSection.appendChild(quakeDetails);
       info.appendChild(quakeSection);
 
@@ -576,9 +546,15 @@ export function createLayoutModal({
         if (settingsManager.settings.quakeLayouts[selected.id]) {
           delete settingsManager.settings.quakeLayouts[selected.id];
           bridge.removeQuake(selected.id).catch(() => {});
+          if (selected.id === layoutManager.getWindowLayoutId()) {
+            document.body.classList.remove('is-quake-window');
+          }
         } else {
           settingsManager.settings.quakeLayouts[selected.id] = { ...currentQuake };
           bridge.applyQuake(selected.id, { ...currentQuake }).catch(() => {});
+          if (selected.id === layoutManager.getWindowLayoutId()) {
+            document.body.classList.add('is-quake-window');
+          }
         }
         settingsManager.scheduleSettingsSave();
         renderModalLayouts(overlay);

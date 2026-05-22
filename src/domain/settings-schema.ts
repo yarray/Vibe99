@@ -69,12 +69,6 @@ export type QuakePosition = z.infer<typeof quakePositionSchema>;
  * that layout — no separate `enabled` boolean needed.
  */
 export const quakeLayoutConfigSchema = z.object({
-  animationDuration: z
-    .number({ error: 'Animation duration must be a number' })
-    .int({ message: 'Animation duration must be an integer' })
-    .min(100, { message: 'Animation duration must be at least 100ms' })
-    .max(500, { message: 'Animation duration must be at most 500ms' })
-    .default(200),
   position: quakePositionSchema.default('top'),
   height: z
     .number({ error: 'Height must be a number' })
@@ -82,7 +76,7 @@ export const quakeLayoutConfigSchema = z.object({
     .min(30, { message: 'Height must be at least 30%' })
     .max(100, { message: 'Height must be at most 100%' })
     .default(60),
-});
+}).passthrough();
 
 export type QuakeLayoutConfig = z.infer<typeof quakeLayoutConfigSchema>;
 

@@ -6,7 +6,7 @@
   min-width: 600px;
   max-width: 800px;
   width: 85vw;
-  height: 500px;
+  height: min(500px, calc(100vh - 32px));
   display: flex;
   flex-direction: column;
 }
