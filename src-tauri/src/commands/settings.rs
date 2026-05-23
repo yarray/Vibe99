@@ -443,8 +443,8 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
         .and_then(|v| v.as_object())
         .map(|o| {
             o.iter()
-                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.clone())))
-                .collect::<serde_json::Map<String, String>>()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), Value::String(s.to_string()))))
+                .collect::<serde_json::Map<String, Value>>()
         });
 
     let mut result = serde_json::json!({
