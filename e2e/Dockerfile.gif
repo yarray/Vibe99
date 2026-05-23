@@ -70,7 +70,7 @@ WORKDIR /app/Vibe99
 COPY e2e/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-COPY e2e/record-gif.sh /usr/local/bin/record-gif.sh
+COPY e2e/bin/record-gif.sh /usr/local/bin/record-gif.sh
 RUN chmod +x /usr/local/bin/record-gif.sh
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
