@@ -494,14 +494,25 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   window.addEventListener('focus', () => {
     syncIgnoreFocus();
-    // Window regained focus — clear any alert on the focused pane
-    // because the user can now see it.
     paneActivityWatcher.setFocus(paneState.getFocusedPaneId());
-    // Refresh all activity snapshots so stale fingerprints (from resize
-    // reflow, clear, etc.) don't cause false positives on the next write.
     paneRenderer?.refreshActivitySnapshots();
+    if (document.visibilityState === 'visible') {
+      render();
+    }
   });
   window.addEventListener('blur', () => syncIgnoreFocus());
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      const focusedPaneId = paneState.getFocusedPaneId();
+      if (focusedPaneId) {
+        const session = workbench?.session(focusedPaneId);
+        session?.setCursorBlink(false);
+      }
+    } else {
+      render();
+    }
+  });
 
   const floatWindowManager = createFloatWindowManager({
     tauri: (window as any).__TAURI__,

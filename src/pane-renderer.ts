@@ -135,6 +135,7 @@ export function createPaneRenderer({
 
       session.setAccent(accentColor);
       session.setTheme(pane.themeId);
+      session.setCursorBlink(isFocused);
 
       if (refit || session.needsFit()) {
         session.fit({ force: true });
