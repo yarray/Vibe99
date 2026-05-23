@@ -69,12 +69,6 @@ export type QuakePosition = z.infer<typeof quakePositionSchema>;
  * that layout — no separate `enabled` boolean needed.
  */
 export const quakeLayoutConfigSchema = z.object({
-  animationDuration: z
-    .number({ error: 'Animation duration must be a number' })
-    .int({ message: 'Animation duration must be an integer' })
-    .min(100, { message: 'Animation duration must be at least 100ms' })
-    .max(500, { message: 'Animation duration must be at most 500ms' })
-    .default(200),
   position: quakePositionSchema.default('top'),
   height: z
     .number({ error: 'Height must be a number' })
@@ -82,7 +76,7 @@ export const quakeLayoutConfigSchema = z.object({
     .min(30, { message: 'Height must be at least 30%' })
     .max(100, { message: 'Height must be at most 100%' })
     .default(60),
-});
+}).passthrough();
 
 export type QuakeLayoutConfig = z.infer<typeof quakeLayoutConfigSchema>;
 
@@ -422,6 +416,8 @@ export interface LegacySettingsInput {
     breathingIntensity?: unknown;
     activityAlertDebounceMs?: unknown;
     shortcuts?: Record<string, unknown>;
+    layoutHotkeys?: unknown;
+    quakeLayouts?: unknown;
   }>;
 }
 
@@ -438,22 +434,15 @@ export interface LegacySettingsInput {
  */
 export function migrateLegacySettings(raw: LegacySettingsInput): Partial<AppSettingsUi> {
   const ui = raw.ui ?? {};
-  const result: Partial<AppSettingsUi> = {};
 
-  // Copy current fields
-  if (ui.fontSize !== undefined) result.fontSize = ui.fontSize as number;
-  if (ui.fontFamily !== undefined) result.fontFamily = ui.fontFamily as string;
-  if (ui.paneOpacity !== undefined) result.paneOpacity = ui.paneOpacity as number;
-  if (ui.paneWidth !== undefined) result.paneWidth = ui.paneWidth as number;
-  if (ui.webglEnabled !== undefined) result.webglEnabled = ui.webglEnabled as boolean;
-  if (ui.breathingIntensity !== undefined) result.breathingIntensity = ui.breathingIntensity as BreathingIntensity;
-  if (ui.activityAlertDebounceMs !== undefined) result.activityAlertDebounceMs = ui.activityAlertDebounceMs as number;
+  // Strip non-schema fields, pass everything else through as-is
+  const { paneMaskAlpha, breathingAlertEnabled, shortcuts, ...rest } =
+    ui as Record<string, unknown>;
+  const result = rest as Partial<AppSettingsUi>;
 
   // Migrate paneMaskAlpha → paneMaskOpacity
-  if (ui.paneMaskAlpha !== undefined && ui.paneMaskOpacity === undefined) {
-    result.paneMaskOpacity = ui.paneMaskAlpha as number;
-  } else if (ui.paneMaskOpacity !== undefined) {
-    result.paneMaskOpacity = ui.paneMaskOpacity as number;
+  if (paneMaskAlpha !== undefined && ui.paneMaskOpacity === undefined) {
+    result.paneMaskOpacity = paneMaskAlpha as number;
   }
 
   // Migrate version 3 inverted mask opacity
@@ -462,8 +451,8 @@ export function migrateLegacySettings(raw: LegacySettingsInput): Partial<AppSett
   }
 
   // Migrate breathingAlertEnabled → breathingIntensity
-  if (ui.breathingAlertEnabled !== undefined && result.breathingIntensity === undefined) {
-    result.breathingIntensity = ui.breathingAlertEnabled ? 'intense' : 'none';
+  if (breathingAlertEnabled !== undefined && result.breathingIntensity === undefined) {
+    result.breathingIntensity = breathingAlertEnabled ? 'intense' : 'none';
   }
 
   return result;

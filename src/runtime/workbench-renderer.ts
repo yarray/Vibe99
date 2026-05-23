@@ -37,6 +37,7 @@ import type { AppCommand } from '../domain/commands.js';
 import { createCommandPaletteEntries } from '../command-palette-entries';
 import { createWorkbench } from './workbench.js';
 import type { Workbench } from './workbench.js';
+import { createQuakeView } from './quake-view.js';
 
 import * as ShortcutsRegistry from '../shortcuts-registry';
 import * as ShortcutsUI from '../shortcuts-ui';
@@ -130,6 +131,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   let layoutRestoreComplete = false;
   let layoutFocusNotice: { layoutId: string } | null = null;
   let layoutFocusNoticeTimer: number | null = null;
+  let quakeView: ReturnType<typeof createQuakeView> | null = null;
 
   // Shell-profile state (shared with shell-profiles module via adapter)
   let shellProfiles: ShellProfile[] = [];
@@ -154,7 +156,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   const windowContext: { kind: 'layout'; layoutId: string } | { kind: 'main' } = (() => {
     const params = new URLSearchParams(window.location.search);
-    const layoutId = params.get('layoutId');
+    const layoutId = (window as any).__VIBE99_LAYOUT_ID ?? params.get('layoutId');
     return layoutId ? { kind: 'layout', layoutId } : { kind: 'main' };
   })();
 
@@ -271,7 +273,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   const hotkeyHandler = createHotkeyHandler({
     bridge,
     reportError,
-    isMainWindow: () => windowContext.kind === 'main',
+    windowLayoutId: windowContext.kind === 'layout' ? windowContext.layoutId : null,
   });
 
   // -- Inline helpers ---------------------------------------------------------
@@ -581,7 +583,10 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   bridge.onLayoutFocusNotice?.(() => {
     if (!layoutManager.getWindowLayoutId()) return;
     dispatch({ type: 'focus.refocus' });
-    showLayoutFocusNotice(layoutManager.getWindowLayoutId()!);
+    const lid = layoutManager.getWindowLayoutId()!;
+    if (!settingsManager.settings.quakeLayouts[lid]) {
+      showLayoutFocusNotice(lid);
+    }
   });
 
   const removeTerminalExitListener = bridge.onTerminalExit(({ paneId, exitCode, reason }) => {
@@ -678,7 +683,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       delete document.body.dataset.layoutFocusName;
       document.body.classList.remove('is-layout-focus-notice');
       updateStatus();
-    }, 1400);
+    }, 1000);
   }
 
   // -- Settings / modal helpers -----------------------------------------------
@@ -794,6 +799,18 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     }
 
     layoutManager.setWindowLayoutId(targetLayout.id);
+    const quakeConfig = settingsManager.settings.quakeLayouts[targetLayout.id];
+    if (quakeConfig) {
+      console.debug('[quake] init', {
+        layoutId: targetLayout.id,
+        currentWindowLabel: bridge.currentWindowLabel,
+        windowContext,
+        quakeConfig,
+      });
+      quakeView = createQuakeView({ bridge, layoutId: targetLayout.id });
+      quakeView.init();
+      await bridge.applyQuake(targetLayout.id, quakeConfig);
+    }
     paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
     paneRenderer?.ensureSessions();
 
@@ -812,6 +829,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     layoutManager.flushWindowLayoutSave();
     settingsManager.flushSettingsSave();
     hotkeyHandler.dispose();
+    quakeView?.dispose();
     clearLayoutWindowBinding(layoutManager.getWindowLayoutId() ?? undefined, bridge.currentWindowLabel);
     removeTerminalDataListener();
     removeTerminalExitListener();

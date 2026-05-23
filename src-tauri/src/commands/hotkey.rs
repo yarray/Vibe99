@@ -28,11 +28,13 @@ pub fn hotkey_register(app: AppHandle, shortcut: String, layout_id: String) -> R
     let parsed = Shortcut::from_str(&shortcut)
         .map_err(|e| format!("invalid shortcut '{shortcut}': {e}"))?;
 
+    let key = parsed.to_string();
+
     app.global_shortcut()
         .register(parsed)
         .map_err(|e| format!("failed to register shortcut: {e}"))?;
 
-    bindings.insert(shortcut, layout_id);
+    bindings.insert(key, layout_id);
     Ok(())
 }
 
@@ -47,11 +49,13 @@ pub fn hotkey_unregister(app: AppHandle, shortcut: String) -> Result<(), String>
     let parsed = Shortcut::from_str(&shortcut)
         .map_err(|e| format!("invalid shortcut '{shortcut}': {e}"))?;
 
+    let key = parsed.to_string();
+
     app.global_shortcut()
         .unregister(parsed)
         .map_err(|e| format!("failed to unregister shortcut: {e}"))?;
 
-    bindings.remove(&shortcut);
+    bindings.remove(&key);
     Ok(())
 }
 
@@ -80,19 +84,27 @@ pub fn hotkey_register_all(app: AppHandle, bindings: Vec<HotkeyBinding>) -> Resu
         .lock()
         .map_err(|e| format!("lock poisoned: {e}"))?;
 
+    // Validate all shortcuts before modifying any state.
+    for binding in &bindings {
+        let _ = Shortcut::from_str(&binding.shortcut)
+            .map_err(|e| format!("invalid shortcut '{}': {e}", binding.shortcut))?;
+    }
+
+    // All validated — safe to clear old shortcuts.
     app.global_shortcut()
         .unregister_all()
         .map_err(|e| format!("failed to unregister all shortcuts: {e}"))?;
 
     state_bindings.clear();
 
+    // Register new shortcuts (re-parse is safe — validated above).
     for binding in &bindings {
-        let parsed = Shortcut::from_str(&binding.shortcut)
-            .map_err(|e| format!("invalid shortcut '{}': {e}", binding.shortcut))?;
+        let parsed = Shortcut::from_str(&binding.shortcut).unwrap();
+        let key = parsed.to_string();
         app.global_shortcut()
             .register(parsed)
             .map_err(|e| format!("failed to register '{}': {e}", binding.shortcut))?;
-        state_bindings.insert(binding.shortcut.clone(), binding.layout_id.clone());
+        state_bindings.insert(key, binding.layout_id.clone());
     }
 
     Ok(())

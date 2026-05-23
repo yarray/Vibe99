@@ -167,6 +167,10 @@
   flex-shrink: 0;
 }
 
+body.is-quake-window .tabs-actions {
+  margin-right: var(--quake-right-inset, 0px);
+}
+
 .tabs-add-group {
   display: inline-flex;
   align-items: center;
