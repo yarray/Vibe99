@@ -176,9 +176,9 @@ export function createPaneState({
 
   // Helper function to get the default three-pane layout (internal, returns PaneEntity[])
   const createDefaultPaneEntities = (): PaneEntity[] => [
-    createDefaultPane('p1', { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[0] }),
-    createDefaultPane('p2', { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[1] }),
-    createDefaultPane('p3', { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[2] }),
+    createDefaultPane(crypto.randomUUID(), { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[0] }),
+    createDefaultPane(crypto.randomUUID(), { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[1] }),
+    createDefaultPane(crypto.randomUUID(), { cwd: defaultCwd, terminalTitle: defaultTabTitle, accent: palette[2] }),
   ];
 
   const defaultPaneEntities = createDefaultPaneEntities();
@@ -191,8 +191,6 @@ export function createPaneState({
     focusedPaneId: defaultPaneEntities[0]?.id ?? null,
     mruPaneIds: defaultPaneEntities.map((pane) => pane.id),
   });
-
-  let nextPaneNumber: number = layout.panes().length + 1;
 
   // Internal helpers
   const notifyChange = (): void => {
@@ -235,9 +233,9 @@ export function createPaneState({
     );
     const accent: string =
       getAccentPalette().find((c: string) => !usedAccents.has(c.toLowerCase()))
-      || getAccentPalette()[(nextPaneNumber - 1) % getAccentPalette().length];
+      || getAccentPalette()[layout.panes().length % getAccentPalette().length];
     const focusedPane: PaneEntity | undefined = layout.panes()[getFocusedIndex()];
-    const newPane: PaneEntity = createDefaultPane(`p${nextPaneNumber}`, {
+    const newPane: PaneEntity = createDefaultPane(crypto.randomUUID(), {
       cwd: focusedPane?.cwd() || defaultCwd,
       terminalTitle: defaultTabTitle,
       accent,
@@ -246,7 +244,6 @@ export function createPaneState({
       newPane.setShellProfile(shellProfileId);
     }
 
-    nextPaneNumber += 1;
     layout.addPane(newPane);
     notifyChange();
     return newPane.id;
@@ -472,7 +469,7 @@ export function createPaneState({
           p && typeof p.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.accent),
       )
       .map((p: SessionPaneEntry, index: number): PaneSnapshot => ({
-        id: `p${index + 1}`,
+        id: p.paneId || `p${index + 1}`,
         title: (typeof p.title === 'string' && p.title) || null,
         terminalTitle: defaultTabTitle,
         cwd: (typeof p.cwd === 'string' && p.cwd) || defaultCwd,
@@ -500,7 +497,6 @@ export function createPaneState({
         pane.setCwd(defaultCwd);
         pane.setTerminalTitle(defaultTabTitle);
       }
-      nextPaneNumber = layout.panes().length + 1;
       notifyChange();
       return false;
     }
@@ -522,7 +518,6 @@ export function createPaneState({
       ].filter((id) => id !== ''),
     });
 
-    nextPaneNumber = validSnapshots.length + 1;
     notifyChange();
     return true;
   };

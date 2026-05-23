@@ -395,30 +395,12 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   });
 
   paneRenderer = createPaneRenderer({
-    bridge,
     paneState,
     settingsManager,
     paneAlert,
     paneActivityWatcher,
-    reportError,
     stageEl,
     getMode: () => currentMode,
-    onPaneClick: (paneId: string, opts?: { focusTerminal?: boolean }) => {
-      return dispatch({ type: 'pane.focus', paneId, focusTerminal: opts?.focusTerminal });
-    },
-    onTerminalTitleChange: (paneId, title) => paneState.setPaneTerminalTitle(paneId, title),
-    onTerminalContextMenu: (paneId, event) => {
-      void contextMenus?.showTerminalContextMenu(paneId, event);
-    },
-    scheduleWindowLayoutSave: () => layoutManager.scheduleWindowLayoutSave(),
-    tabBar,
-    getPaneLabel: (pane) => pane.title ?? pane.terminalTitle ?? '',
-    onPaneCwdChanged: (paneId, newCwd) => {
-      const pane = paneState.getPaneById(paneId);
-      if (!pane || pane.cwd === newCwd) return;
-      paneState.setPaneCwd(paneId, newCwd);
-      layoutManager.scheduleWindowLayoutSave(5000);
-    },
     workbench: workbench!,
   });
 
