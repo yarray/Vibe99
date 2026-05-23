@@ -783,7 +783,9 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       leftInset: (frame.left + seamBleed) / scaleFactor,
       topInset: (frame.top + seamBleed) / scaleFactor,
       rightInset: (frame.right + seamBleed) / scaleFactor,
-      bottomInset: (frame.bottom + seamBleed) / scaleFactor,
+      bottomInset: config.position === 'bottom'
+        ? (frame.bottom + seamBleed) / scaleFactor
+        : 0,
       width: monitor.size.width / scaleFactor,
       height: quakeHeight / scaleFactor,
     };

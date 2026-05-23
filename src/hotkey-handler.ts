@@ -35,7 +35,6 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
 
   async function sync(layoutHotkeys: Record<string, string>): Promise<void> {
     const bindings = toBindings(layoutHotkeys);
-    if (bindings.length === 0) return;
     await bridge.hotkey.registerAll(bindings).catch((e) => {
       console.error('[hotkey] registerAll failed', e);
       reportError(e);

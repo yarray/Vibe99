@@ -84,15 +84,22 @@ pub fn hotkey_register_all(app: AppHandle, bindings: Vec<HotkeyBinding>) -> Resu
         .lock()
         .map_err(|e| format!("lock poisoned: {e}"))?;
 
+    // Validate all shortcuts before modifying any state.
+    for binding in &bindings {
+        let _ = Shortcut::from_str(&binding.shortcut)
+            .map_err(|e| format!("invalid shortcut '{}': {e}", binding.shortcut))?;
+    }
+
+    // All validated — safe to clear old shortcuts.
     app.global_shortcut()
         .unregister_all()
         .map_err(|e| format!("failed to unregister all shortcuts: {e}"))?;
 
     state_bindings.clear();
 
+    // Register new shortcuts (re-parse is safe — validated above).
     for binding in &bindings {
-        let parsed = Shortcut::from_str(&binding.shortcut)
-            .map_err(|e| format!("invalid shortcut '{}': {e}", binding.shortcut))?;
+        let parsed = Shortcut::from_str(&binding.shortcut).unwrap();
         let key = parsed.to_string();
         app.global_shortcut()
             .register(parsed)

@@ -37,6 +37,7 @@ import type { AppCommand } from '../domain/commands.js';
 import { createCommandPaletteEntries } from '../command-palette-entries';
 import { createWorkbench } from './workbench.js';
 import type { Workbench } from './workbench.js';
+import { createQuakeView } from './quake-view.js';
 
 import * as ShortcutsRegistry from '../shortcuts-registry';
 import * as ShortcutsUI from '../shortcuts-ui';
@@ -100,30 +101,6 @@ export interface WorkbenchRenderer {
   onKeyboardShortcutsSettingsClick: () => void;
 }
 
-interface QuakeViewportPayload {
-  leftInset?: number;
-  topInset?: number;
-  rightInset?: number;
-  bottomInset?: number;
-  width?: number;
-  height?: number;
-}
-
-function applyQuakeViewport(viewport: QuakeViewportPayload): void {
-  const style = document.documentElement.style;
-  style.setProperty('--quake-left-inset', `${Math.max(0, viewport.leftInset ?? 0)}px`);
-  style.setProperty('--quake-top-inset', `${Math.max(0, viewport.topInset ?? 0)}px`);
-  style.setProperty('--quake-right-inset', `${Math.max(0, viewport.rightInset ?? 0)}px`);
-  style.setProperty('--quake-bottom-inset', `${Math.max(0, viewport.bottomInset ?? 0)}px`);
-  if (viewport.width && viewport.width > 0) {
-    style.setProperty('--quake-width', `${viewport.width}px`);
-  }
-  if (viewport.height && viewport.height > 0) {
-    style.setProperty('--quake-height', `${viewport.height}px`);
-  }
-  console.debug('[quake] viewport received', viewport);
-}
-
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -154,6 +131,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   let layoutRestoreComplete = false;
   let layoutFocusNotice: { layoutId: string } | null = null;
   let layoutFocusNoticeTimer: number | null = null;
+  let quakeView: ReturnType<typeof createQuakeView> | null = null;
 
   // Shell-profile state (shared with shell-profiles module via adapter)
   let shellProfiles: ShellProfile[] = [];
@@ -826,12 +804,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
         windowContext,
         quakeConfig,
       });
-      document.body.classList.add('is-quake-window');
-      bridge.listen<QuakeViewportPayload>('quake:viewport', applyQuakeViewport);
+      quakeView = createQuakeView({ bridge, layoutId: targetLayout.id });
+      quakeView.init();
       await bridge.applyQuake(targetLayout.id, quakeConfig);
-      bridge.listen<void>('tauri://blur', () => {
-        bridge.toggleLayoutWindow(targetLayout.id).catch(() => {});
-      });
     }
     paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
     paneRenderer?.ensureSessions();
@@ -851,6 +826,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     layoutManager.flushWindowLayoutSave();
     settingsManager.flushSettingsSave();
     hotkeyHandler.dispose();
+    quakeView?.dispose();
     clearLayoutWindowBinding(layoutManager.getWindowLayoutId() ?? undefined, bridge.currentWindowLabel);
     removeTerminalDataListener();
     removeTerminalExitListener();
