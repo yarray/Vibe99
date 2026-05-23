@@ -27,6 +27,8 @@ Vibe99 is a desktop terminal workspace designed for agentic coding. The UI keeps
 - **Navigation mode** — `Ctrl+B` enters a vim-style mode: move with `h`/`l`, jump by number (`1`–`9`), close (`x`), rename (`r`), then `Enter` to focus.
 - **Per-pane shell profiles** — each pane can run a different shell. Create profiles for bash, zsh, SSH, Docker, or any command. WSL distributions on Windows are auto-detected.
 
+For detailed feature documentation with animated demonstrations, see [docs/features/](./docs/features/).
+
 ## Installation
 
 ### Pre-built Binaries

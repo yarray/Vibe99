@@ -1,0 +1,1 @@
+Added comprehensive feature documentation in `docs/features/` covering multi-pane layouts, layouts system, float window, quake mode, shell profiles, activity alerts, keyboard shortcuts, and breathing light effects. Includes GIF recording guide in `docs/gifs/` with tool recommendations and production guidelines.

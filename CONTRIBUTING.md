@@ -138,3 +138,7 @@ That is not a substitute for review. If you use an agent:
 - keep generated changes scoped to the task instead of mixing refactors into unrelated work
 
 The acceptance bar is simple: another contributor should be able to review the diff and the changelog fragment quickly without reconstructing your prompting history.
+
+## Documentation and GIFs
+
+Feature documentation lives in `docs/features/` with accompanying GIF recordings in `docs/gifs/`. See [docs/gifs/README.md](./docs/gifs/README.md) for guidelines on recording feature demonstrations.
