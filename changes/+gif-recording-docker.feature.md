@@ -1,0 +1,1 @@
+Added Docker-based GIF recording infrastructure for feature demos. Use `docker build -f e2e/Dockerfile.gif -t vibe99-recorder .` to build the recorder image, then `./scripts/record-gifs.sh <feature>` to record specific features or `./scripts/record-gifs.sh all` for all features. See `e2e/RECORDING.md` for details.

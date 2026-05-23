@@ -222,6 +222,24 @@ Build image (first time):
 docker build -f e2e/Dockerfile.e2e -t vibe99-builder:latest .
 ```
 
+## GIF Recording
+
+Record feature demonstrations as GIFs using Docker:
+
+```bash
+# Build the recorder image
+docker build -f e2e/Dockerfile.gif -t vibe99-recorder .
+
+# Record a specific feature
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-recorder npm run test:e2e -- ./tests/record-multi-pane.spec.js
+
+# Or use the convenience script
+./scripts/record-gifs.sh multi-pane
+./scripts/record-gifs.sh all  # Record all features
+```
+
+See [e2e/RECORDING.md](./e2e/RECORDING.md) for details.
+
 Details see [e2e/README.md](./e2e/README.md).
 
 ## Contributing
