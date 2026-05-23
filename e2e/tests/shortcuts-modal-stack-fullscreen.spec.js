@@ -434,7 +434,7 @@ describe('Keyboard Shortcuts, Modal Stack, and Fullscreen', () => {
         const items = Array.from(shortcutsList.querySelectorAll('.shortcut-item'));
         const newTabItem = items.find(item => {
           const name = item.querySelector('.shortcut-name');
-          return name && name.textContent.includes('New Tab');
+          return name && name.textContent.includes('New Pane');
         });
         if (!newTabItem) return null;
         const keys = newTabItem.querySelector('.shortcut-keys');

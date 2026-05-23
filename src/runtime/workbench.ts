@@ -479,7 +479,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
       case 'focus.next': {
         const moved = paneState.moveFocus(1);
-        if (moved) {
+        if (moved && getCurrentMode() !== 'nav') {
           const id = paneState.getFocusedPaneId();
           if (id) { setMode('terminal'); focusSession(id); }
         }
@@ -489,7 +489,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
       case 'focus.prev': {
         const moved = paneState.moveFocus(-1);
-        if (moved) {
+        if (moved && getCurrentMode() !== 'nav') {
           const id = paneState.getFocusedPaneId();
           if (id) { setMode('terminal'); focusSession(id); }
         }
@@ -551,8 +551,10 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         const panes = paneState.getPanes();
         if (panes.length === 0 || command.index < 0 || command.index >= panes.length) return fail('out-of-range');
         paneState.focusPane(panes[command.index].id);
-        setMode('terminal');
-        focusSession(panes[command.index].id);
+        if (getCurrentMode() !== 'nav') {
+          setMode('terminal');
+          focusSession(panes[command.index].id);
+        }
         externalRender();
         return ok();
       }
