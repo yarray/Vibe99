@@ -89,7 +89,7 @@ record_feature() {
     docker run --rm --privileged \
         -v "$PWD:/mnt/source:ro" \
         "$IMAGE_NAME" \
-        npm run test:e2e -- "./tests/$spec_file"
+        npm run test:e2e -- "./recordings/$spec_file"
 
     echo ""
     echo -e "${GREEN}✓ 录制完成${NC}"
@@ -106,7 +106,7 @@ record_all() {
     docker run --rm --privileged \
         -v "$PWD:/mnt/source:ro" \
         "$IMAGE_NAME" \
-        npm run test:e2e -- "./tests/record-*.spec.js"
+        npm run test:e2e -- "./recordings/record-*.spec.js"
 
     echo ""
     echo -e "${GREEN}✓ 所有录制完成${NC}"

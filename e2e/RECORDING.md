@@ -21,13 +21,13 @@ docker build -f e2e/Dockerfile.gif -t vibe99-recorder .
 docker run --rm --privileged \
   -v $PWD:/mnt/source:ro \
   vibe99-recorder \
-  npm run test:e2e -- ./tests/record-multi-pane.spec.js
+  npm run test:e2e -- ./recordings/record-multi-pane.spec.js
 
 # 录制 layout 功能
 docker run --rm --privileged \
   -v $PWD:/mnt/source:ro \
   vibe99-recorder \
-  npm run test:e2e -- ./tests/record-layouts.spec.js
+  npm run test:e2e -- ./recordings/record-layouts.spec.js
 ```
 
 ### 3. 录制所有功能
@@ -36,7 +36,7 @@ docker run --rm --privileged \
 docker run --rm --privileged \
   -v $PWD:/mnt/source:ro \
   vibe99-recorder \
-  npm run test:e2e -- ./tests/record-*.spec.js
+  npm run test:e2e -- ./recordings/record-*.spec.js
 ```
 
 ## 可录制的功能
@@ -117,7 +117,7 @@ export DISPLAY=:98
 ~/.cargo/bin/tauri-driver &
 
 # 运行录制测试
-npm run test:e2e -- ./tests/record-multi-pane.spec.js
+npm run test:e2e -- ./recordings/record-multi-pane.spec.js
 ```
 
 ## 技术细节

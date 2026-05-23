@@ -231,7 +231,7 @@ Record feature demonstrations as GIFs using Docker:
 docker build -f e2e/Dockerfile.gif -t vibe99-recorder .
 
 # Record a specific feature
-docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-recorder npm run test:e2e -- ./tests/record-multi-pane.spec.js
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-recorder npm run test:e2e -- ./recordings/record-multi-pane.spec.js
 
 # Or use the convenience script
 ./scripts/record-gifs.sh multi-pane
