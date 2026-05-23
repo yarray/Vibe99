@@ -68,6 +68,8 @@ export interface TerminalSessionDeps {
   onSessionReadyChange?: (paneId: string, ready: boolean) => void;
   /** Function to create terminal theme with given accent color. */
   terminalTheme: (accent: string) => TerminalTheme;
+  /** Function to get the layout's default theme ID. */
+  getLayoutThemeId: () => string | undefined;
 }
 
 /** The full public API surface returned by `createTerminalSession`. */
@@ -314,6 +316,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     onCwdChanged,
     onTabRefreshNeeded,
     terminalTheme,
+    getLayoutThemeId,
   } = deps;
 
   const pane = getPaneSnapshot();
@@ -707,7 +710,9 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   }
 
   function applyTerminalTheme(): void {
-    const theme = _themeId ? getTheme(_themeId) : null;
+    // Theme resolution priority: pane theme > layout theme > global default
+    const themeId = _themeId ?? getLayoutThemeId() ?? null;
+    const theme = themeId ? getTheme(themeId) : null;
     const themeFn = theme ? ((accent: string) => theme.terminalTheme(accent)) : terminalTheme;
     const newTheme = themeFn(_accent);
 

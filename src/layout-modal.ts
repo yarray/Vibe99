@@ -5,6 +5,7 @@ import type { ModalStack } from './modal-stack';
 import type { LayoutManager } from './layout-manager';
 import type { SettingsManager } from './settings';
 import type { LayoutHotkey, QuakePosition, QuakeLayoutConfig } from './domain/settings-schema';
+import { listThemes, type Theme } from './domain/theme';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -560,6 +561,67 @@ export function createLayoutModal({
         renderModalLayouts(overlay);
       });
 
+      // -- Theme --
+      const themeSection = document.createElement('div');
+      themeSection.className = 'layout-section';
+
+      const themeRow = document.createElement('div');
+      themeRow.className = 'settings-row';
+      const themeLabel = document.createElement('span');
+      themeLabel.textContent = 'Default Theme';
+      themeRow.appendChild(themeLabel);
+
+      const themeActions = document.createElement('div');
+      themeActions.className = 'layout-theme-actions';
+
+      const themes: Theme[] = listThemes();
+      const currentLayoutThemeId: string | undefined = selected.themeId;
+      const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+
+      const saveLayoutTheme = async (layoutId: string, themeId: string | undefined) => {
+        const updatedLayout = {
+          ...layout!,
+          themeId,
+        };
+        await bridge.saveLayout(updatedLayout);
+        const config = await bridge.listLayouts();
+        layoutManager._setLayouts(config.layouts ?? []);
+        renderModalLayouts(overlay);
+      };
+
+      if (currentLayoutThemeId) {
+        const currentTheme = themes.find((t) => t.id === currentLayoutThemeId);
+        const themeDisplay = document.createElement('div');
+        themeDisplay.className = 'theme-display';
+        themeDisplay.textContent = currentTheme?.name || currentLayoutThemeId;
+        themeDisplay.addEventListener('click', () => {
+          showThemePicker(selected.id, themeActions, layout, saveLayoutTheme);
+        });
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'theme-edit-btn';
+        clearBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        clearBtn.title = 'Clear theme (use global default)';
+        clearBtn.addEventListener('click', () => {
+          saveLayoutTheme(selected.id, undefined);
+        });
+
+        themeActions.append(themeDisplay, clearBtn);
+      } else {
+        const setBtn = document.createElement('button');
+        setBtn.type = 'button';
+        setBtn.className = 'settings-btn layout-theme-set-btn';
+        setBtn.textContent = 'Set Theme';
+        setBtn.addEventListener('click', () => {
+          showThemePicker(selected.id, themeActions, layout, saveLayoutTheme);
+        });
+        themeActions.appendChild(setBtn);
+      }
+      themeRow.appendChild(themeActions);
+      themeSection.appendChild(themeRow);
+      info.appendChild(themeSection);
+
       // -- Panes list --
       const panesCount: number = selected.panes?.length ?? 0;
       const paneCountLabel = document.createElement('div');
@@ -598,6 +660,46 @@ export function createLayoutModal({
   }
 
   return { openLayoutsModal };
+}
+
+// ---------------------------------------------------------------------------
+// Theme Picker Helpers
+// ---------------------------------------------------------------------------
+
+function showThemePicker(
+  layoutId: string,
+  container: HTMLElement,
+  layout: LayoutData | undefined,
+  saveLayoutTheme: (layoutId: string, themeId: string | undefined) => Promise<void>,
+): void {
+  const themes: Theme[] = listThemes();
+  const currentThemeId = layout?.themeId;
+
+  const picker = document.createElement('div');
+  picker.className = 'theme-picker-inline';
+
+  const list = document.createElement('div');
+  list.className = 'theme-picker-list';
+
+  for (const theme of themes) {
+    const item = document.createElement('div');
+    item.className = 'theme-picker-item';
+    if (theme.id === currentThemeId) item.classList.add('is-active');
+
+    const label = document.createElement('span');
+    label.className = 'theme-picker-label';
+    label.textContent = theme.name;
+
+    item.addEventListener('click', () => {
+      saveLayoutTheme(layoutId, theme.id);
+    });
+
+    item.appendChild(label);
+    list.appendChild(item);
+  }
+
+  picker.appendChild(list);
+  container.replaceChildren(picker);
 }
 
 // ---------------------------------------------------------------------------

@@ -103,17 +103,20 @@ export function createLayoutManager({
   async function createLayoutFromCurrentWindow(layoutId: string, name: string): Promise<LayoutData> {
     const session: SessionData = buildSessionData();
     const windowGeometry = await bridge.getWindowGeometry();
+    const layoutSnapshot = paneState.getLayout().snapshot();
     return {
       id: layoutId,
       name,
       panes: session.panes as unknown as LayoutData['panes'],
       focusedPaneIndex: session.focusedPaneIndex,
       windowGeometry: windowGeometry ?? undefined,
+      themeId: layoutSnapshot.themeId,
     };
   }
 
   function createDefaultLayout(): LayoutData {
     const currentPanes = paneState.getPanes();
+    const layoutSnapshot = paneState.getLayout().snapshot();
     return {
       id: 'default',
       name: 'Default',
@@ -127,6 +130,7 @@ export function createLayoutManager({
         breathingMonitor: p.breathingMonitor !== false,
       })) as unknown as LayoutData['panes'],
       focusedPaneIndex: 0,
+      themeId: layoutSnapshot.themeId,
     };
   }
 

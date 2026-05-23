@@ -1,0 +1,1 @@
+Support layout-level default theme that applies to all panes in the layout, with per-pane theme override. New panes inherit the layout's default theme, and individual panes can override it. Theme resolution priority: per-pane theme > layout default theme > global default. (VIB-331)
