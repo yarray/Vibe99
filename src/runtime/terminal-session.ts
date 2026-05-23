@@ -169,6 +169,8 @@ export interface TerminalSession {
   /** Toggle the alert breathing state. */
   setAlerted(alerted: boolean): void;
 
+  setCursorBlink(enabled: boolean): void;
+
   // -- DOM helpers ---------------------------------------------------------------
 
   /** Check whether the session's root element contains the given node. */
@@ -366,7 +368,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     allowTransparency: true,
     convertEol: false,
     customGlyphs: true,
-    cursorBlink: true,
+    cursorBlink: false,
     disableStdin: false,
     drawBoldTextInBrightColors: false,
     fontFamily: settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform),
@@ -758,6 +760,10 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     // needs access to the PaneAlertStrategy.
   }
 
+  function setCursorBlink(enabled: boolean): void {
+    terminal.options.cursorBlink = enabled;
+  }
+
   function contains(node: Node): boolean {
     return paneEl.contains(node);
   }
@@ -895,6 +901,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     setAccent,
     setTheme,
     setAlerted,
+    setCursorBlink,
 
     // DOM helpers
     contains,
