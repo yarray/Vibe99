@@ -236,7 +236,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
       session.root.classList.toggle('is-focused', isFocused);
       session.setAccent(accentColor);
       session.setTheme(pane.themeId());
-      session.setCursorBlink(isFocused);
+      session.setCursorBlink(isFocused && document.visibilityState === 'visible');
 
       if (refit || session.needsFit()) {
         session.fit({ force: true });
