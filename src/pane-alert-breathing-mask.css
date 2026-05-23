@@ -34,3 +34,7 @@
     box-shadow: var(--breathing-glow, none);
   }
 }
+
+body.is-window-hidden .pane.has-pending-activity::after {
+  animation-play-state: paused;
+}

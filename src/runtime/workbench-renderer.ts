@@ -504,12 +504,12 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      const focusedPaneId = paneState.getFocusedPaneId();
-      if (focusedPaneId) {
-        const session = workbench?.session(focusedPaneId);
-        session?.setCursorBlink(false);
-      }
+      document.body.classList.add('is-window-hidden');
+      paneState.getPanes().forEach((pane) => {
+        workbench?.session(pane.id)?.setCursorBlink(false);
+      });
     } else {
+      document.body.classList.remove('is-window-hidden');
       render();
     }
   });
