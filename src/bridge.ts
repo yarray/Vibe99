@@ -81,7 +81,6 @@ export interface LayoutData {
   panes: LayoutPane[];
   focusedPaneIndex: number;
   windowGeometry?: WindowGeometry;
-  nextPaneNumber?: number;
 }
 
 /** Result of listing layouts */
