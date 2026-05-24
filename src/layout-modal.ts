@@ -604,8 +604,9 @@ export function createLayoutModal({
               dispatch({ type: 'pane.setTheme', paneId: pane.id, themeId: null });
             }
           }
-
-          renderModalLayouts(overlay);
+          // Note: We don't call renderModalLayouts() here to avoid destroying the custom-select
+          // element while it's handling the selection. The layout manager state is already
+          // updated above, and the select element will show the new value via its own update.
         },
       });
 
