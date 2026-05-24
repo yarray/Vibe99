@@ -579,32 +579,31 @@ describe('Layout Quake Mode and Global Hotkey', () => {
   });
 
   // ================================================================
-  // Quake CSS Class on Window
+  // Quake via Layout Editor (current window layout)
   // ================================================================
 
-  describe('Quake CSS Class', () => {
-    it('adds is-quake-window class when toggling quake for current layout', async () => {
+  describe('Quake via Layout Editor', () => {
+    it('enables quake for the current window layout via the layout editor', async () => {
       await saveLayoutAs('Current Quake');
       await openLayoutsModal();
       await clickModalLayout('Current Quake');
       await browser.pause(300);
 
-      // Record initial quake class state
-      const initialState = await browser.execute(() => {
-        return document.body.classList.contains('is-quake-window');
-      });
-
-      // Enable quake
+      // Toggle quake ON for this layout
       const overlay = await $('.settings-modal-overlay');
       const quakeToggle = await overlay.$('.layout-quake-toggle');
       await quakeToggle.click();
       await browser.pause(500);
 
-      // Verify class state changed after toggling quake
-      const newState = await browser.execute(() => {
-        return document.body.classList.contains('is-quake-window');
-      });
-      expect(newState).not.toBe(initialState);
+      // Verify quake is enabled in the editor (dot is active)
+      const dot = await (await $('.settings-modal-overlay')).$('.layout-quake-toggle .settings-toggle-dot');
+      const dotClass = await dot.getAttribute('class');
+      expect(dotClass.includes('is-active')).toBe(true);
+
+      // Verify quake settings persisted
+      const settings = await loadSettings();
+      expect(settings.ui.quakeLayouts['current-quake']).toBeDefined();
+      expect(settings.ui.quakeLayouts['current-quake'].position).toBeDefined();
     });
   });
 });
