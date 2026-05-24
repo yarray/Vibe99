@@ -1,0 +1,1 @@
+Layouts can now override global UI settings (fontSize, fontFamily, paneOpacity, paneMaskOpacity, paneWidth, breathingIntensity). The three-level fallback priority is: pane → layout.uiOverrides → global settings. Layout-level overrides are configurable in the Layout Manager modal.
