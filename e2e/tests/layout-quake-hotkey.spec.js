@@ -589,11 +589,10 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await clickModalLayout('Current Quake');
       await browser.pause(300);
 
-      // Check current state
-      let hasQuakeClass = await browser.execute(() => {
+      // Record initial quake class state
+      const initialState = await browser.execute(() => {
         return document.body.classList.contains('is-quake-window');
       });
-      expect(hasQuakeClass).toBe(false);
 
       // Enable quake
       const overlay = await $('.settings-modal-overlay');
@@ -601,12 +600,11 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await quakeToggle.click();
       await browser.pause(500);
 
-      // Verify class is added (since 'Current Quake' should be the window layout)
-      hasQuakeClass = await browser.execute(() => {
+      // Verify class state changed after toggling quake
+      const newState = await browser.execute(() => {
         return document.body.classList.contains('is-quake-window');
       });
-      // The class may only be added if this is the windowLayoutId, which after saveLayoutAs it should be
-      expect(typeof hasQuakeClass).toBe('boolean');
+      expect(newState).not.toBe(initialState);
     });
   });
 });
