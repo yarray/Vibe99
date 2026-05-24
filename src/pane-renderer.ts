@@ -75,16 +75,18 @@ export function createPaneRenderer({
       return 0;
     }
 
-    if (stageWidth >= settingsManager.settings.paneWidth * count) {
-      return settingsManager.settings.paneWidth;
+    const resolvedPaneWidth = settingsManager.getResolvedSettings().paneWidth;
+    if (stageWidth >= resolvedPaneWidth * count) {
+      return resolvedPaneWidth;
     }
 
-    return (stageWidth - settingsManager.settings.paneWidth) / (count - 1);
+    return (stageWidth - resolvedPaneWidth) / (count - 1);
   }
 
   function getPaneLeft(index: number, previewWidth: number, focusedIndex: number): number {
-    if (previewWidth >= settingsManager.settings.paneWidth) {
-      return index * settingsManager.settings.paneWidth;
+    const resolvedPaneWidth = settingsManager.getResolvedSettings().paneWidth;
+    if (previewWidth >= resolvedPaneWidth) {
+      return index * resolvedPaneWidth;
     }
 
     const focusedLeft = focusedIndex * previewWidth;
@@ -97,7 +99,7 @@ export function createPaneRenderer({
       return focusedLeft;
     }
 
-    return focusedLeft + settingsManager.settings.paneWidth + (index - focusedIndex - 1) * previewWidth;
+    return focusedLeft + resolvedPaneWidth + (index - focusedIndex - 1) * previewWidth;
   }
 
   // -- Tab refresh check --------------------------------------------------------

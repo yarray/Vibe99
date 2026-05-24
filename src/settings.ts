@@ -101,6 +101,7 @@ export interface SettingsManagerDeps {
 
 export interface SettingsManager {
   readonly settings: AppSettings;
+  getResolvedSettings(): AppSettings;
   applySettings(): void;
   applyPersistedSettings(nextSettings: unknown): void;
   scheduleSettingsSave(): void;
@@ -153,6 +154,14 @@ export function getDefaultFontFamily(platform: string): string {
   return '"DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono", "Noto Sans CJK SC", monospace';
 }
 
+function createPinElement(): HTMLSpanElement {
+  const pin = document.createElement('span');
+  pin.className = 'settings-pin';
+  pin.title = 'Layout override';
+  pin.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-8"/><path d="M12 2v2"/><path d="m19 13-7-3-7 3"/><path d="M12 8 8 5"/></svg>`;
+  return pin;
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -191,6 +200,33 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
   let pendingSettingsSave: number | null = null;
 
+  // -- Pin elements for layout override indicators --
+  function attachPinToLabel(inputEl: HTMLElement | null): HTMLSpanElement | null {
+    const label = inputEl?.previousElementSibling as HTMLElement | null;
+    if (!label) return null;
+    const span = label.querySelector('span');
+    if (!span) return null;
+    const pin = createPinElement();
+    span.appendChild(pin);
+    return pin;
+  }
+
+  const fontSizePin = attachPinToLabel(fontSizeInput);
+  const fontFamilyPin = attachPinToLabel(fontFamilyInput);
+  const paneWidthPin = attachPinToLabel(paneWidthRange);
+  const paneOpacityPin = attachPinToLabel(paneOpacityRange);
+  const paneMaskOpacityPin = attachPinToLabel(paneMaskOpacityRange);
+
+  const breathingPin = (() => {
+    const label = breathingSegments.parentElement;
+    if (!label) return null;
+    const span = label.querySelector('span');
+    if (!span) return null;
+    const pin = createPinElement();
+    span.appendChild(pin);
+    return pin;
+  })();
+
   function applySettings(): void {
     // Get layout UI overrides if available
     const layoutUiOverrides = deps.getLayoutUiOverrides?.();
@@ -223,6 +259,19 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     // Apply debounce setting (input is in seconds)
     debounceInput.value = String(resolvedSettings.activityAlertDebounceMs / 1000);
     paneActivityWatcher.setSettleMs(resolvedSettings.activityAlertDebounceMs);
+
+    // Update pin visibility
+    fontSizePin?.classList.toggle('is-visible', layoutUiOverrides?.fontSize !== undefined);
+    fontFamilyPin?.classList.toggle('is-visible', layoutUiOverrides?.fontFamily !== undefined);
+    paneWidthPin?.classList.toggle('is-visible', layoutUiOverrides?.paneWidth !== undefined);
+    paneOpacityPin?.classList.toggle('is-visible', layoutUiOverrides?.paneOpacity !== undefined);
+    paneMaskOpacityPin?.classList.toggle('is-visible', layoutUiOverrides?.paneMaskOpacity !== undefined);
+    breathingPin?.classList.toggle('is-visible', layoutUiOverrides?.breathingIntensity !== undefined);
+  }
+
+  function getResolvedSettings(): AppSettings {
+    const layoutUiOverrides = deps.getLayoutUiOverrides?.();
+    return resolveUiSettings(settings, layoutUiOverrides);
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -282,75 +331,119 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     void bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
   }
 
-  // Font size
-  fontSizeInput.addEventListener('change', () => {
-    const nextValue = Number(fontSizeInput.value);
+  // -- Write helpers with layout override routing --
+
+  function writeFontSize(nextValue: number): void {
     const result = validateField('fontSize', nextValue);
-    settings.fontSize = result.sanitizedValue as number;
+    const layoutOverrides = deps.getLayoutUiOverrides?.();
+    if (layoutOverrides?.fontSize !== undefined) {
+      deps.onLayoutUiOverridesChange?.({ ...layoutOverrides, fontSize: result.sanitizedValue as number });
+    } else {
+      settings.fontSize = result.sanitizedValue as number;
+      scheduleSettingsSave();
+    }
     applySettings();
     applyCallback();
-    scheduleSettingsSave();
+  }
+
+  function writeFontFamily(nextValue: string): void {
+    const result = validateField('fontFamily', nextValue);
+    const sanitizedValue = (result.sanitizedValue as string) || getDefaultFontFamily(bridge.platform);
+    const layoutOverrides = deps.getLayoutUiOverrides?.();
+    if (layoutOverrides?.fontFamily !== undefined) {
+      deps.onLayoutUiOverridesChange?.({ ...layoutOverrides, fontFamily: sanitizedValue });
+    } else {
+      settings.fontFamily = sanitizedValue;
+      scheduleSettingsSave();
+    }
+    applySettings();
+    applyCallback();
+  }
+
+  function writePaneWidth(nextValue: number): void {
+    const result = validateField('paneWidth', nextValue);
+    const layoutOverrides = deps.getLayoutUiOverrides?.();
+    if (layoutOverrides?.paneWidth !== undefined) {
+      deps.onLayoutUiOverridesChange?.({ ...layoutOverrides, paneWidth: result.sanitizedValue as number });
+    } else {
+      settings.paneWidth = result.sanitizedValue as number;
+      scheduleSettingsSave();
+    }
+    applySettings();
+    applyCallback();
+  }
+
+  function writePaneOpacity(nextValue: number): void {
+    const result = validateField('paneOpacity', nextValue);
+    const layoutOverrides = deps.getLayoutUiOverrides?.();
+    if (layoutOverrides?.paneOpacity !== undefined) {
+      deps.onLayoutUiOverridesChange?.({ ...layoutOverrides, paneOpacity: result.sanitizedValue as number });
+    } else {
+      settings.paneOpacity = result.sanitizedValue as number;
+      scheduleSettingsSave();
+    }
+    applySettings();
+  }
+
+  function writePaneMaskOpacity(nextValue: number): void {
+    const result = validateField('paneMaskOpacity', nextValue);
+    const layoutOverrides = deps.getLayoutUiOverrides?.();
+    if (layoutOverrides?.paneMaskOpacity !== undefined) {
+      deps.onLayoutUiOverridesChange?.({ ...layoutOverrides, paneMaskOpacity: result.sanitizedValue as number });
+    } else {
+      settings.paneMaskOpacity = result.sanitizedValue as number;
+      scheduleSettingsSave();
+    }
+    applySettings();
+  }
+
+  function writeBreathingIntensity(nextValue: BreathingIntensity): void {
+    const result = validateField('breathingIntensity', nextValue);
+    const layoutOverrides = deps.getLayoutUiOverrides?.();
+    if (layoutOverrides?.breathingIntensity !== undefined) {
+      deps.onLayoutUiOverridesChange?.({ ...layoutOverrides, breathingIntensity: result.sanitizedValue as BreathingIntensity });
+    } else {
+      settings.breathingIntensity = result.sanitizedValue as BreathingIntensity;
+      scheduleSettingsSave();
+    }
+    applySettings();
+  }
+
+  // Font size
+  fontSizeInput.addEventListener('change', () => {
+    writeFontSize(Number(fontSizeInput.value));
   });
 
   // Font family
   fontFamilyInput.addEventListener('change', () => {
-    const result = validateField('fontFamily', fontFamilyInput.value);
-    settings.fontFamily = (result.sanitizedValue as string) || getDefaultFontFamily(bridge.platform);
-    applySettings();
-    applyCallback();
-    scheduleSettingsSave();
+    writeFontFamily(fontFamilyInput.value);
   });
 
   // Pane width
-  function updatePaneWidth(nextValue: string): void {
-    const parsedValue = Number(nextValue);
-    const result = validateField('paneWidth', parsedValue);
-    settings.paneWidth = result.sanitizedValue as number;
-    applySettings();
-    applyCallback();
-    scheduleSettingsSave();
-  }
-
   paneWidthRange.addEventListener('input', () => {
-    updatePaneWidth(paneWidthRange.value);
+    writePaneWidth(Number(paneWidthRange.value));
   });
 
   paneWidthInput.addEventListener('change', () => {
-    updatePaneWidth(paneWidthInput.value);
+    writePaneWidth(Number(paneWidthInput.value));
   });
 
   // Pane opacity
-  function updatePaneOpacity(nextValue: string): void {
-    const parsedValue = Number(nextValue);
-    const result = validateField('paneOpacity', parsedValue);
-    settings.paneOpacity = result.sanitizedValue as number;
-    applySettings();
-    scheduleSettingsSave();
-  }
-
   paneOpacityRange.addEventListener('input', () => {
-    updatePaneOpacity(paneOpacityRange.value);
+    writePaneOpacity(Number(paneOpacityRange.value));
   });
 
   paneOpacityInput.addEventListener('change', () => {
-    updatePaneOpacity(paneOpacityInput.value);
+    writePaneOpacity(Number(paneOpacityInput.value));
   });
 
   // Pane mask opacity
-  function updatePaneMaskOpacity(nextValue: string): void {
-    const parsedValue = Number(nextValue);
-    const result = validateField('paneMaskOpacity', parsedValue);
-    settings.paneMaskOpacity = result.sanitizedValue as number;
-    applySettings();
-    scheduleSettingsSave();
-  }
-
   paneMaskOpacityRange.addEventListener('input', () => {
-    updatePaneMaskOpacity(paneMaskOpacityRange.value);
+    writePaneMaskOpacity(Number(paneMaskOpacityRange.value));
   });
 
   paneMaskOpacityInput.addEventListener('change', () => {
-    updatePaneMaskOpacity(paneMaskOpacityInput.value);
+    writePaneMaskOpacity(Number(paneMaskOpacityInput.value));
   });
 
   // Breathing alert
@@ -359,11 +452,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     if (!btn) return;
     const value = btn.dataset.value as BreathingIntensity | undefined;
     if (!value) return;
-
-    const result = validateField('breathingIntensity', value);
-    settings.breathingIntensity = result.sanitizedValue as BreathingIntensity;
-    applySettings();
-    scheduleSettingsSave();
+    writeBreathingIntensity(value);
   });
 
   // WebGL (3D acceleration)
@@ -411,6 +500,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     get settings() {
       return settings;
     },
+    getResolvedSettings,
     applySettings,
     applyPersistedSettings,
     scheduleSettingsSave,

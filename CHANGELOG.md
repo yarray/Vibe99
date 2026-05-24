@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Settings panel layout-level UI override write and pin hint** (VIB-341):
+  - Settings inputs now route writes to `layout.uiOverrides` when an override exists for that key, preventing the "bounce back" bug.
+  - Added `getResolvedSettings()` to `SettingsManager` to expose layout-resolved values.
+  - Pin icon indicator (`settings-pin`) shown next to overridden settings in the settings panel.
+  - `terminal-session.ts` uses resolved `fontSize`/`fontFamily` for xterm.js.
+  - `pane-renderer.ts` uses resolved `paneWidth` for pane layout calculations.
+  - CSS variables (`--pane-opacity`, `--pane-bg-mask-opacity`, `--pane-width`) are updated with resolved values during init.
+
 - **Layout hotkeys and Quake mode settings UI** (VIB-314):
   - Settings schema extended with `layoutHotkeys` and `quakeMode` fields.
   - Layout Hotkeys configuration modal with hotkey recording and conflict detection.
