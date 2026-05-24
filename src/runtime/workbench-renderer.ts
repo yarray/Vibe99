@@ -504,12 +504,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      const focusedPaneId = paneState.getFocusedPaneId();
-      if (focusedPaneId) {
-        const session = workbench?.session(focusedPaneId);
-        session?.setCursorBlink(false);
-      }
+      document.body.classList.add('is-window-hidden');
     } else {
+      document.body.classList.remove('is-window-hidden');
       render();
     }
   });

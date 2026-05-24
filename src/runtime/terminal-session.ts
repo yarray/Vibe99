@@ -365,7 +365,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
 
   const terminal = new Terminal({
     allowProposedApi: true,
-    allowTransparency: true,
+    allowTransparency: false,
     convertEol: false,
     customGlyphs: true,
     cursorBlink: false,
