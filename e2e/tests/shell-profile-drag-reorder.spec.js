@@ -227,11 +227,20 @@ describe('Shell Profile Drag Reorder and Icon Buttons', () => {
 
     it('shows star button for non-default profiles', async () => {
       await openShellProfilesModal();
+
+      // Create two profiles: first becomes default auto, second is non-default
+      await clickAddProfileBtn();
+      await fillProfileEditor({
+        id: 'def-auto',
+        name: 'DefaultAuto',
+        command: '/bin/bash',
+      });
+
       await clickAddProfileBtn();
       await fillProfileEditor({
         id: 'star-test',
         name: 'StarTest',
-        command: '/bin/bash',
+        command: '/bin/zsh',
       });
 
       const item = await findProfileItem('star-test');
@@ -249,6 +258,8 @@ describe('Shell Profile Drag Reorder and Icon Buttons', () => {
 
     it('does not show star button for default profile', async () => {
       await openShellProfilesModal();
+
+      // Create two profiles: first becomes default auto
       await clickAddProfileBtn();
       await fillProfileEditor({
         id: 'def-profile',
@@ -256,10 +267,14 @@ describe('Shell Profile Drag Reorder and Icon Buttons', () => {
         command: '/bin/bash',
       });
 
-      // Set this as default
-      await clickProfileAction('def-profile', 'Set as default');
-      await browser.pause(300);
+      await clickAddProfileBtn();
+      await fillProfileEditor({
+        id: 'non-def-profile',
+        name: 'NonDefaultProfile',
+        command: '/bin/zsh',
+      });
 
+      // First profile should be the default (no star button)
       const item = await findProfileItem('def-profile');
       const buttons = await item.$$('.shell-profile-actions .settings-btn');
       const titles = [];
@@ -516,23 +531,32 @@ describe('Shell Profile Drag Reorder and Icon Buttons', () => {
   describe('Icon Button Actions', () => {
     it('set as default button updates the default profile indicator', async () => {
       await openShellProfilesModal();
+
+      // Create two profiles: first becomes default auto, second is non-default
+      await clickAddProfileBtn();
+      await fillProfileEditor({
+        id: 'auto-def',
+        name: 'AutoDefault',
+        command: '/bin/bash',
+      });
+
       await clickAddProfileBtn();
       await fillProfileEditor({
         id: 'new-default',
         name: 'NewDefault',
-        command: '/bin/bash',
+        command: '/bin/zsh',
       });
 
-      // Initially not default
+      // Second profile should NOT be default initially
       let item = await findProfileItem('new-default');
       let cls = await item.getAttribute('class');
       expect(cls.includes('is-default')).toBe(false);
 
-      // Set as default
+      // Set second profile as default
       await clickProfileAction('new-default', 'Set as default');
       await browser.pause(300);
 
-      // Verify is-default class
+      // Verify is-default class is now present
       item = await findProfileItem('new-default');
       cls = await item.getAttribute('class');
       expect(cls.includes('is-default')).toBe(true);

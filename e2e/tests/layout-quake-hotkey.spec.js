@@ -223,7 +223,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
         const btns = document.querySelectorAll('.layout-quake-details .settings-segmented-btn');
         for (const btn of btns) {
           if (btn.textContent === 'Bottom') {
-            (btn as HTMLElement).click();
+            btn.click();
             break;
           }
         }
@@ -299,7 +299,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
         const details = document.querySelector('.layout-quake-details');
         if (!details) return null;
         const range = details.querySelector('input[type="range"]');
-        return range ? (range as HTMLInputElement).value : null;
+        return range ? range.value : null;
       });
       expect(heightValue).toBe('60');
     });
@@ -320,9 +320,9 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await browser.execute(() => {
         const details = document.querySelector('.layout-quake-details');
         if (!details) return;
-        const range = details.querySelector('input[type="range"]') as HTMLInputElement;
+        const range = details.querySelector('input[type="range"]');
         if (range) {
-          const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+          const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
           nativeSetter.call(range, '80');
           range.dispatchEvent(new Event('input', { bubbles: true }));
         }
@@ -350,9 +350,9 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await browser.execute(() => {
         const details = document.querySelector('.layout-quake-details');
         if (!details) return;
-        const numInput = details.querySelector('input[type="number"]') as HTMLInputElement;
+        const numInput = details.querySelector('input[type="number"]');
         if (numInput) {
-          const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+          const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
           nativeSetter.call(numInput, '45');
           numInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
@@ -395,7 +395,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       const assignBtn = await browser.execute(() => {
         const btn = document.querySelector('.layout-hotkey-assign-btn');
-        return btn ? (btn as HTMLElement).textContent : null;
+        return btn ? (btn).textContent : null;
       });
       expect(assignBtn).toBe('Assign Hotkey');
     });
@@ -408,7 +408,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Click "Assign Hotkey" button
       await browser.execute(() => {
-        const btn = document.querySelector('.layout-hotkey-assign-btn') as HTMLElement;
+        const btn = document.querySelector('.layout-hotkey-assign-btn');
         if (btn) btn.click();
       });
       await browser.pause(300);
@@ -443,7 +443,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Click Save
       await browser.execute(() => {
-        const saveBtn = document.querySelector('.shortcut-recorder-save') as HTMLElement;
+        const saveBtn = document.querySelector('.shortcut-recorder-save');
         if (saveBtn) saveBtn.click();
       });
       await browser.pause(500);
@@ -463,7 +463,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Assign a hotkey
       await browser.execute(() => {
-        const btn = document.querySelector('.layout-hotkey-assign-btn') as HTMLElement;
+        const btn = document.querySelector('.layout-hotkey-assign-btn');
         if (btn) btn.click();
       });
       await browser.pause(300);
@@ -479,7 +479,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await browser.pause(200);
 
       await browser.execute(() => {
-        const saveBtn = document.querySelector('.shortcut-recorder-save') as HTMLElement;
+        const saveBtn = document.querySelector('.shortcut-recorder-save');
         if (saveBtn) saveBtn.click();
       });
       await browser.pause(500);
@@ -500,7 +500,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Assign first
       await browser.execute(() => {
-        const btn = document.querySelector('.layout-hotkey-assign-btn') as HTMLElement;
+        const btn = document.querySelector('.layout-hotkey-assign-btn');
         if (btn) btn.click();
       });
       await browser.pause(300);
@@ -516,14 +516,14 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await browser.pause(200);
 
       await browser.execute(() => {
-        const saveBtn = document.querySelector('.shortcut-recorder-save') as HTMLElement;
+        const saveBtn = document.querySelector('.shortcut-recorder-save');
         if (saveBtn) saveBtn.click();
       });
       await browser.pause(500);
 
       // Click clear button
       await browser.execute(() => {
-        const clearBtn = document.querySelector('.shortcut-edit-btn') as HTMLElement;
+        const clearBtn = document.querySelector('.shortcut-edit-btn');
         if (clearBtn) clearBtn.click();
       });
       await browser.pause(500);
@@ -543,7 +543,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Assign hotkey
       await browser.execute(() => {
-        const btn = document.querySelector('.layout-hotkey-assign-btn') as HTMLElement;
+        const btn = document.querySelector('.layout-hotkey-assign-btn');
         if (btn) btn.click();
       });
       await browser.pause(300);
@@ -560,7 +560,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await browser.pause(200);
 
       await browser.execute(() => {
-        const saveBtn = document.querySelector('.shortcut-recorder-save') as HTMLElement;
+        const saveBtn = document.querySelector('.shortcut-recorder-save');
         if (saveBtn) saveBtn.click();
       });
       await browser.pause(800);
