@@ -46,7 +46,7 @@ export interface WorkbenchDeps {
 
   terminalSessionDeps: Omit<
     TerminalSessionDeps,
-    'getPaneSnapshot' | 'onPaneClick' | 'onTitleChange' | 'onContextMenu' | 'onCwdChanged' | 'onTabRefreshNeeded'
+    'getPaneSnapshot' | 'onPaneClick' | 'onTitleChange' | 'onContextMenu' | 'onCwdChanged' | 'onTabRefreshNeeded' | 'getLayoutThemeId'
   > & {
     getPaneSnapshot: (paneId: string) => Pane | null;
     onPaneClick: (paneId: string, options?: { focusTerminal?: boolean }) => void;
@@ -169,6 +169,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         }
       },
       terminalTheme: createDefaultTerminalTheme,
+      getLayoutThemeId: () => resolveLayout().snapshot().themeId,
     });
 
     return session;

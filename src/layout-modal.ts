@@ -5,6 +5,9 @@ import type { ModalStack } from './modal-stack';
 import type { LayoutManager } from './layout-manager';
 import type { SettingsManager } from './settings';
 import type { LayoutHotkey, QuakePosition, QuakeLayoutConfig } from './domain/settings-schema';
+import { listThemes, type Theme } from './domain/theme';
+import { createCustomSelect, type CustomSelect } from './custom-select';
+import type { AppCommand, CommandResult } from './domain/commands';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -18,6 +21,7 @@ export interface LayoutModalDeps {
   reportError: (error: unknown) => void;
   layoutManager: LayoutManager;
   settingsManager: SettingsManager;
+  dispatch: (command: AppCommand) => CommandResult;
 }
 
 /** The public API surface returned by createLayoutModal. */
@@ -48,6 +52,7 @@ export function createLayoutModal({
   reportError,
   layoutManager,
   settingsManager,
+  dispatch,
 }: LayoutModalDeps): LayoutModal {
   let layoutModalPollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -559,6 +564,55 @@ export function createLayoutModal({
         settingsManager.scheduleSettingsSave();
         renderModalLayouts(overlay);
       });
+
+      // -- Theme --
+      const themeSection = document.createElement('div');
+      themeSection.className = 'layout-section';
+
+      const themeRow = document.createElement('div');
+      themeRow.className = 'settings-row';
+      const themeLabel = document.createElement('span');
+      themeLabel.textContent = 'Default Theme';
+      themeRow.appendChild(themeLabel);
+
+      const themes: Theme[] = listThemes();
+      const currentLayoutThemeId: string = selected.themeId ?? '';
+      const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+
+      const themeSelectOptions = [
+        { value: '', label: 'Default (use global theme)' },
+        ...themes.map((t: Theme) => ({ value: t.id, label: t.name })),
+      ];
+
+      const themeSelect = createCustomSelect({
+        options: themeSelectOptions,
+        value: currentLayoutThemeId,
+        placeholder: 'Default (use global theme)',
+        onChange: async (themeId: string) => {
+          const resolvedThemeId = themeId || undefined;
+          const updatedLayout = {
+            ...layout!,
+            themeId: resolvedThemeId,
+          };
+          await bridge.saveLayout(updatedLayout);
+          const config = await bridge.listLayouts();
+          layoutManager._setLayouts(config.layouts ?? []);
+
+          // Update the runtime layout so getLayoutThemeId() returns the new value
+          paneState.setLayoutThemeId(resolvedThemeId);
+
+          // Trigger a single render to re-apply themes for all panes.
+          // Pick a pane without an explicit theme so we don't clobber per-pane overrides.
+          const plainPane = (layout!.panes ?? []).find((p: any) => !p.themeId);
+          if (plainPane) {
+            dispatch({ type: 'pane.setTheme', paneId: plainPane.id, themeId: null });
+          }
+        },
+      });
+
+      themeRow.appendChild(themeSelect.el);
+      themeSection.appendChild(themeRow);
+      info.appendChild(themeSection);
 
       // -- Panes list --
       const panesCount: number = selected.panes?.length ?? 0;

@@ -1,0 +1,1 @@
+Fix layout theme picker to use the same `createCustomSelect` component as shell profiles, removing custom inline picker implementation. Refresh terminal themes immediately when layout theme changes by dispatching `pane.setTheme(null)` for all panes without explicit themes.
