@@ -261,15 +261,6 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     requestAppRestart: () => window.location.reload(),
   });
 
-  layoutModal = createLayoutModal({
-    bridge,
-    paneState,
-    modalStack,
-    reportError,
-    layoutManager,
-    settingsManager,
-  });
-
   const hotkeyHandler = createHotkeyHandler({
     bridge,
     reportError,
@@ -452,6 +443,16 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     bridge,
     shellProfileManager,
     reportError,
+    dispatch,
+  });
+
+  layoutModal = createLayoutModal({
+    bridge,
+    paneState,
+    modalStack,
+    reportError,
+    layoutManager,
+    settingsManager,
     dispatch,
   });
 
