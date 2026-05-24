@@ -444,6 +444,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     shellProfileManager,
     reportError,
     dispatch,
+    getLayoutThemeId: () => paneState.getLayout().snapshot().themeId,
   });
 
   layoutModal = createLayoutModal({
@@ -454,6 +455,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     layoutManager,
     settingsManager,
     dispatch,
+    render,
   });
 
   // Track auto-save state for E2E testing

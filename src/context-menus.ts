@@ -78,6 +78,8 @@ export interface ContextMenusDeps {
   shellProfileManager: ShellProfileManagerLike;
   reportError: (error: unknown) => void;
   dispatch: (command: AppCommand) => CommandResult;
+  /** Optional callback to get the current layout's default theme ID. */
+  getLayoutThemeId?: () => string | undefined;
 }
 
 /** Public API surface returned by `createContextMenus`. */
@@ -326,6 +328,7 @@ function showTerminalContextMenu(
   shellProfileManager: ShellProfileManagerLike,
   handleMenuAction: HandleMenuActionFn,
   dispatch: (command: AppCommand) => CommandResult,
+  getLayoutThemeId: (() => string | undefined) | undefined,
 ): void {
   getClipboardSnapshot(bridge).then((clipboardSnapshot) => {
 
@@ -343,11 +346,13 @@ function showTerminalContextMenu(
     const panes = state.getPanels();
     const pane = panes[state.getPaneIndex(paneId)];
     const currentThemeId = pane?.themeId ?? null;
+    const layoutThemeId = getLayoutThemeId?.() ?? undefined;
+    const effectiveThemeId = currentThemeId ?? layoutThemeId ?? 'default-dark';
 
     const themeChildren: MenuChildItem[] = themes.map((t: Theme) => ({
       label: t.name,
       action: `pane-set-theme:${t.id}`,
-      isDefault: !currentThemeId && t.id === 'default-dark' || currentThemeId === t.id,
+      isDefault: t.id === effectiveThemeId,
     }));
 
     const breathingOn = pane && pane.breathingMonitor !== false;
@@ -397,6 +402,7 @@ function showTabContextMenu(
   bridge: Bridge,
   handleMenuAction: HandleMenuActionFn,
   dispatch: (command: AppCommand) => CommandResult,
+  getLayoutThemeId: (() => string | undefined) | undefined,
 ): void {
   const paneIndex = state.getPaneIndex(paneId);
   if (paneIndex === -1) {
@@ -412,11 +418,13 @@ function showTabContextMenu(
   // Build theme submenu
   const themes = listThemes();
   const currentThemeId = pane?.themeId ?? null;
+  const layoutThemeId = getLayoutThemeId?.() ?? undefined;
+  const effectiveThemeId = currentThemeId ?? layoutThemeId ?? 'default-dark';
 
   const themeChildren: MenuChildItem[] = themes.map((t: Theme) => ({
     label: t.name,
     action: `pane-set-theme:${t.id}`,
-    isDefault: !currentThemeId && t.id === 'default-dark' || currentThemeId === t.id,
+    isDefault: t.id === effectiveThemeId,
   }));
 
   const items: MenuItem[] = [
@@ -730,7 +738,7 @@ function handleMenuAction(
  * @returns Context menu manager API
  */
 export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
-  const { state, bridge, shellProfileManager, dispatch } = deps;
+  const { state, bridge, shellProfileManager, dispatch, getLayoutThemeId } = deps;
 
   // Bind handleMenuAction with all dependencies
   const boundHandleMenuAction = (action: string, paneId: string): void =>
@@ -741,9 +749,9 @@ export function createContextMenus(deps: ContextMenusDeps): ContextMenus {
       showContextMenu(items, x, y, paneId, state, bridge, boundHandleMenuAction),
     hideContextMenu: (): void => hideContextMenu(state),
     showTerminalContextMenu: (paneId: string, event: MouseEvent): void =>
-      showTerminalContextMenu(paneId, event, state, bridge, shellProfileManager, boundHandleMenuAction, dispatch),
+      showTerminalContextMenu(paneId, event, state, bridge, shellProfileManager, boundHandleMenuAction, dispatch, getLayoutThemeId),
     showTabContextMenu: (paneId: string, event: MouseEvent): void =>
-      showTabContextMenu(paneId, event, state, bridge, boundHandleMenuAction, dispatch),
+      showTabContextMenu(paneId, event, state, bridge, boundHandleMenuAction, dispatch, getLayoutThemeId),
     showColorPicker: (paneId: string): void =>
       showColorPicker(paneId, state, bridge, dispatch, boundHandleMenuAction),
     setPaneColor: (paneId: string, color: string): void => setPaneColor(paneId, color, dispatch),

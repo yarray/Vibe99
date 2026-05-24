@@ -22,6 +22,8 @@ export interface LayoutModalDeps {
   layoutManager: LayoutManager;
   settingsManager: SettingsManager;
   dispatch: (command: AppCommand) => CommandResult;
+  /** Optional render callback to refresh the UI after layout theme changes. */
+  render?: () => void;
 }
 
 /** The public API surface returned by createLayoutModal. */
@@ -53,6 +55,7 @@ export function createLayoutModal({
   layoutManager,
   settingsManager,
   dispatch,
+  render,
 }: LayoutModalDeps): LayoutModal {
   let layoutModalPollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -598,14 +601,11 @@ export function createLayoutModal({
           const config = await bridge.listLayouts();
           layoutManager._setLayouts(config.layouts ?? []);
 
-          // Update the runtime layout so getLayoutThemeId() returns the new value
-          paneState.setLayoutThemeId(resolvedThemeId);
-
-          // Trigger a single render to re-apply themes for all panes.
-          // Pick a pane without an explicit theme so we don't clobber per-pane overrides.
-          const plainPane = (layout!.panes ?? []).find((p: any) => !p.themeId);
-          if (plainPane) {
-            dispatch({ type: 'pane.setTheme', paneId: plainPane.id, themeId: null });
+          // Only update the runtime layout and refresh terminals when editing
+          // the layout currently bound to this window.
+          if (selected.id === layoutManager.getWindowLayoutId()) {
+            paneState.setLayoutThemeId(resolvedThemeId);
+            render?.();
           }
         },
       });

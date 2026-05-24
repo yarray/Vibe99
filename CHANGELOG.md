@@ -44,6 +44,11 @@
   - Fixed theme selection not persisting - removed unnecessary modal re-render that was destroying the custom-select element during selection.
   - Fixed label wrapping in layout editor - constrained custom-select width to prevent overflow.
 
+- **Layout-level default theme priority chain** (VIB-334):
+  - Fixed layout modal theme changes incorrectly affecting the current window when editing a different layout. Now only updates runtime theme when editing the window's bound layout.
+  - Fixed theme re-application after layout theme change by using direct `render()` callback instead of hacky `dispatch(pane.setTheme)` on a potentially stale pane ID.
+  - Fixed context menu theme submenu to correctly mark the effective theme (pane override → layout default → global default) as selected, instead of always defaulting to `default-dark`.
+
 ### Security
 
 - None.
