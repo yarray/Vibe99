@@ -44,6 +44,10 @@
   - Fixed theme selection not persisting - removed unnecessary modal re-render that was destroying the custom-select element during selection.
   - Fixed label wrapping in layout editor - constrained custom-select width to prevent overflow.
 
+- **E2E Docker image size** (VIB-339):
+  - Fixed image bloat caused by `cargo build` leaving `target/debug/deps` directory.
+  - Added `rm -rf src-tauri/target/debug/deps` to cleanup pipeline.
+
 ### Security
 
 - None.
