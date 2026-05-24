@@ -771,6 +771,19 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     let layouts = layoutManager.getLayouts();
     let defaultLayoutId = layoutManager.getDefaultLayoutId();
 
+    // Migrate: if defaultLayoutId is set but no layout has autostart,
+    // set the default layout's autostart to true for backward compat
+    const hasAnyAutostart = layouts.some((l) => l.autostart === true);
+    if (!hasAnyAutostart && defaultLayoutId) {
+      const defaultLayout = layouts.find((l) => l.id === defaultLayoutId);
+      if (defaultLayout) {
+        defaultLayout.autostart = true;
+        await bridge.saveLayout(defaultLayout);
+        await layoutManager.refreshLayouts();
+        layouts = layoutManager.getLayouts();
+      }
+    }
+
     let defaultLayout = layouts.find((l) => l.id === defaultLayoutId)
       || layouts.find((l) => l.id === 'default');
 
@@ -787,9 +800,17 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? defaultLayout.id);
     }
 
+    // Determine target layout for this window.
+    // For the main window: prefer an autostart layout, falling back to default layout.
+    // For layout-specific windows (opened via ?layoutId=): use the specified layout.
     const targetLayoutId = windowContext.kind === 'layout'
       ? windowContext.layoutId
-      : layoutManager.getDefaultLayoutId();
+      : (() => {
+          // Prefer first autostart layout for the main window
+          const autostartLayouts = layoutManager.getAutostartLayouts();
+          if (autostartLayouts.length > 0) return autostartLayouts[0].id;
+          return layoutManager.getDefaultLayoutId();
+        })();
     const targetLayout = layoutManager.getLayouts().find((l) => l.id === targetLayoutId);
     if (!targetLayout) {
       throw new Error(`Layout not found: ${targetLayoutId}`);
@@ -821,6 +842,18 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     // Auto-restore float window if it was open before the app was closed
     if (floatWindowManager.shouldAutoOpen()) {
       void floatWindowManager.open();
+    }
+
+    // Open windows for all other autostart layouts (main window only)
+    if (windowContext.kind === 'main') {
+      const autostartLayouts = layoutManager.getAutostartLayouts();
+      for (const layout of autostartLayouts) {
+        if (layout.id !== targetLayout.id) {
+          bridge.openLayoutWindow(layout.id).catch((err) => {
+            console.error('Failed to open autostart layout window:', layout.id, err);
+          });
+        }
+      }
     }
   }
 

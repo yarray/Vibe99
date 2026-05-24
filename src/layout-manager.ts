@@ -44,6 +44,7 @@ export interface LayoutManager {
   createDefaultLayout: () => LayoutData;
   getLayouts: () => LayoutData[];
   getDefaultLayoutId: () => string;
+  getAutostartLayouts: () => LayoutData[];
   setLayoutRestoreComplete: (value: boolean) => void;
   createFreshDefaultLayout: (layoutId: string, name: string) => LayoutData;
   // Internal accessors for layout-modal
@@ -104,6 +105,7 @@ export function createLayoutManager({
     const session: SessionData = buildSessionData();
     const windowGeometry = await bridge.getWindowGeometry();
     const layoutSnapshot = paneState.getLayout().snapshot();
+    const existingLayout = layouts.find((l) => l.id === layoutId);
     return {
       id: layoutId,
       name,
@@ -112,6 +114,7 @@ export function createLayoutManager({
       windowGeometry: windowGeometry ?? undefined,
       themeId: layoutSnapshot.themeId,
       uiOverrides: layoutSnapshot.uiOverrides,
+      autostart: existingLayout?.autostart ?? false,
     };
   }
 
@@ -411,6 +414,9 @@ export function createLayoutManager({
   function _setLayouts(newLayouts: LayoutData[]): void { layouts = newLayouts; }
   function _setDefaultLayoutId(id: string): void { defaultLayoutId = id; }
   function setLayoutRestoreComplete(value: boolean): void { layoutRestoreComplete = value; }
+  function getAutostartLayouts(): LayoutData[] {
+    return layouts.filter((l) => l.autostart === true);
+  }
 
   return {
     setWindowLayoutId,
@@ -430,6 +436,7 @@ export function createLayoutManager({
     createDefaultLayout,
     getLayouts,
     getDefaultLayoutId,
+    getAutostartLayouts,
     setLayoutRestoreComplete,
     // Internal accessors for layout-modal
     _getSelectedLayoutId,

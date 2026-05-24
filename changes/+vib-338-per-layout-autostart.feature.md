@@ -1,0 +1,1 @@
+Layout config now has a per-layout "Auto-start on boot" toggle instead of a single global default layout. Multiple layouts can be set to auto-start simultaneously; each opens in its own window on app launch. Existing `defaultLayoutId` is automatically migrated to the new `autostart` boolean on first load.
