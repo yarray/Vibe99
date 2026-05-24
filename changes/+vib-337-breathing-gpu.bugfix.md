@@ -1,0 +1,1 @@
+Replace box-shadow animation with static box-shadow + opacity-only keyframe animation in breathing light. box-shadow cannot be GPU-composited and forces full repaints every frame (38-50% GPU). Now only opacity is animated (GPU-compositable), reducing GPU usage to near-zero during breathing.
