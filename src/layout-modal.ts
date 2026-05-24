@@ -589,24 +589,24 @@ export function createLayoutModal({
         value: currentLayoutThemeId,
         placeholder: 'Default (use global theme)',
         onChange: async (themeId: string) => {
+          const resolvedThemeId = themeId || undefined;
           const updatedLayout = {
             ...layout!,
-            themeId: themeId || undefined,
+            themeId: resolvedThemeId,
           };
           await bridge.saveLayout(updatedLayout);
           const config = await bridge.listLayouts();
           layoutManager._setLayouts(config.layouts ?? []);
 
-          // Refresh theme for all panes in this layout that don't have an explicit theme
-          // This ensures terminals immediately pick up the new layout theme
-          for (const pane of layout!.panes ?? []) {
-            if (!pane.themeId) {
-              dispatch({ type: 'pane.setTheme', paneId: pane.id, themeId: null });
-            }
+          // Update the runtime layout so getLayoutThemeId() returns the new value
+          paneState.setLayoutThemeId(resolvedThemeId);
+
+          // Trigger a single render to re-apply themes for all panes.
+          // Pick a pane without an explicit theme so we don't clobber per-pane overrides.
+          const plainPane = (layout!.panes ?? []).find((p: any) => !p.themeId);
+          if (plainPane) {
+            dispatch({ type: 'pane.setTheme', paneId: plainPane.id, themeId: null });
           }
-          // Note: We don't call renderModalLayouts() here to avoid destroying the custom-select
-          // element while it's handling the selection. The layout manager state is already
-          // updated above, and the select element will show the new value via its own update.
         },
       });
 

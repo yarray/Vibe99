@@ -752,9 +752,6 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   }
 
   function setTheme(themeId: string | null): void {
-    if (_themeId === themeId) {
-      return;
-    }
     _themeId = themeId;
     applyTerminalTheme();
   }

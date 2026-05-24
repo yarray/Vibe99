@@ -806,6 +806,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       await bridge.applyQuake(targetLayout.id, quakeConfig);
     }
     paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
+    paneState.setLayoutThemeId(targetLayout.themeId);
     paneRenderer?.ensureSessions();
 
     layoutManager.updateLayoutsIndicator();

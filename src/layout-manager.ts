@@ -194,6 +194,7 @@ export function createLayoutManager({
     const layout = layouts.find((l) => l.id === layoutId);
     if (!layout) return;
     restoreSession({ panes: layout.panes as unknown as SessionData['panes'], focusedPaneIndex: layout.focusedPaneIndex });
+    paneState.setLayoutThemeId(layout.themeId);
     setWindowLayoutId(layoutId);
     flushWindowLayoutSave();
     updateLayoutsIndicator();
