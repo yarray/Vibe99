@@ -27,6 +27,8 @@ Vibe99 is a desktop terminal workspace designed for agentic coding. The UI keeps
 - **Navigation mode** — `Ctrl+B` enters a vim-style mode: move with `h`/`l`, jump by number (`1`–`9`), close (`x`), rename (`r`), then `Enter` to focus.
 - **Per-pane shell profiles** — each pane can run a different shell. Create profiles for bash, zsh, SSH, Docker, or any command. WSL distributions on Windows are auto-detected.
 
+For detailed feature documentation with animated demonstrations, see [docs/features/](./docs/features/).
+
 ## Installation
 
 ### Pre-built Binaries
@@ -219,6 +221,24 @@ Build image (first time):
 ``` bash
 docker build -f e2e/Dockerfile.e2e -t vibe99-builder:latest .
 ```
+
+## GIF Recording
+
+Record feature demonstrations as GIFs using Docker:
+
+```bash
+# Build the recorder image
+docker build -f e2e/Dockerfile.gif -t vibe99-recorder .
+
+# Record a specific feature
+docker run --rm --privileged -v $PWD:/mnt/source:ro vibe99-recorder npm run test:e2e -- ./recordings/record-multi-pane.spec.js
+
+# Or use the convenience script
+./scripts/record-gifs.sh multi-pane
+./scripts/record-gifs.sh all  # Record all features
+```
+
+See [e2e/RECORDING.md](./e2e/RECORDING.md) for details.
 
 Details see [e2e/README.md](./e2e/README.md).
 
