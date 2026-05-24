@@ -731,4 +731,499 @@ describe('Layout', () => {
     const labelText = await statusLabel.getText();
     expect(labelText).not.toBe('Layout focused');
   });
+
+  // ================================================================
+  // UI Overrides (VIB-335)
+  // ================================================================
+
+  describe('UI Overrides', () => {
+    it('shows UI Overrides section in layout modal editor', async () => {
+      await saveLayoutAs('UI Override Test');
+      await openLayoutsModal();
+      await clickModalLayout('UI Override Test');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the UI Overrides section header
+      const sections = await editor.$$('.layout-section-header');
+      let uiOverridesSection = null;
+      for (const section of sections) {
+        const text = await getTextSafe(section);
+        if (text === 'UI Overrides') {
+          uiOverridesSection = section;
+          break;
+        }
+      }
+      expect(uiOverridesSection).toExist();
+    });
+
+    it('displays "Use Global" state when no override is set', async () => {
+      await saveLayoutAs('Global State Test');
+      await openLayoutsModal();
+      await clickModalLayout('Global State Test');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Check that all override toggles show "Use Global" when no overrides are set
+      const toggles = await editor.$$('.layout-override-toggle');
+      expect(toggles.length).toBeGreaterThanOrEqual(5); // fontSize, fontFamily, paneWidth, paneOpacity, paneMaskOpacity
+
+      // All toggles should show "Use Global" when no overrides are set
+      for (const toggle of toggles) {
+        const text = await getTextSafe(toggle);
+        expect(text).toBe('Use Global');
+        expect(await toggle.getAttribute('class')).not.toContain('is-active');
+      }
+    });
+
+    it('shows "Custom" state when override value is set', async () => {
+      await saveLayoutAs('Custom State Test');
+
+      // Set a uiOverride value via bridge
+      await browser.execute(async () => {
+        if (!window.__TAURI__) return;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'custom-state-test');
+        if (layout) {
+          layout.uiOverrides = { fontSize: 16 };
+          await core.invoke('layout_save', { layout });
+        }
+      });
+      await browser.pause(500);
+
+      await openLayoutsModal();
+      await clickModalLayout('Custom State Test');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the override rows - the first row should be Font Size
+      const rows = await editor.$$('.settings-row');
+      let fontSizeToggle = null;
+      for (const row of rows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Font Size') {
+            fontSizeToggle = await row.$('.layout-override-toggle');
+            break;
+          }
+        }
+      }
+      expect(fontSizeToggle).toExist();
+
+      const toggleText = await getTextSafe(fontSizeToggle);
+      expect(toggleText).toBe('Custom');
+      expect(await fontSizeToggle.getAttribute('class')).toContain('is-active');
+    });
+
+    it('persists font size override when set via modal', async () => {
+      await saveLayoutAs('Font Size Persist');
+      await openLayoutsModal();
+      await clickModalLayout('Font Size Persist');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the Font Size row and click "Custom" toggle
+      const rows = await editor.$$('.settings-row');
+      let fontSizeRow = null;
+      for (const row of rows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Font Size') {
+            fontSizeRow = row;
+            break;
+          }
+        }
+      }
+      expect(fontSizeRow).toExist();
+
+      // Click the "Use Global" toggle to switch to "Custom"
+      const toggle = await fontSizeRow.$('.layout-override-toggle');
+      await toggle.click();
+      await browser.pause(300);
+
+      // Now the input should be enabled, set a custom value
+      const input = await fontSizeRow.$('input');
+      expect(input).toExist();
+
+      await browser.execute((el) => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(el, '18');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, input);
+      await browser.pause(500);
+
+      // Verify the value was persisted by checking the layout data
+      const layoutData = await browser.execute(async () => {
+        if (!window.__TAURI__) return null;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'font-size-persist');
+        return layout ? layout.uiOverrides : null;
+      });
+
+      expect(layoutData).not.toBeNull();
+      expect(layoutData.fontSize).toBe(18);
+    });
+
+    it('persists pane width override when set via modal', async () => {
+      await saveLayoutAs('Pane Width Persist');
+      await openLayoutsModal();
+      await clickModalLayout('Pane Width Persist');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the Pane Width row
+      const rows = await editor.$$('.settings-row');
+      let paneWidthRow = null;
+      for (const row of rows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Pane Width') {
+            paneWidthRow = row;
+            break;
+          }
+        }
+      }
+      expect(paneWidthRow).toExist();
+
+      // Click the "Use Global" toggle to switch to "Custom"
+      const toggle = await paneWidthRow.$('.layout-override-toggle');
+      await toggle.click();
+      await browser.pause(300);
+
+      // Set a custom value
+      const input = await paneWidthRow.$('input');
+      expect(input).toExist();
+
+      await browser.execute((el) => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(el, '1000');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, input);
+      await browser.pause(500);
+
+      // Verify the value was persisted
+      const layoutData = await browser.execute(async () => {
+        if (!window.__TAURI__) return null;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'pane-width-persist');
+        return layout ? layout.uiOverrides : null;
+      });
+
+      expect(layoutData).not.toBeNull();
+      expect(layoutData.paneWidth).toBe(1000);
+    });
+
+    it('persists pane opacity override when set via modal', async () => {
+      await saveLayoutAs('Pane Opacity Persist');
+      await openLayoutsModal();
+      await clickModalLayout('Pane Opacity Persist');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the Pane Opacity row
+      const rows = await editor.$$('.settings-row');
+      let paneOpacityRow = null;
+      for (const row of rows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Pane Opacity') {
+            paneOpacityRow = row;
+            break;
+          }
+        }
+      }
+      expect(paneOpacityRow).toExist();
+
+      // Click the "Use Global" toggle to switch to "Custom"
+      const toggle = await paneOpacityRow.$('.layout-override-toggle');
+      await toggle.click();
+      await browser.pause(300);
+
+      // Set a custom value
+      const input = await paneOpacityRow.$('input');
+      expect(input).toExist();
+
+      await browser.execute((el) => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(el, '0.9');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, input);
+      await browser.pause(500);
+
+      // Verify the value was persisted
+      const layoutData = await browser.execute(async () => {
+        if (!window.__TAURI__) return null;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'pane-opacity-persist');
+        return layout ? layout.uiOverrides : null;
+      });
+
+      expect(layoutData).not.toBeNull();
+      expect(layoutData.paneOpacity).toBe(0.9);
+    });
+
+    it('persists pane mask opacity override when set via modal', async () => {
+      await saveLayoutAs('Pane Mask Opacity Persist');
+      await openLayoutsModal();
+      await clickModalLayout('Pane Mask Opacity Persist');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the Pane Mask Opacity row
+      const rows = await editor.$$('.settings-row');
+      let paneMaskOpacityRow = null;
+      for (const row of rows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Pane Mask Opacity') {
+            paneMaskOpacityRow = row;
+            break;
+          }
+        }
+      }
+      expect(paneMaskOpacityRow).toExist();
+
+      // Click the "Use Global" toggle to switch to "Custom"
+      const toggle = await paneMaskOpacityRow.$('.layout-override-toggle');
+      await toggle.click();
+      await browser.pause(300);
+
+      // Set a custom value
+      const input = await paneMaskOpacityRow.$('input');
+      expect(input).toExist();
+
+      await browser.execute((el) => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(el, '0.7');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, input);
+      await browser.pause(500);
+
+      // Verify the value was persisted
+      const layoutData = await browser.execute(async () => {
+        if (!window.__TAURI__) return null;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'pane-mask-opacity-persist');
+        return layout ? layout.uiOverrides : null;
+      });
+
+      expect(layoutData).not.toBeNull();
+      expect(layoutData.paneMaskOpacity).toBe(0.7);
+    });
+
+    it('persists font family override when set via modal', async () => {
+      await saveLayoutAs('Font Family Persist');
+      await openLayoutsModal();
+      await clickModalLayout('Font Family Persist');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the Font Family row
+      const rows = await editor.$$('.settings-row');
+      let fontFamilyRow = null;
+      for (const row of rows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Font Family') {
+            fontFamilyRow = row;
+            break;
+          }
+        }
+      }
+      expect(fontFamilyRow).toExist();
+
+      // Click the "Use Global" toggle to switch to "Custom"
+      const toggle = await fontFamilyRow.$('.layout-override-toggle');
+      await toggle.click();
+      await browser.pause(300);
+
+      // Set a custom value
+      const input = await fontFamilyRow.$('input');
+      expect(input).toExist();
+
+      await browser.execute((el) => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(el, 'monospace');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, input);
+      await browser.pause(500);
+
+      // Verify the value was persisted
+      const layoutData = await browser.execute(async () => {
+        if (!window.__TAURI__) return null;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'font-family-persist');
+        return layout ? layout.uiOverrides : null;
+      });
+
+      expect(layoutData).not.toBeNull();
+      expect(layoutData.fontFamily).toBe('monospace');
+    });
+
+    it('clears override when clicking "Use Global" toggle', async () => {
+      await saveLayoutAs('Clear Override Test');
+
+      // First set an override via bridge
+      await browser.execute(async () => {
+        if (!window.__TAURI__) return;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'clear-override-test');
+        if (layout) {
+          layout.uiOverrides = { fontSize: 18 };
+          await core.invoke('layout_save', { layout });
+        }
+      });
+      await browser.pause(500);
+
+      await openLayoutsModal();
+      await clickModalLayout('Clear Override Test');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the Font Size row
+      const rows = await editor.$$('.settings-row');
+      let fontSizeRow = null;
+      for (const row of rows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Font Size') {
+            fontSizeRow = row;
+            break;
+          }
+        }
+      }
+      expect(fontSizeRow).toExist();
+
+      // The toggle should show "Custom" since we set an override
+      let toggle = await fontSizeRow.$('.layout-override-toggle');
+      let toggleText = await getTextSafe(toggle);
+      expect(toggleText).toBe('Custom');
+
+      // Click the "Custom" toggle to clear the override (switches to "Use Global")
+      await toggle.click();
+      await browser.pause(500);
+
+      // After clicking, the modal should re-render and the toggle should show "Use Global"
+      // We need to re-query the elements
+      await browser.pause(300);
+      const updatedRows = await editor.$$('.settings-row');
+      for (const row of updatedRows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Font Size') {
+            fontSizeRow = row;
+            break;
+          }
+        }
+      }
+
+      toggle = await fontSizeRow.$('.layout-override-toggle');
+      toggleText = await getTextSafe(toggle);
+      expect(toggleText).toBe('Use Global');
+
+      // Verify the override was cleared from the layout data
+      const layoutData = await browser.execute(async () => {
+        if (!window.__TAURI__) return null;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'clear-override-test');
+        return layout ? layout.uiOverrides : null;
+      });
+
+      expect(layoutData).not.toBeNull();
+      expect(layoutData.fontSize).toBeUndefined();
+    });
+
+    it('persists breathing intensity override when set via modal', async () => {
+      await saveLayoutAs('Breathing Persist');
+      await openLayoutsModal();
+      await clickModalLayout('Breathing Persist');
+      await browser.pause(300);
+
+      const overlay = await $('.settings-modal-overlay');
+      const editor = await overlay.$('#modal-layout-editor');
+
+      // Find the Breathing Intensity row
+      const rows = await editor.$$('.settings-row');
+      let breathingRow = null;
+      for (const row of rows) {
+        const label = await row.$('span');
+        if (label) {
+          const text = await getTextSafe(label);
+          if (text === 'Breathing Intensity') {
+            breathingRow = row;
+            break;
+          }
+        }
+      }
+      expect(breathingRow).toExist();
+
+      // Click the "Use Global" toggle to switch to "Custom"
+      const toggle = await breathingRow.$('.layout-override-toggle');
+      await toggle.click();
+      await browser.pause(300);
+
+      // After clicking, the segmented buttons should appear
+      // Click on the "intense" option
+      await browser.execute(() => {
+        const container = document.querySelector('.layout-ui-override-container');
+        if (!container) return;
+        const segments = container.querySelector('.settings-segmented');
+        if (!segments) return;
+        const intenseBtn = segments.querySelector('.settings-segmented-btn[data-value="intense"]');
+        if (intenseBtn) intenseBtn.click();
+      });
+      await browser.pause(500);
+
+      // Verify the value was persisted
+      const layoutData = await browser.execute(async () => {
+        if (!window.__TAURI__) return null;
+        const core = window.__TAURI__.core;
+        const config = await core.invoke('layouts_list');
+        const layout = config.layouts?.find((l) => l.id === 'breathing-persist');
+        return layout ? layout.uiOverrides : null;
+      });
+
+      expect(layoutData).not.toBeNull();
+      expect(layoutData.breathingIntensity).toBe('intense');
+    });
+  });
 });
