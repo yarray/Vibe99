@@ -243,6 +243,22 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+.settings-pin {
+  display: none;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-left: 6px;
+  color: var(--status-highlight);
+  vertical-align: middle;
+}
+
+.settings-pin.is-visible {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .settings-row-hint {
   color: var(--panel-muted);
   font-size: 14px;

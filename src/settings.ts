@@ -101,6 +101,8 @@ export interface SettingsManagerDeps {
 
 export interface SettingsManager {
   readonly settings: AppSettings;
+  /** Resolved settings with layout UI overrides applied. */
+  readonly resolvedSettings: AppSettings;
   applySettings(): void;
   applyPersistedSettings(nextSettings: unknown): void;
   scheduleSettingsSave(): void;
@@ -184,12 +186,30 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const floatWindowRow = document.getElementById('float-window-row') as HTMLElement;
   const debounceInput = document.getElementById('activity-alert-debounce-input') as HTMLInputElement;
 
+  // Pin icons for layout UI overrides
+  const fontSizePin = document.getElementById('font-size-pin') as HTMLElement | null;
+  const fontFamilyPin = document.getElementById('font-family-pin') as HTMLElement | null;
+  const paneWidthPin = document.getElementById('pane-width-pin') as HTMLElement | null;
+  const paneOpacityPin = document.getElementById('pane-opacity-pin') as HTMLElement | null;
+  const paneMaskOpacityPin = document.getElementById('pane-mask-opacity-pin') as HTMLElement | null;
+  const breathingIntensityPin = document.getElementById('breathing-intensity-pin') as HTMLElement | null;
+
   const settings: AppSettings = {
     ...getDefaultSettings(),
     fontFamily: getDefaultFontFamily(bridge.platform),
   };
 
   let pendingSettingsSave: number | null = null;
+
+  function updatePinVisibility(): void {
+    const layoutUiOverrides = deps.getLayoutUiOverrides?.();
+    fontSizePin?.classList.toggle('is-visible', layoutUiOverrides?.fontSize !== undefined);
+    fontFamilyPin?.classList.toggle('is-visible', layoutUiOverrides?.fontFamily !== undefined);
+    paneWidthPin?.classList.toggle('is-visible', layoutUiOverrides?.paneWidth !== undefined);
+    paneOpacityPin?.classList.toggle('is-visible', layoutUiOverrides?.paneOpacity !== undefined);
+    paneMaskOpacityPin?.classList.toggle('is-visible', layoutUiOverrides?.paneMaskOpacity !== undefined);
+    breathingIntensityPin?.classList.toggle('is-visible', layoutUiOverrides?.breathingIntensity !== undefined);
+  }
 
   function applySettings(): void {
     // Get layout UI overrides if available
@@ -223,6 +243,7 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     // Apply debounce setting (input is in seconds)
     debounceInput.value = String(resolvedSettings.activityAlertDebounceMs / 1000);
     paneActivityWatcher.setSettleMs(resolvedSettings.activityAlertDebounceMs);
+    updatePinVisibility();
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {
@@ -282,33 +303,51 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     void bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData).catch(reportError);
   }
 
+  // Helper: write a setting to either global or layout override
+  function writeSetting<K extends keyof LayoutUiOverrides>(
+    key: K,
+    value: LayoutUiOverrides[K],
+    applyToGlobal: (v: NonNullable<LayoutUiOverrides[K]>) => void,
+  ): void {
+    const layoutUiOverrides = deps.getLayoutUiOverrides?.();
+    if (layoutUiOverrides && layoutUiOverrides[key] !== undefined) {
+      // Current layout has an override for this field — update the override
+      // so the current window actually sees the change.
+      const nextOverrides = { ...layoutUiOverrides, [key]: value };
+      deps.onLayoutUiOverridesChange?.(nextOverrides);
+    } else {
+      // No layout override — write to global settings.
+      applyToGlobal(value as NonNullable<LayoutUiOverrides[K]>);
+      scheduleSettingsSave();
+    }
+    applySettings();
+    applyCallback();
+  }
+
   // Font size
   fontSizeInput.addEventListener('change', () => {
     const nextValue = Number(fontSizeInput.value);
     const result = validateField('fontSize', nextValue);
-    settings.fontSize = result.sanitizedValue as number;
-    applySettings();
-    applyCallback();
-    scheduleSettingsSave();
+    writeSetting('fontSize', result.sanitizedValue as number, (v) => {
+      settings.fontSize = v;
+    });
   });
 
   // Font family
   fontFamilyInput.addEventListener('change', () => {
     const result = validateField('fontFamily', fontFamilyInput.value);
-    settings.fontFamily = (result.sanitizedValue as string) || getDefaultFontFamily(bridge.platform);
-    applySettings();
-    applyCallback();
-    scheduleSettingsSave();
+    writeSetting('fontFamily', (result.sanitizedValue as string) || getDefaultFontFamily(bridge.platform), (v) => {
+      settings.fontFamily = v;
+    });
   });
 
   // Pane width
   function updatePaneWidth(nextValue: string): void {
     const parsedValue = Number(nextValue);
     const result = validateField('paneWidth', parsedValue);
-    settings.paneWidth = result.sanitizedValue as number;
-    applySettings();
-    applyCallback();
-    scheduleSettingsSave();
+    writeSetting('paneWidth', result.sanitizedValue as number, (v) => {
+      settings.paneWidth = v;
+    });
   }
 
   paneWidthRange.addEventListener('input', () => {
@@ -323,9 +362,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   function updatePaneOpacity(nextValue: string): void {
     const parsedValue = Number(nextValue);
     const result = validateField('paneOpacity', parsedValue);
-    settings.paneOpacity = result.sanitizedValue as number;
-    applySettings();
-    scheduleSettingsSave();
+    writeSetting('paneOpacity', result.sanitizedValue as number, (v) => {
+      settings.paneOpacity = v;
+    });
   }
 
   paneOpacityRange.addEventListener('input', () => {
@@ -340,9 +379,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   function updatePaneMaskOpacity(nextValue: string): void {
     const parsedValue = Number(nextValue);
     const result = validateField('paneMaskOpacity', parsedValue);
-    settings.paneMaskOpacity = result.sanitizedValue as number;
-    applySettings();
-    scheduleSettingsSave();
+    writeSetting('paneMaskOpacity', result.sanitizedValue as number, (v) => {
+      settings.paneMaskOpacity = v;
+    });
   }
 
   paneMaskOpacityRange.addEventListener('input', () => {
@@ -361,9 +400,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     if (!value) return;
 
     const result = validateField('breathingIntensity', value);
-    settings.breathingIntensity = result.sanitizedValue as BreathingIntensity;
-    applySettings();
-    scheduleSettingsSave();
+    writeSetting('breathingIntensity', result.sanitizedValue as BreathingIntensity, (v) => {
+      settings.breathingIntensity = v;
+    });
   });
 
   // WebGL (3D acceleration)
@@ -410,6 +449,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   return {
     get settings() {
       return settings;
+    },
+    get resolvedSettings() {
+      return resolveUiSettings(settings, deps.getLayoutUiOverrides?.());
     },
     applySettings,
     applyPersistedSettings,

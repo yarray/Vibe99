@@ -37,16 +37,25 @@
 
             <label class="settings-row" for="font-size-input">
               <span>Font size</span>
+              <span class="settings-pin" id="font-size-pin" title="Layout override">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M16 12V4H17V2H7V4H8V12L6 14V16H11.2V22H12.8V16H18V14L16 12Z"/></svg>
+              </span>
             </label>
             <input class="settings-number" id="font-size-input" type="number" min="10" max="24" step="1" value="13" />
 
             <label class="settings-row" for="font-family-input">
               <span>Font family</span>
+              <span class="settings-pin" id="font-family-pin" title="Layout override">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M16 12V4H17V2H7V4H8V12L6 14V16H11.2V22H12.8V16H18V14L16 12Z"/></svg>
+              </span>
             </label>
             <input class="settings-number" id="font-family-input" type="text" placeholder="e.g. JetBrains Mono, Consolas" value="" />
 
             <label class="settings-row" for="pane-width-range">
               <span>Pane width</span>
+              <span class="settings-pin" id="pane-width-pin" title="Layout override">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M16 12V4H17V2H7V4H8V12L6 14V16H11.2V22H12.8V16H18V14L16 12Z"/></svg>
+              </span>
             </label>
             <div class="settings-dual">
               <input id="pane-width-range" type="range" min="520" max="2000" step="10" value="720" />
@@ -55,6 +64,9 @@
 
             <label class="settings-row" for="pane-opacity-range">
               <span>Pane opacity</span>
+              <span class="settings-pin" id="pane-opacity-pin" title="Layout override">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M16 12V4H17V2H7V4H8V12L6 14V16H11.2V22H12.8V16H18V14L16 12Z"/></svg>
+              </span>
             </label>
             <div class="settings-dual">
               <input id="pane-opacity-range" type="range" min="0.55" max="1" step="0.01" value="0.8" />
@@ -63,6 +75,9 @@
 
             <label class="settings-row" for="pane-mask-alpha-range">
               <span>BG mask opacity</span>
+              <span class="settings-pin" id="pane-mask-opacity-pin" title="Layout override">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M16 12V4H17V2H7V4H8V12L6 14V16H11.2V22H12.8V16H18V14L16 12Z"/></svg>
+              </span>
             </label>
             <div class="settings-dual">
               <input id="pane-mask-alpha-range" type="range" min="0" max="1" step="0.01" value="0.75" />
@@ -88,7 +103,11 @@
             <div class="settings-section-title">Alert Settings</div>
 
             <div class="settings-row">
-              <span>Breathing alert</span>
+              <span>Breathing alert
+                <span class="settings-pin" id="breathing-intensity-pin" title="Layout override">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M16 12V4H17V2H7V4H8V12L6 14V16H11.2V22H12.8V16H18V14L16 12Z"/></svg>
+                </span>
+              </span>
               <div class="settings-segmented" id="breathing-intensity-segments" role="radiogroup" aria-label="Breathing alert intensity">
                 <button class="settings-segmented-btn" data-value="none" role="radio" aria-checked="false">None</button>
                 <button class="settings-segmented-btn is-active" data-value="mild" role="radio" aria-checked="true">Mild</button>

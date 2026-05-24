@@ -178,6 +178,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     reportError,
     layoutsButtonEl,
     onManageLayouts: () => layoutModal!.openLayoutsModal(),
+    onAfterSwitchLayout: () => settingsManager.applySettings(),
   });
   (window as any).layoutManager = layoutManager;
 
@@ -816,6 +817,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     paneRenderer?.ensureSessions();
 
     layoutManager.updateLayoutsIndicator();
+    settingsManager.applySettings();
     render(true);
     layoutManager.setLayoutRestoreComplete(true);
     layoutRestoreComplete = true;

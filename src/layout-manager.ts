@@ -23,6 +23,7 @@ export interface LayoutManagerDeps {
   reportError: (error: unknown) => void;
   layoutsButtonEl: HTMLElement;
   onManageLayouts?: () => void;
+  onAfterSwitchLayout?: () => void;
 }
 
 /** The public API surface returned by createLayoutManager. */
@@ -68,6 +69,7 @@ export function createLayoutManager({
   reportError,
   layoutsButtonEl,
   onManageLayouts,
+  onAfterSwitchLayout,
 }: LayoutManagerDeps): LayoutManager {
   let windowLayoutId: string | null = null;
   let layouts: LayoutData[] = [];
@@ -200,6 +202,7 @@ export function createLayoutManager({
     setWindowLayoutId(layoutId);
     flushWindowLayoutSave();
     updateLayoutsIndicator();
+    onAfterSwitchLayout?.();
   }
 
   function updateLayoutsIndicator(): void {
