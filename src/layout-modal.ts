@@ -8,6 +8,7 @@ import type { LayoutHotkey, QuakePosition, QuakeLayoutConfig } from './domain/se
 import { listThemes, type Theme } from './domain/theme';
 import { createCustomSelect, type CustomSelect } from './custom-select';
 import type { AppCommand, CommandResult } from './domain/commands';
+import { enable, disable } from '@tauri-apps/plugin-autostart';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -287,6 +288,7 @@ export function createLayoutModal({
                 const existing = oldLayouts.find((l: LayoutData) => l.id === nl.id);
                 if (!existing) return true;
                 return existing.name !== nl.name ||
+                       existing.autostart !== nl.autostart ||
                        JSON.stringify(existing.panes) !== JSON.stringify(nl.panes);
               }) ||
               oldLayouts.some((el: LayoutData) => !newLayouts.find((l: LayoutData) => l.id === el.id));
@@ -327,9 +329,16 @@ export function createLayoutModal({
       for (const layout of layouts) {
         const isActive: boolean = layout.id === windowLayoutId;
         const isDefault: boolean = layout.id === defaultLayoutId;
+        const isAutostart: boolean = layout.autostart === true;
         const isSelected: boolean = layout.id === selectedLayoutId;
         const item = document.createElement('div');
-        item.className = `layout-item${isActive ? ' is-active' : ''}${isDefault ? ' is-default' : ''}${isSelected ? ' is-selected' : ''}`;
+        item.className = [
+          'layout-item',
+          isActive ? 'is-active' : '',
+          isDefault ? 'is-default' : '',
+          isAutostart ? 'is-autostart' : '',
+          isSelected ? 'is-selected' : '',
+        ].filter(Boolean).join(' ');
         item.dataset.layoutId = layout.id;
 
         let nameEl: HTMLElement;
@@ -385,7 +394,13 @@ export function createLayoutModal({
           nameEl = document.createElement('div');
           nameEl.className = 'layout-name';
           const nameText = layout.name || layout.id;
-          nameEl.innerHTML = isDefault ? `${icon('star')} ${nameText}` : nameText;
+          if (isAutostart) {
+            nameEl.innerHTML = `${icon('zap')} ${nameText}`;
+          } else if (isDefault) {
+            nameEl.innerHTML = `${icon('star')} ${nameText}`;
+          } else {
+            nameEl.innerHTML = nameText;
+          }
         }
 
         const info = document.createElement('div');
@@ -493,21 +508,48 @@ export function createLayoutModal({
       const actionsRow = document.createElement('div');
       actionsRow.className = 'layout-info-actions';
       const isDefault: boolean = selected.id === defaultLayoutId;
-      const setDefaultBtn = document.createElement('button');
-      setDefaultBtn.type = 'button';
-      setDefaultBtn.className = 'settings-btn layout-info-btn';
-      setDefaultBtn.innerHTML = isDefault ? `${icon('check')} Default` : 'Set as Default';
-      setDefaultBtn.disabled = isDefault;
-      setDefaultBtn.title = isDefault ? 'This is the default layout' : 'Set this layout to restore on startup';
-      setDefaultBtn.addEventListener('click', () => {
-        bridge.setLayoutAsDefault(selected.id)
-          .then((config: LayoutsListResult) => {
-            layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? selected.id);
-            renderModalLayouts(overlay);
-          })
-          .catch(reportError);
+      const isAutostart: boolean = selected.autostart === true;
+
+      // Autostart toggle
+      const autostartRow = document.createElement('div');
+      autostartRow.className = 'settings-row settings-clickable-row layout-autostart-toggle';
+      autostartRow.setAttribute('role', 'button');
+      autostartRow.setAttribute('tabindex', '0');
+      const autostartLabel = document.createElement('span');
+      autostartLabel.textContent = 'Auto-start on boot';
+      const autostartDot = document.createElement('span');
+      autostartDot.className = 'settings-toggle-dot';
+      if (isAutostart) autostartDot.classList.add('is-active');
+      autostartRow.append(autostartLabel, autostartDot);
+      autostartRow.addEventListener('click', async () => {
+        const newAutostart = !isAutostart;
+        const updatedLayout = {
+          ...selected,
+          autostart: newAutostart,
+        };
+        await bridge.saveLayout(updatedLayout);
+        const config = await bridge.listLayouts();
+        layoutManager._setLayouts(config.layouts ?? []);
+        layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? defaultLayoutId);
+
+        // Sync OS autostart registration
+        if (newAutostart) {
+          await enable();
+        } else {
+          const layouts = config.layouts ?? [];
+          const hasAnyAutostart = layouts.some((l) => l.id !== selected.id && l.autostart === true);
+          if (!hasAnyAutostart) {
+            await disable();
+          }
+        }
+
+        if (newAutostart && !config.defaultLayoutId) {
+          // If no default layout is set, also set this as default for backward compat
+          await bridge.setLayoutAsDefault(selected.id);
+        }
+        renderModalLayouts(overlay);
       });
-      actionsRow.appendChild(setDefaultBtn);
+      actionsRow.appendChild(autostartRow);
 
       const openInNewWindowBtn = document.createElement('button');
       openInNewWindowBtn.type = 'button';

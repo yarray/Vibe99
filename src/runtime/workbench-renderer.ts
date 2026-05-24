@@ -54,6 +54,7 @@ import { createTabBar } from '../tab-bar';
 import type { TabBarLocalState } from '../tab-bar';
 import type { ShellProfile, EditingShellProfile } from '../shell-profiles';
 import { createDefaultTerminalTheme } from '../domain/theme';
+import { enable, disable } from '@tauri-apps/plugin-autostart';
 
 // ---------------------------------------------------------------------------
 // Dependencies injected by the bootstrap entry
@@ -771,6 +772,31 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     let layouts = layoutManager.getLayouts();
     let defaultLayoutId = layoutManager.getDefaultLayoutId();
 
+    // Migrate: if defaultLayoutId is set but no layout has autostart,
+    // set the default layout's autostart to true for backward compat
+    const hasAnyAutostart = layouts.some((l) => l.autostart === true);
+    if (!hasAnyAutostart && defaultLayoutId) {
+      const defaultLayout = layouts.find((l) => l.id === defaultLayoutId);
+      if (defaultLayout) {
+        defaultLayout.autostart = true;
+        await bridge.saveLayout(defaultLayout);
+        await layoutManager.refreshLayouts();
+        layouts = layoutManager.getLayouts();
+      }
+    }
+
+    // Self-healing: sync OS autostart registration with layout state.
+    // - Any layout has autostart → ensure the app is registered for boot launch.
+    // - No layouts have autostart → remove stale OS registration (e.g. registry).
+    if (windowContext.kind === 'main') {
+      const hasAutostartLayouts = layouts.some((l) => l.autostart === true);
+      if (hasAutostartLayouts) {
+        enable().catch((err) => console.error('autostart enable failed:', err));
+      } else {
+        disable().catch((err) => console.error('autostart disable failed:', err));
+      }
+    }
+
     let defaultLayout = layouts.find((l) => l.id === defaultLayoutId)
       || layouts.find((l) => l.id === 'default');
 
@@ -787,6 +813,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? defaultLayout.id);
     }
 
+    // Determine target layout for this window.
+    // For the main window: always use the default layout.
+    // For layout-specific windows (opened via ?layoutId=): use the specified layout.
     const targetLayoutId = windowContext.kind === 'layout'
       ? windowContext.layoutId
       : layoutManager.getDefaultLayoutId();
@@ -821,6 +850,16 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     // Auto-restore float window if it was open before the app was closed
     if (floatWindowManager.shouldAutoOpen()) {
       void floatWindowManager.open();
+    }
+
+    // Open windows for all autostart layouts on system boot (main window only)
+    if (windowContext.kind === 'main' && (window as any).__VIBE99_AUTOSTART) {
+      const autostartLayouts = layoutManager.getAutostartLayouts();
+      for (const layout of autostartLayouts) {
+        bridge.openLayoutWindow(layout.id).catch((err) => {
+          console.error('Failed to open autostart layout window:', layout.id, err);
+        });
+      }
     }
   }
 

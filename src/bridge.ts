@@ -93,6 +93,7 @@ export interface LayoutData {
   windowGeometry?: WindowGeometry;
   themeId?: string;
   uiOverrides?: LayoutUiOverrides;
+  autostart?: boolean;
 }
 
 /** Result of listing layouts */

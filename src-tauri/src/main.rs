@@ -26,10 +26,16 @@ fn resolve_layout_id() -> Option<String> {
     std::env::var("VIBE99_LAYOUT").ok()
 }
 
+/// Check if the app was launched with `--autostart` (system boot launch).
+fn is_autostart() -> bool {
+    std::env::args().any(|a| a == "--autostart")
+}
+
 fn main() {
     vibe99_lib::windows::log_redirection_guard_status();
 
     let layout_id_arg = resolve_layout_id();
+    let autostart_arg = is_autostart();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -37,6 +43,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::Builder::new().args(["--autostart"]).build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -109,6 +116,11 @@ fn main() {
                 if let Some(window) = app.get_webview_window("main") {
                     let escaped = layout_id.replace('\\', "\\\\").replace('\'', "\\'");
                     let _ = window.eval(&format!("window.__VIBE99_LAYOUT_ID = '{escaped}'"));
+                }
+            }
+            if autostart_arg {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.eval("window.__VIBE99_AUTOSTART = true");
                 }
             }
             Ok(())

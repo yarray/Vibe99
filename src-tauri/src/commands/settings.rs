@@ -214,6 +214,10 @@ pub struct Layout {
     pub theme_id: Option<String>,
     #[serde(default)]
     pub ui_overrides: LayoutUiOverrides,
+    /// Whether this layout should auto-start when the application launches.
+    /// Multiple layouts can have autostart enabled simultaneously.
+    #[serde(default)]
+    pub autostart: bool,
 }
 
 /// Validate that an `accent` value is a 7-char hex color (`#RRGGBB`).
@@ -397,6 +401,14 @@ pub(crate) fn sanitize_layout(candidate: &Value) -> Option<Value> {
             .as_object_mut()
             .unwrap()
             .insert("themeId".into(), Value::String(theme_id.to_string()));
+    }
+
+    // Preserve autostart if present
+    if let Some(autostart) = obj.get("autostart").and_then(|v| v.as_bool()) {
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("autostart".into(), Value::Bool(autostart));
     }
 
     Some(result)
