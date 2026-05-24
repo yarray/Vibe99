@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod context_menu;
 pub mod hook;
 pub mod hotkey;
