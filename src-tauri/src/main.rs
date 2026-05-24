@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use tauri::Manager;
+use vibe99_lib::commands::cli;
 use vibe99_lib::commands::context_menu;
 use vibe99_lib::commands::hook;
 use vibe99_lib::commands::hotkey::{self, HotkeyState};
@@ -72,6 +73,7 @@ fn main() {
             lock: std::sync::Mutex::new(()),
         })
         .manage(HotkeyState::default())
+        .manage(cli::CliState::default())
         .invoke_handler(tauri::generate_handler![
             terminal::terminal_create,
             terminal::terminal_write,
@@ -110,8 +112,12 @@ fn main() {
             hotkey::hotkey_register_all,
             window::window_frame_insets,
             window::window_set_square_corners,
+            cli::cli_respond,
         ])
         .setup(move |app| {
+            if let Err(e) = cli::start_cli_server(app.handle().clone()) {
+                eprintln!("[cli] failed to start CLI server: {e}");
+            }
             if let Some(layout_id) = &layout_id_arg {
                 if let Some(window) = app.get_webview_window("main") {
                     let escaped = layout_id.replace('\\', "\\\\").replace('\'', "\\'");
@@ -130,6 +136,9 @@ fn main() {
                 let state = window.state::<AppState>();
                 let label = window.label().to_string();
                 terminal::destroy_terminals_for_window(&state, &label);
+                if label == "main" {
+                    cli::cleanup_cli_server();
+                }
             }
         })
         .run(tauri::generate_context!())
