@@ -45,7 +45,8 @@ COPY . /app/Vibe99
 WORKDIR /app/Vibe99
 RUN npm install \
     && npm cache clean --force \
-    && npm run tauri:build-dev \
+    && npm run vite:build \
+    && cargo build --manifest-path=src-tauri/Cargo.toml \
     && rm -f src-tauri/target/debug/vibe99 \
     && rm -rf src-tauri/target/debug/incremental \
     && rm -rf src-tauri/target/debug/.fingerprint \
