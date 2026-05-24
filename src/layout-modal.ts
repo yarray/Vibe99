@@ -59,6 +59,10 @@ export function createLayoutModal({
       })
       .catch(reportError)
       .finally(() => {
+        const windowLayoutId: string | null = layoutManager.getWindowLayoutId();
+        if (windowLayoutId) {
+          layoutManager._setSelectedLayoutId(windowLayoutId);
+        }
         const overlay: LayoutModalOverlay = document.createElement('div') as LayoutModalOverlay;
         overlay.className = 'settings-modal-overlay';
 
