@@ -27,6 +27,7 @@
     "vitest": "^4.1.6"
   },
   "dependencies": {
+    "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-unicode11": "^0.9.0",

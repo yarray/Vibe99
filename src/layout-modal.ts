@@ -8,6 +8,7 @@ import type { LayoutHotkey, QuakePosition, QuakeLayoutConfig } from './domain/se
 import { listThemes, type Theme } from './domain/theme';
 import { createCustomSelect, type CustomSelect } from './custom-select';
 import type { AppCommand, CommandResult } from './domain/commands';
+import { enable, disable } from '@tauri-apps/plugin-autostart';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -530,6 +531,18 @@ export function createLayoutModal({
         const config = await bridge.listLayouts();
         layoutManager._setLayouts(config.layouts ?? []);
         layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? defaultLayoutId);
+
+        // Sync OS autostart registration
+        if (newAutostart) {
+          await enable();
+        } else {
+          const layouts = config.layouts ?? [];
+          const hasAnyAutostart = layouts.some((l) => l.id !== selected.id && l.autostart === true);
+          if (!hasAnyAutostart) {
+            await disable();
+          }
+        }
+
         if (newAutostart && !config.defaultLayoutId) {
           // If no default layout is set, also set this as default for backward compat
           await bridge.setLayoutAsDefault(selected.id);

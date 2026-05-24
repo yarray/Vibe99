@@ -1,1 +1,3 @@
 Layout config now has a per-layout "Auto-start on boot" toggle instead of a single global default layout. Multiple layouts can be set to auto-start simultaneously; each opens in its own window when the app is launched with the `--autostart` CLI flag (intended for system boot). Manual app launch always loads only the default layout. Existing `defaultLayoutId` is automatically migrated to the new `autostart` boolean on first load.
+
+System-level autostart registration uses `tauri-plugin-autostart`: any layout with autostart enabled registers the app with the OS (Windows registry, Linux `.desktop`, macOS LaunchAgent). Disabling the last autostart layout removes the OS registration. Startup self-healing re-syncs OS state with layout state to prevent stale registrations.

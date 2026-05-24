@@ -54,6 +54,7 @@ import { createTabBar } from '../tab-bar';
 import type { TabBarLocalState } from '../tab-bar';
 import type { ShellProfile, EditingShellProfile } from '../shell-profiles';
 import { createDefaultTerminalTheme } from '../domain/theme';
+import { enable, disable } from '@tauri-apps/plugin-autostart';
 
 // ---------------------------------------------------------------------------
 // Dependencies injected by the bootstrap entry
@@ -781,6 +782,18 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
         await bridge.saveLayout(defaultLayout);
         await layoutManager.refreshLayouts();
         layouts = layoutManager.getLayouts();
+      }
+    }
+
+    // Self-healing: sync OS autostart registration with layout state.
+    // - Any layout has autostart → ensure the app is registered for boot launch.
+    // - No layouts have autostart → remove stale OS registration (e.g. registry).
+    if (windowContext.kind === 'main') {
+      const hasAutostartLayouts = layouts.some((l) => l.autostart === true);
+      if (hasAutostartLayouts) {
+        enable().catch((err) => console.error('autostart enable failed:', err));
+      } else {
+        disable().catch((err) => console.error('autostart disable failed:', err));
       }
     }
 
