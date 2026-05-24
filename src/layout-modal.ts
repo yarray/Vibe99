@@ -61,6 +61,11 @@ export function createLayoutModal({
       .then((config: LayoutsListResult) => {
         layoutManager._setLayouts(config.layouts ?? []);
         layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? '');
+        // Auto-select the current window's layout in the editor
+        const windowLayoutId: string | null = layoutManager.getWindowLayoutId();
+        if (windowLayoutId) {
+          layoutManager._setSelectedLayoutId(windowLayoutId);
+        }
       })
       .catch(reportError)
       .finally(() => {
