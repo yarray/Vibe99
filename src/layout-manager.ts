@@ -111,6 +111,7 @@ export function createLayoutManager({
       focusedPaneIndex: session.focusedPaneIndex,
       windowGeometry: windowGeometry ?? undefined,
       themeId: layoutSnapshot.themeId,
+      uiOverrides: layoutSnapshot.uiOverrides,
     };
   }
 
@@ -195,6 +196,7 @@ export function createLayoutManager({
     if (!layout) return;
     restoreSession({ panes: layout.panes as unknown as SessionData['panes'], focusedPaneIndex: layout.focusedPaneIndex });
     paneState.setLayoutThemeId(layout.themeId);
+    paneState.setLayoutUiOverrides(layout.uiOverrides);
     setWindowLayoutId(layoutId);
     flushWindowLayoutSave();
     updateLayoutsIndicator();

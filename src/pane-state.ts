@@ -110,6 +110,10 @@ export interface PaneState {
   getLayout: () => Layout;
   /** Update the layout's default theme ID. */
   setLayoutThemeId: (themeId: string | undefined) => void;
+  /** Get the layout's UI overrides. */
+  getLayoutUiOverrides: () => LayoutSnapshot['uiOverrides'];
+  /** Set the layout's UI overrides. */
+  setLayoutUiOverrides: (uiOverrides: LayoutSnapshot['uiOverrides']) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -568,6 +572,12 @@ export function createPaneState({
     getLayout: () => layout,
     setLayoutThemeId: (themeId: string | undefined): void => {
       layout.setThemeId(themeId);
+    },
+    getLayoutUiOverrides: (): LayoutSnapshot['uiOverrides'] => {
+      return layout.getUiOverrides();
+    },
+    setLayoutUiOverrides: (uiOverrides: LayoutSnapshot['uiOverrides']): void => {
+      layout.setUiOverrides(uiOverrides);
     },
   };
 }

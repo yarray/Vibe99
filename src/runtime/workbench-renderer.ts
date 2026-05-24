@@ -259,6 +259,12 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     onToggleFloatWindow: () => floatWindowManager.toggle(),
     getFloatWindowOpen: () => floatWindowManager.isOpen(),
     requestAppRestart: () => window.location.reload(),
+    getLayoutUiOverrides: () => paneState.getLayoutUiOverrides(),
+    onLayoutUiOverridesChange: (overrides) => {
+      paneState.setLayoutUiOverrides(overrides);
+      // Trigger a layout save to persist the uiOverrides
+      layoutManager.scheduleWindowLayoutSave();
+    },
   });
 
   const hotkeyHandler = createHotkeyHandler({
@@ -507,12 +513,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      const focusedPaneId = paneState.getFocusedPaneId();
-      if (focusedPaneId) {
-        const session = workbench?.session(focusedPaneId);
-        session?.setCursorBlink(false);
-      }
+      document.body.classList.add('is-window-hidden');
     } else {
+      document.body.classList.remove('is-window-hidden');
       render();
     }
   });
@@ -809,6 +812,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     }
     paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
     paneState.setLayoutThemeId(targetLayout.themeId);
+    paneState.setLayoutUiOverrides(targetLayout.uiOverrides);
     paneRenderer?.ensureSessions();
 
     layoutManager.updateLayoutsIndicator();

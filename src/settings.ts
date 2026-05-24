@@ -24,6 +24,57 @@ import {
 export type AppSettings = AppSettingsUi;
 export { type BreathingIntensity };
 
+/**
+ * Layout UI overrides - a subset of AppSettings that can be overridden at layout level.
+ */
+export type LayoutUiOverrides = {
+  fontSize?: number;
+  fontFamily?: string;
+  paneOpacity?: number;
+  paneMaskOpacity?: number;
+  paneWidth?: number;
+  breathingIntensity?: BreathingIntensity;
+};
+
+/**
+ * Resolve UI settings with three-level fallback: layout → global.
+ *
+ * Priority: layout.uiOverrides → global settings
+ *
+ * @param globalSettings - The global settings
+ * @param layoutUiOverrides - Optional layout-level UI overrides
+ * @returns Resolved settings with layout overrides applied
+ */
+export function resolveUiSettings(
+  globalSettings: AppSettings,
+  layoutUiOverrides?: LayoutUiOverrides,
+): AppSettings {
+  const resolved: AppSettings = { ...globalSettings };
+
+  if (layoutUiOverrides) {
+    if (layoutUiOverrides.fontSize !== undefined) {
+      resolved.fontSize = layoutUiOverrides.fontSize;
+    }
+    if (layoutUiOverrides.fontFamily !== undefined) {
+      resolved.fontFamily = layoutUiOverrides.fontFamily;
+    }
+    if (layoutUiOverrides.paneOpacity !== undefined) {
+      resolved.paneOpacity = layoutUiOverrides.paneOpacity;
+    }
+    if (layoutUiOverrides.paneMaskOpacity !== undefined) {
+      resolved.paneMaskOpacity = layoutUiOverrides.paneMaskOpacity;
+    }
+    if (layoutUiOverrides.paneWidth !== undefined) {
+      resolved.paneWidth = layoutUiOverrides.paneWidth;
+    }
+    if (layoutUiOverrides.breathingIntensity !== undefined) {
+      resolved.breathingIntensity = layoutUiOverrides.breathingIntensity;
+    }
+  }
+
+  return resolved;
+}
+
 // ---------------------------------------------------------------------------
 // Public Interfaces
 // ---------------------------------------------------------------------------
@@ -42,6 +93,10 @@ export interface SettingsManagerDeps {
   requestAppRestart?: () => void;
   /** Optional custom validation reporter (defaults to ConsoleValidationReporter) */
   validationReporter?: ValidationReporter;
+  /** Optional callback to get layout UI overrides */
+  getLayoutUiOverrides?: () => LayoutUiOverrides | undefined;
+  /** Optional callback to notify when layout UI overrides change */
+  onLayoutUiOverridesChange?: (overrides: LayoutUiOverrides) => void;
 }
 
 export interface SettingsManager {
@@ -137,33 +192,37 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   let pendingSettingsSave: number | null = null;
 
   function applySettings(): void {
-    document.documentElement.style.setProperty('--pane-opacity', settings.paneOpacity.toFixed(2));
-    document.documentElement.style.setProperty('--pane-bg-mask-opacity', settings.paneMaskOpacity.toFixed(2));
-    document.documentElement.style.setProperty('--pane-width', `${settings.paneWidth}px`);
-    fontSizeInput.value = String(settings.fontSize);
-    fontFamilyInput.value = settings.fontFamily;
-    paneWidthRange.value = String(settings.paneWidth);
-    paneWidthInput.value = String(settings.paneWidth);
-    paneOpacityRange.value = settings.paneOpacity.toFixed(2);
-    paneOpacityInput.value = settings.paneOpacity.toFixed(2);
-    paneMaskOpacityRange.value = settings.paneMaskOpacity.toFixed(2);
-    paneMaskOpacityInput.value = settings.paneMaskOpacity.toFixed(2);
+    // Get layout UI overrides if available
+    const layoutUiOverrides = deps.getLayoutUiOverrides?.();
+    const resolvedSettings = resolveUiSettings(settings, layoutUiOverrides);
+
+    document.documentElement.style.setProperty('--pane-opacity', resolvedSettings.paneOpacity.toFixed(2));
+    document.documentElement.style.setProperty('--pane-bg-mask-opacity', resolvedSettings.paneMaskOpacity.toFixed(2));
+    document.documentElement.style.setProperty('--pane-width', `${resolvedSettings.paneWidth}px`);
+    fontSizeInput.value = String(resolvedSettings.fontSize);
+    fontFamilyInput.value = resolvedSettings.fontFamily;
+    paneWidthRange.value = String(resolvedSettings.paneWidth);
+    paneWidthInput.value = String(resolvedSettings.paneWidth);
+    paneOpacityRange.value = String(resolvedSettings.paneOpacity.toFixed(2));
+    paneOpacityInput.value = String(resolvedSettings.paneOpacity.toFixed(2));
+    paneMaskOpacityRange.value = String(resolvedSettings.paneMaskOpacity.toFixed(2));
+    paneMaskOpacityInput.value = String(resolvedSettings.paneMaskOpacity.toFixed(2));
     breathingSegments.querySelectorAll('.settings-segmented-btn').forEach((btn) => {
       const value = (btn as HTMLElement).dataset.value ?? '';
-      const isActive = value === settings.breathingIntensity;
+      const isActive = value === resolvedSettings.breathingIntensity;
       btn.classList.toggle('is-active', isActive);
       btn.setAttribute('aria-checked', String(isActive));
     });
-    onBreathingIntensityChange?.(settings.breathingIntensity);
-    webglToggle.checked = settings.webglEnabled;
-    webglDot.classList.toggle('is-active', settings.webglEnabled);
+    onBreathingIntensityChange?.(resolvedSettings.breathingIntensity);
+    webglToggle.checked = resolvedSettings.webglEnabled;
+    webglDot.classList.toggle('is-active', resolvedSettings.webglEnabled);
     // Sync float window toggle dot with current runtime state
     const floatOpen = deps.getFloatWindowOpen?.() ?? false;
     floatWindowToggle.checked = floatOpen;
     floatWindowDot.classList.toggle('is-active', floatOpen);
     // Apply debounce setting (input is in seconds)
-    debounceInput.value = String(settings.activityAlertDebounceMs / 1000);
-    paneActivityWatcher.setSettleMs(settings.activityAlertDebounceMs);
+    debounceInput.value = String(resolvedSettings.activityAlertDebounceMs / 1000);
+    paneActivityWatcher.setSettleMs(resolvedSettings.activityAlertDebounceMs);
   }
 
   function applyPersistedSettings(nextSettings: unknown): void {

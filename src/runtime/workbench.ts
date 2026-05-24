@@ -237,7 +237,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
       session.root.classList.toggle('is-focused', isFocused);
       session.setAccent(accentColor);
       session.setTheme(pane.themeId());
-      session.setCursorBlink(isFocused);
+      session.setCursorBlink(isFocused && document.visibilityState === 'visible');
 
       if (refit || session.needsFit()) {
         session.fit({ force: true });
@@ -480,7 +480,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
       case 'focus.next': {
         const moved = paneState.moveFocus(1);
-        if (moved) {
+        if (moved && getCurrentMode() !== 'nav') {
           const id = paneState.getFocusedPaneId();
           if (id) { setMode('terminal'); focusSession(id); }
         }
@@ -490,7 +490,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
       case 'focus.prev': {
         const moved = paneState.moveFocus(-1);
-        if (moved) {
+        if (moved && getCurrentMode() !== 'nav') {
           const id = paneState.getFocusedPaneId();
           if (id) { setMode('terminal'); focusSession(id); }
         }
@@ -552,8 +552,10 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         const panes = paneState.getPanes();
         if (panes.length === 0 || command.index < 0 || command.index >= panes.length) return fail('out-of-range');
         paneState.focusPane(panes[command.index].id);
-        setMode('terminal');
-        focusSession(panes[command.index].id);
+        if (getCurrentMode() !== 'nav') {
+          setMode('terminal');
+          focusSession(panes[command.index].id);
+        }
         externalRender();
         return ok();
       }

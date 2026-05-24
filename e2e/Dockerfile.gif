@@ -1,0 +1,76 @@
+# Vibe99 GIF Recording Image
+# 基于 e2e 镜像，添加 GIF 录制工具
+# 用法: docker build -f e2e/Dockerfile.gif -t vibe99-recorder .
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME=/root
+ENV PATH="/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV RUSTUP_DIST_SERVER=https://mirrors.tuna.tsinghua.edu.cn/rustup
+ENV RUSTUP_UPDATE_ROOT=https://mirrors.tuna.tsinghua.edu.cn/rustup
+
+# 系统依赖（包含录制工具）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential pkg-config libssl-dev \
+    libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+    libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+    curl wget git file xz-utils ca-certificates \
+    xvfb xauth webkit2gtk-driver \
+    rsync \
+    # GIF 录制工具
+    byzanz \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 22
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Rust stable (minimal profile)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    && rm -rf /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/doc \
+    /root/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/man
+RUN mkdir -p /root/.cargo && \
+    echo "[source.crates-io]" >> /root/.cargo/config.toml && \
+    echo "replace-with = 'tuna'" >> /root/.cargo/config.toml && \
+    echo "[source.tuna]" >> /root/.cargo/config.toml && \
+    echo "registry = 'https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git'" >> /root/.cargo/config.toml
+
+# tauri-driver（e2e WebDriver bridge）
+RUN cargo install tauri-driver
+
+# 复制源码并预编译
+WORKDIR /app
+COPY . /app/Vibe99
+
+WORKDIR /app/Vibe99
+RUN npm install \
+    && npm cache clean --force \
+    && npm run tauri:build-dev \
+    && rm -f src-tauri/target/debug/vibe99 \
+    && rm -rf src-tauri/target/debug/incremental \
+    && rm -rf src-tauri/target/debug/.fingerprint \
+    && rm -rf src-tauri/target/debug/build \
+    && rm -rf /root/.cargo/registry/cache \
+    && rm -rf /tmp/*
+
+# 安装 e2e 依赖
+WORKDIR /app/Vibe99/e2e
+RUN npm install \
+    && npm cache clean --force
+
+# 创建 GIF 输出目录
+RUN mkdir -p /app/Vibe99/docs/gifs
+
+WORKDIR /app/Vibe99
+
+# 复制录制脚本
+COPY e2e/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+COPY e2e/record-gif.sh /usr/local/bin/record-gif.sh
+RUN chmod +x /usr/local/bin/record-gif.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

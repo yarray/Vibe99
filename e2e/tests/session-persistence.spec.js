@@ -231,6 +231,15 @@ describe('Session persistence', () => {
   it('saves both settings and layout via bridge', async () => {
     await waitForAppReady();
 
+    // Disable auto-save for the entire test to prevent the debounced
+    // layout save from overwriting the test's 4-pane layout with the
+    // current window's 3-pane layout between assertions.
+    await browser.execute(() => {
+      if (window.__vibe99_test?.setAutoSaveEnabled) {
+        window.__vibe99_test.setAutoSaveEnabled(false);
+      }
+    });
+
     const cwd = await getActualCwd();
     const savedCount = await saveLayoutViaBridge([
       { paneId: 'p1', title: null, cwd, accent: '#9b5de5' },
@@ -270,6 +279,13 @@ describe('Session persistence', () => {
 
     const layout = await readDefaultLayoutFromStorage();
     expect(layout.panes.length).toBe(4);
+
+    // Re-enable auto-save after all assertions
+    await browser.execute(() => {
+      if (window.__vibe99_test?.setAutoSaveEnabled) {
+        window.__vibe99_test.setAutoSaveEnabled(true);
+      }
+    });
   });
 
   it('creates default layout with valid accents', async () => {
