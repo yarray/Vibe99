@@ -780,6 +780,12 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     const monitor = await currentMonitor();
     if (!monitor) return null;
 
+    // Apply borderless style first so frame insets reflect the actual
+    // undecorated window (DWM invisible border can differ from decorated).
+    await win.setDecorations(false);
+    await win.setShadow(false).catch(() => {});
+    await setNativeWindowSquareCorners(win.label, true);
+
     const frame = await getNativeWindowFrameInsets(win.label);
     const seamBleed = 1;
     const scaleFactor = monitor.scaleFactor || 1;
@@ -813,9 +819,6 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       outer: { x, y, width: outerWidth, height: outerHeight },
     });
 
-    await win.setDecorations(false);
-    await win.setShadow(false).catch(() => {});
-    await setNativeWindowSquareCorners(win.label, true);
     await win.setAlwaysOnTop(true);
     await win.setSkipTaskbar(true);
     await win.setResizable(false);
