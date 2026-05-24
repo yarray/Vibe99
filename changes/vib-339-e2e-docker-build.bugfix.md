@@ -1,0 +1,1 @@
+Fixed E2E Docker image build failure caused by network issues during Tauri bundling. The Dockerfile now uses direct `cargo build` instead of `npm run tauri:build-dev` to skip the AppImage packaging step that requires downloading AppRun from GitHub.
