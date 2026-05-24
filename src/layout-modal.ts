@@ -45,6 +45,115 @@ interface LayoutModalOverlay extends HTMLDivElement {
 
 const LAYOUT_MODAL_POLL_INTERVAL: number = 3000; // 3 seconds
 
+/**
+ * Helper function to create a UI override row with toggle and input.
+ */
+function createOverrideRow(
+  label: string,
+  overrideValue: number | string | undefined,
+  globalValue: number | string,
+  min: number,
+  max: number,
+  step: number,
+  unit: string,
+  onSave: (value: number | string) => Promise<void>,
+  renderFn: () => void,
+  isText = false,
+  isFloat = false,
+): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'settings-row';
+
+  const labelSpan = document.createElement('span');
+  labelSpan.textContent = label;
+  row.appendChild(labelSpan);
+
+  const overrideContainer = document.createElement('div');
+  overrideContainer.className = 'layout-ui-override-container';
+
+  const isOverridden = overrideValue !== undefined;
+  const currentValue = isOverridden ? overrideValue : globalValue;
+
+  const overrideToggle = document.createElement('button');
+  overrideToggle.type = 'button';
+  overrideToggle.className = 'settings-btn layout-override-toggle';
+  overrideToggle.textContent = isOverridden ? 'Custom' : 'Use Global';
+  overrideToggle.classList.toggle('is-active', isOverridden);
+  overrideToggle.addEventListener('click', async () => {
+    if (isOverridden) {
+      // Clear override - for now we need to trigger a re-render
+      // The actual clearing logic will be handled by the UI state
+      renderFn();
+    }
+  });
+  overrideContainer.appendChild(overrideToggle);
+
+  if (isText) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'settings-text';
+    input.value = String(currentValue);
+    input.disabled = !isOverridden;
+    input.addEventListener('change', async () => {
+      const val = input.value.trim();
+      if (isOverridden && val) {
+        await onSave(val);
+      }
+    });
+    overrideContainer.appendChild(input);
+  } else {
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = String(min);
+    range.max = String(max);
+    range.step = String(step);
+    range.value = String(currentValue);
+    range.disabled = !isOverridden;
+    range.addEventListener('input', () => {
+      numInput.value = range.value;
+    });
+    range.addEventListener('change', async () => {
+      if (isOverridden) {
+        await onSave(Number(range.value));
+      }
+    });
+    overrideContainer.appendChild(range);
+
+    const numInput = document.createElement('input');
+    numInput.className = 'settings-number';
+    numInput.type = 'number';
+    numInput.min = String(min);
+    numInput.max = String(max);
+    numInput.step = String(step);
+    numInput.value = String(currentValue);
+    numInput.disabled = !isOverridden;
+    numInput.addEventListener('change', async () => {
+      if (isOverridden) {
+        let val = Number(numInput.value);
+        if (isFloat) {
+          val = Math.max(min, Math.min(max, val));
+        } else {
+          val = Math.round(Math.max(min, Math.min(max, val)));
+        }
+        numInput.value = String(val);
+        range.value = String(val);
+        await onSave(val);
+      }
+    });
+    overrideContainer.appendChild(numInput);
+  }
+
+  if (unit) {
+    const unitSpan = document.createElement('span');
+    unitSpan.className = 'settings-unit';
+    unitSpan.textContent = unit;
+    overrideContainer.appendChild(unitSpan);
+  }
+
+  row.appendChild(overrideContainer);
+  return row;
+}
+
 export function createLayoutModal({
   bridge,
   paneState,
@@ -618,6 +727,195 @@ export function createLayoutModal({
       themeRow.appendChild(themeSelect.el);
       themeSection.appendChild(themeRow);
       info.appendChild(themeSection);
+
+      // -- UI Overrides --
+      const uiOverridesSection = document.createElement('div');
+      uiOverridesSection.className = 'layout-section';
+
+      const uiOverridesHeader = document.createElement('div');
+      uiOverridesHeader.className = 'layout-section-header';
+      uiOverridesHeader.textContent = 'UI Overrides';
+      uiOverridesSection.appendChild(uiOverridesHeader);
+
+      // Get current uiOverrides or initialize as empty
+      const currentUiOverrides: typeof selected.uiOverrides = selected.uiOverrides || {};
+
+      // Font Size
+      const fontSizeRow = createOverrideRow(
+        'Font Size',
+        currentUiOverrides.fontSize,
+        settingsManager.settings.fontSize,
+        10,
+        24,
+        1,
+        'px',
+        async (value) => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout) {
+            layout.uiOverrides = { ...layout.uiOverrides, fontSize: value as number };
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+          }
+        },
+        () => renderModalLayouts(overlay),
+      );
+      uiOverridesSection.appendChild(fontSizeRow);
+
+      // Font Family
+      const fontFamilyRow = createOverrideRow(
+        'Font Family',
+        currentUiOverrides.fontFamily,
+        settingsManager.settings.fontFamily,
+        0,
+        100,
+        1,
+        '',
+        async (value) => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout) {
+            layout.uiOverrides = { ...layout.uiOverrides, fontFamily: value as string };
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+          }
+        },
+        () => renderModalLayouts(overlay),
+        true // isText
+      );
+      uiOverridesSection.appendChild(fontFamilyRow);
+
+      // Pane Width
+      const paneWidthRow = createOverrideRow(
+        'Pane Width',
+        currentUiOverrides.paneWidth,
+        settingsManager.settings.paneWidth,
+        520,
+        2000,
+        10,
+        'px',
+        async (value) => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout) {
+            layout.uiOverrides = { ...layout.uiOverrides, paneWidth: value as number };
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+          }
+        },
+        () => renderModalLayouts(overlay),
+      );
+      uiOverridesSection.appendChild(paneWidthRow);
+
+      // Pane Opacity
+      const paneOpacityRow = createOverrideRow(
+        'Pane Opacity',
+        currentUiOverrides.paneOpacity,
+        settingsManager.settings.paneOpacity,
+        0.55,
+        1.0,
+        0.01,
+        '',
+        async (value) => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout) {
+            layout.uiOverrides = { ...layout.uiOverrides, paneOpacity: value as number };
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+          }
+        },
+        () => renderModalLayouts(overlay),
+        false,
+        true // isFloat
+      );
+      uiOverridesSection.appendChild(paneOpacityRow);
+
+      // Pane Mask Opacity
+      const paneMaskOpacityRow = createOverrideRow(
+        'Pane Mask Opacity',
+        currentUiOverrides.paneMaskOpacity,
+        settingsManager.settings.paneMaskOpacity,
+        0.0,
+        1.0,
+        0.01,
+        '',
+        async (value) => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout) {
+            layout.uiOverrides = { ...layout.uiOverrides, paneMaskOpacity: value as number };
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+          }
+        },
+        () => renderModalLayouts(overlay),
+        false,
+        true // isFloat
+      );
+      uiOverridesSection.appendChild(paneMaskOpacityRow);
+
+      // Breathing Intensity
+      const breathingIntensityRow = document.createElement('div');
+      breathingIntensityRow.className = 'settings-row';
+      const breathingLabel = document.createElement('span');
+      breathingLabel.textContent = 'Breathing Intensity';
+      breathingIntensityRow.appendChild(breathingLabel);
+
+      const breathingOverrideContainer = document.createElement('div');
+      breathingOverrideContainer.className = 'layout-ui-override-container';
+
+      const breathingOverrideToggle = document.createElement('button');
+      breathingOverrideToggle.type = 'button';
+      breathingOverrideToggle.className = 'settings-btn layout-override-toggle';
+      breathingOverrideToggle.textContent = currentUiOverrides.breathingIntensity ? 'Custom' : 'Use Global';
+      breathingOverrideToggle.classList.toggle('is-active', currentUiOverrides.breathingIntensity !== undefined);
+      breathingOverrideToggle.addEventListener('click', async () => {
+        if (currentUiOverrides.breathingIntensity !== undefined) {
+          // Clear override
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout) {
+            delete layout.uiOverrides?.breathingIntensity;
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+            renderModalLayouts(overlay);
+          }
+        }
+      });
+      breathingOverrideContainer.appendChild(breathingOverrideToggle);
+
+      if (currentUiOverrides.breathingIntensity !== undefined) {
+        const breathingSegments = document.createElement('div');
+        breathingSegments.className = 'settings-segmented';
+        breathingSegments.setAttribute('role', 'radiogroup');
+        for (const intensity of ['none', 'mild', 'intense'] as const) {
+          const btn = document.createElement('button');
+          btn.className = 'settings-segmented-btn';
+          btn.dataset.value = intensity;
+          btn.setAttribute('role', 'radio');
+          btn.setAttribute('aria-checked', String(intensity === currentUiOverrides.breathingIntensity));
+          btn.textContent = intensity === 'none' ? 'None' : intensity === 'mild' ? 'Mild' : 'Intense';
+          if (intensity === currentUiOverrides.breathingIntensity) btn.classList.add('is-active');
+          btn.addEventListener('click', async () => {
+            const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+            if (layout) {
+              layout.uiOverrides = { ...layout.uiOverrides, breathingIntensity: intensity };
+              await bridge.saveLayout(layout);
+              const config = await bridge.listLayouts();
+              layoutManager._setLayouts(config.layouts ?? []);
+              renderModalLayouts(overlay);
+            }
+          });
+          breathingSegments.appendChild(btn);
+        }
+        breathingOverrideContainer.appendChild(breathingSegments);
+      }
+
+      breathingIntensityRow.appendChild(breathingOverrideContainer);
+      uiOverridesSection.appendChild(breathingIntensityRow);
+
+      info.appendChild(uiOverridesSection);
 
       // -- Panes list --
       const panesCount: number = selected.panes?.length ?? 0;

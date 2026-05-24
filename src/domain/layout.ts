@@ -26,6 +26,14 @@ export interface LayoutSnapshot {
   mruPaneIds: string[];
   activation?: string;
   themeId?: string;
+  uiOverrides?: {
+    fontSize?: number;
+    fontFamily?: string;
+    paneOpacity?: number;
+    paneMaskOpacity?: number;
+    paneWidth?: number;
+    breathingIntensity?: 'none' | 'mild' | 'intense';
+  };
 }
 
 /**
@@ -53,6 +61,10 @@ export interface Layout {
 
   // Theme
   setThemeId(themeId: string | undefined): void;
+
+  // UI Overrides
+  setUiOverrides(uiOverrides: LayoutSnapshot['uiOverrides']): void;
+  getUiOverrides(): LayoutSnapshot['uiOverrides'];
 
   // Pane property operations
   renamePane(paneId: string, title: string | null): boolean;
@@ -84,6 +96,14 @@ interface LayoutState {
   name: string;
   activation?: string;
   themeId?: string;
+  uiOverrides?: {
+    fontSize?: number;
+    fontFamily?: string;
+    paneOpacity?: number;
+    paneMaskOpacity?: number;
+    paneWidth?: number;
+    breathingIntensity?: 'none' | 'mild' | 'intense';
+  };
   panes: Pane[];
   focusedPaneId: string | null;
   mruPaneIds: string[];
@@ -125,6 +145,7 @@ export function createLayout(snapshot: LayoutSnapshot): Layout {
     name: snapshot.name,
     activation: snapshot.activation,
     themeId: snapshot.themeId,
+    uiOverrides: snapshot.uiOverrides,
     panes: snapshot.panes.map((p) => createPane(p)),
     focusedPaneId: snapshot.focusedPaneId,
     mruPaneIds: [...snapshot.mruPaneIds],
@@ -144,6 +165,14 @@ export function createLayout(snapshot: LayoutSnapshot): Layout {
 
     setThemeId(themeId: string | undefined): void {
       state.themeId = themeId;
+    },
+
+    setUiOverrides(uiOverrides: LayoutSnapshot['uiOverrides']): void {
+      state.uiOverrides = uiOverrides;
+    },
+
+    getUiOverrides(): LayoutSnapshot['uiOverrides'] {
+      return state.uiOverrides;
     },
 
     panes(): readonly Pane[] {
@@ -302,6 +331,7 @@ export function createLayout(snapshot: LayoutSnapshot): Layout {
         mruPaneIds: [...state.mruPaneIds],
         activation: state.activation,
         themeId: state.themeId,
+        uiOverrides: state.uiOverrides,
       };
     },
   };

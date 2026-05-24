@@ -169,6 +169,38 @@ pub struct LayoutPane {
     pub shell_profile_id: Option<String>,
 }
 
+/// UI overrides at the layout level.
+/// These override global UI settings but can be further overridden by individual pane settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutUiOverrides {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_size: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_opacity: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_mask_opacity: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breathing_intensity: Option<String>,
+}
+
+impl Default for LayoutUiOverrides {
+    fn default() -> Self {
+        Self {
+            font_size: None,
+            font_family: None,
+            pane_opacity: None,
+            pane_mask_opacity: None,
+            pane_width: None,
+            breathing_intensity: None,
+        }
+    }
+}
+
 /// A named arrangement of panes that users can save and restore.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -178,6 +210,10 @@ pub struct Layout {
     pub panes: Vec<LayoutPane>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub focused_pane_index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_id: Option<String>,
+    #[serde(default)]
+    pub ui_overrides: LayoutUiOverrides,
 }
 
 /// Validate that an `accent` value is a 7-char hex color (`#RRGGBB`).
@@ -185,6 +221,62 @@ fn is_valid_accent(v: &Value) -> bool {
     v.as_str().is_some_and(|s| {
         s.starts_with('#') && s.len() == 7 && s[1..].chars().all(|c| c.is_ascii_hexdigit())
     })
+}
+
+/// Sanitize layout UI overrides.
+/// Only keeps valid values within their allowed ranges.
+fn sanitize_ui_overrides(candidate: Option<&Value>) -> LayoutUiOverrides {
+    let obj = candidate.and_then(|v| v.as_object());
+
+    let mut overrides = LayoutUiOverrides::default();
+
+    if let Some(obj) = obj {
+        // font_size: 10-24, integer
+        if let Some(font_size) = obj.get("fontSize").and_then(|v| v.as_u64()) {
+            if font_size >= 10 && font_size <= 24 {
+                overrides.font_size = Some(font_size as u32);
+            }
+        }
+
+        // font_family: non-empty string
+        if let Some(font_family) = obj.get("fontFamily").and_then(|v| v.as_str()) {
+            let trimmed = font_family.trim();
+            if !trimmed.is_empty() {
+                overrides.font_family = Some(trimmed.to_string());
+            }
+        }
+
+        // pane_opacity: 0.55-1.0, 2 decimal places
+        if let Some(pane_opacity) = obj.get("paneOpacity").and_then(|v| v.as_f64()) {
+            let clamped = pane_opacity.clamp(0.55, 1.0);
+            let rounded = (clamped * 100.0).round() / 100.0;
+            overrides.pane_opacity = Some(rounded);
+        }
+
+        // pane_mask_opacity: 0.0-1.0, 2 decimal places
+        if let Some(pane_mask_opacity) = obj.get("paneMaskOpacity").and_then(|v| v.as_f64()) {
+            let clamped = pane_mask_opacity.clamp(0.0, 1.0);
+            let rounded = (clamped * 100.0).round() / 100.0;
+            overrides.pane_mask_opacity = Some(rounded);
+        }
+
+        // pane_width: 520-2000, multiples of 10
+        if let Some(pane_width) = obj.get("paneWidth").and_then(|v| v.as_u64()) {
+            let clamped = (pane_width as u32).clamp(520, 2000);
+            let rounded = ((clamped as f64) / 10.0).round() as u32 * 10;
+            overrides.pane_width = Some(rounded);
+        }
+
+        // breathing_intensity: enum (none, mild, intense)
+        if let Some(intensity) = obj.get("breathingIntensity").and_then(|v| v.as_str()) {
+            let lower = intensity.to_lowercase();
+            if ["none", "mild", "intense"].contains(&lower.as_str()) {
+                overrides.breathing_intensity = Some(lower);
+            }
+        }
+    }
+
+    overrides
 }
 
 /// Sanitize a raw layout pane into a canonical form.
@@ -253,6 +345,8 @@ pub(crate) fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
 /// - `name` must be non-empty.
 /// - `panes` must be a non-empty array of valid panes.
 /// - `focusedPaneIndex` is clamped to the valid pane range.
+/// - `themeId` is preserved if present and valid.
+/// - `uiOverrides` are sanitized to valid ranges.
 pub(crate) fn sanitize_layout(candidate: &Value) -> Option<Value> {
     let obj = candidate.as_object()?;
 
@@ -286,12 +380,26 @@ pub(crate) fn sanitize_layout(candidate: &Value) -> Option<Value> {
         .map(|i| (i as usize).min(valid_panes.len() - 1))
         .unwrap_or(0);
 
-    Some(serde_json::json!({
+    // Sanitize uiOverrides
+    let ui_overrides = sanitize_ui_overrides(obj.get("uiOverrides"));
+
+    let mut result = serde_json::json!({
         "id": id,
         "name": name,
         "panes": valid_panes,
         "focusedPaneIndex": focused_pane_index,
-    }))
+        "uiOverrides": ui_overrides,
+    });
+
+    // Preserve themeId if present
+    if let Some(theme_id) = obj.get("themeId").and_then(|v| v.as_str()) {
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("themeId".into(), Value::String(theme_id.to_string()));
+    }
+
+    Some(result)
 }
 
 /// Sanitize a list of layouts, deduplicating by id.
