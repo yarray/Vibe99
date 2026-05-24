@@ -840,6 +840,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     paneState.restoreSession({ panes: targetLayout.panes as any, focusedPaneIndex: targetLayout.focusedPaneIndex });
     paneState.setLayoutThemeId(targetLayout.themeId);
     paneState.setLayoutUiOverrides(targetLayout.uiOverrides);
+    settingsManager.applySettings();
     paneRenderer?.ensureSessions();
 
     layoutManager.updateLayoutsIndicator();

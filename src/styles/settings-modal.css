@@ -249,6 +249,16 @@
   transition: color 120ms ease;
 }
 
+.settings-pin {
+  display: none;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+.settings-pin.is-visible {
+  display: inline-block;
+}
+
 .settings-clickable-row:hover .settings-row-hint {
   color: rgba(255, 255, 255, 0.9);
 }

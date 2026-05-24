@@ -374,8 +374,8 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     cursorBlink: false,
     disableStdin: false,
     drawBoldTextInBrightColors: false,
-    fontFamily: settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform),
-    fontSize: settingsManager.settings.fontSize,
+    fontFamily: settingsManager.getResolvedSettings().fontFamily || getDefaultFontFamily(bridge.platform),
+    fontSize: settingsManager.getResolvedSettings().fontSize,
     lineHeight: 1.2,
     scrollback: 5000,
     theme: terminalTheme(accentColor),
@@ -529,9 +529,9 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   // ---------------------------------------------------------------------------
 
   function fitInternal(force = false): void {
-    terminal.options.fontSize = settingsManager.settings.fontSize;
-    terminal.options.fontFamily =
-      settingsManager.settings.fontFamily || getDefaultFontFamily(bridge.platform);
+    const resolved = settingsManager.getResolvedSettings();
+    terminal.options.fontSize = resolved.fontSize;
+    terminal.options.fontFamily = resolved.fontFamily || getDefaultFontFamily(bridge.platform);
     fitAddon.fit();
 
     const cols = Math.max(20, terminal.cols || 80);
