@@ -40,7 +40,9 @@
 
 ### Fixed
 
-- None.
+- **Layout theme picker** (VIB-331):
+  - Fixed theme selection not persisting - removed unnecessary modal re-render that was destroying the custom-select element during selection.
+  - Fixed label wrapping in layout editor - constrained custom-select width to prevent overflow.
 
 ### Security
 

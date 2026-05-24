@@ -450,6 +450,13 @@
   gap: 16px;
 }
 
+/* Custom select inside settings-row should not take full width to avoid label wrapping */
+.layout-section > .settings-row > .custom-select {
+  flex: 1;
+  min-width: 0;
+  max-width: 280px;
+}
+
 .layout-hotkey-actions {
   display: flex;
   align-items: center;

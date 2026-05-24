@@ -108,6 +108,8 @@ export interface PaneState {
   // Domain access
   /** Get the underlying Layout aggregate root. */
   getLayout: () => Layout;
+  /** Update the layout's default theme ID. */
+  setLayoutThemeId: (themeId: string | undefined) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -564,5 +566,8 @@ export function createPaneState({
 
     // Domain access
     getLayout: () => layout,
+    setLayoutThemeId: (themeId: string | undefined): void => {
+      layout.setThemeId(themeId);
+    },
   };
 }

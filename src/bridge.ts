@@ -81,6 +81,7 @@ export interface LayoutData {
   panes: LayoutPane[];
   focusedPaneIndex: number;
   windowGeometry?: WindowGeometry;
+  themeId?: string;
 }
 
 /** Result of listing layouts */

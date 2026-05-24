@@ -1,0 +1,1 @@
+Layout editor now automatically loads and displays the current window's layout in the right preview panel when opened. Previously, users had to manually click a layout in the sidebar to see its details; now the active layout is selected immediately if one exists.

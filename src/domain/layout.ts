@@ -51,6 +51,9 @@ export interface Layout {
   moveFocus(delta: number): boolean;
   movePane(paneId: string, index: number): boolean;
 
+  // Theme
+  setThemeId(themeId: string | undefined): void;
+
   // Pane property operations
   renamePane(paneId: string, title: string | null): boolean;
   updatePane(paneId: string, patch: Partial<Omit<PaneSnapshot, 'id'>>): boolean;
@@ -137,6 +140,10 @@ export function createLayout(snapshot: LayoutSnapshot): Layout {
     },
     rename(newName: string): void {
       state.name = newName;
+    },
+
+    setThemeId(themeId: string | undefined): void {
+      state.themeId = themeId;
     },
 
     panes(): readonly Pane[] {
