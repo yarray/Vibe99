@@ -214,7 +214,6 @@ async fn handle_direct(
         "settings.get" => {
             let config = super::settings::settings_load(app.clone())?;
             if let Some(key) = params.get("key").and_then(|v| v.as_str()) {
-                // Return a specific key path (dot-separated)
                 let mut current = &config;
                 for part in key.split('.') {
                     current = current.get(part).ok_or_else(|| {
@@ -227,9 +226,15 @@ async fn handle_direct(
             }
         }
         "settings.set" => {
-            let settings = params.get("settings").cloned().ok_or("missing 'settings' param")?;
-            super::settings::settings_save(app.clone(), settings)
+            let updates = params.get("settings").cloned().ok_or("missing 'settings' param")?;
+            if !updates.is_object() {
+                return Err("'settings' must be a JSON object".to_string());
+            }
+            let current = super::settings::settings_load(app.clone())?;
+            let merged = deep_merge(current, updates);
+            super::settings::settings_save(app.clone(), merged)
         }
+        "settings.schema" => Ok(settings_schema()),
         "layout.list" => {
             super::layout::layouts_list(app.clone())
                 .map(|v| serde_json::json!({"ok": true, "value": v}))
@@ -284,6 +289,97 @@ fn base64_decode(data: &str) -> Result<Vec<u8>, String> {
     base64::engine::general_purpose::STANDARD
         .decode(data)
         .map_err(|e| format!("invalid base64: {e}"))
+}
+
+fn deep_merge(base: Value, override_val: Value) -> Value {
+    match (base, override_val) {
+        (Value::Object(mut base_map), Value::Object(over_map)) => {
+            for (k, v) in over_map {
+                let merged = if let Some(base_v) = base_map.remove(&k) {
+                    deep_merge(base_v, v)
+                } else {
+                    v
+                };
+                base_map.insert(k, merged);
+            }
+            Value::Object(base_map)
+        }
+        (_, over) => over,
+    }
+}
+
+fn settings_schema() -> Value {
+    serde_json::json!({
+        "fields": {
+            "fontSize": {
+                "type": "integer",
+                "min": 10,
+                "max": 24,
+                "default": 13,
+                "description": "Terminal font size in pixels"
+            },
+            "fontFamily": {
+                "type": "string",
+                "default": "",
+                "description": "Font family name. Empty string uses platform default"
+            },
+            "paneOpacity": {
+                "type": "number",
+                "min": 0.55,
+                "max": 1.0,
+                "default": 0.8,
+                "description": "Pane background opacity"
+            },
+            "paneMaskOpacity": {
+                "type": "number",
+                "min": 0.0,
+                "max": 1.0,
+                "default": 0.75,
+                "description": "Mask overlay opacity for inactive panes"
+            },
+            "paneWidth": {
+                "type": "integer",
+                "min": 520,
+                "max": 2000,
+                "default": 720,
+                "multipleOf": 10,
+                "description": "Default pane width in pixels"
+            },
+            "webglEnabled": {
+                "type": "boolean",
+                "default": true,
+                "description": "Enable WebGL renderer for terminal canvas"
+            },
+            "breathingIntensity": {
+                "type": "string",
+                "enum": ["none", "mild", "intense"],
+                "default": "mild",
+                "description": "Activity breathing animation intensity"
+            },
+            "activityAlertDebounceMs": {
+                "type": "integer",
+                "min": 3000,
+                "max": 300000,
+                "default": 30000,
+                "description": "Debounce interval for activity alerts (ms)"
+            },
+            "layoutHotkeys": {
+                "type": "object",
+                "additionalProperties": { "type": "string" },
+                "default": {},
+                "description": "Keyboard shortcuts per layout. Key=layoutId, Value=shortcut string (e.g. 'F1', 'Ctrl+Shift+T')"
+            },
+            "quakeLayouts": {
+                "type": "object",
+                "default": {},
+                "description": "Per-layout quake-mode config. Key=layoutId",
+                "properties": {
+                    "position": { "type": "string", "enum": ["top", "bottom"], "default": "top" },
+                    "height": { "type": "integer", "min": 30, "max": 100, "default": 60 }
+                }
+            }
+        }
+    })
 }
 
 // ---------------------------------------------------------------------------

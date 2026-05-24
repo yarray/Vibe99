@@ -67,6 +67,12 @@ enum SettingsAction {
     Get {
         key: Option<String>,
     },
+    Set {
+        settings: String,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        value: Vec<String>,
+    },
+    Schema,
 }
 
 #[derive(Subcommand)]
@@ -202,6 +208,25 @@ fn main() {
         },
         Commands::Settings { action } => match action {
             SettingsAction::Get { key } => ("settings.get".to_string(), json!({"key": key})),
+            SettingsAction::Set { settings, value } => {
+                if value.is_empty() {
+                    let parsed: Value = serde_json::from_str(settings)
+                        .unwrap_or_else(|e| {
+                            eprintln!("Error: invalid JSON — {e}");
+                            eprintln!("Usage: vibe99ctl settings set <json-object>");
+                            eprintln!("   or: vibe99ctl settings set <key> <value>");
+                            std::process::exit(1);
+                        });
+                    ("settings.set".to_string(), json!({"settings": parsed}))
+                } else {
+                    let val: Value = serde_json::from_str(&value.join(" "))
+                        .unwrap_or_else(|_| json!(value.join(" ")));
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(settings.clone(), val);
+                    ("settings.set".to_string(), json!({"settings": Value::Object(obj)}))
+                }
+            }
+            SettingsAction::Schema => ("settings.schema".to_string(), json!({})),
         },
         Commands::Shell { action } => match action {
             ShellAction::List => ("shell.list".to_string(), json!({})),
