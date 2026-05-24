@@ -801,16 +801,11 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     }
 
     // Determine target layout for this window.
-    // For the main window: prefer an autostart layout, falling back to default layout.
+    // For the main window: always use the default layout.
     // For layout-specific windows (opened via ?layoutId=): use the specified layout.
     const targetLayoutId = windowContext.kind === 'layout'
       ? windowContext.layoutId
-      : (() => {
-          // Prefer first autostart layout for the main window
-          const autostartLayouts = layoutManager.getAutostartLayouts();
-          if (autostartLayouts.length > 0) return autostartLayouts[0].id;
-          return layoutManager.getDefaultLayoutId();
-        })();
+      : layoutManager.getDefaultLayoutId();
     const targetLayout = layoutManager.getLayouts().find((l) => l.id === targetLayoutId);
     if (!targetLayout) {
       throw new Error(`Layout not found: ${targetLayoutId}`);
@@ -844,15 +839,13 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       void floatWindowManager.open();
     }
 
-    // Open windows for all other autostart layouts (main window only)
-    if (windowContext.kind === 'main') {
+    // Open windows for all autostart layouts on system boot (main window only)
+    if (windowContext.kind === 'main' && (window as any).__VIBE99_AUTOSTART) {
       const autostartLayouts = layoutManager.getAutostartLayouts();
       for (const layout of autostartLayouts) {
-        if (layout.id !== targetLayout.id) {
-          bridge.openLayoutWindow(layout.id).catch((err) => {
-            console.error('Failed to open autostart layout window:', layout.id, err);
-          });
-        }
+        bridge.openLayoutWindow(layout.id).catch((err) => {
+          console.error('Failed to open autostart layout window:', layout.id, err);
+        });
       }
     }
   }
