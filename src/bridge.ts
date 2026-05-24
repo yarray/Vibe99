@@ -74,6 +74,16 @@ export interface WindowGeometry {
   fullscreen: boolean;
 }
 
+/** UI overrides at the layout level. */
+export interface LayoutUiOverrides {
+  fontSize?: number;
+  fontFamily?: string;
+  paneOpacity?: number;
+  paneMaskOpacity?: number;
+  paneWidth?: number;
+  breathingIntensity?: 'none' | 'mild' | 'intense';
+}
+
 /** Layout data as stored / transmitted */
 export interface LayoutData {
   id: string;
@@ -82,6 +92,7 @@ export interface LayoutData {
   focusedPaneIndex: number;
   windowGeometry?: WindowGeometry;
   themeId?: string;
+  uiOverrides?: LayoutUiOverrides;
 }
 
 /** Result of listing layouts */
