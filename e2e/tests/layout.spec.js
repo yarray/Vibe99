@@ -856,12 +856,32 @@ describe('Layout', () => {
       const input = await fontSizeRow.$('input');
       expect(input).toExist();
 
-      await browser.execute((el) => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(el, '18');
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, input);
+      // Get the row's index to find it via querySelector
+      const rowIndex = await browser.execute(async () => {
+        const rows = document.querySelectorAll('.settings-row');
+        for (let i = 0; i < rows.length; i++) {
+          const label = rows[i].querySelector('span');
+          if (label && label.textContent === 'Font Size') {
+            return i;
+          }
+        }
+        return -1;
+      });
+
+      // Set the input value using the actual DOM element
+      await browser.execute((idx) => {
+        const rows = document.querySelectorAll('.settings-row');
+        if (idx >= 0 && idx < rows.length) {
+          const row = rows[idx];
+          const input = row.querySelector('input');
+          if (input) {
+            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(input, '18');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      }, rowIndex);
       await browser.pause(500);
 
       // Verify the value was persisted by checking the layout data
@@ -910,12 +930,32 @@ describe('Layout', () => {
       const input = await paneWidthRow.$('input');
       expect(input).toExist();
 
-      await browser.execute((el) => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(el, '1000');
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, input);
+      // Get the row's index to find it via querySelector
+      const rowIndex = await browser.execute(async () => {
+        const rows = document.querySelectorAll('.settings-row');
+        for (let i = 0; i < rows.length; i++) {
+          const label = rows[i].querySelector('span');
+          if (label && label.textContent === 'Pane Width') {
+            return i;
+          }
+        }
+        return -1;
+      });
+
+      // Set the input value using the actual DOM element
+      await browser.execute((idx) => {
+        const rows = document.querySelectorAll('.settings-row');
+        if (idx >= 0 && idx < rows.length) {
+          const row = rows[idx];
+          const input = row.querySelector('input');
+          if (input) {
+            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(input, '1000');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      }, rowIndex);
       await browser.pause(500);
 
       // Verify the value was persisted
@@ -964,12 +1004,32 @@ describe('Layout', () => {
       const input = await paneOpacityRow.$('input');
       expect(input).toExist();
 
-      await browser.execute((el) => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(el, '0.9');
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, input);
+      // Get the row's index to find it via querySelector
+      const rowIndex = await browser.execute(async () => {
+        const rows = document.querySelectorAll('.settings-row');
+        for (let i = 0; i < rows.length; i++) {
+          const label = rows[i].querySelector('span');
+          if (label && label.textContent === 'Pane Opacity') {
+            return i;
+          }
+        }
+        return -1;
+      });
+
+      // Set the input value using the actual DOM element
+      await browser.execute((idx) => {
+        const rows = document.querySelectorAll('.settings-row');
+        if (idx >= 0 && idx < rows.length) {
+          const row = rows[idx];
+          const input = row.querySelector('input');
+          if (input) {
+            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(input, '0.9');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      }, rowIndex);
       await browser.pause(500);
 
       // Verify the value was persisted
@@ -1018,12 +1078,32 @@ describe('Layout', () => {
       const input = await paneMaskOpacityRow.$('input');
       expect(input).toExist();
 
-      await browser.execute((el) => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(el, '0.7');
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, input);
+      // Get the row's index to find it via querySelector
+      const rowIndex = await browser.execute(async () => {
+        const rows = document.querySelectorAll('.settings-row');
+        for (let i = 0; i < rows.length; i++) {
+          const label = rows[i].querySelector('span');
+          if (label && label.textContent === 'Pane Mask Opacity') {
+            return i;
+          }
+        }
+        return -1;
+      });
+
+      // Set the input value using the actual DOM element
+      await browser.execute((idx) => {
+        const rows = document.querySelectorAll('.settings-row');
+        if (idx >= 0 && idx < rows.length) {
+          const row = rows[idx];
+          const input = row.querySelector('input');
+          if (input) {
+            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(input, '0.7');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      }, rowIndex);
       await browser.pause(500);
 
       // Verify the value was persisted
@@ -1072,12 +1152,32 @@ describe('Layout', () => {
       const input = await fontFamilyRow.$('input');
       expect(input).toExist();
 
-      await browser.execute((el) => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(el, 'monospace');
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, input);
+      // Get the row's index to find it via querySelector
+      const rowIndex = await browser.execute(async () => {
+        const rows = document.querySelectorAll('.settings-row');
+        for (let i = 0; i < rows.length; i++) {
+          const label = rows[i].querySelector('span');
+          if (label && label.textContent === 'Font Family') {
+            return i;
+          }
+        }
+        return -1;
+      });
+
+      // Set the input value using the actual DOM element
+      await browser.execute((idx) => {
+        const rows = document.querySelectorAll('.settings-row');
+        if (idx >= 0 && idx < rows.length) {
+          const row = rows[idx];
+          const input = row.querySelector('input');
+          if (input) {
+            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(input, 'monospace');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      }, rowIndex);
       await browser.pause(500);
 
       // Verify the value was persisted
