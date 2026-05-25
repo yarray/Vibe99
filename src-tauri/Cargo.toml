@@ -4,6 +4,7 @@ version = "0.20.2"
 description = "Vibe99 terminal workspace"
 authors = [""]
 edition = "2021"
+default-run = "vibe99"
 
 [lib]
 name = "vibe99_lib"
@@ -38,6 +39,9 @@ percent-encoding = "2"
 tokio = { version = "1", features = ["net", "io-util", "sync", "rt", "macros"] }
 clap = { version = "4", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

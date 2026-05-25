@@ -526,7 +526,7 @@ async fn run_named_pipe_server(
         let app = app.clone();
         let pending = pending.clone();
         tokio::spawn(async move {
-            let (reader, mut writer) = server.into_split();
+            let (reader, mut writer) = tokio::io::split(server);
             let mut lines = BufReader::new(reader).lines();
 
             while let Ok(Some(line)) = lines.next_line().await {
