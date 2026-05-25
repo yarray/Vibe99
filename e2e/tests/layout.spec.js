@@ -553,23 +553,11 @@ describe('Layout', () => {
   // Set as Default (P1)
   // ================================================================
 
-  it('sets layout as default via editor "Set as Default" button', async () => {
+  it('sets layout as default via bridge API', async () => {
     await saveLayoutAs('Set Default Test');
-    await openLayoutsModal();
-    await clickModalLayout('Set Default Test');
-    await browser.pause(300);
 
-    // Find and click "Set as Default" button in editor panel
-    const overlay = await $('.settings-modal-overlay');
-    const editor = await overlay.$('#modal-layout-editor');
-    const buttons = await editor.$$('.layout-info-btn');
-
-    // First button should be "Set as Default"
-    const setDefaultBtn = buttons[0];
-    const text = await getTextSafe(setDefaultBtn);
-    expect(text).toContain('Set as Default');
-
-    await setDefaultBtn.click();
+    // Use the bridge API directly since the "Set as Default" button was removed from UI
+    await setDefaultLayoutViaBridge('set-default-test');
     await browser.pause(500);
 
     // Verify defaultLayoutId is updated
@@ -577,32 +565,19 @@ describe('Layout', () => {
     expect(config.defaultLayoutId).toBe('set-default-test');
   });
 
-  it('shows "Default" and star indicator after setting as default in editor', async () => {
+  it('shows "Default" and star indicator after setting as default', async () => {
     await saveLayoutAs('Default Indicator');
+
+    // Set as default via bridge API
+    await setDefaultLayoutViaBridge('default-indicator');
+    await browser.pause(500);
+
+    // Refresh the modal to show updated state
     await openLayoutsModal();
     await clickModalLayout('Default Indicator');
     await browser.pause(300);
 
-    let overlay = await $('.settings-modal-overlay');
-    let editor = await overlay.$('#modal-layout-editor');
-    let buttons = await editor.$$('.layout-info-btn');
-
-    // Click "Set as Default"
-    await buttons[0].click();
-    await browser.pause(500);
-
-    // Re-query overlay and editor after clicking Set as Default,
-    // because renderModalLayouts() replaces the overlay content.
-    overlay = await $('.settings-modal-overlay');
-    editor = await overlay.$('#modal-layout-editor');
-    buttons = await editor.$$('.layout-info-btn');
-
-    // Verify the button text changed to indicate default status
-    const btnHtml = await buttons[0].getHTML();
-    expect(btnHtml).toContain('Default');
-
     // Verify star indicator (SVG icon) appears in sidebar for the default layout
-    await browser.pause(300);
     const items = await getModalLayoutItems();
     // Find the layout item with is-default class
     let defaultItem = null;
