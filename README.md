@@ -23,7 +23,7 @@ Vibe99 is a desktop terminal workspace designed for agentic coding. The UI keeps
 - **Spotlight + stack multi-pane layout** — one terminal gets full width while the rest stack on the side, each showing the last few lines of output. You always know what every agent is doing without juggling windows or tabs.
 - **Activity alerts** — when a backgrounded pane finishes output and goes idle, it pulses with a breathing mask so you can tell at a glance which agent needs attention. Global and per-pane toggles.
 - **Session restore** — pane layout, working directories (tracked via OSC 7), shell profiles, and tab titles all survive app restart. Pick up exactly where you left off.
-- **Layout system** — save a pane arrangement, switch between saved layouts, open layouts in separate windows, and set a default layout that loads on startup.
+- **Layout system** — save a pane arrangement, switch between saved layouts, open layouts in separate windows, and set layouts to auto-start on boot.
 - **Navigation mode** — `Ctrl+B` enters a vim-style mode: move with `h`/`l`, jump by number (`1`–`9`), close (`x`), rename (`r`), then `Enter` to focus.
 - **Per-pane shell profiles** — each pane can run a different shell. Create profiles for bash, zsh, SSH, Docker, or any command. WSL distributions on Windows are auto-detected.
 
@@ -129,8 +129,8 @@ Layouts save the complete state of a window: number of panes, their working dire
 
 - **Save current layout**: Click `▦` in the toolbar → "Save Layout As…", or `Ctrl+Shift+L` → "Save Layout As…"
 - **Open a layout**: Click `▦` → click a layout to open it in a window (new window if not already open, otherwise focus the existing one)
-- **Manage layouts**: Click `▦` → "Manage Layouts…" to open the Layout Manager modal, where you can create, rename, delete, set as default, and view pane details
-- **Default layout**: In Layout Manager, select a layout → "Set as Default" — it loads automatically on startup
+- **Manage layouts**: Click `▦` → "Manage Layouts…" to open the Layout Manager modal, where you can create, rename, delete layouts, configure auto-start and global hotkeys, and view pane details
+- **Auto-start on boot**: In Layout Manager, select a layout → toggle "Auto-start on boot" — the layout opens automatically when the app starts. Multiple layouts can be set to auto-start simultaneously
 - **Open in new window**: In Layout Manager, click `⎆` on a layout to open it in a separate window
 
 ### Shell Profiles

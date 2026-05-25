@@ -550,52 +550,78 @@ describe('Layout', () => {
   });
 
   // ================================================================
-  // Set as Default (P1)
+  // Auto-start on boot (P1)
   // ================================================================
 
-  it('sets layout as default via bridge API', async () => {
-    await saveLayoutAs('Set Default Test');
+  it('toggles auto-start on boot via UI', async () => {
+    await saveLayoutAs('Auto-start Test');
 
-    // Use the bridge API directly since the "Set as Default" button was removed from UI
-    await setDefaultLayoutViaBridge('set-default-test');
+    // Open modal and click the layout
+    await openLayoutsModal();
+    await clickModalLayout('Auto-start Test');
+    await browser.pause(300);
+
+    const overlay = await $('.settings-modal-overlay');
+    const editor = await overlay.$('#modal-layout-editor');
+
+    // Find and click the "Auto-start on boot" toggle
+    const autostartToggle = await editor.$('.layout-autostart-toggle');
+    expect(autostartToggle).toExist();
+    await autostartToggle.click();
     await browser.pause(500);
 
-    // Verify defaultLayoutId is updated
-    const config = await listLayoutsViaBridge();
-    expect(config.defaultLayoutId).toBe('set-default-test');
+    // Verify the autostart state was persisted
+    const layoutData = await browser.execute(async () => {
+      if (!window.__TAURI__) return null;
+      const core = window.__TAURI__.core;
+      const config = await core.invoke('layouts_list');
+      const layout = config.layouts?.find((l) => l.id === 'auto-start-test');
+      return layout ? layout.autostart : null;
+    });
+
+    expect(layoutData).toBe(true);
   });
 
-  it('shows "Default" and star indicator after setting as default', async () => {
-    await saveLayoutAs('Default Indicator');
+  it('shows zap icon indicator after enabling auto-start', async () => {
+    await saveLayoutAs('Zap Indicator Test');
 
-    // Set as default via bridge API
-    await setDefaultLayoutViaBridge('default-indicator');
+    // Enable autostart via bridge
+    await browser.execute(async () => {
+      if (!window.__TAURI__) return;
+      const core = window.__TAURI__.core;
+      const config = await core.invoke('layouts_list');
+      const layout = config.layouts?.find((l) => l.id === 'zap-indicator-test');
+      if (layout) {
+        layout.autostart = true;
+        await core.invoke('layout_save', { layout });
+      }
+    });
     await browser.pause(500);
 
     // Refresh the modal to show updated state
     await openLayoutsModal();
-    await clickModalLayout('Default Indicator');
+    await clickModalLayout('Zap Indicator Test');
     await browser.pause(300);
 
-    // Verify star indicator (SVG icon) appears in sidebar for the default layout
+    // Verify zap indicator (SVG icon) appears in sidebar for the autostart layout
     const items = await getModalLayoutItems();
-    // Find the layout item with is-default class
-    let defaultItem = null;
+    // Find the layout item with is-autostart class
+    let autostartItem = null;
     for (const item of items) {
       const cls = await item.getAttribute('class');
-      if (cls.includes('is-default')) {
-        defaultItem = item;
+      if (cls.includes('is-autostart')) {
+        autostartItem = item;
         break;
       }
     }
-    expect(defaultItem).toExist();
-    const nameEl = await defaultItem.$('.layout-name');
+    expect(autostartItem).toExist();
+    const nameEl = await autostartItem.$('.layout-name');
     const html = await nameEl.getHTML();
-    // The star icon renders as an SVG with a star-shaped path
+    // The zap icon renders as an SVG
     expect(html).toContain('<svg');
-    // The layout item should have the is-default CSS class
-    const itemClass = await defaultItem.getAttribute('class');
-    expect(itemClass).toContain('is-default');
+    // The layout item should have the is-autostart CSS class
+    const itemClass = await autostartItem.getAttribute('class');
+    expect(itemClass).toContain('is-autostart');
   });
 
   // ================================================================

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **README and e2e test updates for Auto-start on boot feature** (VIB-342):
+  - Updated README to reflect "Auto-start on boot" toggle instead of "Set as Default" button.
+  - Updated e2e test `layout.spec.js` to test "Auto-start on boot" toggle functionality.
+  - The "Set as Default" button was intentionally replaced with "Auto-start on boot" toggle in commit b9f1e83 to support multiple autostart layouts.
+
 ### Added
 
 - **Settings panel layout-level UI override write and pin hint** (VIB-341):
