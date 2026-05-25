@@ -48,6 +48,10 @@
 
 ### Fixed
 
+- **E2E Docker image build** (VIB-339):
+  - Added `--no-bundle` flag to `tauri build` in Dockerfile.e2e to skip AppImage bundling (avoids network download issues, reduces image size).
+  - Dockerfile.gif retains bundling for GIF recording functionality.
+
 - **Layout theme picker** (VIB-331):
   - Fixed theme selection not persisting - removed unnecessary modal re-render that was destroying the custom-select element during selection.
   - Fixed label wrapping in layout editor - constrained custom-select width to prevent overflow.

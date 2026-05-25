@@ -45,11 +45,12 @@ COPY . /app/Vibe99
 WORKDIR /app/Vibe99
 RUN npm install \
     && npm cache clean --force \
-    && npm run tauri:build-dev \
+    && npm run tauri:build-dev -- --no-bundle \
     && rm -f src-tauri/target/debug/vibe99 \
     && rm -rf src-tauri/target/debug/incremental \
     && rm -rf src-tauri/target/debug/.fingerprint \
     && rm -rf src-tauri/target/debug/build \
+    && rm -rf src-tauri/target/debug/deps \
     && rm -rf /root/.cargo/registry/cache \
     && rm -rf /tmp/*
 
