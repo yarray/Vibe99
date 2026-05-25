@@ -409,16 +409,21 @@ pub fn start_cli_server(app: AppHandle) -> Result<(), String> {
     let pending: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<Value>>>> =
         app.state::<CliState>().pending.clone();
 
-    #[cfg(unix)]
-    {
-        let listener = {
-            use tokio::net::UnixListener;
-            UnixListener::bind(&sock_path)
-                .map_err(|e| format!("failed to bind UDS at {}: {e}", sock_path.display()))?
-        };
+    // Spawn the server loop inside the Tokio runtime via tauri::async_runtime.
+    // UnixListener::bind() and tokio::spawn() both require a Tokio reactor,
+    // which is not available in Tauri's .setup() callback on the main thread.
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        #[cfg(unix)]
+        {
+            let listener = match tokio::net::UnixListener::bind(&sock_path) {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("[cli] failed to bind UDS at {}: {e}", sock_path.display());
+                    return;
+                }
+            };
 
-        let app_clone = app.clone();
-        tokio::spawn(async move {
             loop {
                 match listener.accept().await {
                     Ok((stream, _addr)) => {
@@ -435,16 +440,13 @@ pub fn start_cli_server(app: AppHandle) -> Result<(), String> {
                     }
                 }
             }
-        });
-    }
+        }
 
-    #[cfg(windows)]
-    {
-        let app_clone = app.clone();
-        tokio::spawn(async move {
+        #[cfg(windows)]
+        {
             run_named_pipe_server(&app_clone, pending).await;
-        });
-    }
+        }
+    });
 
     Ok(())
 }
