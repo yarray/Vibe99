@@ -48,6 +48,11 @@
 
 ### Fixed
 
+- **E2E test failures** (VIB-342):
+  - Fixed syntax error in `layout-quake-hotkey.spec.js` - removed TypeScript `as` type assertions from `.js` file
+  - Updated `layout.spec.js` tests to use bridge API for setting default layout (removed "Set as Default" button tests)
+  - Fixed UI override toggle bug in `layout-modal.ts` - clicking "Use Global" now correctly enables override mode
+
 - **Layout theme picker** (VIB-331):
   - Fixed theme selection not persisting - removed unnecessary modal re-render that was destroying the custom-select element during selection.
   - Fixed label wrapping in layout editor - constrained custom-select width to prevent overflow.
