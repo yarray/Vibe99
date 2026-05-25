@@ -59,6 +59,9 @@
   - Fixed syntax error in `layout-quake-hotkey.spec.js` - removed TypeScript `as` type assertions from `.js` file
   - Updated `layout.spec.js` tests to use bridge API for setting default layout (removed "Set as Default" button tests)
   - Fixed UI override toggle bug in `layout-modal.ts` - clicking "Use Global" now correctly enables override mode
+- **E2E Docker image build** (VIB-339):
+  - Added `--no-bundle` flag to `tauri build` in Dockerfile.e2e to skip AppImage bundling (avoids network download issues, reduces image size).
+  - Dockerfile.gif retains bundling for GIF recording functionality.
 
 - **Layout theme picker** (VIB-331):
   - Fixed theme selection not persisting - removed unnecessary modal re-render that was destroying the custom-select element during selection.
