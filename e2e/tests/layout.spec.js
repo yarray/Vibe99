@@ -550,77 +550,78 @@ describe('Layout', () => {
   });
 
   // ================================================================
-  // Set as Default (P1)
+  // Auto-start on boot (P1)
   // ================================================================
 
-  it('sets layout as default via editor "Set as Default" button', async () => {
-    await saveLayoutAs('Set Default Test');
+  it('toggles auto-start on boot via UI', async () => {
+    await saveLayoutAs('Auto-start Test');
+
+    // Open modal and click the layout
     await openLayoutsModal();
-    await clickModalLayout('Set Default Test');
+    await clickModalLayout('Auto-start Test');
     await browser.pause(300);
 
-    // Find and click "Set as Default" button in editor panel
     const overlay = await $('.settings-modal-overlay');
     const editor = await overlay.$('#modal-layout-editor');
-    const buttons = await editor.$$('.layout-info-btn');
 
-    // First button should be "Set as Default"
-    const setDefaultBtn = buttons[0];
-    const text = await getTextSafe(setDefaultBtn);
-    expect(text).toContain('Set as Default');
-
-    await setDefaultBtn.click();
+    // Find and click the "Auto-start on boot" toggle
+    const autostartToggle = await editor.$('.layout-autostart-toggle');
+    expect(autostartToggle).toExist();
+    await autostartToggle.click();
     await browser.pause(500);
 
-    // Verify defaultLayoutId is updated
-    const config = await listLayoutsViaBridge();
-    expect(config.defaultLayoutId).toBe('set-default-test');
+    // Verify the autostart state was persisted
+    const layoutData = await browser.execute(async () => {
+      if (!window.__TAURI__) return null;
+      const core = window.__TAURI__.core;
+      const config = await core.invoke('layouts_list');
+      const layout = config.layouts?.find((l) => l.id === 'auto-start-test');
+      return layout ? layout.autostart : null;
+    });
+
+    expect(layoutData).toBe(true);
   });
 
-  it('shows "Default" and star indicator after setting as default in editor', async () => {
-    await saveLayoutAs('Default Indicator');
-    await openLayoutsModal();
-    await clickModalLayout('Default Indicator');
-    await browser.pause(300);
+  it('shows zap icon indicator after enabling auto-start', async () => {
+    await saveLayoutAs('Zap Indicator Test');
 
-    let overlay = await $('.settings-modal-overlay');
-    let editor = await overlay.$('#modal-layout-editor');
-    let buttons = await editor.$$('.layout-info-btn');
-
-    // Click "Set as Default"
-    await buttons[0].click();
+    // Enable autostart via bridge
+    await browser.execute(async () => {
+      if (!window.__TAURI__) return;
+      const core = window.__TAURI__.core;
+      const config = await core.invoke('layouts_list');
+      const layout = config.layouts?.find((l) => l.id === 'zap-indicator-test');
+      if (layout) {
+        layout.autostart = true;
+        await core.invoke('layout_save', { layout });
+      }
+    });
     await browser.pause(500);
 
-    // Re-query overlay and editor after clicking Set as Default,
-    // because renderModalLayouts() replaces the overlay content.
-    overlay = await $('.settings-modal-overlay');
-    editor = await overlay.$('#modal-layout-editor');
-    buttons = await editor.$$('.layout-info-btn');
-
-    // Verify the button text changed to indicate default status
-    const btnHtml = await buttons[0].getHTML();
-    expect(btnHtml).toContain('Default');
-
-    // Verify star indicator (SVG icon) appears in sidebar for the default layout
+    // Refresh the modal to show updated state
+    await openLayoutsModal();
+    await clickModalLayout('Zap Indicator Test');
     await browser.pause(300);
+
+    // Verify zap indicator (SVG icon) appears in sidebar for the autostart layout
     const items = await getModalLayoutItems();
-    // Find the layout item with is-default class
-    let defaultItem = null;
+    // Find the layout item with is-autostart class
+    let autostartItem = null;
     for (const item of items) {
       const cls = await item.getAttribute('class');
-      if (cls.includes('is-default')) {
-        defaultItem = item;
+      if (cls.includes('is-autostart')) {
+        autostartItem = item;
         break;
       }
     }
-    expect(defaultItem).toExist();
-    const nameEl = await defaultItem.$('.layout-name');
+    expect(autostartItem).toExist();
+    const nameEl = await autostartItem.$('.layout-name');
     const html = await nameEl.getHTML();
-    // The star icon renders as an SVG with a star-shaped path
+    // The zap icon renders as an SVG
     expect(html).toContain('<svg');
-    // The layout item should have the is-default CSS class
-    const itemClass = await defaultItem.getAttribute('class');
-    expect(itemClass).toContain('is-default');
+    // The layout item should have the is-autostart CSS class
+    const itemClass = await autostartItem.getAttribute('class');
+    expect(itemClass).toContain('is-autostart');
   });
 
   // ================================================================

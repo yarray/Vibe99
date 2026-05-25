@@ -82,9 +82,11 @@ function createOverrideRow(
   overrideToggle.classList.toggle('is-active', isOverridden);
   overrideToggle.addEventListener('click', async () => {
     if (isOverridden) {
-      // Clear override - for now we need to trigger a re-render
-      // The actual clearing logic will be handled by the UI state
+      // Clear override - trigger a re-render to update UI state
       renderFn();
+    } else {
+      // Enable override by saving the current global value
+      await onSave(globalValue);
     }
   });
   overrideContainer.appendChild(overrideToggle);
