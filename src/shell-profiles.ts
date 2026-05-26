@@ -110,8 +110,16 @@ function splitArgs(str: string): string[] {
   let quoteChar = '';
   for (const ch of str) {
     if (inQuote) {
-      if (ch === quoteChar) { inQuote = false; } else { cur += ch; }
+      if (ch === quoteChar) {
+        // Closing quote: push the accumulated content and start fresh
+        inQuote = false;
+        if (cur) { args.push(cur); cur = ''; }
+      } else {
+        cur += ch;
+      }
     } else if (ch === '"' || ch === "'") {
+      // Opening quote: push any accumulated content first
+      if (cur) { args.push(cur); cur = ''; }
       inQuote = true;
       quoteChar = ch;
     } else if (/\s/.test(ch)) {

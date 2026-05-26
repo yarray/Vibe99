@@ -1,0 +1,1 @@
+Fixed shell profile argument parsing where adjacent quoted strings (e.g., `"Ubuntu""Debian"`) would lose the first quoted value. The `splitArgs` function now properly pushes accumulated content when closing a quote before starting a new one.
