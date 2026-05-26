@@ -17,6 +17,11 @@
   - Fixed input change event handlers to use `!input.disabled` instead of stale `isOverridden` closure value.
   - Fixed Breathing Intensity toggle to enable override when switching from "Use Global" to "Custom".
 
+- **Shell profile args quote preservation** (VIB-343):
+  - `splitArgs()` now tracks quote type (single/double/none) for each argument.
+  - `formatArgs()` preserves original quote style for idempotent save→display→save cycles.
+  - Fixed bug where quotes were lost during save→display→save, causing command corruption.
+
 - **README and e2e test updates for Auto-start on boot feature** (VIB-342):
   - Updated README to reflect "Auto-start on boot" toggle instead of "Set as Default" button.
   - Updated e2e test `layout.spec.js` to test "Auto-start on boot" toggle functionality.
