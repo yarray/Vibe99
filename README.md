@@ -129,8 +129,9 @@ Layouts save the complete state of a window: number of panes, their working dire
 
 - **Save current layout**: Click `▦` in the toolbar → "Save Layout As…", or `Ctrl+Shift+L` → "Save Layout As…"
 - **Open a layout**: Click `▦` → click a layout to open it in a window (new window if not already open, otherwise focus the existing one)
-- **Manage layouts**: Click `▦` → "Manage Layouts…" to open the Layout Manager modal, where you can create, rename, delete layouts, configure auto-start and global hotkeys, and view pane details
-- **Auto-start on boot**: In Layout Manager, select a layout → toggle "Auto-start on boot" — the layout opens automatically when the app starts. Multiple layouts can be set to auto-start simultaneously
+- **Manage layouts**: Click `▦` → "Manage Layouts…" to open the Layout Manager modal, where you can create, rename, delete layouts, configure default layout and auto-start, set global hotkeys, and view pane details
+- **Set as Default**: In Layout Manager, click "Set as Default" on a layout — this layout becomes the template for new windows and is loaded when the app starts normally
+- **Auto-start on boot**: In Layout Manager, select a layout → toggle "Auto-start on boot" — the layout opens automatically when the app starts at system boot. Multiple layouts can be set to auto-start simultaneously
 - **Open in new window**: In Layout Manager, click `⎆` on a layout to open it in a separate window
 
 ### Shell Profiles

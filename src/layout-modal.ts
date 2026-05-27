@@ -553,6 +553,23 @@ export function createLayoutModal({
       });
       actionsRow.appendChild(autostartRow);
 
+      // Set as Default button
+      const setDefaultBtn = document.createElement('button');
+      setDefaultBtn.type = 'button';
+      setDefaultBtn.className = 'settings-btn layout-info-btn';
+      setDefaultBtn.innerHTML = isDefault ? `${icon('check')} Default` : 'Set as Default';
+      setDefaultBtn.disabled = isDefault;
+      setDefaultBtn.title = isDefault ? 'This is the default layout for new windows' : 'Set this layout as the default for new windows';
+      setDefaultBtn.addEventListener('click', () => {
+        bridge.setLayoutAsDefault(selected.id)
+          .then((config: LayoutsListResult) => {
+            layoutManager._setDefaultLayoutId(config.defaultLayoutId ?? selected.id);
+            renderModalLayouts(overlay);
+          })
+          .catch(reportError);
+      });
+      actionsRow.appendChild(setDefaultBtn);
+
       const openInNewWindowBtn = document.createElement('button');
       openInNewWindowBtn.type = 'button';
       openInNewWindowBtn.className = 'settings-btn layout-info-btn';
