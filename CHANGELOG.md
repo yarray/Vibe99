@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **Layout UI override toggle bug** (VIB-342):
+  - Fixed `createOverrideRow()` function in `src/layout-modal.ts` to properly handle toggle state changes.
+  - Added `onClear` callback to properly delete overrides when switching from "Custom" to "Use Global".
+  - Fixed input change event handlers to use `!input.disabled` instead of stale `isOverridden` closure value.
+  - Fixed Breathing Intensity toggle to enable override when switching from "Use Global" to "Custom".
+
 - **README and e2e test updates for Auto-start on boot feature** (VIB-342):
   - Updated README to reflect "Auto-start on boot" toggle instead of "Set as Default" button.
   - Updated e2e test `layout.spec.js` to test "Auto-start on boot" toggle functionality.
