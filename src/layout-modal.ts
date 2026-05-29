@@ -96,14 +96,20 @@ function createOverrideRow(
       // Clear override - delete the custom value and revert to global
       overrideToggle.textContent = 'Use Global';
       overrideToggle.classList.remove('is-active');
-      inputs.forEach(input => { input.disabled = true; });
+      inputs.forEach(input => {
+        input.disabled = true;
+        input.value = String(globalValue);
+      });
       await onClear();
     } else {
-      // Enable override by saving the current global value as the custom override
+      // Enable override - enable the input and set it to global value as starting point
       overrideToggle.textContent = 'Custom';
       overrideToggle.classList.add('is-active');
-      inputs.forEach(input => { input.disabled = false; });
-      await onSave(globalValue);
+      inputs.forEach(input => {
+        input.disabled = false;
+        input.value = String(globalValue);
+      });
+      // Don't save here - let the user modify the value, and it will be saved on change event
     }
   });
   overrideContainer.appendChild(overrideToggle);
