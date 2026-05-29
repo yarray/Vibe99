@@ -4757,6 +4757,7 @@ version = "0.20.2"
 dependencies = [
  "base64 0.22.1",
  "clap",
+ "libc",
  "percent-encoding",
  "portable-pty",
  "regex",

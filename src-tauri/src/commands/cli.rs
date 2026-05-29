@@ -390,16 +390,16 @@ fn settings_schema() -> Value {
 ///
 /// This should be called once during app `.setup()`.
 pub fn start_cli_server(app: AppHandle) -> Result<(), String> {
-    // Ensure parent directory exists.
     let sock_path = socket_path()?;
-    if let Some(parent) = sock_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("failed to create socket dir: {e}"))?;
-    }
 
-    // Clean up stale socket from a previous run.
+    // Ensure parent directory exists (Unix only; Windows pipes live in kernel space).
     #[cfg(unix)]
     {
+        if let Some(parent) = sock_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create socket dir: {e}"))?;
+        }
+        // Clean up stale socket from a previous run.
         let _ = std::fs::remove_file(&sock_path);
     }
 
@@ -505,8 +505,8 @@ async fn run_named_pipe_server(
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::windows::named_pipe::ServerOptions;
 
-    let pipe_path = match socket_path() {
-        Ok(p) => p,
+    let pipe_name = match socket_path() {
+        Ok(p) => p.to_string_lossy().into_owned(),
         Err(e) => {
             eprintln!("[cli] pipe path error: {e}");
             return;
@@ -514,10 +514,18 @@ async fn run_named_pipe_server(
     };
 
     loop {
-        let server = ServerOptions::new()
-            .first_pipe_instance(false)
-            .create(&pipe_path)
-            .expect("failed to create named pipe");
+        let server = match ServerOptions::new()
+            .access_inbound(true)
+            .access_outbound(true)
+            .create(&pipe_name.to_string_lossy())
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[cli] failed to create named pipe: {e}");
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                continue;
+            }
+        };
 
         // Wait for a client to connect.
         if let Err(e) = server.connect().await {

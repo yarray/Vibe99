@@ -151,8 +151,45 @@ fn send_request(
 
     #[cfg(windows)]
     {
-        let _ = (socket_path, method, params, timeout_secs);
-        Err("Windows named pipe client not yet implemented (use tokio)".to_string())
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+        use tokio::net::windows::named_pipe::ClientOptions;
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .map_err(|e| format!("failed to create tokio runtime: {e}"))?;
+
+        rt.block_on(async {
+            let mut client = ClientOptions::new()
+                .open(&socket_path.to_string_lossy())
+                .map_err(|e| format!("cannot connect to Vibe99 at {}: {e}", socket_path.display()))?;
+
+            let request = json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": method,
+                "params": params,
+            });
+
+            let mut out = serde_json::to_string(&request).unwrap_or_default();
+            out.push('\n');
+            client.write_all(out.as_bytes()).await
+                .map_err(|e| format!("write error: {e}"))?;
+
+            let mut reader = tokio::io::BufReader::new(client);
+            let mut line = String::new();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(timeout_secs),
+                reader.read_line(&mut line)
+            ).await
+            .map_err(|_| "read timeout".to_string())?
+            .map_err(|e| format!("read error: {e}"))?;
+
+            let response: Value = serde_json::from_str(&line)
+                .map_err(|e| format!("invalid response: {e}"))?;
+
+            Ok(response)
+        })
     }
 }
 
