@@ -92,9 +92,27 @@ function createOverrideRow(
     const isCurrentlyOverridden = overrideToggle.classList.contains('is-active');
     if (isCurrentlyOverridden) {
       // Clear override - delete the custom value and revert to global
+      // Immediately update UI state for responsiveness, then clear the override
+      overrideToggle.textContent = 'Use Global';
+      overrideToggle.classList.remove('is-active');
+      if (isText) {
+        (overrideContainer.querySelector('.settings-text') as HTMLInputElement)?.setAttribute('disabled', 'true');
+      } else {
+        (overrideContainer.querySelector('input[type="range"]') as HTMLInputElement)?.setAttribute('disabled', 'true');
+        (overrideContainer.querySelector('.settings-number') as HTMLInputElement)?.setAttribute('disabled', 'true');
+      }
       await onClear();
     } else {
       // Enable override by saving the current global value as the custom override
+      // Immediately update UI state for responsiveness
+      overrideToggle.textContent = 'Custom';
+      overrideToggle.classList.add('is-active');
+      if (isText) {
+        (overrideContainer.querySelector('.settings-text') as HTMLInputElement)?.removeAttribute('disabled');
+      } else {
+        (overrideContainer.querySelector('input[type="range"]') as HTMLInputElement)?.removeAttribute('disabled');
+        (overrideContainer.querySelector('.settings-number') as HTMLInputElement)?.removeAttribute('disabled');
+      }
       await onSave(globalValue);
     }
   });
