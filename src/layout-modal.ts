@@ -90,29 +90,19 @@ function createOverrideRow(
   overrideToggle.classList.toggle('is-active', isOverridden);
   overrideToggle.addEventListener('click', async () => {
     const isCurrentlyOverridden = overrideToggle.classList.contains('is-active');
+    // Update all inputs in the container immediately for responsiveness
+    const inputs = overrideContainer.querySelectorAll('input');
     if (isCurrentlyOverridden) {
       // Clear override - delete the custom value and revert to global
-      // Immediately update UI state for responsiveness, then clear the override
       overrideToggle.textContent = 'Use Global';
       overrideToggle.classList.remove('is-active');
-      if (isText) {
-        (overrideContainer.querySelector('.settings-text') as HTMLInputElement)?.setAttribute('disabled', 'true');
-      } else {
-        (overrideContainer.querySelector('input[type="range"]') as HTMLInputElement)?.setAttribute('disabled', 'true');
-        (overrideContainer.querySelector('.settings-number') as HTMLInputElement)?.setAttribute('disabled', 'true');
-      }
+      inputs.forEach(input => { input.disabled = true; });
       await onClear();
     } else {
       // Enable override by saving the current global value as the custom override
-      // Immediately update UI state for responsiveness
       overrideToggle.textContent = 'Custom';
       overrideToggle.classList.add('is-active');
-      if (isText) {
-        (overrideContainer.querySelector('.settings-text') as HTMLInputElement)?.removeAttribute('disabled');
-      } else {
-        (overrideContainer.querySelector('input[type="range"]') as HTMLInputElement)?.removeAttribute('disabled');
-        (overrideContainer.querySelector('.settings-number') as HTMLInputElement)?.removeAttribute('disabled');
-      }
+      inputs.forEach(input => { input.disabled = false; });
       await onSave(globalValue);
     }
   });
