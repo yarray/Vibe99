@@ -227,6 +227,14 @@ describe('Shell Profile Drag Reorder and Icon Buttons', () => {
 
     it('shows star button for non-default profiles', async () => {
       await openShellProfilesModal();
+      // Create a dummy profile first - it will become the default
+      await clickAddProfileBtn();
+      await fillProfileEditor({
+        id: 'dummy-default',
+        name: 'DummyDefault',
+        command: '/bin/sh',
+      });
+      // Now create the test profile - it will NOT be the default
       await clickAddProfileBtn();
       await fillProfileEditor({
         id: 'star-test',
@@ -249,6 +257,14 @@ describe('Shell Profile Drag Reorder and Icon Buttons', () => {
 
     it('does not show star button for default profile', async () => {
       await openShellProfilesModal();
+      // Create a dummy profile first - it will become the default
+      await clickAddProfileBtn();
+      await fillProfileEditor({
+        id: 'another-profile',
+        name: 'AnotherProfile',
+        command: '/bin/sh',
+      });
+      // Now create the test profile - it will NOT be the default initially
       await clickAddProfileBtn();
       await fillProfileEditor({
         id: 'def-profile',
@@ -516,6 +532,14 @@ describe('Shell Profile Drag Reorder and Icon Buttons', () => {
   describe('Icon Button Actions', () => {
     it('set as default button updates the default profile indicator', async () => {
       await openShellProfilesModal();
+      // Create a dummy profile first - it will become the default
+      await clickAddProfileBtn();
+      await fillProfileEditor({
+        id: 'dummy-default',
+        name: 'DummyDefault',
+        command: '/bin/sh',
+      });
+      // Now create the test profile - it will NOT be the default initially
       await clickAddProfileBtn();
       await fillProfileEditor({
         id: 'new-default',
