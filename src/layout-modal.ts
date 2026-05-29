@@ -90,27 +90,24 @@ function createOverrideRow(
   overrideToggle.classList.toggle('is-active', isOverridden);
   overrideToggle.addEventListener('click', async () => {
     const isCurrentlyOverridden = overrideToggle.classList.contains('is-active');
-    // Update all inputs in the container immediately for responsiveness
     const inputs = overrideContainer.querySelectorAll('input');
     if (isCurrentlyOverridden) {
       // Clear override - delete the custom value and revert to global
       overrideToggle.textContent = 'Use Global';
       overrideToggle.classList.remove('is-active');
-      inputs.forEach(input => {
-        input.disabled = true;
-        input.value = String(globalValue);
-      });
+      inputs.forEach(input => { input.disabled = true; });
       await onClear();
     } else {
-      // Enable override - enable the input immediately, then save the global value
+      // Enable override - save the global value first, then enable the input
       overrideToggle.textContent = 'Custom';
       overrideToggle.classList.add('is-active');
+      // Save the global value to initialize the override
+      await onSave(globalValue);
+      // Only enable the input after saving completes
       inputs.forEach(input => {
         input.disabled = false;
         input.value = String(globalValue);
       });
-      // Save the global value to initialize the override
-      await onSave(globalValue);
     }
   });
   overrideContainer.appendChild(overrideToggle);
