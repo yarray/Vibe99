@@ -91,11 +91,15 @@ function createOverrideRow(
   overrideToggle.addEventListener('click', async () => {
     const isCurrentlyOverridden = overrideToggle.classList.contains('is-active');
     if (isCurrentlyOverridden) {
-      // Clear override - delete the custom value and revert to global
       await onClear();
+    } else if (isText && !String(globalValue).trim()) {
+      overrideToggle.textContent = 'Custom';
+      overrideToggle.classList.add('is-active');
+      const textInput = overrideContainer.querySelector('input') as HTMLInputElement | null;
+      if (textInput) textInput.disabled = false;
     } else {
-      // Enable override by saving the current global value as the custom override
       await onSave(globalValue);
+      renderFn();
     }
   });
   overrideContainer.appendChild(overrideToggle);
@@ -106,13 +110,14 @@ function createOverrideRow(
     input.className = 'settings-text';
     input.value = String(currentValue);
     input.disabled = !isOverridden;
-    input.addEventListener('change', async () => {
+    const handleSave = async () => {
       const val = input.value.trim();
-      // Input is only enabled when override is active, so we can save directly
       if (!input.disabled && val) {
         await onSave(val);
       }
-    });
+    };
+    input.addEventListener('input', handleSave);
+    input.addEventListener('change', handleSave);
     overrideContainer.appendChild(input);
   } else {
     const range = document.createElement('input');

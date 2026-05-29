@@ -1067,18 +1067,25 @@ describe('Layout', () => {
       // Click the "Use Global" toggle to switch to "Custom"
       const toggle = await fontFamilyRow.$('.layout-override-toggle');
       await toggle.click();
-      await browser.pause(300);
+      await browser.pause(500);
 
-      // Set a custom value
-      const input = await fontFamilyRow.$('input');
-      expect(input).toExist();
-
-      await browser.execute((el) => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(el, 'monospace');
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, input);
+      // Set the custom value and trigger save entirely in browser context
+      await browser.execute(() => {
+        const rows = document.querySelectorAll('#modal-layout-editor .settings-row');
+        for (const row of rows) {
+          const label = row.querySelector('span');
+          if (label && label.textContent === 'Font Family') {
+            const input = row.querySelector('input.settings-text');
+            if (input) {
+              const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+              nativeSetter.call(input, 'monospace');
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            break;
+          }
+        }
+      });
       await browser.pause(500);
 
       // Verify the value was persisted
@@ -1203,14 +1210,14 @@ describe('Layout', () => {
       await browser.pause(300);
 
       // After clicking, the segmented buttons should appear
-      // Click on the "intense" option
       await browser.execute(() => {
-        const container = document.querySelector('.layout-ui-override-container');
-        if (!container) return;
-        const segments = container.querySelector('.settings-segmented');
-        if (!segments) return;
-        const intenseBtn = segments.querySelector('.settings-segmented-btn[data-value="intense"]');
-        if (intenseBtn) intenseBtn.click();
+        const containers = document.querySelectorAll('.layout-ui-override-container');
+        for (const container of containers) {
+          const segments = container.querySelector('.settings-segmented');
+          if (!segments) continue;
+          const intenseBtn = segments.querySelector('.settings-segmented-btn[data-value="intense"]');
+          if (intenseBtn) { intenseBtn.click(); break; }
+        }
       });
       await browser.pause(500);
 

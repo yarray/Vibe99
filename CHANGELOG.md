@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **Layout UI override E2E test failures** (VIB-344):
+  - Fixed `createOverrideRow()` to call `renderFn()` after enabling override so the toggle updates to "Custom" and inputs become enabled.
+  - Fixed text input override to save on `input` event in addition to `change`, ensuring compatibility with WebKitGTK programmatic value changes.
+  - Fixed empty global value for text-type overrides: when fontFamily default is empty, skip the stripped-by-backend `onSave('')` and directly enable the input.
+  - Fixed breathing intensity E2E test selector to find the correct container with segmented buttons.
+  - Fixed font family E2E test to use direct DOM queries via `browser.execute` avoiding stale WDIO element references.
+
 - **Layout UI override toggle bug** (VIB-342):
   - Fixed `createOverrideRow()` function in `src/layout-modal.ts` to properly handle toggle state changes.
   - Added `onClear` callback to properly delete overrides when switching from "Custom" to "Use Global".
