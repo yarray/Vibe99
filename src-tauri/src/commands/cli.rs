@@ -390,9 +390,10 @@ fn settings_schema() -> Value {
 ///
 /// This should be called once during app `.setup()`.
 pub fn start_cli_server(app: AppHandle) -> Result<(), String> {
+    // Windows Named Pipe resolves its own path inside run_named_pipe_server().
+    #[cfg(unix)]
     let sock_path = socket_path()?;
 
-    // Ensure parent directory exists (Unix only; Windows pipes live in kernel space).
     #[cfg(unix)]
     {
         if let Some(parent) = sock_path.parent() {
@@ -517,7 +518,7 @@ async fn run_named_pipe_server(
         let server = match ServerOptions::new()
             .access_inbound(true)
             .access_outbound(true)
-            .create(&pipe_name.to_string_lossy())
+            .create(&*pipe_name)
         {
             Ok(s) => s,
             Err(e) => {
