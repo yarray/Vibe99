@@ -1,5 +1,6 @@
 import { createBridge } from './bridge';
 import { createWorkbenchRenderer } from './runtime/workbench-renderer';
+import { initCliBridge } from './cli-bridge';
 import { loadBuiltinThemes } from './domain/theme-presets';
 import '@xterm/xterm/css/xterm.css';
 
@@ -82,7 +83,18 @@ window.addEventListener('pointerdown', wb.onPointerdown);
 window.addEventListener('keydown', wb.onEscapeKeydown, true);
 
 window.addEventListener('DOMContentLoaded', () => {
-  wb.init().catch(wb.reportError);
+  wb.init().then(() => {
+    initCliBridge({
+      dispatch: wb.dispatch,
+      listen: (event, handler) => bridge.listen(event, handler),
+      invoke: async (cmd, args) => {
+        const tauri = (window as any).__TAURI__;
+        if (tauri) {
+          await tauri.core.invoke(cmd, args);
+        }
+      },
+    });
+  }).catch(wb.reportError);
 });
 
 window.addEventListener('beforeunload', wb.dispose);
