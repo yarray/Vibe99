@@ -680,18 +680,10 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
             }
 
             // Null, non-object, or unrecognized format → defaults
+            // Use sanitize_ui_config to ensure layoutHotkeys and quakeLayouts are included
             serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
-                "ui": {
-                    "fontSize": DEFAULT_FONT_SIZE,
-                    "paneOpacity": DEFAULT_PANE_OPACITY,
-                    "paneMaskOpacity": 0.25,
-                    "paneWidth": DEFAULT_PANE_WIDTH,
-                    "breathingAlertEnabled": true,
-                    "webglEnabled": true,
-                    "breathingIntensity": "mild",
-                    "activityAlertDebounceMs": 30000,
-                },
+                "ui": sanitize_ui_config(None::<&Value>),
                 "shell": {
                     "profiles": [],
                     "defaultProfile": "",
