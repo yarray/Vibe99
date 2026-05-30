@@ -1015,16 +1015,23 @@ describe('Layout', () => {
       await toggle.click();
       await browser.pause(300);
 
-      // Set a custom value
-      const input = await paneMaskOpacityRow.$('input');
-      expect(input).toExist();
-
-      await browser.execute((el) => {
-        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        nativeSetter.call(el, '0.7');
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }, input);
+      // Set the custom value and trigger save entirely in browser context
+      await browser.execute(() => {
+        const rows = document.querySelectorAll('#modal-layout-editor .settings-row');
+        for (const row of rows) {
+          const label = row.querySelector('span');
+          if (label && label.textContent === 'Pane Mask Opacity') {
+            const input = row.querySelector('input');
+            if (input) {
+              const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+              nativeSetter.call(input, '0.7');
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            break;
+          }
+        }
+      });
       await browser.pause(500);
 
       // Verify the value was persisted

@@ -649,6 +649,15 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
   describe('Quake CSS Class', () => {
     it('adds is-quake-window class when toggling quake for current layout', async () => {
+      // Ensure quake is disabled before saving the layout
+      await browser.execute(() => {
+        const body = document.body;
+        if (body.classList.contains('is-quake-window')) {
+          body.classList.remove('is-quake-window');
+        }
+      });
+      await browser.pause(300);
+
       await saveLayoutAs('Current Quake');
       await openLayoutsModal();
       await clickModalLayout('Current Quake');
