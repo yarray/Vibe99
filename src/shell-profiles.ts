@@ -103,32 +103,70 @@ export interface ShellProfileManager {
 // Utility functions for shell argument parsing
 // ---------------------------------------------------------------------------
 
-function splitArgs(str: string): string[] {
-  const args: string[] = [];
+type QuoteType = 'none' | 'single' | 'double';
+
+interface ArgWithQuote {
+  value: string;
+  quoteType: QuoteType;
+}
+
+function splitArgs(str: string): ArgWithQuote[] {
+  const args: ArgWithQuote[] = [];
   let cur = '';
   let inQuote = false;
-  let quoteChar = '';
+  let quoteChar: QuoteType = 'none';
   for (const ch of str) {
     if (inQuote) {
-      if (ch === quoteChar) { inQuote = false; } else { cur += ch; }
+      if (ch === quoteChar) {
+        inQuote = false;
+      } else {
+        cur += ch;
+      }
     } else if (ch === '"' || ch === "'") {
       inQuote = true;
-      quoteChar = ch;
+      quoteChar = ch === '"' ? 'double' : 'single';
     } else if (/\s/.test(ch)) {
-      if (cur) { args.push(cur); cur = ''; }
+      if (cur || quoteChar !== 'none') {
+        args.push({ value: cur, quoteType });
+        cur = '';
+        quoteChar = 'none';
+      }
     } else {
       cur += ch;
     }
   }
-  if (cur) { args.push(cur); }
+  if (cur || quoteChar !== 'none') {
+    args.push({ value: cur, quoteType });
+  }
   return args;
 }
 
-function formatArgs(args: string[]): string {
+function formatArgs(argsWithQuote: ArgWithQuote[]): string {
+  return argsWithQuote.map((arg) => {
+    switch (arg.quoteType) {
+      case 'single':
+        // Original was single-quoted: wrap in single quotes
+        return `'${arg.value}'`;
+      case 'double':
+        // Original was double-quoted: wrap in double quotes, escape internal quotes and backslashes
+        const escaped = arg.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        return `"${escaped}"`;
+      case 'none':
+      default:
+        // No quotes originally: only add quotes if needed for shell safety
+        if (arg.value === '' || /[\s"']/.test(arg.value) || /\\/.test(arg.value)) {
+          const escaped = arg.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          return `"${escaped}"`;
+        }
+        return arg.value;
+    }
+  }).join(' ');
+}
+
+// Backward compatibility: format string[] (used when loading from storage)
+function formatStringArgs(args: string[]): string {
   return args.map((arg) => {
-    // Arguments needing quoting: contain spaces, double quotes, backslashes, or are empty.
-    if (arg === '' || /[\s"]/.test(arg) || /\\/.test(arg)) {
-      // Escape backslashes and double quotes before wrapping in double quotes.
+    if (arg === '' || /[\s"']/.test(arg) || /\\/.test(arg)) {
       const escaped = arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       return `"${escaped}"`;
     }
@@ -285,7 +323,7 @@ export function createShellProfileManager({
         id: firstProfile.id,
         name: firstProfile.name || '',
         command: firstProfile.command,
-        args: formatArgs(firstProfile.args ?? []),
+        args: formatStringArgs(firstProfile.args ?? []),
         themeId: firstProfile.themeId || '',
         isNew: false
       });
@@ -385,7 +423,7 @@ export function createShellProfileManager({
             id: profile.id,
             name: profile.name || '',
             command: profile.command,
-            args: formatArgs(profile.args ?? []),
+            args: formatStringArgs(profile.args ?? []),
             themeId: profile.themeId || '',
             isNew: false
           });
@@ -547,11 +585,12 @@ export function createShellProfileManager({
     save.className = 'settings-btn shell-profile-editor-btn is-primary';
     save.textContent = 'Save';
     save.addEventListener('click', () => {
+      const parsedArgs = splitArgs((inputs.args as HTMLInputElement).value.trim());
       const profile: ShellProfile = {
         id: (inputs.id as HTMLInputElement).value.trim(),
         name: (inputs.name as HTMLInputElement).value.trim(),
         command: (inputs.command as HTMLInputElement).value.trim(),
-        args: splitArgs((inputs.args as HTMLInputElement).value.trim()),
+        args: parsedArgs.map((a) => a.value),
         themeId: (inputs.themeId as CustomSelect).value() || undefined,
       };
 
@@ -565,13 +604,13 @@ export function createShellProfileManager({
         state.setShellProfiles([...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))]);
         state.setDefaultShellProfileId(config.defaultProfile ?? '');
 
-        // Select the newly created/saved profile
+        // Select the newly created/saved profile - use parsed args for display to preserve quote style
         state.setSelectedShellProfileId(profile.id);
         state.setEditingShellProfile({
           id: profile.id,
           name: profile.name,
           command: profile.command,
-          args: formatArgs(profile.args),
+          args: formatArgs(parsedArgs),
           themeId: profile.themeId || '',
           isNew: false
         });
@@ -613,7 +652,7 @@ export function createShellProfileManager({
         id: clonedProfile.id,
         name: clonedProfile.name,
         command: clonedProfile.command,
-        args: formatArgs(clonedProfile.args ?? []),
+        args: formatStringArgs(clonedProfile.args ?? []),
         themeId: clonedProfile.themeId || '',
         isNew: true // Treat as new so user can edit the ID
       });
