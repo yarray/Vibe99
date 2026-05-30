@@ -128,7 +128,18 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       const overlay = await $('.settings-modal-overlay');
       const quakeToggle = await overlay.$('.layout-quake-toggle');
       await quakeToggle.click();
-      await browser.pause(800);
+
+      // Flush any pending settings save and wait for disk write
+      await browser.executeAsync((done) => {
+        if (window.__TAURI__ && window.settingsManager) {
+          window.settingsManager.flushSettingsSave();
+          // Wait for file write to complete
+          setTimeout(() => done(), 200);
+        } else {
+          done();
+        }
+      });
+      await browser.pause(500);
 
       // Load settings and verify quakeLayouts has the layout
       const settings = await loadSettings();
@@ -153,7 +164,17 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       let toggleAgain = await (await $('.settings-modal-overlay')).$('.layout-quake-toggle');
       await toggleAgain.click();
-      await browser.pause(800);
+
+      // Flush any pending settings save and wait for disk write
+      await browser.executeAsync((done) => {
+        if (window.__TAURI__ && window.settingsManager) {
+          window.settingsManager.flushSettingsSave();
+          setTimeout(() => done(), 200);
+        } else {
+          done();
+        }
+      });
+      await browser.pause(500);
 
       const settings = await loadSettings();
       expect(settings.quakeLayouts['disable-quake']).toBeUndefined();
@@ -236,6 +257,17 @@ describe('Layout Quake Mode and Global Hotkey', () => {
         return btns.length > 0 ? btns[0].textContent : null;
       });
       expect(activeBtn).toBe('Bottom');
+
+      // Flush settings save and wait for disk write
+      await browser.executeAsync((done) => {
+        if (window.__TAURI__ && window.settingsManager) {
+          window.settingsManager.flushSettingsSave();
+          setTimeout(() => done(), 200);
+        } else {
+          done();
+        }
+      });
+      await browser.pause(500);
 
       // Verify persisted
       const settings = await loadSettings();
@@ -329,6 +361,17 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       });
       await browser.pause(500);
 
+      // Flush settings save and wait for disk write
+      await browser.executeAsync((done) => {
+        if (window.__TAURI__ && window.settingsManager) {
+          window.settingsManager.flushSettingsSave();
+          setTimeout(() => done(), 200);
+        } else {
+          done();
+        }
+      });
+      await browser.pause(500);
+
       // Verify height persisted
       const settings = await loadSettings();
       expect(settings.quakeLayouts['range-height'].height).toBe(80);
@@ -355,6 +398,17 @@ describe('Layout Quake Mode and Global Hotkey', () => {
           const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
           nativeSetter.call(numInput, '45');
           numInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+      await browser.pause(500);
+
+      // Flush settings save and wait for disk write
+      await browser.executeAsync((done) => {
+        if (window.__TAURI__ && window.settingsManager) {
+          window.settingsManager.flushSettingsSave();
+          setTimeout(() => done(), 200);
+        } else {
+          done();
         }
       });
       await browser.pause(500);
@@ -564,6 +618,17 @@ describe('Layout Quake Mode and Global Hotkey', () => {
         if (saveBtn) saveBtn.click();
       });
       await browser.pause(800);
+
+      // Flush settings save and wait for disk write
+      await browser.executeAsync((done) => {
+        if (window.__TAURI__ && window.settingsManager) {
+          window.settingsManager.flushSettingsSave();
+          setTimeout(() => done(), 200);
+        } else {
+          done();
+        }
+      });
+      await browser.pause(500);
 
       // Verify persisted in settings
       const settings = await loadSettings();
