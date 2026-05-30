@@ -560,20 +560,30 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
             .insert("shortcuts".into(), Value::Object(shortcuts.clone()));
     }
 
-    // Preserve layoutHotkeys if present
+    // Always include layoutHotkeys (empty object if not present)
     if let Some(hotkeys) = layout_hotkeys {
         result
             .as_object_mut()
             .unwrap()
             .insert("layoutHotkeys".into(), Value::Object(hotkeys));
+    } else {
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("layoutHotkeys".into(), Value::Object(serde_json::Map::new()));
     }
 
-    // Preserve quakeLayouts (per-layout quake configs) if present
+    // Always include quakeLayouts (empty object if not present)
     if let Some(quake_layouts) = ui.get("quakeLayouts").and_then(|v| v.as_object()) {
         result
             .as_object_mut()
             .unwrap()
             .insert("quakeLayouts".into(), Value::Object(quake_layouts.clone()));
+    } else {
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("quakeLayouts".into(), Value::Object(serde_json::Map::new()));
     }
 
     result
