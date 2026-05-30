@@ -161,7 +161,7 @@ fn send_request(
 
         rt.block_on(async {
             let mut client = ClientOptions::new()
-                .open(&socket_path.to_string_lossy())
+                .open(socket_path)
                 .map_err(|e| format!("cannot connect to Vibe99 at {}: {e}", socket_path.display()))?;
 
             let request = json!({

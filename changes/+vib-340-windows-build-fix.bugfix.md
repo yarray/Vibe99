@@ -1,0 +1,1 @@
+Fix Windows build error: `to_string_lossy()` on String type and unused variable on Windows in CLI server.
