@@ -143,11 +143,11 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Load settings and verify quakeLayouts has the layout
       const settings = await loadSettings();
-      expect(settings.quakeLayouts).toBeDefined();
-      expect(settings.quakeLayouts['persist-quake']).toBeDefined();
-      expect(settings.quakeLayouts['persist-quake'].position).toBeDefined();
-      expect(settings.quakeLayouts['persist-quake'].height).toBeDefined();
-      expect(settings.quakeLayouts['persist-quake'].height).toBeGreaterThanOrEqual(30);
+      expect(settings.ui.quakeLayouts).toBeDefined();
+      expect(settings.ui.quakeLayouts['persist-quake']).toBeDefined();
+      expect(settings.ui.quakeLayouts['persist-quake'].position).toBeDefined();
+      expect(settings.ui.quakeLayouts['persist-quake'].height).toBeDefined();
+      expect(settings.ui.quakeLayouts['persist-quake'].height).toBeGreaterThanOrEqual(30);
     });
 
     it('persists quake disabled state in settings', async () => {
@@ -177,7 +177,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await browser.pause(500);
 
       const settings = await loadSettings();
-      expect(settings.quakeLayouts['disable-quake']).toBeUndefined();
+      expect(settings.ui.quakeLayouts['disable-quake']).toBeUndefined();
     });
   });
 
@@ -271,7 +271,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Verify persisted
       const settings = await loadSettings();
-      expect(settings.quakeLayouts['bottom-pos'].position).toBe('bottom');
+      expect(settings.ui.quakeLayouts['bottom-pos'].position).toBe('bottom');
     });
   });
 
@@ -374,7 +374,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Verify height persisted
       const settings = await loadSettings();
-      expect(settings.quakeLayouts['range-height'].height).toBe(80);
+      expect(settings.ui.quakeLayouts['range-height'].height).toBe(80);
     });
 
     it('changes height via number input', async () => {
@@ -414,7 +414,7 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await browser.pause(500);
 
       const settings = await loadSettings();
-      expect(settings.quakeLayouts['number-height'].height).toBe(45);
+      expect(settings.ui.quakeLayouts['number-height'].height).toBe(45);
     });
   });
 
@@ -632,11 +632,11 @@ describe('Layout Quake Mode and Global Hotkey', () => {
 
       // Verify persisted in settings
       const settings = await loadSettings();
-      expect(settings.layoutHotkeys).toBeDefined();
-      expect(settings.layoutHotkeys['persist-hotkey']).toBeTruthy();
+      expect(settings.ui.layoutHotkeys).toBeDefined();
+      expect(settings.ui.layoutHotkeys['persist-hotkey']).toBeTruthy();
 
       // The shortcut should contain ctrl and shift and t (order may vary)
-      const shortcut = settings.layoutHotkeys['persist-hotkey'].toLowerCase();
+      const shortcut = settings.ui.layoutHotkeys['persist-hotkey'].toLowerCase();
       expect(shortcut).toContain('ctrl');
       expect(shortcut).toContain('shift');
       expect(shortcut).toContain('t');
