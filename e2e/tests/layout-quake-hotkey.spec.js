@@ -667,11 +667,16 @@ describe('Layout Quake Mode and Global Hotkey', () => {
       await browser.pause(500);
 
       // Verify class is added (since 'Current Quake' should be the window layout)
-      hasQuakeClass = await browser.execute(() => {
-        return document.body.classList.contains('is-quake-window');
+      // Wait for the class to be applied with a timeout
+      await browser.waitUntil(async () => {
+        const result = await browser.execute(() => {
+          return document.body.classList.contains('is-quake-window');
+        });
+        return result === true;
+      }, {
+        timeout: 5000,
+        timeoutMsg: 'Expected is-quake-window class to be added after enabling quake mode'
       });
-      // The class may only be added if this is the windowLayoutId, which after saveLayoutAs it should be
-      expect(typeof hasQuakeClass).toBe('boolean');
     });
   });
 });

@@ -107,6 +107,89 @@ async function renameTabViaExecute(index, newName) {
 // the IPC bridge disconnects and the app fails to reinitialize.
 // These tests verify the persistence layer (save → read back) instead of a full page reload.
 describe('Session persistence', () => {
+  beforeEach(async () => {
+    // Reset settings and clear layouts to ensure test isolation
+    await browser.executeAsync(async (done) => {
+      if (window.__TAURI__) {
+        // Cancel pending debounced save
+        if (window.settingsManager) {
+          window.settingsManager.flushSettingsSave();
+        }
+        // Brief settle
+        await new Promise((r) => setTimeout(r, 50));
+        try {
+          await window.__TAURI__.core.invoke('settings_save', {
+            settings: {
+              version: 6,
+              ui: {
+                fontSize: 13,
+                fontFamily: '',
+                paneOpacity: 0.8,
+                paneMaskOpacity: 0.75,
+                paneWidth: 720,
+                webglEnabled: true,
+                breathingIntensity: 'mild',
+                activityAlertDebounceMs: 30000,
+                layoutHotkeys: {},
+                quakeLayouts: {},
+              },
+            },
+          });
+        } catch (_) {
+          // Ignore
+        }
+      }
+      done();
+    });
+    await browser.pause(300);
+
+    // Reload and re-apply settings
+    await browser.executeAsync((done) => {
+      if (window.__TAURI__ && window.settingsManager) {
+        window.__TAURI__.core.invoke('settings_load').then((saved) => {
+          window.settingsManager.applyPersistedSettings(saved);
+          window.settingsManager.applySettings();
+          done();
+        }).catch(done);
+      } else {
+        done();
+      }
+    });
+    await browser.pause(300);
+
+    // Clear layouts to ensure clean state
+    await browser.execute(async () => {
+      if (!window.__TAURI__) return;
+      const core = window.__TAURI__.core;
+      if (window.layoutManager) {
+        window.layoutManager.flushWindowLayoutSave();
+      }
+      const config = await core.invoke('layouts_list');
+      const layouts = config.layouts ?? [];
+      for (const layout of layouts) {
+        try {
+          await core.invoke('layout_delete', { layoutId: layout.id });
+        } catch {
+          // ignore
+        }
+      }
+      // Recreate default layout
+      try {
+        const defaultLayout = window.layoutManager?.createDefaultLayout();
+        if (defaultLayout) {
+          await core.invoke('layout_save', { layout: defaultLayout });
+          await core.invoke('layout_set_default', { layoutId: defaultLayout.id });
+        }
+      } catch {
+        // Ignore
+      }
+      if (window.layoutManager) {
+        await window.layoutManager.refreshLayouts();
+      }
+    });
+    await browser.pause(300);
+  });
+
   it('saves and reads back 3 panes via bridge', async () => {
     await waitForAppReady();
     await waitForTerminalReady(0);
