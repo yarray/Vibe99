@@ -14,7 +14,7 @@ use crate::wsl;
 /// - Unquoted text: split on whitespace
 ///
 /// Example: `"-l \"some value\""` → `["-l", "some value"]`
-fn parse_args_string(s: &str) -> Vec<String> {
+pub(crate) fn parse_args_string(s: &str) -> Vec<String> {
     let mut args = Vec::new();
     let mut current = String::new();
     let mut in_quote = None; // Some('"') or Some('\'')
