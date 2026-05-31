@@ -36,9 +36,10 @@ pub struct ShellProfile {
     pub name: String,
     /// Absolute path to the shell executable.
     pub command: String,
-    /// Arguments passed to the shell (e.g. ["-il"]).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub args: Vec<String>,
+    /// Arguments passed to the shell as a raw string (e.g. "-il").
+    /// The PTY layer parses this into `Vec<String>` at spawn time.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub args: String,
     /// Optional per-profile terminal theme id.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub theme_id: String,
@@ -59,7 +60,8 @@ impl ShellProfile {
     /// - `id` must be non-empty; whitespace is trimmed.
     /// - `command` must be non-empty; whitespace is trimmed.
     /// - `name` is optional; whitespace is trimmed.
-    /// - `args` are kept as-is (they are user-specified).
+    /// - `args`: stored as a raw string. Legacy `string[]` values are
+    ///   migrated by joining with spaces.
     ///
     /// Returns `None` if the profile lacks a usable id or command.
     pub fn sanitize(candidate: &Value) -> Option<Self> {
@@ -81,15 +83,19 @@ impl ShellProfile {
             .map(str::trim)
             .unwrap_or("")
             .to_string();
-        let args = obj
-            .get("args")
-            .and_then(|v| v.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let args = match obj.get("args") {
+            Some(v) if v.is_string() => v.as_str().unwrap_or("").to_string(),
+            Some(v) if v.is_array() => v
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|item| item.as_str().map(String::from))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default(),
+            _ => String::new(),
+        };
         let theme_id = obj
             .get("themeId")
             .and_then(|v| v.as_str())

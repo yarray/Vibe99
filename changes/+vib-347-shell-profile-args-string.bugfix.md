@@ -1,0 +1,1 @@
+Store shell profile args as raw string instead of parsed array, preserving user input exactly (including quotes and spaces). Legacy `string[]` format is automatically migrated on load. Args are parsed into `Vec<String>` only at PTY spawn time.
