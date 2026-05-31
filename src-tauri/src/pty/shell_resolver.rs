@@ -5,10 +5,57 @@ use tauri::Manager;
 
 use crate::wsl;
 
+/// Parse a shell argument string into individual arguments.
+///
+/// Handles:
+/// - Single quotes: preserve everything inside
+/// - Double quotes: preserve everything inside
+/// - Backslash escapes: escape the next character
+/// - Unquoted text: split on whitespace
+///
+/// Example: `"-l \"some value\""` → `["-l", "some value"]`
+fn parse_args_string(s: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_quote = None; // Some('"') or Some('\'')
+    let mut escape = false;
+
+    for ch in s.chars() {
+        if escape {
+            current.push(ch);
+            escape = false;
+        } else if ch == '\\' {
+            escape = true;
+        } else if let Some(quote_char) = in_quote {
+            if ch == quote_char {
+                in_quote = None;
+            } else {
+                current.push(ch);
+            }
+        } else if ch == '"' || ch == '\'' {
+            in_quote = Some(ch);
+        } else if ch.is_whitespace() {
+            if !current.is_empty() {
+                args.push(current.clone());
+                current.clear();
+            }
+        } else {
+            current.push(ch);
+        }
+    }
+
+    if !current.is_empty() {
+        args.push(current);
+    }
+
+    args
+}
+
 /// A shell candidate for the fallback chain.
 pub struct ShellCandidate {
     pub shell: PathBuf,
-    pub args: Vec<String>,
+    /// Arguments as a raw string (user input), parsed when spawning.
+    pub args: String,
     /// Optional display override used to derive unique profile id and name.
     pub display_name: Option<String>,
 }
@@ -48,7 +95,7 @@ pub fn auto_detected_candidates() -> Vec<ShellCandidate> {
                 } else {
                     candidates.push(ShellCandidate {
                         shell: PathBuf::from(&custom),
-                        args: vec![],
+                        args: String::new(),
                         display_name: None,
                     });
                 }
@@ -57,7 +104,7 @@ pub fn auto_detected_candidates() -> Vec<ShellCandidate> {
         for shell in &["powershell.exe", "pwsh.exe", "cmd.exe"] {
             candidates.push(ShellCandidate {
                 shell: PathBuf::from(shell),
-                args: vec![],
+                args: String::new(),
                 display_name: None,
             });
         }
@@ -65,7 +112,7 @@ pub fn auto_detected_candidates() -> Vec<ShellCandidate> {
             if !comspec.is_empty() {
                 candidates.push(ShellCandidate {
                     shell: PathBuf::from(&comspec),
-                    args: vec![],
+                    args: String::new(),
                     display_name: None,
                 });
             }
@@ -82,7 +129,7 @@ pub fn auto_detected_candidates() -> Vec<ShellCandidate> {
             if p.is_absolute() && seen.insert(p.clone()) {
                 candidates.push(ShellCandidate {
                     shell: p,
-                    args: vec!["-il".into()],
+                    args: "-il".to_string(),
                     display_name: None,
                 });
             }
@@ -99,7 +146,7 @@ pub fn auto_detected_candidates() -> Vec<ShellCandidate> {
             if seen.insert(p.clone()) && is_executable(&p) {
                 candidates.push(ShellCandidate {
                     shell: p,
-                    args: vec!["-il".into()],
+                    args: "-il".to_string(),
                     display_name: None,
                 });
             }
@@ -123,7 +170,9 @@ fn push_wsl_candidates(candidates: &mut Vec<ShellCandidate>, distro_override: Op
     let default_shell = wsl::detect_wsl_default_shell().unwrap_or_else(|| "/bin/bash".into());
 
     if let Some(distro) = distro_override {
-        let args = wsl::wsl_shell_args(Some(distro), &default_shell, &["-il".into()]);
+        let args_vec = wsl::wsl_shell_args(Some(distro), &default_shell, &["-il".into()]);
+        // Join args with spaces for storage as a raw string
+        let args = args_vec.join(" ");
         candidates.push(ShellCandidate {
             shell: PathBuf::from("wsl.exe"),
             args,
@@ -134,7 +183,9 @@ fn push_wsl_candidates(candidates: &mut Vec<ShellCandidate>, distro_override: Op
 
     let distros = wsl::list_distributions();
     for distro in &distros {
-        let args = wsl::wsl_shell_args(Some(distro), &default_shell, &["-il".into()]);
+        let args_vec = wsl::wsl_shell_args(Some(distro), &default_shell, &["-il".into()]);
+        // Join args with spaces for storage as a raw string
+        let args = args_vec.join(" ");
         candidates.push(ShellCandidate {
             shell: PathBuf::from("wsl.exe"),
             args,
@@ -176,12 +227,13 @@ pub fn build_command(
         let wsl_path = which("wsl.exe").ok_or("wsl.exe not found on PATH")?;
 
         let mut cmd = CommandBuilder::new(&wsl_path);
-        cmd.args(&candidate.args);
+        let parsed_args = parse_args_string(&candidate.args);
+        cmd.args(&parsed_args);
 
         // Resolve the effective cwd for the WSL process.
         if let Some(raw) = raw_cwd.filter(|s| s.starts_with('/')) {
             // Linux path from OSC 7 — convert to UNC so wsl.exe can cd to it.
-            if let Some(distro) = extract_wsl_distro(&candidate.args) {
+            if let Some(distro) = extract_wsl_distro(&parsed_args) {
                 let unc = wsl::wsl_path_to_unc(distro, raw);
                 cmd.cwd(PathBuf::from(&unc));
             } else {
@@ -215,7 +267,8 @@ pub fn build_command(
     }
 
     let mut cmd = CommandBuilder::new(&shell_path);
-    cmd.args(&candidate.args);
+    let parsed_args = parse_args_string(&candidate.args);
+    cmd.args(&parsed_args);
     cmd.cwd(cwd);
     Ok(cmd)
 }

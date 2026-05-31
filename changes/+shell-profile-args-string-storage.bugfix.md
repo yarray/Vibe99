@@ -1,0 +1,1 @@
+Shell profile args now stored as raw user input string instead of parsed array, preventing quote loss on repeated save/load. Args parsed at PTY spawn time. Legacy `string[]` format auto-migrated to `string` on load.

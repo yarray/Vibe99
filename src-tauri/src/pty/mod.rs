@@ -154,7 +154,8 @@ impl PtyManager {
             match build_command(&candidate, &cwd, raw_cwd.as_deref()) {
                 Ok(c) => {
                     if stem == "wsl" {
-                        shell_stem = extract_wsl_inner_shell(&candidate.args);
+                        let parsed_args = parse_args_string(&candidate.args);
+                        shell_stem = extract_wsl_inner_shell(&parsed_args);
                     } else {
                         shell_stem = stem;
                     }

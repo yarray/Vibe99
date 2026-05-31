@@ -25,7 +25,8 @@ export interface ShellProfile {
   id: string;
   name: string;
   command: string;
-  args: string[];
+  /** Arguments as a raw string (user input), parsed when spawning PTY. */
+  args: string;
   themeId?: string;
 }
 
@@ -103,17 +104,37 @@ export interface ShellProfileManager {
 // Utility functions for shell argument parsing
 // ---------------------------------------------------------------------------
 
+/**
+ * Parse a shell argument string into individual arguments.
+ *
+ * Handles:
+ * - Single quotes: preserve everything inside
+ * - Double quotes: preserve everything inside
+ * - Backslash escapes: escape the next character
+ * - Unquoted text: split on whitespace
+ *
+ * Example: `"-l "some value""` → `["-l", "some value"]`
+ */
 function splitArgs(str: string): string[] {
   const args: string[] = [];
   let cur = '';
-  let inQuote = false;
-  let quoteChar = '';
+  let inQuote: '"' | '\'' | false = false;
+  let escape = false;
+
   for (const ch of str) {
-    if (inQuote) {
-      if (ch === quoteChar) { inQuote = false; } else { cur += ch; }
+    if (escape) {
+      cur += ch;
+      escape = false;
+    } else if (ch === '\\') {
+      escape = true;
+    } else if (inQuote) {
+      if (ch === inQuote) {
+        inQuote = false;
+      } else {
+        cur += ch;
+      }
     } else if (ch === '"' || ch === "'") {
-      inQuote = true;
-      quoteChar = ch;
+      inQuote = ch;
     } else if (/\s/.test(ch)) {
       if (cur) { args.push(cur); cur = ''; }
     } else {
@@ -122,18 +143,6 @@ function splitArgs(str: string): string[] {
   }
   if (cur) { args.push(cur); }
   return args;
-}
-
-function formatArgs(args: string[]): string {
-  return args.map((arg) => {
-    // Arguments needing quoting: contain spaces, double quotes, backslashes, or are empty.
-    if (arg === '' || /[\s"]/.test(arg) || /\\/.test(arg)) {
-      // Escape backslashes and double quotes before wrapping in double quotes.
-      const escaped = arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      return `"${escaped}"`;
-    }
-    return arg;
-  }).join(' ');
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +294,7 @@ export function createShellProfileManager({
         id: firstProfile.id,
         name: firstProfile.name || '',
         command: firstProfile.command,
-        args: formatArgs(firstProfile.args ?? []),
+        args: firstProfile.args ?? '',
         themeId: firstProfile.themeId || '',
         isNew: false
       });
@@ -385,7 +394,7 @@ export function createShellProfileManager({
             id: profile.id,
             name: profile.name || '',
             command: profile.command,
-            args: formatArgs(profile.args ?? []),
+            args: profile.args ?? '',
             themeId: profile.themeId || '',
             isNew: false
           });
@@ -571,7 +580,7 @@ export function createShellProfileManager({
           id: profile.id,
           name: profile.name,
           command: profile.command,
-          args: formatArgs(profile.args),
+          args: profile.args,
           themeId: profile.themeId || '',
           isNew: false
         });
@@ -598,7 +607,7 @@ export function createShellProfileManager({
       id: `${profile.id}-copy-${Date.now()}`,
       name: `${profile.name || profile.id} (副本)`,
       command: profile.command,
-      args: profile.args ? [...profile.args] : [],
+      args: profile.args || '',
       themeId: profile.themeId,
     };
 
@@ -613,7 +622,7 @@ export function createShellProfileManager({
         id: clonedProfile.id,
         name: clonedProfile.name,
         command: clonedProfile.command,
-        args: formatArgs(clonedProfile.args ?? []),
+        args: clonedProfile.args,
         themeId: clonedProfile.themeId || '',
         isNew: true // Treat as new so user can edit the ID
       });

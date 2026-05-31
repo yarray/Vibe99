@@ -36,9 +36,10 @@ pub struct ShellProfile {
     pub name: String,
     /// Absolute path to the shell executable.
     pub command: String,
-    /// Arguments passed to the shell (e.g. ["-il"]).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub args: Vec<String>,
+    /// Arguments passed to the shell as a raw string (e.g. "-il").
+    /// Stored as user input to preserve quoting; parsed when spawning PTY.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub args: String,
     /// Optional per-profile terminal theme id.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub theme_id: String,
@@ -59,7 +60,7 @@ impl ShellProfile {
     /// - `id` must be non-empty; whitespace is trimmed.
     /// - `command` must be non-empty; whitespace is trimmed.
     /// - `name` is optional; whitespace is trimmed.
-    /// - `args` are kept as-is (they are user-specified).
+    /// - `args` accepts both string (new format) and array (legacy format, migrated).
     ///
     /// Returns `None` if the profile lacks a usable id or command.
     pub fn sanitize(candidate: &Value) -> Option<Self> {
@@ -83,11 +84,19 @@ impl ShellProfile {
             .to_string();
         let args = obj
             .get("args")
-            .and_then(|v| v.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
+            .and_then(|v| {
+                // New format: args is a string
+                if let Some(s) = v.as_str() {
+                    Some(s.to_string())
+                } else {
+                    // Legacy format: args is an array - migrate to string
+                    v.as_array().map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+                }
             })
             .unwrap_or_default();
         let theme_id = obj
