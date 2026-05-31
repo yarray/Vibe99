@@ -25,7 +25,7 @@ export interface ShellProfile {
   id: string;
   name: string;
   command: string;
-  args: string[];
+  args: string;
   themeId?: string;
 }
 
@@ -124,17 +124,7 @@ function splitArgs(str: string): string[] {
   return args;
 }
 
-function formatArgs(args: string[]): string {
-  return args.map((arg) => {
-    // Arguments needing quoting: contain spaces, double quotes, backslashes, or are empty.
-    if (arg === '' || /[\s"]/.test(arg) || /\\/.test(arg)) {
-      // Escape backslashes and double quotes before wrapping in double quotes.
-      const escaped = arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      return `"${escaped}"`;
-    }
-    return arg;
-  }).join(' ');
-}
+
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -285,7 +275,7 @@ export function createShellProfileManager({
         id: firstProfile.id,
         name: firstProfile.name || '',
         command: firstProfile.command,
-        args: formatArgs(firstProfile.args ?? []),
+        args: firstProfile.args ?? '',
         themeId: firstProfile.themeId || '',
         isNew: false
       });
@@ -385,7 +375,7 @@ export function createShellProfileManager({
             id: profile.id,
             name: profile.name || '',
             command: profile.command,
-            args: formatArgs(profile.args ?? []),
+            args: profile.args ?? '',
             themeId: profile.themeId || '',
             isNew: false
           });
@@ -551,7 +541,7 @@ export function createShellProfileManager({
         id: (inputs.id as HTMLInputElement).value.trim(),
         name: (inputs.name as HTMLInputElement).value.trim(),
         command: (inputs.command as HTMLInputElement).value.trim(),
-        args: splitArgs((inputs.args as HTMLInputElement).value.trim()),
+        args: (inputs.args as HTMLInputElement).value.trim(),
         themeId: (inputs.themeId as CustomSelect).value() || undefined,
       };
 
@@ -571,7 +561,7 @@ export function createShellProfileManager({
           id: profile.id,
           name: profile.name,
           command: profile.command,
-          args: formatArgs(profile.args),
+          args: profile.args,
           themeId: profile.themeId || '',
           isNew: false
         });
@@ -598,7 +588,7 @@ export function createShellProfileManager({
       id: `${profile.id}-copy-${Date.now()}`,
       name: `${profile.name || profile.id} (副本)`,
       command: profile.command,
-      args: profile.args ? [...profile.args] : [],
+      args: profile.args ?? '',
       themeId: profile.themeId,
     };
 
@@ -613,7 +603,7 @@ export function createShellProfileManager({
         id: clonedProfile.id,
         name: clonedProfile.name,
         command: clonedProfile.command,
-        args: formatArgs(clonedProfile.args ?? []),
+        args: clonedProfile.args ?? '',
         themeId: clonedProfile.themeId || '',
         isNew: true // Treat as new so user can edit the ID
       });

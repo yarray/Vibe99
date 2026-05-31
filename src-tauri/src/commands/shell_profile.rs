@@ -327,7 +327,7 @@ pub fn shell_profiles_detect() -> Vec<ShellProfile> {
             id,
             name,
             command: shell_str,
-            args: candidate.args,
+            args: candidate.args.join(" "),
             theme_id: String::new(),
         });
     }
