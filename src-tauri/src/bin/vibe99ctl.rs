@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use serde_json::{json, Value};
+#[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 
