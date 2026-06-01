@@ -1,0 +1,1 @@
+Improved Float Window breathing light effect with better coordination between glow and body. The pulse now synchronizes body brightness, subtle scale change, and glow expansion for a more cohesive visual effect. Extended color palette with cyan, amber, and white variants organized by hue for better color selection.
