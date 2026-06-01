@@ -201,6 +201,44 @@ async function closeColorPicker() {
   await browser.pause(200);
 }
 
+/**
+ * Get the float window handle and switch to it
+ * Returns the main window handle so we can switch back
+ */
+async function switchToFloatWindow() {
+  const handles = await browser.getWindowHandles();
+  const mainHandle = handles[0];
+
+  // Wait for float window to appear
+  await waitForCondition(
+    async () => {
+      const currentHandles = await browser.getWindowHandles();
+      return currentHandles.length > 1;
+    },
+    5000,
+    200,
+  );
+
+  // Get the float window handle (the second window)
+  const floatHandles = await browser.getWindowHandles();
+  const floatHandle = floatHandles.find(h => h !== mainHandle);
+
+  if (floatHandle) {
+    await browser.switchToWindow(floatHandle);
+    await browser.pause(200);
+  }
+
+  return mainHandle;
+}
+
+/**
+ * Switch back to the main window
+ */
+async function switchToMainWindow(mainHandle) {
+  await browser.switchToWindow(mainHandle);
+  await browser.pause(200);
+}
+
 describe('VIB-348: Color Schemes & Breathing Glow Coordination', () => {
   before(async () => {
     await waitForAppReady();
@@ -333,6 +371,9 @@ describe('VIB-348: Color Schemes & Breathing Glow Coordination', () => {
       await toggleActivityAlert(0);
       await browser.pause(500);
 
+      // Switch to float window to access its DOM
+      const mainHandle = await switchToFloatWindow();
+
       // Verify CSS custom property is set
       const blockStyle = await browser.execute(() => {
         const floatBlock = document.querySelector('.float-block');
@@ -343,6 +384,9 @@ describe('VIB-348: Color Schemes & Breathing Glow Coordination', () => {
           hasAlertClass: floatBlock.classList.contains('is-alerted'),
         };
       });
+
+      // Switch back to main window
+      await switchToMainWindow(mainHandle);
 
       expect(blockStyle).toBeTruthy();
       expect(blockStyle.blockGlow).toBe('#5cc8ff');
@@ -371,6 +415,9 @@ describe('VIB-348: Color Schemes & Breathing Glow Coordination', () => {
       await toggleActivityAlert(0);
       await browser.pause(500);
 
+      // Switch to float window to access its DOM
+      const mainHandle = await switchToFloatWindow();
+
       // Verify the breath-glow-mix is set to a visible value
       const blockStyle = await browser.execute(() => {
         const floatBlock = document.querySelector('.float-block');
@@ -380,6 +427,9 @@ describe('VIB-348: Color Schemes & Breathing Glow Coordination', () => {
           breathGlowMix: floatBlock.style.getPropertyValue('--breath-glow-mix'),
         };
       });
+
+      // Switch back to main window
+      await switchToMainWindow(mainHandle);
 
       expect(blockStyle).toBeTruthy();
       expect(blockStyle.blockGlow).toBe('#2e7d32');
@@ -423,6 +473,9 @@ describe('VIB-348: Color Schemes & Breathing Glow Coordination', () => {
       await toggleActivityAlert(0);
       await browser.pause(500);
 
+      // Switch to float window to access its DOM
+      const mainHandle = await switchToFloatWindow();
+
       // Get the animation duration from computed style
       const animDuration = await browser.execute(() => {
         const floatBlock = document.querySelector('.float-block.is-alerted');
@@ -430,6 +483,9 @@ describe('VIB-348: Color Schemes & Breathing Glow Coordination', () => {
         const style = window.getComputedStyle(floatBlock);
         return style.animationDuration;
       });
+
+      // Switch back to main window
+      await switchToMainWindow(mainHandle);
 
       expect(animDuration).toBe('2s');
 
