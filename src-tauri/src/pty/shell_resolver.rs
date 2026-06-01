@@ -13,6 +13,41 @@ pub struct ShellCandidate {
     pub display_name: Option<String>,
 }
 
+/// Parse a raw argument string into a `Vec<String>`, respecting quoted segments.
+///
+/// Handles double and single quotes. Spaces outside quotes delimit arguments.
+/// This is the backend equivalent of the frontend `splitArgs` function.
+pub fn parse_args_string(input: &str) -> Vec<String> {
+    let mut args: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut in_quote = false;
+    let mut quote_char = ' ';
+
+    for ch in input.chars() {
+        if in_quote {
+            if ch == quote_char {
+                in_quote = false;
+            } else {
+                cur.push(ch);
+            }
+        } else if ch == '"' || ch == '\'' {
+            in_quote = true;
+            quote_char = ch;
+        } else if ch.is_whitespace() {
+            if !cur.is_empty() {
+                args.push(cur.clone());
+                cur.clear();
+            }
+        } else {
+            cur.push(ch);
+        }
+    }
+    if !cur.is_empty() {
+        args.push(cur);
+    }
+    args
+}
+
 /// Derive a slug-style id from a display name.
 ///
 /// `"WSL (Ubuntu)"` → `"wsl-ubuntu"`, `"PowerShell"` → `"powershell"`.

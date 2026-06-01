@@ -461,7 +461,7 @@ fn shell_candidates(app: &AppHandle, shell_profile_id: Option<&str>) -> Vec<Shel
                 if seen.insert((path.clone(), None)) {
                     candidates.push(ShellCandidate {
                         shell: path,
-                        args: profile.args.clone(),
+                        args: parse_args_string(&profile.args),
                         display_name: None,
                     });
                 }
@@ -480,7 +480,7 @@ fn shell_candidates(app: &AppHandle, shell_profile_id: Option<&str>) -> Vec<Shel
                 if seen.insert((path.clone(), None)) {
                     candidates.push(ShellCandidate {
                         shell: path,
-                        args: profile.args.clone(),
+                        args: parse_args_string(&profile.args),
                         display_name: None,
                     });
                 }

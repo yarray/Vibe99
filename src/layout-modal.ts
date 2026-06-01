@@ -48,6 +48,13 @@ const LAYOUT_MODAL_POLL_INTERVAL: number = 3000; // 3 seconds
 
 /**
  * Helper function to create a UI override row with toggle and input.
+ *
+ * The toggle controls whether the layout uses the global value or a custom override.
+ * - "Use Global" mode: value is inherited from global settings, input is disabled
+ * - "Custom" mode: value is overridden for this layout, input is enabled
+ *
+ * When switching from "Use Global" to "Custom", the global value is saved as the initial override.
+ * When switching from "Custom" to "Use Global", the override is deleted.
  */
 function createOverrideRow(
   label: string,
@@ -58,6 +65,7 @@ function createOverrideRow(
   step: number,
   unit: string,
   onSave: (value: number | string) => Promise<void>,
+  onClear: () => Promise<void>,
   renderFn: () => void,
   isText = false,
   isFloat = false,
@@ -81,9 +89,16 @@ function createOverrideRow(
   overrideToggle.textContent = isOverridden ? 'Custom' : 'Use Global';
   overrideToggle.classList.toggle('is-active', isOverridden);
   overrideToggle.addEventListener('click', async () => {
-    if (isOverridden) {
-      // Clear override - for now we need to trigger a re-render
-      // The actual clearing logic will be handled by the UI state
+    const isCurrentlyOverridden = overrideToggle.classList.contains('is-active');
+    if (isCurrentlyOverridden) {
+      await onClear();
+    } else if (isText && !String(globalValue).trim()) {
+      overrideToggle.textContent = 'Custom';
+      overrideToggle.classList.add('is-active');
+      const textInput = overrideContainer.querySelector('input') as HTMLInputElement | null;
+      if (textInput) textInput.disabled = false;
+    } else {
+      await onSave(globalValue);
       renderFn();
     }
   });
@@ -95,12 +110,14 @@ function createOverrideRow(
     input.className = 'settings-text';
     input.value = String(currentValue);
     input.disabled = !isOverridden;
-    input.addEventListener('change', async () => {
+    const handleSave = async () => {
       const val = input.value.trim();
-      if (isOverridden && val) {
+      if (!input.disabled && val) {
         await onSave(val);
       }
-    });
+    };
+    input.addEventListener('input', handleSave);
+    input.addEventListener('change', handleSave);
     overrideContainer.appendChild(input);
   } else {
     const range = document.createElement('input');
@@ -114,7 +131,7 @@ function createOverrideRow(
       numInput.value = range.value;
     });
     range.addEventListener('change', async () => {
-      if (isOverridden) {
+      if (!range.disabled) {
         await onSave(Number(range.value));
       }
     });
@@ -129,7 +146,7 @@ function createOverrideRow(
     numInput.value = String(currentValue);
     numInput.disabled = !isOverridden;
     numInput.addEventListener('change', async () => {
-      if (isOverridden) {
+      if (!numInput.disabled) {
         let val = Number(numInput.value);
         if (isFloat) {
           val = Math.max(min, Math.min(max, val));
@@ -800,6 +817,17 @@ export function createLayoutModal({
             layoutManager._setLayouts(config.layouts ?? []);
           }
         },
+        async () => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout && layout.uiOverrides?.fontSize !== undefined) {
+            const { fontSize, ...rest } = layout.uiOverrides;
+            layout.uiOverrides = rest;
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+            renderModalLayouts(overlay);
+          }
+        },
         () => renderModalLayouts(overlay),
       );
       uiOverridesSection.appendChild(fontSizeRow);
@@ -820,6 +848,17 @@ export function createLayoutModal({
             await bridge.saveLayout(layout);
             const config = await bridge.listLayouts();
             layoutManager._setLayouts(config.layouts ?? []);
+          }
+        },
+        async () => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout && layout.uiOverrides?.fontFamily !== undefined) {
+            const { fontFamily, ...rest } = layout.uiOverrides;
+            layout.uiOverrides = rest;
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+            renderModalLayouts(overlay);
           }
         },
         () => renderModalLayouts(overlay),
@@ -845,6 +884,17 @@ export function createLayoutModal({
             layoutManager._setLayouts(config.layouts ?? []);
           }
         },
+        async () => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout && layout.uiOverrides?.paneWidth !== undefined) {
+            const { paneWidth, ...rest } = layout.uiOverrides;
+            layout.uiOverrides = rest;
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+            renderModalLayouts(overlay);
+          }
+        },
         () => renderModalLayouts(overlay),
       );
       uiOverridesSection.appendChild(paneWidthRow);
@@ -865,6 +915,17 @@ export function createLayoutModal({
             await bridge.saveLayout(layout);
             const config = await bridge.listLayouts();
             layoutManager._setLayouts(config.layouts ?? []);
+          }
+        },
+        async () => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout && layout.uiOverrides?.paneOpacity !== undefined) {
+            const { paneOpacity, ...rest } = layout.uiOverrides;
+            layout.uiOverrides = rest;
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+            renderModalLayouts(overlay);
           }
         },
         () => renderModalLayouts(overlay),
@@ -891,6 +952,17 @@ export function createLayoutModal({
             layoutManager._setLayouts(config.layouts ?? []);
           }
         },
+        async () => {
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout && layout.uiOverrides?.paneMaskOpacity !== undefined) {
+            const { paneMaskOpacity, ...rest } = layout.uiOverrides;
+            layout.uiOverrides = rest;
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+            renderModalLayouts(overlay);
+          }
+        },
         () => renderModalLayouts(overlay),
         false,
         true // isFloat
@@ -913,11 +985,22 @@ export function createLayoutModal({
       breathingOverrideToggle.textContent = currentUiOverrides.breathingIntensity ? 'Custom' : 'Use Global';
       breathingOverrideToggle.classList.toggle('is-active', currentUiOverrides.breathingIntensity !== undefined);
       breathingOverrideToggle.addEventListener('click', async () => {
-        if (currentUiOverrides.breathingIntensity !== undefined) {
+        const isCurrentlyActive = breathingOverrideToggle.classList.contains('is-active');
+        if (isCurrentlyActive) {
           // Clear override
           const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
           if (layout) {
             delete layout.uiOverrides?.breathingIntensity;
+            await bridge.saveLayout(layout);
+            const config = await bridge.listLayouts();
+            layoutManager._setLayouts(config.layouts ?? []);
+            renderModalLayouts(overlay);
+          }
+        } else {
+          // Enable override - save a default value ('mild')
+          const layout = layoutManager.getLayouts().find((l) => l.id === selected.id);
+          if (layout) {
+            layout.uiOverrides = { ...layout.uiOverrides, breathingIntensity: 'mild' };
             await bridge.saveLayout(layout);
             const config = await bridge.listLayouts();
             layoutManager._setLayouts(config.layouts ?? []);

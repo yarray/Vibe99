@@ -4,10 +4,15 @@ version = "0.21.0"
 description = "Vibe99 terminal workspace"
 authors = [""]
 edition = "2021"
+default-run = "vibe99"
 
 [lib]
 name = "vibe99_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "vibe99ctl"
+path = "src/bin/vibe99ctl.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -31,6 +36,12 @@ tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 percent-encoding = "2"
+tokio = { version = "1", features = ["net", "io-util", "sync", "rt", "macros"] }
+clap = { version = "4", features = ["derive"] }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

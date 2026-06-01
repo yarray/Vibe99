@@ -64,11 +64,15 @@ export async function resetSettings() {
             version: 6,
             ui: {
               fontSize: 13,
+              fontFamily: '',
               paneOpacity: 0.8,
               paneMaskOpacity: 0.75,
               paneWidth: 720,
+              webglEnabled: true,
               breathingIntensity: 'mild',
               activityAlertDebounceMs: 30000,
+              layoutHotkeys: {},
+              quakeLayouts: {},
             },
           },
         });

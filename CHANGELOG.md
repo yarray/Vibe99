@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Layout UI override E2E test failures** (VIB-344):
+  - Fixed `createOverrideRow()` to call `renderFn()` after enabling override so the toggle updates to "Custom" and inputs become enabled.
+  - Fixed text input override to save on `input` event in addition to `change`, ensuring compatibility with WebKitGTK programmatic value changes.
+  - Fixed empty global value for text-type overrides: when fontFamily default is empty, skip the stripped-by-backend `onSave('')` and directly enable the input.
+  - Fixed breathing intensity E2E test selector to find the correct container with segmented buttons.
+  - Fixed font family E2E test to use direct DOM queries via `browser.execute` avoiding stale WDIO element references.
+
+- **Layout UI override toggle bug** (VIB-342):
+  - Fixed `createOverrideRow()` function in `src/layout-modal.ts` to properly handle toggle state changes.
+  - Added `onClear` callback to properly delete overrides when switching from "Custom" to "Use Global".
+  - Fixed input change event handlers to use `!input.disabled` instead of stale `isOverridden` closure value.
+  - Fixed Breathing Intensity toggle to enable override when switching from "Use Global" to "Custom".
+
+- **README and e2e test updates for Auto-start on boot feature** (VIB-342):
+  - Updated README to reflect "Auto-start on boot" toggle instead of "Set as Default" button.
+  - Updated e2e test `layout.spec.js` to test "Auto-start on boot" toggle functionality.
+  - The "Set as Default" button was intentionally replaced with "Auto-start on boot" toggle in commit b9f1e83 to support multiple autostart layouts.
+
 ### Added
 
 - **Settings panel layout-level UI override write and pin hint** (VIB-341):
@@ -48,6 +68,10 @@
 
 ### Fixed
 
+- **E2E test failures** (VIB-342):
+  - Fixed syntax error in `layout-quake-hotkey.spec.js` - removed TypeScript `as` type assertions from `.js` file
+  - Updated `layout.spec.js` tests to use bridge API for setting default layout (removed "Set as Default" button tests)
+  - Fixed UI override toggle bug in `layout-modal.ts` - clicking "Use Global" now correctly enables override mode
 - **E2E Docker image build** (VIB-339):
   - Added `--no-bundle` flag to `tauri build` in Dockerfile.e2e to skip AppImage bundling (avoids network download issues, reduces image size).
   - Dockerfile.gif retains bundling for GIF recording functionality.
