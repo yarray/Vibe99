@@ -4,10 +4,11 @@ import { waitForCondition } from '../helpers/wait-for.js';
 import { dispatchContextMenu, jsClick, setInputValue } from '../helpers/webview2-helpers.js';
 
 const PRESET_COLORS = [
-  '#9b5de5', '#ef476f', '#fdab0f', '#5cc8ff',
-  '#e17055', '#a29bfe', '#55efc4', '#C71585',
-  '#fdcb6e', '#636e72', '#2e7d32', '#e65100',
-  '#b2bec3', '#e6b100', '#7bd389', '#0050a0',
+  '#9b5de5', '#a29bfe', '#ef476f', '#C71585',
+  '#fdab0f', '#e6b100', '#fdcb6e', '#e65100',
+  '#5cc8ff', '#00bcd4', '#0097a7', '#0050a0',
+  '#e17055', '#55efc4', '#2e7d32', '#7bd389',
+  '#00c853', '#636e72', '#b2bec3', '#ffffff',
 ];
 
 /**
@@ -113,13 +114,13 @@ describe('Color Picker', () => {
   });
 
   // TC-2: Preset swatches visible
-  it('shows all 16 preset color buttons', async () => {
+  it('shows all 20 preset color buttons', async () => {
     // Re-open since TC-1 may have been dismissed by afterEach
     const pane = await getPaneByIndex(0);
     await openColorPicker(pane);
 
     const presets = await $$('.color-preset');
-    expect(presets.length).toBe(16);
+    expect(presets.length).toBe(20);
 
     // Verify CSS custom property is set on each button
     for (let i = 0; i < presets.length; i++) {
@@ -136,8 +137,8 @@ describe('Color Picker', () => {
     await openColorPicker(pane);
 
     const presets = await $$('.color-preset');
-    // index 6 = '#55efc4'
-    await presets[6].click();
+    // index 13 = '#55efc4'
+    await presets[13].click();
     await browser.pause(200);
 
     const style = await pane.getAttribute('style');
@@ -297,7 +298,7 @@ describe('Color Picker', () => {
 
     await openColorPicker(pane);
     const presets = await $$('.color-preset');
-    await presets[6].click(); // #55efc4
+    await presets[13].click(); // #55efc4
     await browser.pause(300);
 
     // Trigger settings save by briefly opening settings

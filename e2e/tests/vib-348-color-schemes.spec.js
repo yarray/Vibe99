@@ -225,6 +225,16 @@ async function switchToFloatWindow() {
 
   if (floatHandle) {
     await browser.switchToWindow(floatHandle);
+
+    // Wait for float window content to load and .float-block elements to appear
+    await waitForCondition(
+      async () => {
+        const blocks = await $$('.float-block');
+        return blocks.length > 0;
+      },
+      5000,
+      200,
+    );
     await browser.pause(200);
   }
 
@@ -250,7 +260,11 @@ describe('VIB-348: Color Schemes & Breathing Glow Coordination', () => {
   });
 
   afterEach(async () => {
-    await cleanupApp();
+    // Dismiss any open overlays
+    for (let i = 0; i < 5; i++) {
+      await browser.keys('Escape');
+      await browser.pause(100);
+    }
   });
 
   // -------------------------------------------------------------------------
