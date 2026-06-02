@@ -70,8 +70,9 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
   async function toggleLayout(layoutId) {
     await setWindowVar('__toggleId', layoutId);
     await browser.executeAsync((done) => {
-      if (!window.__TAURI__) { done(); return; }
-      window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: window.__toggleId })
+      const bridge = window.__vibe99_test?.bridge;
+      if (!bridge) { done(); return; }
+      bridge.layouts.toggleWindow(window.__toggleId)
         .then(() => done())
         .catch(() => done());
     });
