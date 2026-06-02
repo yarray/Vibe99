@@ -701,6 +701,8 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
 
   const currentWebview = tauri.webview.getCurrentWebview();
 
+  const toggleLocks = new Set<string>();
+
   function onTauriEvent<T = unknown>(event: string, handler: (payload: T) => void): () => void {
     const unlisten = currentWebview.listen(event, (e: { payload: T }) => handler(e.payload));
     return () => { unlisten.then((fn: () => void) => fn()); };
@@ -977,11 +979,28 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
   }
 
   async function toggleLayoutWindow(layoutId: string): Promise<void> {
+    while (toggleLocks.has(layoutId)) {
+      await new Promise<void>((r) => setTimeout(r, 30));
+    }
+    toggleLocks.add(layoutId);
+    try {
+      await doToggleLayoutWindow(layoutId);
+    } finally {
+      toggleLocks.delete(layoutId);
+    }
+  }
+
+  async function doToggleLayoutWindow(layoutId: string): Promise<void> {
     if (layoutId === windowLayoutId) {
       const visible = await currentWindow.isVisible();
       if (visible) {
         await currentWindow.hide();
         return;
+      }
+      // Re-apply quake positioning in case monitor changed
+      const quakeConfig = await getQuakeConfig(layoutId);
+      if (quakeConfig) {
+        await applyQuake(layoutId, quakeConfig);
       }
       return focusWindow(currentWindow);
     }
@@ -989,22 +1008,9 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     const existing = await findLayoutWindow(layoutId);
 
     if (existing) {
-      try {
-        const visible = await existing.isVisible();
-        if (visible) {
-          await existing.hide();
-          return;
-        }
-      } catch {
-        // Fall through to show
-      }
-
-      // Re-apply quake positioning in case monitor changed
-      const quakeConfig = await getQuakeConfig(layoutId);
-      if (quakeConfig) {
-        await applyQuake(layoutId, quakeConfig);
-      }
-      return focusWindow(existing);
+      // Target layout window exists and will handle its own toggle via
+      // the hotkey:pressed event it also received. Skip to avoid double-toggle.
+      return;
     }
 
     return openLayoutWindow(layoutId);

@@ -833,7 +833,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
         windowContext,
         quakeConfig,
       });
-      quakeView = createQuakeView({ bridge, layoutId: targetLayout.id });
+      quakeView = createQuakeView({ bridge, layoutId: targetLayout.id, quakeConfig });
       quakeView.init();
       await bridge.applyQuake(targetLayout.id, quakeConfig);
     }
