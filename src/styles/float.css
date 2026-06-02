@@ -57,12 +57,12 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   Breathing alert animation — color-based glow, no shape change
-   Uses per-block CSS variables for luminance-aware visual prominence:
-   --breath-glow-mix: Percentage of accent color to keep (100% = pure accent, lower = more white)
-
-   Low-luminance colors get more white mixed into their glow for visibility,
-   while high-luminance colors keep their pure accent color glow.
+   Breathing alert animation — body in accent color, soft cool-white halo
+   The inner border (body light) keeps the pane's accent color via
+   --block-glow, while the outer halo uses a fixed soft cool white so the
+   glow reads as a moonlight halo regardless of the accent — this avoids
+   the harsh red/pink/amber halos that clashed with the dark backdrop.
+   The 2s ease-in-out breathing rhythm is unchanged.
    --------------------------------------------------------------------------- */
 
 @keyframes float-breathing-pulse {
@@ -84,7 +84,7 @@ body {
     box-shadow:
       inset 0 0 0 2px var(--block-glow),
       inset 0 1px 0 rgba(255, 255, 255, 0.45),
-      0 0 8px 2px color-mix(in srgb, var(--block-glow) var(--breath-glow-mix, 100%), white),
+      0 0 8px 2px color-mix(in srgb, #b8d8ff 55%, white),
       0 3px 10px rgba(0, 0, 0, 0.45);
   }
 }
@@ -102,7 +102,7 @@ body {
     box-shadow:
       inset 0 0 0 2px var(--block-glow),
       inset 0 1px 0 rgba(255, 255, 255, 0.35),
-      0 0 12px 3px color-mix(in srgb, var(--block-glow) var(--breath-glow-mix, 100%), white),
+      0 0 12px 3px color-mix(in srgb, #b8d8ff 55%, white),
       0 4px 12px rgba(0, 0, 0, 0.45);
   }
 }
