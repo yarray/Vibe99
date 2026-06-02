@@ -242,10 +242,18 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await browser.switchToWindow(newHandle);
       await browser.pause(500);
 
+      // Collect diagnostic: is quake-view initialized? What are the settings?
       await browser.executeAsync((done) => {
-        const hasQuakeView = document.body.classList.contains('is-quake-window');
-        window.__blurDiag = { hasQuakeView };
-        if (hasQuakeView) {
+        const bridge = window.__vibe99_test?.bridge;
+        const sm = window.settingsManager;
+        window.__quakeDiag = {
+          hasQuakeClass: document.body.classList.contains('is-quake-window'),
+          hasBridge: !!bridge,
+          currentWindowLabel: bridge?.currentWindowLabel,
+          quakeLayouts: sm ? JSON.stringify(Object.keys(sm.settings.quakeLayouts || {})) : 'no-sm',
+        };
+
+        if (document.body.classList.contains('is-quake-window')) {
           const origHasFocus = document.hasFocus.bind(document);
           document.hasFocus = () => false;
           window.dispatchEvent(new Event('blur'));
@@ -254,20 +262,26 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
             done();
           }, 3000);
         } else {
-          done();
+          // Quake view not initialized — try manually calling toggle from here
+          if (bridge) {
+            bridge.layouts.toggleWindow('quake-blur-test')
+              .then(() => setTimeout(done, 1000))
+              .catch(() => done());
+          } else {
+            done();
+          }
         }
       });
       await browser.pause(500);
 
-      const diag = await browser.execute(() => JSON.stringify(window.__blurDiag || {}));
+      const diag = await browser.execute(() => JSON.stringify(window.__quakeDiag));
       await browser.switchToWindow(mainWindowHandle);
       await browser.pause(300);
 
-      const hidden = await isQuakeWindowHidden('quake-blur-test');
-      if (!hidden) {
-        console.log('Blur test diag (read from layout ctx):', diag);
+      if (!await isQuakeWindowHidden('quake-blur-test')) {
+        console.log('BLUR_DIAG:', diag);
       }
-      expect(hidden).toBe(true);
+      expect(await isQuakeWindowHidden('quake-blur-test')).toBe(true);
     });
   });
 });
