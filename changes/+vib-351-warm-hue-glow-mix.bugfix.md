@@ -1,0 +1,1 @@
+Float Window breathing glow now keeps its pure accent color on warm-hue blocks (red/orange, hue ~0-30°). The previous luminance-based white mix produced a pinkish or peach tone for those hues that no longer matched the block body; cool and yellow accents are unchanged.
