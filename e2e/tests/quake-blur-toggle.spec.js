@@ -61,7 +61,7 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
         window.settingsManager.applyPersistedSettings(saved);
         window.settingsManager.applySettings();
       }
-      done(layout);
+      done();
     }, { lid: layoutId, pos: position, h: height });
     await browser.pause(500);
   }
