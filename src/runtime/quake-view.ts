@@ -9,9 +9,15 @@ export interface QuakeViewportPayload {
   height?: number;
 }
 
+export interface QuakeConfig {
+  position: string;
+  height: number;
+}
+
 export interface QuakeViewDeps {
   bridge: Bridge;
   layoutId: string;
+  quakeConfig: QuakeConfig;
 }
 
 export interface QuakeView {
@@ -38,7 +44,7 @@ function applyViewport(viewport: QuakeViewportPayload): void {
 }
 
 export function createQuakeView(deps: QuakeViewDeps): QuakeView {
-  const { bridge, layoutId } = deps;
+  const { bridge, layoutId, quakeConfig } = deps;
   const cleanups: (() => void)[] = [];
 
   function init(): void {
@@ -47,10 +53,25 @@ export function createQuakeView(deps: QuakeViewDeps): QuakeView {
     const removeViewportListener = bridge.listen<QuakeViewportPayload>('quake:viewport', applyViewport);
     cleanups.push(removeViewportListener);
 
-    const removeBlurListener = bridge.listen<void>('tauri://blur', () => {
-      bridge.toggleLayoutWindow(layoutId).catch(() => {});
+    // bridge.listen() uses webview.listen() which doesn't receive Tauri window events
+    // like tauri://blur, so we use the browser's native blur event instead.
+    function onWindowBlur(): void {
+      if (!document.hasFocus()) {
+        bridge.toggleLayoutWindow(layoutId).catch(() => {});
+      }
+    }
+    window.addEventListener('blur', onWindowBlur);
+    cleanups.push(() => window.removeEventListener('blur', onWindowBlur));
+
+    const removeScaleChangeListener = bridge.listen<{ scaleFactor: number }>('tauri://scale-change', () => {
+      bridge.applyQuake(layoutId, quakeConfig).catch(() => {});
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event('resize'));
+        });
+      });
     });
-    cleanups.push(removeBlurListener);
+    cleanups.push(removeScaleChangeListener);
   }
 
   function dispose(): void {
