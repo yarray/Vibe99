@@ -127,12 +127,59 @@ function calculateLuminance(hexColor: string): number {
 }
 
 /**
+ * Return the HSL hue (0-360°) of a hex color, or null if the color is
+ * effectively grey (no usable hue). Used to detect warm color ranges where
+ * white-mixing the glow produces an unharmonious result.
+ */
+function getHexHue(hexColor: string): number | null {
+  const r = parseInt(hexColor.slice(1, 3), 16) / 255;
+  const g = parseInt(hexColor.slice(3, 5), 16) / 255;
+  const b = parseInt(hexColor.slice(5, 7), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta === 0) return null; // grey — no hue
+
+  let h: number;
+  if (max === r) {
+    h = ((g - b) / delta) % 6;
+  } else if (max === g) {
+    h = (b - r) / delta + 2;
+  } else {
+    h = (r - g) / delta + 4;
+  }
+  h *= 60;
+  if (h < 0) h += 360;
+  return h;
+}
+
+/**
+ * True when the color sits in the warm hue band (red/orange, ~0-30° and
+ * the wrap-around 330-360°), where white-mixing the breathing glow would
+ * produce a pinkish/peach tone that no longer matches the block body.
+ */
+function isWarmHue(hexColor: string): boolean {
+  const h = getHexHue(hexColor);
+  if (h === null) return false;
+  return h <= 30 || h >= 330;
+}
+
+/**
  * Calculate luminance-based white mix ratio for a given color's glow.
  * Low-luminance colors get more white mixed into their glow to achieve
  * consistent visual prominence across all colors.
  * Returns the percentage of accent color to keep (100% = pure accent, lower = more white).
  */
 function getLuminanceBasedGlowMix(hexColor: string): string {
+  // Warm hues (red/orange) keep their pure accent color: white-mixing these
+  // saturated, low-luminance tones produces a pinkish/peach glow that reads
+  // as a different color from the block body. The luminance heuristic below
+  // is well-tuned for cool/mid hues; the warm range needs an exception.
+  if (isWarmHue(hexColor)) {
+    return '100%';
+  }
+
   const luminance = calculateLuminance(hexColor);
 
   // For bright colors (luminance >= 0.5), use 100% pure accent (original behavior)

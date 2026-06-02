@@ -158,6 +158,8 @@ interface TauriGlobal {
   window: {
     getCurrentWindow: () => TauriWindow;
     currentMonitor: () => Promise<TauriMonitor | null>;
+    availableMonitors: () => Promise<TauriMonitor[]>;
+    cursorPosition: () => Promise<{ x: number; y: number }>;
   };
   webview: {
     getCurrentWebview: () => TauriWebview;
@@ -682,7 +684,7 @@ function createUnavailableBridge(): Bridge {
 
 function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): Omit<Bridge, keyof FlatAliases> {
   const { invoke } = tauri.core;
-  const { getCurrentWindow, currentMonitor } = tauri.window;
+  const { getCurrentWindow, currentMonitor, availableMonitors, cursorPosition } = tauri.window;
   const { WebviewWindow } = tauri.webviewWindow;
   const { readText: clipboardReadText, writeText: clipboardWriteText } =
     tauri.clipboardManager;
@@ -751,6 +753,25 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     console.debug('[quake] viewport applied locally', viewport);
   }
 
+  async function getCursorMonitor(): Promise<TauriMonitor | null> {
+    try {
+      const [pos, monitors] = await Promise.all([
+        cursorPosition(),
+        availableMonitors(),
+      ]);
+      // Physical-pixel hit-test: point is inside [x, x+w) × [y, y+h)
+      for (const m of monitors) {
+        if (
+          pos.x >= m.position.x && pos.x < m.position.x + m.size.width &&
+          pos.y >= m.position.y && pos.y < m.position.y + m.size.height
+        ) {
+          return m;
+        }
+      }
+    } catch {}
+    return currentMonitor();
+  }
+
   /**
    * Get the current window's geometry information.
    * Returns position, size, and fullscreen state, or null if any property cannot be obtained.
@@ -790,7 +811,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
     const win = layoutId === windowLayoutId ? currentWindow as TauriWebviewWindow : await findLayoutWindow(layoutId);
     if (!win) return null;
 
-    const monitor = await currentMonitor();
+    const monitor = await getCursorMonitor();
     if (!monitor) return null;
 
     // Apply borderless style first so frame insets reflect the actual
