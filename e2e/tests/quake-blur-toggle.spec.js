@@ -67,7 +67,7 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
     await browser.pause(500);
   }
 
-  async function toggleLayout(layoutId) {
+  async function toggleLayoutFromMainWindow(layoutId) {
     await setWindowVar('__toggleId', layoutId);
     await browser.executeAsync((done) => {
       const bridge = window.__vibe99_test?.bridge;
@@ -76,6 +76,32 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
         .then(() => done())
         .catch(() => done());
     });
+  }
+
+  async function toggleLayoutFromLayoutWindow(layoutId) {
+    const handles = await browser.getWindowHandles();
+    const layoutHandle = handles.find(h => h !== mainWindowHandle);
+    if (!layoutHandle) return;
+
+    await browser.switchToWindow(layoutHandle);
+    await browser.pause(200);
+
+    await setWindowVar('__toggleId', layoutId);
+    await browser.executeAsync((done) => {
+      const bridge = window.__vibe99_test?.bridge;
+      if (!bridge) { done(); return; }
+      bridge.layouts.toggleWindow(window.__toggleId)
+        .then(() => done())
+        .catch(() => done());
+    });
+
+    await browser.switchToWindow(mainWindowHandle);
+    await browser.pause(200);
+  }
+
+  async function getQuakeWindowHandle(layoutId) {
+    const handles = await browser.getWindowHandles();
+    return handles.find(h => h !== mainWindowHandle) || null;
   }
 
   async function isQuakeWindowHidden(layoutId) {
@@ -114,7 +140,7 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
   describe('Single Toggle', () => {
     it('shows quake window via toggleLayoutWindow', async () => {
       await setupQuakeLayout('quake-toggle-show');
-      await toggleLayout('quake-toggle-show');
+      await toggleLayoutFromMainWindow('quake-toggle-show');
       await browser.pause(1000);
 
       const handles = await browser.getWindowHandles();
@@ -123,10 +149,10 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
 
     it('hides quake window via second toggleLayoutWindow', async () => {
       await setupQuakeLayout('quake-toggle-hide');
-      await toggleLayout('quake-toggle-hide');
+      await toggleLayoutFromMainWindow('quake-toggle-hide');
       await browser.pause(1000);
 
-      await toggleLayout('quake-toggle-hide');
+      await toggleLayoutFromLayoutWindow('quake-toggle-hide');
       await browser.pause(1000);
 
       expect(await isQuakeWindowHidden('quake-toggle-hide')).toBe(true);
@@ -135,13 +161,13 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
     it('toggles quake window show then show again (round trip)', async () => {
       await setupQuakeLayout('quake-round-trip');
 
-      await toggleLayout('quake-round-trip');
+      await toggleLayoutFromMainWindow('quake-round-trip');
       await browser.pause(1000);
 
-      await toggleLayout('quake-round-trip');
+      await toggleLayoutFromLayoutWindow('quake-round-trip');
       await browser.pause(1000);
 
-      await toggleLayout('quake-round-trip');
+      await toggleLayoutFromMainWindow('quake-round-trip');
       await browser.pause(1000);
 
       const handles = await browser.getWindowHandles();
@@ -155,13 +181,13 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
 
       await setWindowVar('__toggleId', 'quake-rapid');
       await browser.executeAsync((done) => {
-        if (!window.__TAURI__) { window.__rapidSuccess = false; done(); return; }
+        const bridge = window.__vibe99_test?.bridge;
+        if (!bridge) { window.__rapidSuccess = false; done(); return; }
         const lid = window.__toggleId;
         const promises = [];
         for (let i = 0; i < 5; i++) {
           promises.push(
-            window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid })
-              .catch(() => {})
+            bridge.layouts.toggleWindow(lid).catch(() => {})
           );
         }
         Promise.all(promises).then(() => {
@@ -181,13 +207,13 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
 
       await setWindowVar('__toggleId', 'quake-rapid-even');
       await browser.executeAsync((done) => {
-        if (!window.__TAURI__) { done(); return; }
+        const bridge = window.__vibe99_test?.bridge;
+        if (!bridge) { done(); return; }
         const lid = window.__toggleId;
         const promises = [];
         for (let i = 0; i < 6; i++) {
           promises.push(
-            window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid })
-              .catch(() => {})
+            bridge.layouts.toggleWindow(lid).catch(() => {})
           );
         }
         Promise.all(promises).then(() => {
@@ -203,7 +229,7 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
     it('hides quake window when blur event fires with focus loss', async () => {
       await setupQuakeLayout('quake-blur-test');
 
-      await toggleLayout('quake-blur-test');
+      await toggleLayoutFromMainWindow('quake-blur-test');
       await browser.pause(1000);
 
       const handlesBefore = await browser.getWindowHandles();
