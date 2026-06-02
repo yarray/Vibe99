@@ -26,9 +26,10 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
 
   async function init(layoutHotkeys: Record<string, string>): Promise<void> {
     removeHotkeyListener = bridge.onHotkeyPressed((event) => {
-      // hotkey:pressed is broadcast to all windows; only the main window
-      // handles layout toggles to avoid double-toggle race conditions.
-      if (windowLayoutId !== null) return;
+      // hotkey:pressed is broadcast to all windows.
+      // Layout windows handle their own layout's toggle; main window
+      // handles toggles for layouts that don't have their own window yet.
+      if (windowLayoutId !== null && event.layoutId !== windowLayoutId) return;
       if (toggleDebounce !== null) return;
       toggleDebounce = window.setTimeout(() => { toggleDebounce = null; }, 150);
       bridge.layouts.toggleWindow(event.layoutId).catch(reportError);

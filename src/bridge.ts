@@ -997,28 +997,20 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
         await currentWindow.hide();
         return;
       }
+      // Re-apply quake positioning in case monitor changed
+      const quakeConfig = await getQuakeConfig(layoutId);
+      if (quakeConfig) {
+        await applyQuake(layoutId, quakeConfig);
+      }
       return focusWindow(currentWindow);
     }
 
     const existing = await findLayoutWindow(layoutId);
 
     if (existing) {
-      try {
-        const visible = await existing.isVisible();
-        if (visible) {
-          await existing.hide();
-          return;
-        }
-      } catch {
-        // Fall through to show
-      }
-
-      // Re-apply quake positioning in case monitor changed
-      const quakeConfig = await getQuakeConfig(layoutId);
-      if (quakeConfig) {
-        await applyQuake(layoutId, quakeConfig);
-      }
-      return focusWindow(existing);
+      // Target layout window exists and will handle its own toggle via
+      // the hotkey:pressed event it also received. Skip to avoid double-toggle.
+      return;
     }
 
     return openLayoutWindow(layoutId);
