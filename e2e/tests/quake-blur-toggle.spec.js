@@ -237,26 +237,37 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
 
       const handlesBefore = await browser.getWindowHandles();
       const newHandle = handlesBefore.find(h => h !== mainWindowHandle);
-      if (newHandle) {
-        await browser.switchToWindow(newHandle);
-        await browser.pause(500);
+      expect(newHandle).toBeTruthy();
 
-        await browser.executeAsync((done) => {
+      await browser.switchToWindow(newHandle);
+      await browser.pause(500);
+
+      await browser.executeAsync((done) => {
+        const hasQuakeView = document.body.classList.contains('is-quake-window');
+        window.__blurDiag = { hasQuakeView };
+        if (hasQuakeView) {
           const origHasFocus = document.hasFocus.bind(document);
           document.hasFocus = () => false;
           window.dispatchEvent(new Event('blur'));
           setTimeout(() => {
             document.hasFocus = origHasFocus;
             done();
-          }, 2000);
-        });
-        await browser.pause(1000);
-      }
+          }, 3000);
+        } else {
+          done();
+        }
+      });
+      await browser.pause(500);
 
+      const diag = await browser.execute(() => JSON.stringify(window.__blurDiag || {}));
       await browser.switchToWindow(mainWindowHandle);
       await browser.pause(300);
 
-      expect(await isQuakeWindowHidden('quake-blur-test')).toBe(true);
+      const hidden = await isQuakeWindowHidden('quake-blur-test');
+      if (!hidden) {
+        console.log('Blur test diag (read from layout ctx):', diag);
+      }
+      expect(hidden).toBe(true);
     });
   });
 });
