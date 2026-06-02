@@ -32,6 +32,9 @@ function applyViewport(viewport: QuakeViewportPayload): void {
     style.setProperty('--quake-height', `${viewport.height}px`);
   }
   console.debug('[quake] viewport received', viewport);
+  requestAnimationFrame(() =>
+    window.dispatchEvent(new Event('resize'))
+  );
 }
 
 export function createQuakeView(deps: QuakeViewDeps): QuakeView {
