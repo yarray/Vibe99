@@ -1,0 +1,1 @@
+Standardized input heights across settings UI (26px), removed !important overuse from button styles, unified gap/spacing values for layout manager modal, settings panel, shell profiles, and form controls.
