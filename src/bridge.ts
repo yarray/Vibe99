@@ -701,6 +701,8 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
 
   const currentWebview = tauri.webview.getCurrentWebview();
 
+  const toggleLocks = new Set<string>();
+
   function onTauriEvent<T = unknown>(event: string, handler: (payload: T) => void): () => void {
     const unlisten = currentWebview.listen(event, (e: { payload: T }) => handler(e.payload));
     return () => { unlisten.then((fn: () => void) => fn()); };
@@ -977,6 +979,18 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
   }
 
   async function toggleLayoutWindow(layoutId: string): Promise<void> {
+    while (toggleLocks.has(layoutId)) {
+      await new Promise<void>((r) => setTimeout(r, 30));
+    }
+    toggleLocks.add(layoutId);
+    try {
+      await doToggleLayoutWindow(layoutId);
+    } finally {
+      toggleLocks.delete(layoutId);
+    }
+  }
+
+  async function doToggleLayoutWindow(layoutId: string): Promise<void> {
     if (layoutId === windowLayoutId) {
       const visible = await currentWindow.isVisible();
       if (visible) {

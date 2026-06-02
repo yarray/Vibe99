@@ -16,6 +16,7 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
   const { bridge, reportError, windowLayoutId } = deps;
 
   let removeHotkeyListener: (() => void) | null = null;
+  let toggleDebounce: number | null = null;
 
   function toBindings(layoutHotkeys: Record<string, string>): HotkeyBinding[] {
     return Object.entries(layoutHotkeys)
@@ -25,8 +26,11 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
 
   async function init(layoutHotkeys: Record<string, string>): Promise<void> {
     removeHotkeyListener = bridge.onHotkeyPressed((event) => {
-      // Only handle if this window is the target layout or main window
-      if (windowLayoutId !== null && event.layoutId !== windowLayoutId) return;
+      // hotkey:pressed is broadcast to all windows; only the main window
+      // handles layout toggles to avoid double-toggle race conditions.
+      if (windowLayoutId !== null) return;
+      if (toggleDebounce !== null) return;
+      toggleDebounce = window.setTimeout(() => { toggleDebounce = null; }, 150);
       bridge.layouts.toggleWindow(event.layoutId).catch(reportError);
     });
 
@@ -45,6 +49,10 @@ export function createHotkeyHandler(deps: HotkeyHandlerDeps): HotkeyHandler {
     if (removeHotkeyListener) {
       removeHotkeyListener();
       removeHotkeyListener = null;
+    }
+    if (toggleDebounce !== null) {
+      window.clearTimeout(toggleDebounce);
+      toggleDebounce = null;
     }
   }
 
