@@ -242,16 +242,8 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await browser.switchToWindow(newHandle);
       await browser.pause(500);
 
-      // Collect diagnostic: is quake-view initialized? What are the settings?
       await browser.executeAsync((done) => {
         const bridge = window.__vibe99_test?.bridge;
-        const sm = window.settingsManager;
-        window.__quakeDiag = {
-          hasQuakeClass: document.body.classList.contains('is-quake-window'),
-          hasBridge: !!bridge,
-          currentWindowLabel: bridge?.currentWindowLabel,
-          quakeLayouts: sm ? JSON.stringify(Object.keys(sm.settings.quakeLayouts || {})) : 'no-sm',
-        };
 
         if (document.body.classList.contains('is-quake-window')) {
           const origHasFocus = document.hasFocus.bind(document);
@@ -261,26 +253,19 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
             document.hasFocus = origHasFocus;
             done();
           }, 3000);
+        } else if (bridge) {
+          bridge.layouts.toggleWindow('quake-blur-test')
+            .then(() => setTimeout(done, 1000))
+            .catch(() => done());
         } else {
-          // Quake view not initialized — try manually calling toggle from here
-          if (bridge) {
-            bridge.layouts.toggleWindow('quake-blur-test')
-              .then(() => setTimeout(done, 1000))
-              .catch(() => done());
-          } else {
-            done();
-          }
+          done();
         }
       });
       await browser.pause(500);
 
-      const diag = await browser.execute(() => JSON.stringify(window.__quakeDiag));
       await browser.switchToWindow(mainWindowHandle);
       await browser.pause(300);
 
-      if (!await isQuakeWindowHidden('quake-blur-test')) {
-        console.log('BLUR_DIAG:', diag);
-      }
       expect(await isQuakeWindowHidden('quake-blur-test')).toBe(true);
     });
   });
