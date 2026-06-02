@@ -137,20 +137,31 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
     mainWindowHandle = await browser.getWindowHandle().catch(() => mainWindowHandle);
   });
 
+  async function waitForLayoutWindow(timeout = 10000) {
+    return waitForCondition(
+      async () => {
+        const handles = await browser.getWindowHandles();
+        return handles.length >= 2 ? handles : null;
+      },
+      timeout,
+      500,
+    );
+  }
+
   describe('Single Toggle', () => {
     it('shows quake window via toggleLayoutWindow', async () => {
       await setupQuakeLayout('quake-toggle-show');
       await toggleLayoutFromMainWindow('quake-toggle-show');
-      await browser.pause(1000);
 
-      const handles = await browser.getWindowHandles();
+      const handles = await waitForLayoutWindow();
       expect(handles.length).toBeGreaterThanOrEqual(2);
     });
 
     it('hides quake window via second toggleLayoutWindow', async () => {
       await setupQuakeLayout('quake-toggle-hide');
       await toggleLayoutFromMainWindow('quake-toggle-hide');
-      await browser.pause(1000);
+
+      await waitForLayoutWindow();
 
       await toggleLayoutFromLayoutWindow('quake-toggle-hide');
       await browser.pause(1000);
@@ -162,15 +173,13 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await setupQuakeLayout('quake-round-trip');
 
       await toggleLayoutFromMainWindow('quake-round-trip');
-      await browser.pause(1000);
+      await waitForLayoutWindow();
 
       await toggleLayoutFromLayoutWindow('quake-round-trip');
       await browser.pause(1000);
 
       await toggleLayoutFromMainWindow('quake-round-trip');
-      await browser.pause(1000);
-
-      const handles = await browser.getWindowHandles();
+      const handles = await waitForLayoutWindow();
       expect(handles.length).toBeGreaterThanOrEqual(2);
     });
   });
@@ -233,9 +242,7 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await setupQuakeLayout('quake-blur-test');
 
       await toggleLayoutFromMainWindow('quake-blur-test');
-      await browser.pause(2000);
-
-      const handlesBefore = await browser.getWindowHandles();
+      const handlesBefore = await waitForLayoutWindow();
       const newHandle = handlesBefore.find(h => h !== mainWindowHandle);
       expect(newHandle).toBeTruthy();
 
