@@ -25,10 +25,8 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
   let mainWindowHandle;
 
   async function setupQuakeLayout(layoutId, position = 'top', height = 60) {
-    // Save a layout with quake config
-    await browser.executeAsync(async (args, done) => {
-      const { lid, pos, h } = args;
-      if (!window.__TAURI__) { done(null); return; }
+    await browser.execute(async ({ lid, pos, h }) => {
+      if (!window.__TAURI__) return;
       const core = window.__TAURI__.core;
 
       // Save a basic layout with 3 panes
@@ -61,7 +59,6 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
         window.settingsManager.applyPersistedSettings(saved);
         window.settingsManager.applySettings();
       }
-      done();
     }, { lid: layoutId, pos: position, h: height });
     await browser.pause(500);
   }
@@ -95,10 +92,9 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await setupQuakeLayout(layoutId);
 
       // Toggle to show the quake window
-      await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(); return; }
+      await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return;
         await window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid });
-        done();
       }, layoutId);
       await browser.pause(1000);
 
@@ -112,33 +108,31 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await setupQuakeLayout(layoutId);
 
       // Show
-      await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(); return; }
+      await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return;
         await window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid });
-        done();
       }, layoutId);
       await browser.pause(1000);
 
       // Hide
-      await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(); return; }
+      await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return;
         await window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid });
-        done();
       }, layoutId);
       await browser.pause(1000);
 
       // Verify the quake window is hidden by checking its visibility
-      const quakeHidden = await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(false); return; }
+      const quakeHidden = await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return false;
         try {
           const { WebviewWindow } = window.__TAURI__.webviewWindow;
           const label = `layout-${lid}`;
           const win = await WebviewWindow.getByLabel(label);
-          if (!win) { done(true); return; } // window doesn't exist = effectively hidden
+          if (!win) return true; // window doesn't exist = effectively hidden
           const visible = await win.isVisible();
-          done(!visible);
+          return !visible;
         } catch {
-          done(true); // error means window is gone
+          return true; // error means window is gone
         }
       }, layoutId);
 
@@ -150,26 +144,23 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await setupQuakeLayout(layoutId);
 
       // Show
-      await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(); return; }
+      await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return;
         await window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid });
-        done();
       }, layoutId);
       await browser.pause(1000);
 
       // Hide
-      await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(); return; }
+      await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return;
         await window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid });
-        done();
       }, layoutId);
       await browser.pause(1000);
 
       // Show again
-      await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(); return; }
+      await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return;
         await window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid });
-        done();
       }, layoutId);
       await browser.pause(1000);
 
@@ -189,8 +180,8 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await setupQuakeLayout(layoutId);
 
       // Fire 5 rapid toggles
-      const success = await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(false); return; }
+      const success = await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return false;
         try {
           const promises = [];
           for (let i = 0; i < 5; i++) {
@@ -202,9 +193,9 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
           await Promise.all(promises);
           // Wait for all async operations to settle
           await new Promise((r) => setTimeout(r, 1000));
-          done(true);
+          return true;
         } catch {
-          done(false);
+          return false;
         }
       }, layoutId);
 
@@ -224,8 +215,8 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await setupQuakeLayout(layoutId);
 
       // Fire 6 rapid toggles (even number -> should end hidden)
-      await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(); return; }
+      await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return;
         try {
           const promises = [];
           for (let i = 0; i < 6; i++) {
@@ -239,22 +230,21 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
         } catch {
           // ignore
         }
-        done();
       }, layoutId);
 
       // With mutex, 6 toggles from hidden should end hidden:
       // show -> hide -> show -> hide -> show -> hide
-      const isHidden = await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(true); return; }
+      const isHidden = await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return true;
         try {
           const { WebviewWindow } = window.__TAURI__.webviewWindow;
           const label = `layout-${lid}`;
           const win = await WebviewWindow.getByLabel(label);
-          if (!win) { done(true); return; }
+          if (!win) return true;
           const visible = await win.isVisible();
-          done(!visible);
+          return !visible;
         } catch {
-          done(true);
+          return true;
         }
       }, layoutId);
 
@@ -272,10 +262,9 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await setupQuakeLayout(layoutId);
 
       // Show the quake window
-      await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(); return; }
+      await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return;
         await window.__TAURI__.core.invoke('toggle_layout_window', { layoutId: lid });
-        done();
       }, layoutId);
       await browser.pause(1000);
 
@@ -288,7 +277,7 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
 
         // Simulate the blur event that would fire when clicking outside
         // The fix uses native window 'blur' + document.hasFocus() guard
-        await browser.executeAsync(async (lid, done) => {
+        await browser.execute(async (lid) => {
           // Mock document.hasFocus to return false (simulating focus loss)
           const originalHasFocus = document.hasFocus.bind(document);
           document.hasFocus = () => false;
@@ -301,7 +290,6 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
 
           // Restore
           document.hasFocus = originalHasFocus;
-          done();
         }, layoutId);
         await browser.pause(500);
       }
@@ -311,17 +299,17 @@ describe('Quake Window Blur + Toggle + DPI (VIB-353)', () => {
       await browser.pause(300);
 
       // Verify quake window is now hidden
-      const quakeHidden = await browser.executeAsync(async (lid, done) => {
-        if (!window.__TAURI__) { done(true); return; }
+      const quakeHidden = await browser.execute(async (lid) => {
+        if (!window.__TAURI__) return true;
         try {
           const { WebviewWindow } = window.__TAURI__.webviewWindow;
           const label = `layout-${lid}`;
           const win = await WebviewWindow.getByLabel(label);
-          if (!win) { done(true); return; }
+          if (!win) return true;
           const visible = await win.isVisible();
-          done(!visible);
+          return !visible;
         } catch {
-          done(true);
+          return true;
         }
       }, layoutId);
 
