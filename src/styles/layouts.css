@@ -127,13 +127,13 @@
 .layout-pane-info {
   font-size: 12px;
   color: var(--panel-muted);
-  margin-top: 12px;
+  margin-top: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .layout-pane-list {
-  margin-top: 12px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -235,8 +235,8 @@
 
 .layout-info {
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
@@ -252,7 +252,7 @@
 .layout-name-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .layout-name-input {
@@ -330,8 +330,8 @@
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  margin-top: 8px;
   padding-top: 12px;
+  margin-top: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -363,21 +363,21 @@
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
   font-weight: 500;
-  margin-top: 8px;
-  margin-bottom: 4px;
+  margin-top: 4px;
+  margin-bottom: 0;
 }
 
 .layout-panes-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .layout-pane-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
@@ -392,7 +392,7 @@
 
 .layout-pane-details {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   font-size: 11px;
 }
@@ -445,13 +445,13 @@
 /* --- Layout Editor: Hotkey & Quake Sections --- */
 
 .layout-section {
-  padding-top: 16px;
+  padding-top: 12px;
   margin-top: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .layout-section > .settings-row {
-  gap: 16px;
+  gap: 12px;
 }
 
 /* Custom select inside settings-row should not take full width to avoid label wrapping */
@@ -496,13 +496,13 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-left: 14px;
-  margin-top: 10px;
+  padding-left: 12px;
+  margin-top: 8px;
   border-left: 2px solid rgba(255, 255, 255, 0.08);
 }
 
 .layout-quake-details .settings-row {
-  gap: 16px;
+  gap: 12px;
 }
 
 .layout-quake-details .settings-row > .settings-dual {
