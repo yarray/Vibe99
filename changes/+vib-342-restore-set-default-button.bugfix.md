@@ -1,0 +1,1 @@
+Restore "Set as Default" button in Layout Manager. This button was incorrectly removed in VIB-338; "Set as Default" (sets the layout template for new windows) and "Auto-start on boot" (auto-opens layouts at system boot) are separate features that should both be available.
