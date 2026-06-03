@@ -292,6 +292,7 @@ export interface WindowApi {
   openUrl: (url: string) => void;
   showMenu: () => void;
   focus: () => Promise<void>;
+  isVisible: () => Promise<boolean>;
 }
 
 export interface LayoutsApi {
@@ -594,6 +595,7 @@ function createUnavailableBridge(): Bridge {
       focus: fail,
       openUrl: fail,
       showMenu: () => {},
+      isVisible: async () => true,
     },
     layouts: {
       list: () => Promise.resolve({ layouts: [], defaultLayoutId: '' }),
@@ -1079,6 +1081,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       focus: () => focusWindow(currentWindow),
       openUrl: (url: string) => openUrl(url),
       showMenu: () => {},
+      isVisible: () => getCurrentWindow().isVisible(),
     },
     layouts: {
       list: () => invoke('layouts_list'),

@@ -55,8 +55,14 @@ export function createQuakeView(deps: QuakeViewDeps): QuakeView {
 
     // bridge.listen() uses webview.listen() which doesn't receive Tauri window events
     // like tauri://blur, so we use the browser's native blur event instead.
-    function onWindowBlur(): void {
+    async function onWindowBlur(): Promise<void> {
       if (!document.hasFocus()) {
+        // When the window is hidden programmatically (via toggle hotkey),
+        // hide() triggers this blur event. Check visibility to distinguish
+        // from user-initiated blur (clicking away) and avoid immediately
+        // re-showing the window.
+        const visible = await bridge.window.isVisible();
+        if (!visible) return;
         bridge.toggleLayoutWindow(layoutId).catch(() => {});
       }
     }
