@@ -10,6 +10,7 @@
   height: min(620px, calc(100vh - 32px));
   display: flex;
   flex-direction: column;
+  padding: 16px;
 }
 
 .settings-modal.layouts-modal .layouts-modal-body {
@@ -45,8 +46,8 @@
 .layout-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0 12px;
   height: 36px;
   border-radius: 4px;
   background: transparent;
@@ -235,8 +236,8 @@
 
 .layout-info {
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
@@ -252,12 +253,12 @@
 .layout-name-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .layout-name-input {
   flex: 1;
-  height: 30px;
+  height: 28px;
   padding: 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
@@ -275,41 +276,41 @@
 }
 
 .layout-name-btn {
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  padding: 0 !important;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px !important;
-  font-size: 14px !important;
+  border-radius: 4px;
+  font-size: 14px;
   flex-shrink: 0;
 }
 
 .layout-name-btn-confirm {
-  background: rgba(76, 175, 80, 0.2) !important;
-  color: #81c784 !important;
-  border-color: rgba(76, 175, 80, 0.4) !important;
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+  border-color: rgba(76, 175, 80, 0.4);
 }
 
 .layout-name-btn-confirm:hover {
-  background: rgba(76, 175, 80, 0.35) !important;
+  background: rgba(76, 175, 80, 0.35);
 }
 
 .layout-name-btn-cancel {
-  background: rgba(244, 67, 54, 0.15) !important;
-  color: #e57373 !important;
-  border-color: rgba(244, 67, 54, 0.35) !important;
+  background: rgba(244, 67, 54, 0.15);
+  color: #e57373;
+  border-color: rgba(244, 67, 54, 0.35);
 }
 
 .layout-name-btn-cancel:hover {
-  background: rgba(244, 67, 54, 0.25) !important;
+  background: rgba(244, 67, 54, 0.25);
 }
 
 .layout-info input {
   width: 100%;
-  height: 28px;
+  height: 26px;
   padding: 0 8px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
@@ -336,22 +337,22 @@
 }
 
 .layout-info-btn {
-  width: auto !important;
-  height: 28px !important;
-  padding: 0 16px !important;
-  font-size: 13px !important;
-  border-radius: 4px !important;
+  width: auto;
+  height: 28px;
+  padding: 0 16px;
+  font-size: 13px;
+  border-radius: 4px;
   font-weight: 500;
 }
 
 .layout-info-actions .settings-btn.is-primary {
-  background: rgba(255, 255, 255, 0.15) !important;
+  background: rgba(255, 255, 255, 0.15);
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.25);
 }
 
 .layout-info-actions .settings-btn.is-primary:hover {
-  background: rgba(255, 255, 255, 0.25) !important;
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .layout-info-actions .settings-btn:disabled {
@@ -439,19 +440,19 @@
 
 .layout-info-btn.is-default:hover {
   opacity: 0.6;
-  background: transparent !important;
+  background: transparent;
 }
 
 /* --- Layout Editor: Hotkey & Quake Sections --- */
 
 .layout-section {
-  padding-top: 16px;
-  margin-top: 4px;
+  padding-top: 12px;
+  margin-top: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .layout-section > .settings-row {
-  gap: 16px;
+  gap: 12px;
 }
 
 /* Custom select inside settings-row should not take full width to avoid label wrapping */
@@ -496,13 +497,13 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-left: 14px;
-  margin-top: 10px;
+  padding-left: 12px;
+  margin-top: 8px;
   border-left: 2px solid rgba(255, 255, 255, 0.08);
 }
 
 .layout-quake-details .settings-row {
-  gap: 16px;
+  gap: 12px;
 }
 
 .layout-quake-details .settings-row > .settings-dual {
