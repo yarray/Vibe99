@@ -37,6 +37,8 @@ export interface EditingShellProfile {
   args: string;
   themeId: string;
   isNew: boolean;
+  /** Original profile ID when editing a cloned profile. Used to update the original instead of creating a duplicate. */
+  originalId?: string;
 }
 
 /** Result shape returned by bridge shell profile operations. */
@@ -537,6 +539,8 @@ export function createShellProfileManager({
     save.className = 'settings-btn shell-profile-editor-btn is-primary';
     save.textContent = 'Save';
     save.addEventListener('click', () => {
+      const editingShellProfile = state.getEditingShellProfile()!;
+
       const profile: ShellProfile = {
         id: (inputs.id as HTMLInputElement).value.trim(),
         name: (inputs.name as HTMLInputElement).value.trim(),
@@ -550,12 +554,19 @@ export function createShellProfileManager({
         return;
       }
 
-      bridge.addShellProfile(profile).then((config) => {
+      // When editing a cloned profile (isNew: true with originalId), use the originalId
+      // for the upsert to update the original profile instead of creating a duplicate.
+      // For truly new profiles (no originalId), use the new ID to create.
+      const profileToSave = (editingShellProfile.isNew && editingShellProfile.originalId)
+        ? { ...profile, id: editingShellProfile.originalId }
+        : profile;
+
+      bridge.addShellProfile(profileToSave).then((config) => {
         const userIds = new Set((config.profiles ?? []).map((p) => p.id));
         state.setShellProfiles([...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))]);
         state.setDefaultShellProfileId(config.defaultProfile ?? '');
 
-        // Select the newly created/saved profile
+        // Select the saved profile using the user's chosen ID (not the originalId)
         state.setSelectedShellProfileId(profile.id);
         state.setEditingShellProfile({
           id: profile.id,
@@ -605,7 +616,8 @@ export function createShellProfileManager({
         command: clonedProfile.command,
         args: clonedProfile.args ?? '',
         themeId: clonedProfile.themeId || '',
-        isNew: true // Treat as new so user can edit the ID
+        isNew: true, // Treat as new so user can edit the ID
+        originalId: clonedProfile.id // Remember the original profile to update instead of creating duplicate
       });
       renderModalShellProfiles();
     }).catch(reportError);
