@@ -1,5 +1,11 @@
 /* ============================================================
    layouts.css — Layout Manager Modal + Layouts Dropdown
+
+   Design system:
+   - Section headers use gold accent left-border for hierarchy
+   - Sidebar uses subtle selected-state with accent indicator
+   - Editor panel has elevated background for depth separation
+   - Buttons follow 3-tier hierarchy: primary (accent), secondary (outline), ghost
    ============================================================ */
 
 /* --- Layout Manager Modal --- */
@@ -7,27 +13,30 @@
   min-width: 780px;
   max-width: 960px;
   width: 90vw;
-  height: min(620px, calc(100vh - 32px));
+  height: min(640px, calc(100vh - 32px));
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 20px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
 }
 
 .settings-modal.layouts-modal .layouts-modal-body {
   display: flex;
-  gap: 16px;
+  gap: 20px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
   margin-bottom: 0;
 }
 
+/* --- Sidebar --- */
 .settings-modal.layouts-modal .layouts-sidebar {
   flex: 0 0 240px;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  padding-right: 16px;
+  border-right: 1px solid var(--panel-border);
+  padding-right: 20px;
   min-height: 0;
   overflow: hidden;
 }
@@ -35,7 +44,7 @@
 .layout-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -49,10 +58,10 @@
   gap: 8px;
   padding: 0 12px;
   height: 36px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   cursor: pointer;
-  transition: all 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease;
   border: 1px solid transparent;
   user-select: none;
   min-width: 0;
@@ -60,17 +69,20 @@
 
 .layout-item:hover {
   background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
+/* Selected state: accent left-border for clear visual hierarchy */
 .layout-item.is-selected {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 209, 102, 0.06);
+  border-color: rgba(255, 209, 102, 0.12);
+  border-left: 3px solid var(--status-highlight);
+  padding-left: 9px;
   cursor: default;
 }
 
 .layout-item.is-active {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .layout-item.is-editing {
@@ -98,6 +110,7 @@
   border-radius: 50%;
   background: var(--status-highlight);
   vertical-align: middle;
+  box-shadow: 0 0 4px rgba(255, 209, 102, 0.4);
 }
 
 .layout-name {
@@ -115,8 +128,10 @@
   font-weight: 500;
 }
 
+/* Autostart badge: subtle gold outline */
 .layout-item.is-autostart {
-  outline: 1px solid rgba(255, 196, 93, 0.3);
+  outline: 1px solid rgba(255, 196, 93, 0.25);
+  outline-offset: -1px;
 }
 
 .layout-pane-count {
@@ -130,7 +145,7 @@
   color: var(--panel-muted);
   margin-top: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .layout-pane-list {
@@ -163,6 +178,7 @@
   text-overflow: ellipsis;
 }
 
+/* Sidebar action buttons: ghost style */
 .layout-actions {
   display: inline-flex;
   gap: 2px;
@@ -176,7 +192,7 @@
   border: none;
   background: none;
   padding: 2px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.4);
   transition: color 0.15s ease, transform 0.15s ease;
   pointer-events: auto;
 }
@@ -192,6 +208,7 @@
   padding: 4px 6px;
 }
 
+/* Add button: subtle icon button */
 .layouts-add-btn {
   appearance: none;
   display: inline-flex;
@@ -199,21 +216,21 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .layouts-add-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
   color: var(--text);
-  transform: scale(1.05);
 }
 
+/* --- Editor Panel --- */
 .settings-modal.layouts-modal .layouts-editor-panel {
   flex: 1;
   display: flex;
@@ -221,6 +238,7 @@
   overflow-y: auto;
   min-height: 0;
   scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .layouts-editor-placeholder {
@@ -231,16 +249,17 @@
   color: var(--panel-muted);
   font-size: 14px;
   text-align: center;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
+/* --- Layout Info Card --- */
 .layout-info {
   display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--panel-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .layout-info label {
@@ -250,6 +269,7 @@
   margin-bottom: 4px;
 }
 
+/* Name input row */
 .layout-name-row {
   display: flex;
   align-items: center;
@@ -260,9 +280,9 @@
   flex: 1;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font: inherit;
   font-size: 13px;
@@ -270,9 +290,10 @@
 }
 
 .layout-name-input:focus {
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--status-highlight);
+  background: rgba(255, 255, 255, 0.06);
   outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.15);
 }
 
 .layout-name-btn {
@@ -283,38 +304,38 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 14px;
   flex-shrink: 0;
 }
 
 .layout-name-btn-confirm {
-  background: rgba(76, 175, 80, 0.2);
+  background: rgba(76, 175, 80, 0.15);
   color: #81c784;
-  border-color: rgba(76, 175, 80, 0.4);
+  border-color: rgba(76, 175, 80, 0.3);
 }
 
 .layout-name-btn-confirm:hover {
-  background: rgba(76, 175, 80, 0.35);
+  background: rgba(76, 175, 80, 0.25);
 }
 
 .layout-name-btn-cancel {
-  background: rgba(244, 67, 54, 0.15);
+  background: rgba(244, 67, 54, 0.1);
   color: #e57373;
-  border-color: rgba(244, 67, 54, 0.35);
+  border-color: rgba(244, 67, 54, 0.25);
 }
 
 .layout-name-btn-cancel:hover {
-  background: rgba(244, 67, 54, 0.25);
+  background: rgba(244, 67, 54, 0.2);
 }
 
 .layout-info input {
   width: 100%;
   height: 26px;
   padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font: inherit;
   font-size: 13px;
@@ -322,48 +343,54 @@
 }
 
 .layout-info input:focus {
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--status-highlight);
+  background: rgba(255, 255, 255, 0.06);
   outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.15);
 }
 
+/* --- Action Buttons Bar --- */
 .layout-info-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-border);
 }
 
 .layout-info-btn {
   width: auto;
   height: 28px;
-  padding: 0 16px;
+  padding: 0 14px;
   font-size: 13px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-weight: 500;
 }
 
+/* Primary button: gold accent for main action */
 .layout-info-actions .settings-btn.is-primary {
-  background: rgba(255, 255, 255, 0.15);
-  color: var(--text);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 209, 102, 0.15);
+  color: var(--status-highlight);
+  border-color: rgba(255, 209, 102, 0.3);
 }
 
 .layout-info-actions .settings-btn.is-primary:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 209, 102, 0.25);
 }
 
 .layout-info-actions .settings-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .layout-pane-count-label {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   margin-top: 8px;
   margin-bottom: 4px;
 }
@@ -371,7 +398,7 @@
 .layout-panes-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
 }
 
@@ -379,9 +406,9 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
 }
 
@@ -399,17 +426,22 @@
 }
 
 .layout-pane-cwd {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.5);
   font-family: ui-monospace, 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
 }
 
 .layout-pane-profile {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.4);
   font-style: italic;
 }
 
+/* --- Modal Header --- */
 .settings-modal.layouts-modal .settings-modal-header {
   justify-content: space-between;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 .settings-modal.layouts-modal .settings-modal-title-group {
@@ -428,27 +460,52 @@
 }
 
 .layout-default-star {
-  color: #f9d71c;
+  color: var(--status-highlight);
   font-size: 12px;
   margin-left: 4px;
 }
 
 .layout-info-btn.is-default {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: default;
 }
 
 .layout-info-btn.is-default:hover {
-  opacity: 0.6;
+  opacity: 0.5;
   background: transparent;
 }
 
-/* --- Layout Editor: Hotkey & Quake Sections --- */
+/* --- Layout Editor: Sections with Hierarchy --- */
 
+/*
+  Section design: Each section is a card with:
+  - Subtle background tint to separate from parent
+  - Accent left-border for the header
+  - 16px internal padding
+  - 20px gap between sections
+*/
 .layout-section {
-  padding-top: 12px;
+  padding: 16px;
   margin-top: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.015);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Section header: gold accent left-border for visual hierarchy */
+.layout-section-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--status-highlight);
+  padding-left: 10px;
+  border-left: 3px solid var(--status-highlight);
+  margin-bottom: 2px;
 }
 
 .layout-section > .settings-row {
@@ -471,35 +528,47 @@
 .layout-hotkey-assign-btn {
   width: auto !important;
   height: 26px !important;
-  padding: 0 10px !important;
+  padding: 0 12px !important;
   font-size: 12px !important;
   white-space: nowrap;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
-.layout-quake-toggle {
+.layout-hotkey-assign-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text) !important;
+}
+
+/* --- Toggle Styles (Autostart + Quake) --- */
+.layout-quake-toggle,
+.layout-autostart-toggle {
   cursor: pointer;
 }
 
 .layout-autostart-toggle {
-  cursor: pointer;
-  padding: 6px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.03);
-  transition: background 120ms ease;
+  padding: 8px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 .layout-autostart-toggle:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
+/* --- Quake Details (nested sub-section) --- */
 .layout-quake-details {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-left: 12px;
-  margin-top: 8px;
-  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  padding-left: 16px;
+  margin-top: 4px;
+  border-left: 2px solid rgba(255, 209, 102, 0.2);
 }
 
 .layout-quake-details .settings-row {
@@ -514,8 +583,10 @@
 .layout-quake-details .settings-row > span:first-child {
   flex-shrink: 0;
   min-width: 80px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
+/* --- Inline Shortcut Recorder --- */
 .shortcut-recorder-inline {
   display: flex;
   align-items: center;
@@ -526,11 +597,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 8px;
+  padding: 4px 10px;
   min-width: 80px;
-  border: 1px solid rgba(255, 196, 93, 0.3);
-  border-radius: 4px;
-  background: rgba(255, 196, 93, 0.05);
+  border: 1px solid rgba(255, 209, 102, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 209, 102, 0.05);
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
@@ -549,31 +620,29 @@
   justify-content: center;
   height: 24px;
   padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.6);
   font-size: 11px;
   font-family: inherit;
   cursor: pointer;
-  transition:
-    background 120ms ease,
-    color 120ms ease;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .shortcut-recorder-btn:hover {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.9);
 }
 
 .shortcut-recorder-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.3;
   cursor: default;
 }
 
 .shortcut-recorder-save:not(:disabled) {
-  border-color: rgba(255, 196, 93, 0.3);
-  color: rgba(255, 196, 93, 0.85);
+  border-color: rgba(255, 209, 102, 0.25);
+  color: rgba(255, 209, 102, 0.8);
 }
 
 /* --- Layouts Dropdown Menu --- */
@@ -583,9 +652,9 @@
   right: 4px;
   min-width: 180px;
   padding: 4px 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  background: #1e1e1e;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -614,7 +683,7 @@
 }
 
 .layouts-dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .layouts-dropdown-label {
@@ -628,7 +697,7 @@
 .layouts-dropdown-separator {
   height: 1px;
   margin: 4px 10px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--panel-border);
 }
 
 .layouts-dropdown-action {
@@ -646,7 +715,7 @@
 }
 
 .layouts-dropdown-action:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .layouts-dropdown-action.is-editing {
@@ -661,9 +730,9 @@
   min-width: 0;
   height: 24px;
   padding: 0 6px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font: inherit;
   font-size: 13px;
@@ -671,8 +740,8 @@
 }
 
 .layouts-dropdown-input:focus {
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--status-highlight);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .layouts-dropdown-btn {
@@ -689,21 +758,69 @@
 }
 
 .layouts-dropdown-btn-confirm {
-  background: rgba(76, 175, 80, 0.2);
+  background: rgba(76, 175, 80, 0.15);
   color: #81c784;
-  border: 1px solid rgba(76, 175, 80, 0.4);
+  border: 1px solid rgba(76, 175, 80, 0.3);
 }
 
 .layouts-dropdown-btn-confirm:hover {
-  background: rgba(76, 175, 80, 0.35);
+  background: rgba(76, 175, 80, 0.25);
 }
 
 .layouts-dropdown-btn-cancel {
-  background: rgba(244, 67, 54, 0.15);
+  background: rgba(244, 67, 54, 0.1);
   color: #e57373;
-  border: 1px solid rgba(244, 67, 54, 0.35);
+  border: 1px solid rgba(244, 67, 54, 0.25);
 }
 
 .layouts-dropdown-btn-cancel:hover {
-  background: rgba(244, 67, 54, 0.25);
+  background: rgba(244, 67, 54, 0.2);
+}
+
+/* --- UI Override Container --- */
+.layout-ui-override-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.layout-override-toggle {
+  flex-shrink: 0;
+  font-size: 11px !important;
+  padding: 0 8px !important;
+  height: 22px !important;
+  border-radius: 4px !important;
+  transition: all 120ms ease;
+}
+
+.layout-override-toggle.is-active {
+  background: rgba(255, 209, 102, 0.1) !important;
+  border-color: rgba(255, 209, 102, 0.25) !important;
+  color: var(--status-highlight) !important;
+}
+
+/* --- Settings Text Input (for font family override) --- */
+.settings-text {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.settings-text:focus {
+  border-color: var(--status-highlight);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.settings-text:disabled {
+  opacity: 0.4;
 }

@@ -600,6 +600,11 @@ export function createLayoutModal({
       const hotkeySection = document.createElement('div');
       hotkeySection.className = 'layout-section';
 
+      const hotkeyHeader = document.createElement('div');
+      hotkeyHeader.className = 'layout-section-header';
+      hotkeyHeader.textContent = 'Hotkey';
+      hotkeySection.appendChild(hotkeyHeader);
+
       const hotkeyRow = document.createElement('div');
       hotkeyRow.className = 'settings-row';
       const hotkeyLabel = document.createElement('span');
@@ -648,6 +653,11 @@ export function createLayoutModal({
       // -- Quake --
       const quakeSection = document.createElement('div');
       quakeSection.className = 'layout-section';
+
+      const quakeHeader = document.createElement('div');
+      quakeHeader.className = 'layout-section-header';
+      quakeHeader.textContent = 'Quake Mode';
+      quakeSection.appendChild(quakeHeader);
 
       const quakeConfig: QuakeLayoutConfig | null = settingsManager.settings.quakeLayouts[selected.id] ?? null;
 
@@ -758,6 +768,11 @@ export function createLayoutModal({
       // -- Theme --
       const themeSection = document.createElement('div');
       themeSection.className = 'layout-section';
+
+      const themeHeader = document.createElement('div');
+      themeHeader.className = 'layout-section-header';
+      themeHeader.textContent = 'Theme';
+      themeSection.appendChild(themeHeader);
 
       const themeRow = document.createElement('div');
       themeRow.className = 'settings-row';
