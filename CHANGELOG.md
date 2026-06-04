@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **Layout settings UI alignment and consistency** (VIB-355):
+  - Fixed star/zap icons in sidebar: now use separate `<span>` elements with consistent sizing and vertical alignment with text.
+  - Fixed sidebar element ordering: moved active dot indicator to the start of the row, pane count and actions right-aligned.
+  - Fixed "Use Global" toggle button: removed cramped `settings-btn` base class, now uses standalone style with shorter "Global"/"Custom" labels.
+  - Fixed slider (range input) styling: added gold-themed thumb/track styles to override container sliders, replacing browser-default blue.
+  - Fixed slider sizing: capped max width at 140px to prevent overly long sliders and ensure consistent sizing across rows.
+  - Fixed responsive layout at 1070px: reduced modal min-width, added media query for tighter spacing at narrow viewports.
+
 - **Layout UI override E2E test failures** (VIB-344):
   - Fixed `createOverrideRow()` to call `renderFn()` after enabling override so the toggle updates to "Custom" and inputs become enabled.
   - Fixed text input override to save on `input` event in addition to `change`, ensuring compatibility with WebKitGTK programmatic value changes.
