@@ -48,11 +48,11 @@
 
 /* --- Sidebar --- */
 .settings-modal.layouts-modal .layouts-sidebar {
-  flex: 0 0 240px;
+  flex: 0 0 200px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--panel-border);
-  padding-right: 20px;
+  padding-right: 16px;
   min-height: 0;
   overflow: hidden;
 }
@@ -86,6 +86,12 @@
 .layout-item:hover {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.06);
+}
+
+.layout-item:active:not(.is-selected) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: scale(0.98);
 }
 
 /* Selected state: consistent with shell-profile-item style */
@@ -292,8 +298,8 @@
 /* --- Layout Info Card --- */
 .layout-info {
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 10px;
+  padding: 16px;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
@@ -522,7 +528,7 @@
   - 20px gap between sections
 */
 .layout-section {
-  padding: 16px;
+  padding: 12px;
   margin-top: 0;
   border-top: none;
   border: 1px solid var(--panel-border);
@@ -530,7 +536,7 @@
   background: rgba(255, 255, 255, 0.015);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 /* Section header: gold accent left-border for visual hierarchy */
@@ -546,7 +552,14 @@
 }
 
 .layout-section > .settings-row {
-  gap: 12px;
+  gap: 8px;
+}
+
+.layout-section > .settings-row > span:first-child {
+  flex-shrink: 0;
+  min-width: 80px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
 }
 
 /* Custom select inside settings-row should not take full width to avoid label wrapping */
@@ -591,6 +604,9 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
   transition: background 120ms ease, border-color 120ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .layout-autostart-toggle:hover {
@@ -814,60 +830,71 @@
   background: rgba(244, 67, 54, 0.2);
 }
 
-/* --- UI Override Row (two-line layout for clarity) --- */
+/* --- UI Override Row (single-line compact layout with pin icon) --- */
+
+/* Override rows: no wrapping, keep everything on one line */
 .layout-section > .settings-row:has(> .layout-ui-override-container) {
-  flex-wrap: wrap;
-  gap: 6px 12px;
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 
 .layout-section > .settings-row > .layout-ui-override-container {
-  flex-basis: 100%;
+  flex: 1;
+  min-width: 0;
   padding-left: 0;
 }
 
 .layout-ui-override-container {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
   min-width: 0;
 }
 
+/* Pin-style toggle: icon button instead of text button */
 .layout-override-toggle {
   appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 56px;
+  width: 22px;
   height: 22px;
-  padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0;
+  border: none;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 11px;
-  font-family: inherit;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 14px;
   cursor: pointer;
-  transition: all 120ms ease;
-  white-space: nowrap;
+  transition: color 120ms ease, background 120ms ease;
   flex-shrink: 0;
 }
 
-.layout-override-toggle:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.7);
+.layout-override-toggle svg {
+  width: 14px;
+  height: 14px;
 }
 
+.layout-override-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Active (custom) state: gold pin icon */
 .layout-override-toggle.is-active {
-  background: rgba(255, 209, 102, 0.1);
-  border-color: rgba(255, 209, 102, 0.25);
   color: var(--status-highlight);
 }
 
-/* Override row inputs: keep them on one line, prevent wrapping */
+.layout-override-toggle.is-active:hover {
+  background: rgba(255, 209, 102, 0.1);
+  color: var(--status-highlight);
+}
+
+/* Override row inputs: inline on same line, prevent wrapping */
 .layout-ui-override-container input[type="range"] {
-  flex: 0 1 140px;
-  min-width: 80px;
+  flex: 1;
+  min-width: 60px;
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
@@ -905,13 +932,13 @@
 }
 
 .layout-ui-override-container .settings-number {
-  width: 56px;
+  width: 48px;
   flex-shrink: 0;
 }
 
 .layout-ui-override-container .settings-text {
   flex: 1;
-  min-width: 120px;
+  min-width: 80px;
 }
 
 .layout-ui-override-container .settings-unit {

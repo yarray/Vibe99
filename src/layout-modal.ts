@@ -86,17 +86,17 @@ function createOverrideRow(
   const overrideToggle = document.createElement('button');
   overrideToggle.type = 'button';
   overrideToggle.className = 'layout-override-toggle';
-  overrideToggle.textContent = isOverridden ? 'Custom' : 'Global';
+  overrideToggle.title = isOverridden ? 'Using custom value (click to use global)' : 'Using global value (click to customize)';
+  overrideToggle.innerHTML = icon('pin');
   overrideToggle.classList.toggle('is-active', isOverridden);
   overrideToggle.addEventListener('click', async () => {
     const isCurrentlyOverridden = overrideToggle.classList.contains('is-active');
     if (isCurrentlyOverridden) {
       await onClear();
     } else if (isText && !String(globalValue).trim()) {
-      overrideToggle.textContent = 'Custom';
       overrideToggle.classList.add('is-active');
+      overrideToggle.title = 'Using custom value (click to use global)';
       const textInput = overrideContainer.querySelector('input') as HTMLInputElement | null;
-      if (textInput) textInput.disabled = false;
       if (textInput) textInput.disabled = false;
     } else {
       await onSave(globalValue);
@@ -1023,7 +1023,8 @@ export function createLayoutModal({
       const breathingOverrideToggle = document.createElement('button');
       breathingOverrideToggle.type = 'button';
       breathingOverrideToggle.className = 'layout-override-toggle';
-      breathingOverrideToggle.textContent = currentUiOverrides.breathingIntensity ? 'Custom' : 'Global';
+      breathingOverrideToggle.title = currentUiOverrides.breathingIntensity ? 'Using custom value (click to use global)' : 'Using global value (click to customize)';
+      breathingOverrideToggle.innerHTML = icon('pin');
       breathingOverrideToggle.classList.toggle('is-active', currentUiOverrides.breathingIntensity !== undefined);
       breathingOverrideToggle.addEventListener('click', async () => {
         const isCurrentlyActive = breathingOverrideToggle.classList.contains('is-active');
