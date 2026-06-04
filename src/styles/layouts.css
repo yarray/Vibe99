@@ -10,7 +10,7 @@
 
 /* --- Layout Manager Modal --- */
 .settings-modal.layouts-modal {
-  min-width: 780px;
+  min-width: 680px;
   max-width: 960px;
   width: 90vw;
   height: min(640px, calc(100vh - 32px));
@@ -19,6 +19,22 @@
   padding: 20px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
+}
+
+@media (max-width: 1100px) {
+  .settings-modal.layouts-modal {
+    min-width: 600px;
+    padding: 16px;
+  }
+
+  .settings-modal.layouts-modal .layouts-sidebar {
+    flex: 0 0 180px;
+    padding-right: 12px;
+  }
+
+  .settings-modal.layouts-modal .layouts-modal-body {
+    gap: 12px;
+  }
 }
 
 .settings-modal.layouts-modal .layouts-modal-body {
@@ -83,24 +99,6 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
-.layout-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.06);
-}
-
-/* Selected state: accent left-border for clear visual hierarchy */
-.layout-item.is-selected {
-  background: rgba(255, 209, 102, 0.06);
-  border-color: rgba(255, 209, 102, 0.12);
-  border-left: 3px solid var(--status-highlight);
-  padding-left: 9px;
-  cursor: default;
-}
-
-.layout-item.is-active {
-  background: rgba(255, 255, 255, 0.04);
-}
-
 .layout-item.is-editing {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.08);
@@ -140,6 +138,24 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-item-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--status-highlight);
+}
+
+.layout-item-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .layout-item.is-default .layout-name {
@@ -157,6 +173,8 @@
   font-size: 11px;
   color: var(--panel-muted);
   flex-shrink: 0;
+  text-align: right;
+  min-width: 48px;
 }
 
 .layout-pane-info {
@@ -816,24 +834,74 @@
 }
 
 .layout-override-toggle {
-  flex-shrink: 0;
-  font-size: 11px !important;
-  padding: 0 8px !important;
-  height: 22px !important;
-  border-radius: 4px !important;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
   transition: all 120ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.layout-override-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .layout-override-toggle.is-active {
-  background: rgba(255, 209, 102, 0.1) !important;
-  border-color: rgba(255, 209, 102, 0.25) !important;
-  color: var(--status-highlight) !important;
+  background: rgba(255, 209, 102, 0.1);
+  border-color: rgba(255, 209, 102, 0.25);
+  color: var(--status-highlight);
 }
 
 /* Override row inputs: keep them on one line, prevent wrapping */
 .layout-ui-override-container input[type="range"] {
-  flex: 1;
+  flex: 0 1 140px;
   min-width: 80px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  outline: none;
+}
+
+.layout-ui-override-container input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--status-highlight);
+  border: 2px solid var(--status-highlight);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.layout-ui-override-container input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.25);
+}
+
+.layout-ui-override-container input[type="range"]:disabled {
+  opacity: 0.4;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.layout-ui-override-container input[type="range"]:disabled::-webkit-slider-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.3);
+  cursor: default;
 }
 
 .layout-ui-override-container .settings-number {
