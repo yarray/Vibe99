@@ -58,13 +58,29 @@
   gap: 8px;
   padding: 0 12px;
   height: 36px;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
   border: 1px solid transparent;
   user-select: none;
   min-width: 0;
+}
+
+.layout-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Selected state: consistent with shell-profile-item style */
+.layout-item.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  cursor: default;
+}
+
+.layout-item.is-active {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .layout-item:hover {
@@ -100,6 +116,9 @@
   width: 16px;
   text-align: center;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .layout-item-current.is-active::before {
@@ -777,7 +796,17 @@
   background: rgba(244, 67, 54, 0.2);
 }
 
-/* --- UI Override Container --- */
+/* --- UI Override Row (two-line layout for clarity) --- */
+.layout-section > .settings-row:has(> .layout-ui-override-container) {
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.layout-section > .settings-row > .layout-ui-override-container {
+  flex-basis: 100%;
+  padding-left: 0;
+}
+
 .layout-ui-override-container {
   display: flex;
   align-items: center;
@@ -799,6 +828,26 @@
   background: rgba(255, 209, 102, 0.1) !important;
   border-color: rgba(255, 209, 102, 0.25) !important;
   color: var(--status-highlight) !important;
+}
+
+/* Override row inputs: keep them on one line, prevent wrapping */
+.layout-ui-override-container input[type="range"] {
+  flex: 1;
+  min-width: 80px;
+}
+
+.layout-ui-override-container .settings-number {
+  width: 56px;
+  flex-shrink: 0;
+}
+
+.layout-ui-override-container .settings-text {
+  flex: 1;
+  min-width: 120px;
+}
+
+.layout-ui-override-container .settings-unit {
+  flex-shrink: 0;
 }
 
 /* --- Settings Text Input (for font family override) --- */
