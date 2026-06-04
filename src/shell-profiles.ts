@@ -127,6 +127,38 @@ function splitArgs(str: string): string[] {
 
 
 // ---------------------------------------------------------------------------
+// Drag-and-drop helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Find the profile id whose row is closest to the given y coordinate.
+ *
+ * Used by the list-level drop handler so that releasing a drag in the gap
+ * between two rows still reorders into the nearest row, instead of being
+ * silently dropped.
+ */
+function findDropTarget(listEl: HTMLElement, clientY: number): string | null {
+  const items = Array.from(
+    listEl.querySelectorAll<HTMLElement>('.shell-profile-item'),
+  );
+  if (items.length === 0) return null;
+
+  let bestId: string | null = null;
+  let bestDistance = Infinity;
+  for (const el of items) {
+    const rect = el.getBoundingClientRect();
+    const center = rect.top + rect.height / 2;
+    const distance = Math.abs(clientY - center);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestId = el.dataset.profileId ?? null;
+    }
+  }
+  return bestId;
+}
+
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
@@ -239,6 +271,27 @@ export function createShellProfileManager({
 
     overlay.querySelector('.settings-modal-close')!.addEventListener('click', closeModal);
 
+    // List-level dragover/drop handlers. The per-item handlers cover drops that
+    // land directly on a profile row, but the gap between rows would otherwise
+    // show a "forbidden" cursor and swallow the drop. Catching dragover at the
+    // list level guarantees a valid drop target across the whole sidebar.
+    const profileListEl = overlay.querySelector('#modal-shell-profile-list') as HTMLDivElement;
+    profileListEl.addEventListener('dragover', (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    profileListEl.addEventListener('drop', (e: DragEvent) => {
+      e.preventDefault();
+      const draggedId = e.dataTransfer?.getData('text/plain') ?? '';
+      if (!draggedId) return;
+      // Find the closest profile row to the drop point so dropping in a gap
+      // between items still reorders into the nearest row.
+      const target = findDropTarget(profileListEl, e.clientY) ?? draggedId;
+      if (draggedId !== target) {
+        reorderProfiles(draggedId, target);
+      }
+    });
+
     // Re-detect button
     overlay.querySelector('#modal-shell-profile-redetect')!.addEventListener('click', () => {
       bridge.redetectWsl().then(() => {
@@ -325,7 +378,19 @@ export function createShellProfileManager({
         const item = document.createElement('div');
         item.className = `shell-profile-item${profile.id === selectedShellProfileId ? ' is-selected' : ''}${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
         item.dataset.profileId = profile.id;
-        item.draggable = !isDetected;
+        // Set the draggable attribute both via the IDL property and the
+        // content attribute. Some WebKit builds (Tauri's macOS backend) only
+        // honor the attribute on dynamically created elements, while others
+        // only honor the IDL property; setting both guarantees the element is
+        // treated as draggable in every renderer we ship to.
+        if (isDetected) {
+          item.draggable = false;
+          item.setAttribute('draggable', 'false');
+          item.setAttribute('aria-disabled', 'true');
+        } else {
+          item.draggable = true;
+          item.setAttribute('draggable', 'true');
+        }
 
         const name = document.createElement('div');
         name.className = 'shell-profile-name';
