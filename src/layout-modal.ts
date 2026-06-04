@@ -85,16 +85,17 @@ function createOverrideRow(
 
   const overrideToggle = document.createElement('button');
   overrideToggle.type = 'button';
-  overrideToggle.className = 'settings-btn layout-override-toggle';
-  overrideToggle.textContent = isOverridden ? 'Custom' : 'Use Global';
+  overrideToggle.className = 'layout-override-toggle';
+  overrideToggle.title = isOverridden ? 'Using custom value (click to use global)' : 'Using global value (click to customize)';
+  overrideToggle.innerHTML = icon('pin');
   overrideToggle.classList.toggle('is-active', isOverridden);
   overrideToggle.addEventListener('click', async () => {
     const isCurrentlyOverridden = overrideToggle.classList.contains('is-active');
     if (isCurrentlyOverridden) {
       await onClear();
     } else if (isText && !String(globalValue).trim()) {
-      overrideToggle.textContent = 'Custom';
       overrideToggle.classList.add('is-active');
+      overrideToggle.title = 'Using custom value (click to use global)';
       const textInput = overrideContainer.querySelector('input') as HTMLInputElement | null;
       if (textInput) textInput.disabled = false;
     } else {
@@ -412,11 +413,19 @@ export function createLayoutModal({
           nameEl.className = 'layout-name';
           const nameText = layout.name || layout.id;
           if (isAutostart) {
-            nameEl.innerHTML = `${icon('zap')} ${nameText}`;
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'layout-item-icon';
+            iconSpan.innerHTML = icon('zap');
+            nameEl.appendChild(iconSpan);
+            nameEl.appendChild(document.createTextNode(nameText));
           } else if (isDefault) {
-            nameEl.innerHTML = `${icon('star')} ${nameText}`;
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'layout-item-icon';
+            iconSpan.innerHTML = icon('star');
+            nameEl.appendChild(iconSpan);
+            nameEl.appendChild(document.createTextNode(nameText));
           } else {
-            nameEl.innerHTML = nameText;
+            nameEl.textContent = nameText;
           }
         }
 
@@ -462,7 +471,7 @@ export function createLayoutModal({
         checkmark.className = 'layout-item-current';
         if (isActive) checkmark.classList.add('is-active');
 
-        item.append(nameEl, info, actions, checkmark);
+        item.append(checkmark, nameEl, info, actions);
         item.addEventListener('click', (e: MouseEvent) => {
           if ((e.target as HTMLElement).closest('.layout-actions')) return;
           layoutManager._setSelectedLayoutId(layout.id);
@@ -600,6 +609,11 @@ export function createLayoutModal({
       const hotkeySection = document.createElement('div');
       hotkeySection.className = 'layout-section';
 
+      const hotkeyHeader = document.createElement('div');
+      hotkeyHeader.className = 'layout-section-header';
+      hotkeyHeader.textContent = 'Hotkey';
+      hotkeySection.appendChild(hotkeyHeader);
+
       const hotkeyRow = document.createElement('div');
       hotkeyRow.className = 'settings-row';
       const hotkeyLabel = document.createElement('span');
@@ -648,6 +662,11 @@ export function createLayoutModal({
       // -- Quake --
       const quakeSection = document.createElement('div');
       quakeSection.className = 'layout-section';
+
+      const quakeHeader = document.createElement('div');
+      quakeHeader.className = 'layout-section-header';
+      quakeHeader.textContent = 'Quake Mode';
+      quakeSection.appendChild(quakeHeader);
 
       const quakeConfig: QuakeLayoutConfig | null = settingsManager.settings.quakeLayouts[selected.id] ?? null;
 
@@ -758,6 +777,11 @@ export function createLayoutModal({
       // -- Theme --
       const themeSection = document.createElement('div');
       themeSection.className = 'layout-section';
+
+      const themeHeader = document.createElement('div');
+      themeHeader.className = 'layout-section-header';
+      themeHeader.textContent = 'Theme';
+      themeSection.appendChild(themeHeader);
 
       const themeRow = document.createElement('div');
       themeRow.className = 'settings-row';
@@ -998,8 +1022,9 @@ export function createLayoutModal({
 
       const breathingOverrideToggle = document.createElement('button');
       breathingOverrideToggle.type = 'button';
-      breathingOverrideToggle.className = 'settings-btn layout-override-toggle';
-      breathingOverrideToggle.textContent = currentUiOverrides.breathingIntensity ? 'Custom' : 'Use Global';
+      breathingOverrideToggle.className = 'layout-override-toggle';
+      breathingOverrideToggle.title = currentUiOverrides.breathingIntensity ? 'Using custom value (click to use global)' : 'Using global value (click to customize)';
+      breathingOverrideToggle.innerHTML = icon('pin');
       breathingOverrideToggle.classList.toggle('is-active', currentUiOverrides.breathingIntensity !== undefined);
       breathingOverrideToggle.addEventListener('click', async () => {
         const isCurrentlyActive = breathingOverrideToggle.classList.contains('is-active');
