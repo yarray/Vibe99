@@ -72,7 +72,7 @@ function createState(): ShellProfileState {
   };
 }
 
-describe('shell-profiles bug fix VIB-357', () => {
+describe('createShellProfileManager', () => {
   let originalWindow: any;
   let originalDocument: any;
 
@@ -233,7 +233,7 @@ describe('shell-profiles bug fix VIB-357', () => {
     expect(profiles.length).toBe(2);
   });
 
-  it('cloning and only changing name (no ID change) works correctly', async () => {
+  it('cloning then editing name and ID still updates the cloned profile using originalId', async () => {
     const initial: ShellProfile[] = [
       { id: 'fish', name: 'Fish', command: '/usr/bin/fish', args: '' },
     ];
@@ -280,7 +280,7 @@ describe('shell-profiles bug fix VIB-357', () => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
 
     expect(addCalls.length).toBe(2);
-    // The fix: save uses originalId, NOT the user-typed 'fish-copy'.
+    // Saving a cloned profile uses originalId, ignoring any user-typed ID.
     expect(addCalls[1].id).toBe(editing.originalId);
     expect(addCalls[1].name).toBe('My Fish');
 
