@@ -49,7 +49,7 @@ export type TabRefreshCallback = (paneId: string) => void;
 /** Activity watcher interface used by TerminalSession. */
 export interface TerminalActivityWatcher {
   noteResize: (paneId: string) => void;
-  noteData: (paneId: string) => void;
+  noteData: (paneId: string, byteSize?: number) => void;
   forget: (paneId: string) => void;
 }
 
@@ -520,8 +520,12 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   function noteVisibleTerminalActivity(): void {
     const next = snapshot();
     if (next.length === last.length && !next.some((l, i) => l !== last[i])) return;
+    const changedBytes = next.reduce((sum, line, i) => {
+      if (i >= last.length || line !== last[i]) return sum + line.length;
+      return sum;
+    }, 0);
     last = next;
-    activityWatcher.noteData(paneId);
+    activityWatcher.noteData(paneId, changedBytes);
   }
 
   // ---------------------------------------------------------------------------
