@@ -1,0 +1,1 @@
+Fix bug where copying a Shell Profile and then editing/saving it would create a duplicate profile instead of updating the copied one. The fix adds an `originalId` field to track the original profile ID during clone operations, ensuring the save operation updates the correct profile.
