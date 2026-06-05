@@ -169,10 +169,9 @@
   font-weight: 500;
 }
 
-/* Autostart badge: subtle gold outline */
+/* Autostart badge: no visual outline — the zap icon in the name already indicates autostart */
 .layout-item.is-autostart {
-  outline: 1px solid rgba(255, 196, 93, 0.25);
-  outline-offset: -1px;
+  outline: none;
 }
 
 .layout-pane-count {
@@ -557,7 +556,7 @@
 
 .layout-section > .settings-row > span:first-child {
   flex-shrink: 0;
-  min-width: 120px;
+  width: 120px;
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
 }
@@ -863,15 +862,15 @@
   min-width: 0;
 }
 
-/* Pin-style toggle: icon button instead of text button */
+/* Pin-style toggle: icon button with state label */
 .layout-override-toggle {
   appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
+  gap: 2px;
   height: 22px;
-  padding: 0;
+  padding: 0 6px;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -895,6 +894,19 @@
 /* Active (custom) state: gold pin icon */
 .layout-override-toggle.is-active {
   color: var(--status-highlight);
+}
+
+.layout-override-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-left: 3px;
+  opacity: 0.7;
+}
+
+.layout-override-toggle.is-active .layout-override-label {
+  opacity: 1;
 }
 
 .layout-override-toggle.is-active:hover {
@@ -954,8 +966,12 @@
 
 .layout-ui-override-container .settings-unit {
   flex-shrink: 0;
-  min-width: 18px;
+  width: 18px;
   text-align: left;
+}
+
+.layout-ui-override-container .settings-unit.is-empty {
+  visibility: hidden;
 }
 
 /* --- Settings Text Input (for font family override) --- */

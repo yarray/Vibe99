@@ -11,6 +11,10 @@
   - Fixed slider (range input) styling: added gold-themed thumb/track styles to override container sliders, replacing browser-default blue.
   - Fixed slider sizing: capped max width at 140px to prevent overly long sliders and ensure consistent sizing across rows.
   - Fixed responsive layout at 1070px: reduced modal min-width, added media query for tighter spacing at narrow viewports.
+  - Fixed label column alignment: changed `min-width` to fixed `width` on layout section labels so all inputs start at the same vertical column.
+  - Fixed unit column alignment: always create unit span (hidden when empty) so number inputs align regardless of whether the row has a unit.
+  - Added visible Global/Custom text label next to pin toggle icon for clear state indication.
+  - Removed confusing yellow autostart outline from sidebar layout items — the zap icon already indicates autostart.
 
 - **Layout UI override E2E test failures** (VIB-344):
   - Fixed `createOverrideRow()` to call `renderFn()` after enabling override so the toggle updates to "Custom" and inputs become enabled.
