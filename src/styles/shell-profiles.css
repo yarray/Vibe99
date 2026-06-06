@@ -29,6 +29,17 @@
   min-width: 0;
 }
 
+/* Detected (auto-discovered) profiles are immutable and cannot be reordered.
+   Show a not-allowed cursor so the user immediately sees they are not
+   draggable, instead of the misleading grab cursor. */
+.shell-profile-item.is-detected {
+  cursor: not-allowed;
+}
+
+.shell-profile-item.is-detected:hover {
+  cursor: not-allowed;
+}
+
 .shell-profile-item:hover {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.08);

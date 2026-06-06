@@ -37,6 +37,8 @@ export interface EditingShellProfile {
   args: string;
   themeId: string;
   isNew: boolean;
+  /** Original profile ID when editing a cloned profile. Used to update the original instead of creating a duplicate. */
+  originalId?: string;
 }
 
 /** Result shape returned by bridge shell profile operations. */
@@ -124,6 +126,38 @@ function splitArgs(str: string): string[] {
   return args;
 }
 
+
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Find the profile id whose row is closest to the given y coordinate.
+ *
+ * Used by the list-level drop handler so that releasing a drag in the gap
+ * between two rows still reorders into the nearest row, instead of being
+ * silently dropped.
+ */
+function findDropTarget(listEl: HTMLElement, clientY: number): string | null {
+  const items = Array.from(
+    listEl.querySelectorAll<HTMLElement>('.shell-profile-item'),
+  );
+  if (items.length === 0) return null;
+
+  let bestId: string | null = null;
+  let bestDistance = Infinity;
+  for (const el of items) {
+    const rect = el.getBoundingClientRect();
+    const center = rect.top + rect.height / 2;
+    const distance = Math.abs(clientY - center);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestId = el.dataset.profileId ?? null;
+    }
+  }
+  return bestId;
+}
 
 
 // ---------------------------------------------------------------------------
@@ -239,6 +273,27 @@ export function createShellProfileManager({
 
     overlay.querySelector('.settings-modal-close')!.addEventListener('click', closeModal);
 
+    // List-level dragover/drop handlers. The per-item handlers cover drops that
+    // land directly on a profile row, but the gap between rows would otherwise
+    // show a "forbidden" cursor and swallow the drop. Catching dragover at the
+    // list level guarantees a valid drop target across the whole sidebar.
+    const profileListEl = overlay.querySelector('#modal-shell-profile-list') as HTMLDivElement;
+    profileListEl.addEventListener('dragover', (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    profileListEl.addEventListener('drop', (e: DragEvent) => {
+      e.preventDefault();
+      const draggedId = e.dataTransfer?.getData('text/plain') ?? '';
+      if (!draggedId) return;
+      // Find the closest profile row to the drop point so dropping in a gap
+      // between items still reorders into the nearest row.
+      const target = findDropTarget(profileListEl, e.clientY) ?? draggedId;
+      if (draggedId !== target) {
+        reorderProfiles(draggedId, target);
+      }
+    });
+
     // Re-detect button
     overlay.querySelector('#modal-shell-profile-redetect')!.addEventListener('click', () => {
       bridge.redetectWsl().then(() => {
@@ -325,7 +380,19 @@ export function createShellProfileManager({
         const item = document.createElement('div');
         item.className = `shell-profile-item${profile.id === selectedShellProfileId ? ' is-selected' : ''}${profile.id === defaultShellProfileId ? ' is-default' : ''}${isDetected ? ' is-detected' : ''}`;
         item.dataset.profileId = profile.id;
-        item.draggable = !isDetected;
+        // Set the draggable attribute both via the IDL property and the
+        // content attribute. Some WebKit builds (Tauri's macOS backend) only
+        // honor the attribute on dynamically created elements, while others
+        // only honor the IDL property; setting both guarantees the element is
+        // treated as draggable in every renderer we ship to.
+        if (isDetected) {
+          item.draggable = false;
+          item.setAttribute('draggable', 'false');
+          item.setAttribute('aria-disabled', 'true');
+        } else {
+          item.draggable = true;
+          item.setAttribute('draggable', 'true');
+        }
 
         const name = document.createElement('div');
         name.className = 'shell-profile-name';
@@ -537,6 +604,8 @@ export function createShellProfileManager({
     save.className = 'settings-btn shell-profile-editor-btn is-primary';
     save.textContent = 'Save';
     save.addEventListener('click', () => {
+      const editingShellProfile = state.getEditingShellProfile()!;
+
       const profile: ShellProfile = {
         id: (inputs.id as HTMLInputElement).value.trim(),
         name: (inputs.name as HTMLInputElement).value.trim(),
@@ -550,12 +619,19 @@ export function createShellProfileManager({
         return;
       }
 
-      bridge.addShellProfile(profile).then((config) => {
+      // When editing a cloned profile (isNew: true with originalId), use the originalId
+      // for the upsert to update the original profile instead of creating a duplicate.
+      // For truly new profiles (no originalId), use the new ID to create.
+      const profileToSave = (editingShellProfile.isNew && editingShellProfile.originalId)
+        ? { ...profile, id: editingShellProfile.originalId }
+        : profile;
+
+      bridge.addShellProfile(profileToSave).then((config) => {
         const userIds = new Set((config.profiles ?? []).map((p) => p.id));
         state.setShellProfiles([...(config.profiles ?? []), ...detectedShellProfiles.filter((p) => !userIds.has(p.id))]);
         state.setDefaultShellProfileId(config.defaultProfile ?? '');
 
-        // Select the newly created/saved profile
+        // Select the saved profile using the user's chosen ID (not the originalId)
         state.setSelectedShellProfileId(profile.id);
         state.setEditingShellProfile({
           id: profile.id,
@@ -605,7 +681,8 @@ export function createShellProfileManager({
         command: clonedProfile.command,
         args: clonedProfile.args ?? '',
         themeId: clonedProfile.themeId || '',
-        isNew: true // Treat as new so user can edit the ID
+        isNew: true, // Treat as new so user can edit the ID
+        originalId: clonedProfile.id // Remember the original profile to update instead of creating duplicate
       });
       renderModalShellProfiles();
     }).catch(reportError);

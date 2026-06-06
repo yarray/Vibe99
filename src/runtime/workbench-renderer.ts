@@ -335,7 +335,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       settingsManager,
       activityWatcher: {
         noteResize: (paneId) => paneActivityWatcher.noteResize(paneId),
-        noteData: (paneId) => paneActivityWatcher.noteData(paneId),
+        noteData: (paneId, byteSize?) => paneActivityWatcher.noteData(paneId, byteSize),
         forget: (paneId) => paneActivityWatcher.forget(paneId),
       },
       reportError,
@@ -364,7 +364,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     stageEl,
     paneActivityWatcher: {
       noteResize: (paneId) => paneActivityWatcher.noteResize(paneId),
-      noteData: (paneId) => paneActivityWatcher.noteData(paneId),
+      noteData: (paneId, byteSize?) => paneActivityWatcher.noteData(paneId, byteSize),
       setFocus: (id) => paneActivityWatcher.setFocus(id),
       setPaneEnabled: (paneId, enabled) => paneActivityWatcher.setPaneEnabled(paneId, enabled),
       isAlerted: (paneId) => paneActivityWatcher.isAlerted(paneId),

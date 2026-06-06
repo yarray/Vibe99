@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **Shell Profile copy creates duplicate on save** (VIB-357):
+  - Fixed `createShellProfileManager` save handler to use `originalId` when saving a cloned profile, preventing duplicate profile creation.
+  - Added unit tests in `src/shell-profiles.test.ts` covering clone-and-save, clone-without-changes, clone-with-ID-edit, and new-profile paths.
+  - Corrected test names and comments to accurately describe behavior instead of referencing bug fix IDs.
+
 - **Layout UI override E2E test failures** (VIB-344):
   - Fixed `createOverrideRow()` to call `renderFn()` after enabling override so the toggle updates to "Custom" and inputs become enabled.
   - Fixed text input override to save on `input` event in addition to `change`, ensuring compatibility with WebKitGTK programmatic value changes.
