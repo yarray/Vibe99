@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 0.22.5
+
 ### Fixed
 
 - **Shell Profile copy creates duplicate on save** (VIB-357):
