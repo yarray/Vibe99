@@ -254,13 +254,12 @@ body.is-dragging-tabs {
 .pane.is-exited.is-focused::after,
 .pane.is-exited.has-pending-activity.is-focused::after {
   opacity: 0 !important;
-  animation: none !important;
 }
 
-/* When exited but NOT focused, keep the breathing animation off */
+/* When exited but NOT focused, hide the alert overlay */
 .pane.is-exited:not(.is-focused)::after,
 .pane.is-exited:not(.is-focused).has-pending-activity::after {
-  animation: none !important;
+  opacity: 0 !important;
 }
 
 .terminal-exit-overlay {

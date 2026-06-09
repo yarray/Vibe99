@@ -192,6 +192,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   });
 
   const paneAlert = createBreathingMaskAlert();
+  paneAlert.attach();
   let globalBreathingEnabled = true;
 
   function applyBreathingIntensity(intensity: string): void {
