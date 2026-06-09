@@ -250,10 +250,6 @@ body.is-dragging-tabs {
 
 /* Terminal exited state — overlay with restart button */
 
-.pane.is-exited {
-  border-color: #e04040;
-}
-
 /* When exited and focused, hide the color card overlay */
 .pane.is-exited.is-focused::after,
 .pane.is-exited.has-pending-activity.is-focused::after {
