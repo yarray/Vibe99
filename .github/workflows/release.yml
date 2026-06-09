@@ -196,9 +196,9 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
         run: node ./scripts/extract-release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
 
-      - name: Append release notes to draft
+      - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
-          gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
+          gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md --draft=false
