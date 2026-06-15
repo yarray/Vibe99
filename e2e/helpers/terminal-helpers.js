@@ -57,6 +57,15 @@ export async function getTerminalText(paneIndex = 0) {
   return _getTerminalTextViaDom(paneIndex);
 }
 
+export async function getTerminalRecentOutput(paneIndex = 0, maxLines = 20) {
+  return await browser.execute((idx, lines) => {
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const paneId = tabs[idx]?.dataset?.paneId;
+    if (!paneId || !window.__vibe99_test?.paneRenderer) return '';
+    return window.__vibe99_test.paneRenderer.getRecentOutput(paneId, lines);
+  }, paneIndex, maxLines);
+}
+
 export async function waitForTerminalOutput(expectedText, paneIndex = 0, timeout = 10000) {
   await waitForCondition(
     async () => {

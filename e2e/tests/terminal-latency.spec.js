@@ -3,7 +3,7 @@ import { cleanupApp } from '../helpers/app-cleanup.js';
 import {
   waitForTerminalReady,
   waitForTerminalSessionReady,
-  getTerminalText,
+  getTerminalRecentOutput,
   sendKeyToTerminal,
   setTerminalLocalEcho,
   getFocusedLatencyStats,
@@ -54,8 +54,8 @@ describe('Terminal input latency and local echo', () => {
     // without shell-prompt noise.
     await sendKeyToTerminal('reset');
     await browser.pause(50);
-    await sendKeyToTerminal('\n');
-    await browser.pause(500);
+    await sendKeyToTerminal('Enter');
+    await browser.pause(800);
 
     const echoMarker = 'locEcho42';
     for (const char of echoMarker) {
@@ -66,8 +66,8 @@ describe('Terminal input latency and local echo', () => {
     // Wait for the real PTY echo to arrive and be reconciled.
     await browser.pause(1000);
 
-    const echoText = await getTerminalText(0);
-    console.log('[terminal-latency] terminal text with local echo:', JSON.stringify(echoText));
+    const echoText = await getTerminalRecentOutput(0, 10);
+    console.log('[terminal-latency] terminal output with local echo:', JSON.stringify(echoText));
 
     // The marker must be present.
     expect(echoText).toContain(echoMarker);
