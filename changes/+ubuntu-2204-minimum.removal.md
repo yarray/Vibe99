@@ -1,0 +1,1 @@
+Dropped Ubuntu 20.04 (focal) support and the `setup-build-deps-ubuntu2004.sh` shim; Linux builds now require Ubuntu 22.04+ where Tauri 2's webkit/gtk/icu dependencies ship natively.

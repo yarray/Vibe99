@@ -29,6 +29,16 @@ Vibe99 is a desktop terminal workspace designed for agentic coding. The UI keeps
 
 For detailed feature documentation with animated demonstrations, see [docs/features/](./docs/features/).
 
+## System Requirements
+
+| Platform | Minimum |
+|----------|---------|
+| Linux    | **Ubuntu 22.04+** (jammy or newer) |
+| Windows  | Windows 10 1809+ |
+| macOS    | macOS 11 Big Sur+ (builds paused; see below) |
+
+Earlier Linux distributions (Ubuntu 20.04 / focal) are **no longer supported**. Tauri 2's dependency chain (`webkit2gtk-4.1`, `libsoup-3.0`, `glib ≥ 2.70`, modern `icu`) is not available in Ubuntu 20.04's default repositories, and the previous custom `/opt/glib-2.72` / `/opt/webkit-jammy` shim has been removed.
+
 ## Installation
 
 ### Pre-built Binaries
@@ -55,15 +65,6 @@ macOS builds are paused until signing and notarization demand justifies the cost
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
   libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-```
-
-**Linux (Ubuntu 20.04):**
-
-Ubuntu 20.04's default repos lack the Tauri v2 system dependencies. Use the provided setup script:
-
-```bash
-sudo bash scripts/setup-build-deps-ubuntu2004.sh
-source .build-env.sh
 ```
 
 **Windows / macOS:**
@@ -249,7 +250,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, changelog rules, and the rel
 
 ## Platform Notes
 
-- **Linux**: Terminal font defaults to DejaVu Sans Mono. Install `libwebkit2gtk-4.1-dev` for Tauri. Ubuntu 20.04 users should run `scripts/setup-build-deps-ubuntu2004.sh` first.
+- **Linux**: Terminal font defaults to DejaVu Sans Mono. Install `libwebkit2gtk-4.1-dev` for Tauri. Requires Ubuntu 22.04+ (see [System Requirements](#system-requirements)).
 - **Windows**: WSL distributions are auto-detected and available as shell profiles.
 - **macOS**: Terminal font defaults to Menlo. The native title bar may remain light when the system is in dark mode ([#28](https://github.com/NekoApocalypse/Vibe99/issues/28)). Release artifacts are paused pending Apple signing.
 
