@@ -204,6 +204,9 @@ export interface TerminalSession {
   /** Return aggregated input latency statistics for this session. */
   getLatencyStats(): LatencyStats;
 
+  /** Reset input latency statistics for this session. */
+  resetLatencyStats(): void;
+
   /** Set the session-ready flag and notify. */
   setReady(ready: boolean): void;
 
@@ -640,6 +643,10 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     return latencyTracker.getStats();
   }
 
+  function resetLatencyStats(): void {
+    latencyTracker.reset();
+  }
+
   function writeLine(text: string): void {
     terminal.writeln(text);
   }
@@ -970,6 +977,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     refreshActivitySnapshot,
     getRecentOutput,
     getLatencyStats,
+    resetLatencyStats,
     setReady,
 
     // Exited state

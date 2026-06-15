@@ -135,3 +135,31 @@ export async function clearCapturedOutput(paneIndex) {
     }
   }, paneIndex);
 }
+
+export async function setTerminalLocalEcho(enabled) {
+  await browser.execute((value) => {
+    if (!window.settingsManager) {
+      throw new Error('settingsManager not exposed on window');
+    }
+    window.settingsManager.settings.terminalLocalEcho = Boolean(value);
+    window.settingsManager.applySettings();
+  }, enabled);
+}
+
+export async function getFocusedLatencyStats() {
+  return await browser.execute(() => {
+    if (!window.__vibe99_latency) {
+      throw new Error('__vibe99_latency not exposed on window');
+    }
+    return window.__vibe99_latency.getFocusedStats();
+  });
+}
+
+export async function resetLatencyStats() {
+  await browser.execute(() => {
+    if (!window.__vibe99_latency) {
+      throw new Error('__vibe99_latency not exposed on window');
+    }
+    window.__vibe99_latency.reset();
+  });
+}

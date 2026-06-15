@@ -41,6 +41,8 @@ export interface PaneRenderer {
   closeSession: (paneId: string, options?: { destroyPty?: boolean }) => void;
   getRecentOutput: (paneId: string, maxLines?: number) => string;
   getLatencyStats: (paneId: string) => LatencyStats;
+  /** Reset input latency statistics for the given pane. */
+  resetLatencyStats: (paneId: string) => void;
   getWorkbench: () => Workbench;
 }
 
@@ -216,6 +218,11 @@ export function createPaneRenderer({
         return { count: 0, last: null, min: null, max: null, avg: null };
       }
       return session.getLatencyStats();
+    },
+    resetLatencyStats: (paneId) => {
+      const session = workbench.session(paneId);
+      if (!session) return;
+      session.resetLatencyStats();
     },
     getWorkbench: () => workbench,
   };

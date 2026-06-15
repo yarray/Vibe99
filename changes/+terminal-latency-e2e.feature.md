@@ -1,0 +1,1 @@
+Added a Linux Tauri end-to-end test for terminal input latency and local echo reconciliation, plus a dedicated GitHub Actions workflow that runs it on relevant changes. The test reports the raw backend-to-frontend PTY latency and verifies that local-echoed characters are not rendered twice.

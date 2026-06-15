@@ -501,6 +501,11 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       return paneRenderer?.getLatencyStats(focusedPaneId) ?? null;
     },
     getStats: (paneId: string) => paneRenderer?.getLatencyStats(paneId) ?? null,
+    reset: () => {
+      const focusedPaneId = paneState.getFocusedPaneId();
+      if (!focusedPaneId) return;
+      paneRenderer?.resetLatencyStats(focusedPaneId);
+    },
   };
 
   let cachedFloatWindowState: Record<string, any> = {};
