@@ -89,12 +89,19 @@ function createOverrideRow(
   overrideToggle.title = isOverridden ? 'Using custom value (click to use global)' : 'Using global value (click to customize)';
   overrideToggle.innerHTML = icon('pin');
   overrideToggle.classList.toggle('is-active', isOverridden);
+
+  const overrideLabel = document.createElement('span');
+  overrideLabel.className = 'layout-override-label';
+  overrideLabel.textContent = isOverridden ? 'Custom' : 'Global';
+  overrideToggle.appendChild(overrideLabel);
+
   overrideToggle.addEventListener('click', async () => {
     const isCurrentlyOverridden = overrideToggle.classList.contains('is-active');
     if (isCurrentlyOverridden) {
       await onClear();
     } else if (isText && !String(globalValue).trim()) {
       overrideToggle.classList.add('is-active');
+      overrideLabel.textContent = 'Custom';
       overrideToggle.title = 'Using custom value (click to use global)';
       const textInput = overrideContainer.querySelector('input') as HTMLInputElement | null;
       if (textInput) textInput.disabled = false;
@@ -162,12 +169,11 @@ function createOverrideRow(
     overrideContainer.appendChild(numInput);
   }
 
-  if (unit) {
-    const unitSpan = document.createElement('span');
-    unitSpan.className = 'settings-unit';
-    unitSpan.textContent = unit;
-    overrideContainer.appendChild(unitSpan);
-  }
+  const unitSpan = document.createElement('span');
+  unitSpan.className = 'settings-unit';
+  unitSpan.textContent = unit || '';
+  if (!unit) unitSpan.classList.add('is-empty');
+  overrideContainer.appendChild(unitSpan);
 
   row.appendChild(overrideContainer);
   return row;
@@ -1026,6 +1032,12 @@ export function createLayoutModal({
       breathingOverrideToggle.title = currentUiOverrides.breathingIntensity ? 'Using custom value (click to use global)' : 'Using global value (click to customize)';
       breathingOverrideToggle.innerHTML = icon('pin');
       breathingOverrideToggle.classList.toggle('is-active', currentUiOverrides.breathingIntensity !== undefined);
+
+      const breathingOverrideLabel = document.createElement('span');
+      breathingOverrideLabel.className = 'layout-override-label';
+      breathingOverrideLabel.textContent = currentUiOverrides.breathingIntensity !== undefined ? 'Custom' : 'Global';
+      breathingOverrideToggle.appendChild(breathingOverrideLabel);
+
       breathingOverrideToggle.addEventListener('click', async () => {
         const isCurrentlyActive = breathingOverrideToggle.classList.contains('is-active');
         if (isCurrentlyActive) {

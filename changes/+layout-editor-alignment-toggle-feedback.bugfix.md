@@ -1,0 +1,1 @@
+Fix layout editor UI alignment: label column min-width increased to prevent misalignment, unit column now reserves consistent space, toggle dot enlarged for visibility, Quake details border uses neutral panel color instead of confusing gold accent, and active toggle rows get a subtle background tint.
