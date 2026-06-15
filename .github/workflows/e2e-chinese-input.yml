@@ -1,0 +1,186 @@
+name: E2E Chinese Input Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      ime:
+        description: 'IME to test (fcitx5 or ibus)'
+        required: false
+        default: 'fcitx5'
+        type: choice
+        options:
+          - fcitx5
+          - ibus
+
+jobs:
+  e2e-chinese-input:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Chinese locale
+        run: |
+          sudo locale-gen zh_CN.UTF-8
+          sudo update-locale LANG=zh_CN.UTF-8
+          echo "LANG=zh_CN.UTF-8" >> $GITHUB_ENV
+          echo "LC_ALL=zh_CN.UTF-8" >> $GITHUB_ENV
+
+      - name: Install Chinese fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            fonts-wqy-microhei \
+            fonts-wqy-zenhei \
+            fonts-noto-cjk
+
+      - name: Install Fcitx5 and Chinese input methods
+        if: github.event.inputs.ime != 'ibus'
+        run: |
+          sudo apt-get install -y \
+            fcit5 \
+            fcit5-chinese-addons \
+            fcit5-frontend-gtk3 \
+            fcit5-frontend-gtk4 \
+            fcit5-configtool
+
+      - name: Install iBus and Chinese input methods
+        if: github.event.inputs.ime == 'ibus'
+        run: |
+          sudo apt-get install -y \
+            ibus \
+            ibus-libpinyin \
+            ibus-pinyin \
+            ibus-gtk3 \
+            ibus-gtk4
+
+      - name: Install Tauri dependencies
+        run: |
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xvfb \
+            webkit2gtk-driver
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Node modules
+        uses: actions/cache@v4
+        id: cache-node-modules
+        with:
+          path: |
+            node_modules
+            e2e/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json', 'e2e/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-rust-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-
+
+      - name: Cache tauri-driver
+        id: cache-td
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: tauri-driver-${{ runner.os }}
+
+      - name: Install tauri-driver
+        if: steps.cache-td.outputs.cache-hit != 'true'
+        run: cargo install tauri-driver
+
+      - name: Install frontend dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Install E2E dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        working-directory: e2e
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri:build-dev
+
+      - name: Start Xvfb with proper settings
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
+          export DISPLAY=:99
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          sleep 2
+
+      - name: Setup Fcitx5 environment
+        if: github.event.inputs.ime != 'ibus'
+        run: |
+          export DISPLAY=:99
+          export GTK_IM_MODULE=fcitx
+          export QT_IM_MODULE=fcitx
+          export XMODIFIERS=@im=fcitx
+          export INPUT_METHOD=fcitx
+          export SDL_IM_MODULE=fcitx
+          export GLFW_IM_MODULE=ibus
+
+          # Start Fcitx5 daemon
+          fcit5 -d --replace &
+          sleep 3
+
+          # Configure Fcitx5 to use Pinyin
+          dbus-send --session --print-reply --dest=org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1.SetCurrentIM string:fcitx-keyboard-us || true
+          sleep 1
+
+          echo "Fcitx5 started and configured"
+
+      - name: Setup iBus environment
+        if: github.event.inputs.ime == 'ibus'
+        run: |
+          export DISPLAY=:99
+          export GTK_IM_MODULE=ibus
+          export QT_IM_MODULE=ibus
+          export XMODIFIERS=@im=ibus
+          export INPUT_METHOD=ibus
+          export SDL_IM_MODULE=ibus
+          export GLFW_IM_MODULE=ibus
+
+          # Start iBus daemon
+          ibus-daemon -drx
+          sleep 3
+
+          # Configure iBus to use Pinyin
+          ibus engine libpinyin &
+          sleep 1
+
+          echo "iBus started and configured"
+
+      - name: Run E2E Chinese input tests
+        run: |
+          export DISPLAY=:99
+          cd e2e
+          npm run test:e2e -- chinese-input.spec.js
+
+      - name: Upload E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-chinese-input-artifacts
+          path: |
+            e2e/screenshots/
+            src-tauri/target/debug/vibe99
+          if-no-files-found: ignore

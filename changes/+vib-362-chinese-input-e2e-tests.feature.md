@@ -1,0 +1,1 @@
+Add GitHub Actions workflow and E2E tests for Chinese input method (IME) support. The workflow configures Ubuntu 22.04 with Fcitx5/iBus input methods for testing Chinese input without character duplication (VIB-362). Tests verify IME event filtering and prevent text accumulation across multiple inputs.
