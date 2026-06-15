@@ -148,6 +148,17 @@ export const webglEnabledSchema = z
   .default(true);
 
 /**
+ * Terminal local echo: boolean
+ *
+ * Reduces perceived input latency on platforms where the PTY round-trip
+ * through Tauri/WebkitGTK is slow (e.g. Linux) by echoing safe keystrokes
+ * locally before the shell sends them back.
+ */
+const terminalLocalEchoSchema = z
+  .boolean({ error: 'Terminal local echo must be a boolean' })
+  .default(false);
+
+/**
  * Activity alert debounce: 3000-300000 ms, positive integer
  *
  * `.positive()` rejects 0 and NaN before the transform runs, so invalid
@@ -181,6 +192,7 @@ export const appSettingsSchema = z.object({
   paneMaskOpacity: paneMaskOpacitySchema,
   paneWidth: paneWidthSchema,
   webglEnabled: webglEnabledSchema,
+  terminalLocalEcho: terminalLocalEchoSchema,
   breathingIntensity: breathingIntensitySchema.default('mild'),
   activityAlertDebounceMs: activityAlertDebounceMsSchema,
   layoutHotkeys: layoutHotkeysSchema,
@@ -412,6 +424,7 @@ export interface LegacySettingsInput {
     paneMaskAlpha?: unknown; // Deprecated: replaced by paneMaskOpacity
     paneWidth?: unknown;
     webglEnabled?: unknown;
+    terminalLocalEcho?: unknown;
     breathingAlertEnabled?: boolean; // Deprecated: replaced by breathingIntensity
     breathingIntensity?: unknown;
     activityAlertDebounceMs?: unknown;

@@ -188,6 +188,9 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
   const webglToggle = document.getElementById('webgl-toggle') as HTMLInputElement;
   const webglDot = document.getElementById('webgl-dot') as HTMLElement;
   const webglRow = document.getElementById('webgl-row') as HTMLElement;
+  const terminalLocalEchoToggle = document.getElementById('terminal-local-echo-toggle') as HTMLInputElement;
+  const terminalLocalEchoDot = document.getElementById('terminal-local-echo-dot') as HTMLElement;
+  const terminalLocalEchoRow = document.getElementById('terminal-local-echo-row') as HTMLElement;
   const floatWindowToggle = document.getElementById('float-window-toggle') as HTMLInputElement;
   const floatWindowDot = document.getElementById('float-window-dot') as HTMLElement;
   const floatWindowRow = document.getElementById('float-window-row') as HTMLElement;
@@ -252,6 +255,8 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     onBreathingIntensityChange?.(resolvedSettings.breathingIntensity);
     webglToggle.checked = resolvedSettings.webglEnabled;
     webglDot.classList.toggle('is-active', resolvedSettings.webglEnabled);
+    terminalLocalEchoToggle.checked = resolvedSettings.terminalLocalEcho;
+    terminalLocalEchoDot.classList.toggle('is-active', resolvedSettings.terminalLocalEcho);
     // Sync float window toggle dot with current runtime state
     const floatOpen = deps.getFloatWindowOpen?.() ?? false;
     floatWindowToggle.checked = floatOpen;
@@ -471,6 +476,15 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
     bridge.saveSettings(buildSettingsPayloadForCurrentWindow() as unknown as import('./bridge').SettingsData)
       .then(() => { deps.requestAppRestart?.(); })
       .catch(reportError);
+  });
+
+  // Terminal local echo
+  terminalLocalEchoRow.addEventListener('click', () => {
+    const newValue = !settings.terminalLocalEcho;
+    settings.terminalLocalEcho = newValue;
+    terminalLocalEchoToggle.checked = newValue;
+    terminalLocalEchoDot.classList.toggle('is-active', newValue);
+    scheduleSettingsSave();
   });
 
   // Float window toggle

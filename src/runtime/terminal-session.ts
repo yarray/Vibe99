@@ -18,6 +18,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { getDefaultFontFamily } from '../settings';
+import { createLocalEcho } from '../terminal-local-echo';
 import type { Bridge } from '../bridge';
 import type { Pane } from '../pane-state';
 import type { SettingsManager } from '../settings';
@@ -336,6 +337,21 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   let _themeId: string | null = null;
 
   // ---------------------------------------------------------------------------
+  // Local echo
+  // ---------------------------------------------------------------------------
+
+  const localEcho = createLocalEcho(
+    {
+      onFlush: (data) => {
+        terminal.write(data);
+      },
+    },
+    {
+      getEnabled: () => settingsManager.getResolvedSettings().terminalLocalEcho,
+    },
+  );
+
+  // ---------------------------------------------------------------------------
   // DOM construction
   // ---------------------------------------------------------------------------
 
@@ -452,6 +468,10 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
 
   terminal.onData((data) => {
     if (_sessionReady) {
+      const echoData = localEcho.handleInput(data);
+      if (echoData !== null) {
+        terminal.write(echoData);
+      }
       bridge.writeTerminal({ paneId, data });
     }
   });
@@ -589,7 +609,10 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   }
 
   function write(data: string): void {
-    terminal.write(data, noteVisibleTerminalActivity);
+    const reconciled = localEcho.handleBackendData(data);
+    if (reconciled !== null && reconciled.length > 0) {
+      terminal.write(reconciled, noteVisibleTerminalActivity);
+    }
   }
 
   function writeLine(text: string): void {
