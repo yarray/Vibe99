@@ -40,11 +40,11 @@ jobs:
         if: github.event.inputs.ime != 'ibus'
         run: |
           sudo apt-get install -y \
-            fcit5 \
-            fcit5-chinese-addons \
-            fcit5-frontend-gtk3 \
-            fcit5-frontend-gtk4 \
-            fcit5-configtool
+            fcitx5 \
+            fcitx5-chinese-addons \
+            fcitx5-frontend-gtk3 \
+            fcitx5-frontend-gtk4 \
+            fcitx5-configtool
 
       - name: Install iBus and Chinese input methods
         if: github.event.inputs.ime == 'ibus'
@@ -139,7 +139,7 @@ jobs:
           export GLFW_IM_MODULE=ibus
 
           # Start Fcitx5 daemon
-          fcit5 -d --replace &
+          fcitx5 -d --replace &
           sleep 3
 
           # Configure Fcitx5 to use Pinyin
