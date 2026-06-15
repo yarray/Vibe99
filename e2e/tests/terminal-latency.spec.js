@@ -3,7 +3,7 @@ import { cleanupApp } from '../helpers/app-cleanup.js';
 import {
   waitForTerminalReady,
   waitForTerminalSessionReady,
-  getTerminalRecentOutput,
+  getTerminalCurrentLine,
   getTerminalDebugOutput,
   sendKeyToTerminal,
   setTerminalLocalEcho,
@@ -56,8 +56,8 @@ describe('Terminal input latency and local echo', () => {
     console.log('[terminal-latency] local echo immediate debug:', JSON.stringify(await getTerminalDebugOutput(0)));
     await browser.pause(800);
 
-    const echoText = await getTerminalRecentOutput(0, 10);
-    console.log('[terminal-latency] terminal output with local echo:', JSON.stringify(echoText));
+    const echoText = await getTerminalCurrentLine(0);
+    console.log('[terminal-latency] terminal current line:', JSON.stringify(echoText));
     console.log('[terminal-latency] local echo final debug:', JSON.stringify(await getTerminalDebugOutput(0)));
 
     // The echoed characters must be present.

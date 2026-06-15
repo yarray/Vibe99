@@ -90,6 +90,11 @@ export async function getTerminalDebugOutput(paneIndex = 0) {
   }, paneIndex);
 }
 
+export async function getTerminalCurrentLine(paneIndex = 0) {
+  const debug = await getTerminalDebugOutput(paneIndex);
+  return debug.currentLine ?? '';
+}
+
 export async function waitForTerminalOutput(expectedText, paneIndex = 0, timeout = 10000) {
   await waitForCondition(
     async () => {
