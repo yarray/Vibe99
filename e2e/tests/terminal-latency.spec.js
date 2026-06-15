@@ -4,6 +4,7 @@ import {
   waitForTerminalReady,
   waitForTerminalSessionReady,
   getTerminalRecentOutput,
+  getTerminalDebugOutput,
   sendKeyToTerminal,
   setTerminalLocalEcho,
   getFocusedLatencyStats,
@@ -35,6 +36,7 @@ describe('Terminal input latency and local echo', () => {
 
     const baseline = await getFocusedLatencyStats();
     console.log('[terminal-latency] baseline backend latency:', JSON.stringify(baseline));
+    console.log('[terminal-latency] baseline debug:', JSON.stringify(await getTerminalDebugOutput(0)));
 
     expect(baseline.count).toBeGreaterThanOrEqual(baselineChars.length);
     expect(baseline.avg).toBeGreaterThan(0);
@@ -50,10 +52,13 @@ describe('Terminal input latency and local echo', () => {
       await sendKeyToTerminal(char);
       await browser.pause(80);
     }
+    await browser.pause(200);
+    console.log('[terminal-latency] local echo immediate debug:', JSON.stringify(await getTerminalDebugOutput(0)));
     await browser.pause(800);
 
     const echoText = await getTerminalRecentOutput(0, 10);
     console.log('[terminal-latency] terminal output with local echo:', JSON.stringify(echoText));
+    console.log('[terminal-latency] local echo final debug:', JSON.stringify(await getTerminalDebugOutput(0)));
 
     // The echoed characters must be present.
     expect(echoText).toContain(echoChars);

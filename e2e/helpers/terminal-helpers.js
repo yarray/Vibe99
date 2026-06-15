@@ -66,6 +66,30 @@ export async function getTerminalRecentOutput(paneIndex = 0, maxLines = 20) {
   }, paneIndex, maxLines);
 }
 
+export async function getTerminalDebugOutput(paneIndex = 0) {
+  return await browser.execute((idx) => {
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const paneId = tabs[idx]?.dataset?.paneId;
+    if (!paneId || !window.__vibe99_test?.paneRenderer) return { error: 'no renderer' };
+    const session = window.__vibe99_test.paneRenderer.getWorkbench().session(paneId);
+    if (!session) return { error: 'no session' };
+    const term = session.terminal;
+    const buf = term.buffer.active;
+    const cursorY = buf.cursorY + buf.viewportY;
+    return {
+      cols: term.cols,
+      rows: term.rows,
+      bufLength: buf.length,
+      cursorY,
+      cursorX: buf.cursorX,
+      currentLine: buf.getLine(cursorY)?.translateToString(true) ?? '',
+      recent10: Array.from({ length: Math.min(10, buf.length) }, (_, i) =>
+        buf.getLine(buf.length - 10 + i)?.translateToString(true) ?? ''
+      ),
+    };
+  }, paneIndex);
+}
+
 export async function waitForTerminalOutput(expectedText, paneIndex = 0, timeout = 10000) {
   await waitForCondition(
     async () => {
