@@ -11,6 +11,21 @@ export async function waitForTerminalReady(paneIndex = 0, timeout = 10000) {
   );
 }
 
+export async function waitForTerminalSessionReady(paneIndex = 0, timeout = 15000) {
+  await waitForCondition(
+    async () => {
+      return await browser.execute((idx) => {
+        const tabs = document.querySelectorAll('#tabs-list .tab');
+        const paneId = tabs[idx]?.dataset?.paneId;
+        if (!paneId || !window.__vibe99_test?.paneRenderer) return false;
+        return window.__vibe99_test.paneRenderer.isSessionReady(paneId);
+      }, paneIndex);
+    },
+    timeout,
+    500,
+  );
+}
+
 export async function getTerminalHosts() {
   return await $$('.terminal-host');
 }
@@ -28,7 +43,10 @@ export async function sendKeyToTerminal(key) {
   if (!textarea) {
     throw new Error('No focused xterm textarea found');
   }
-  await textarea.addValue(key);
+  // Use browser.keys() so xterm.js receives proper keydown/keypress events.
+  // addValue() only dispatches input events and does not trigger xterm's onData.
+  await textarea.click();
+  await browser.keys(key);
 }
 
 export async function getTerminalText(paneIndex = 0) {

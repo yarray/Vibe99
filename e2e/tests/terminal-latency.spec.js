@@ -2,6 +2,7 @@ import { waitForAppReady } from '../helpers/app-launch.js';
 import { cleanupApp } from '../helpers/app-cleanup.js';
 import {
   waitForTerminalReady,
+  waitForTerminalSessionReady,
   getTerminalText,
   sendKeyToTerminal,
   setTerminalLocalEcho,
@@ -17,6 +18,7 @@ describe('Terminal input latency and local echo', () => {
   it('measures backend echo latency and verifies local echo reconciliation', async () => {
     await waitForAppReady();
     await waitForTerminalReady(0);
+    await waitForTerminalSessionReady(0);
 
     // -------------------------------------------------------------------------
     // Baseline: local echo OFF. Measure the raw backend-to-frontend latency.
