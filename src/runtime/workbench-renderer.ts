@@ -493,6 +493,16 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     isAutoSaveEnabled,
   };
 
+  // Latency diagnostics: expose focused-pane latency stats via the pane renderer.
+  (window as any).__vibe99_latency = {
+    getFocusedStats: () => {
+      const focusedPaneId = paneState.getFocusedPaneId();
+      if (!focusedPaneId) return null;
+      return paneRenderer?.getLatencyStats(focusedPaneId) ?? null;
+    },
+    getStats: (paneId: string) => paneRenderer?.getLatencyStats(paneId) ?? null,
+  };
+
   let cachedFloatWindowState: Record<string, any> = {};
 
   // Derive ignoreFocus from live state — no manual flag to keep in sync.

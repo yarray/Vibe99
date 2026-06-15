@@ -149,4 +149,17 @@ describe('createLocalEcho', () => {
     expect(flushed).toEqual(['\b \b']);
     expect(echo.pending).toBe('');
   });
+
+  it('renders safe input immediately, bypassing backend latency', () => {
+    const echo = create();
+
+    const rendered = echo.handleInput('a');
+    expect(rendered).toBe('a');
+
+    // Even if the backend takes a long time to echo back, the character has
+    // already been rendered locally, so effective latency is zero.
+    vi.advanceTimersByTime(90);
+    expect(echo.handleBackendData('a')).toBeNull();
+    expect(echo.pending).toBe('');
+  });
 });

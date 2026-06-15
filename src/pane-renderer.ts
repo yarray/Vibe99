@@ -2,6 +2,7 @@ import type { PaneState } from './pane-state';
 import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
 import type { SettingsManager } from './settings';
 import type { Workbench } from './runtime/workbench';
+import type { LatencyStats } from './terminal-latency-tracker';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -39,6 +40,7 @@ export interface PaneRenderer {
   /** Close a session for a specific pane. */
   closeSession: (paneId: string, options?: { destroyPty?: boolean }) => void;
   getRecentOutput: (paneId: string, maxLines?: number) => string;
+  getLatencyStats: (paneId: string) => LatencyStats;
   getWorkbench: () => Workbench;
 }
 
@@ -207,6 +209,13 @@ export function createPaneRenderer({
       const session = workbench.session(paneId);
       if (!session) return '';
       return session.getRecentOutput(maxLines);
+    },
+    getLatencyStats: (paneId) => {
+      const session = workbench.session(paneId);
+      if (!session) {
+        return { count: 0, last: null, min: null, max: null, avg: null };
+      }
+      return session.getLatencyStats();
     },
     getWorkbench: () => workbench,
   };
