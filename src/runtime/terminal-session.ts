@@ -18,7 +18,10 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { getDefaultFontFamily } from '../settings';
+import { createLocalEcho } from '../terminal-local-echo';
+import { createLatencyTracker } from '../terminal-latency-tracker';
 import type { Bridge } from '../bridge';
+import type { LatencyTracker, LatencyStats } from '../terminal-latency-tracker';
 import type { Pane } from '../pane-state';
 import type { SettingsManager } from '../settings';
 import type { TerminalTheme, Theme } from '../domain/theme';
@@ -198,6 +201,12 @@ export interface TerminalSession {
   /** Get recent terminal output as a string. */
   getRecentOutput(maxLines?: number): string;
 
+  /** Return aggregated input latency statistics for this session. */
+  getLatencyStats(): LatencyStats;
+
+  /** Reset input latency statistics for this session. */
+  resetLatencyStats(): void;
+
   /** Set the session-ready flag and notify. */
   setReady(ready: boolean): void;
 
@@ -244,6 +253,9 @@ interface InternalTerminalSession extends TerminalSession {
 
   /** FitAddon instance. Internal use only. */
   fitAddon: FitAddon;
+
+  /** Latency tracker for this session. Internal use only. */
+  latencyTracker: LatencyTracker;
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +346,32 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   let _exited = false;
   let _exitOverlay: HTMLElement | null = null;
   let _themeId: string | null = null;
+
+  // ---------------------------------------------------------------------------
+  // Local echo
+  // ---------------------------------------------------------------------------
+
+  const localEcho = createLocalEcho(
+    {
+      onFlush: (data) => {
+        terminal.write(data);
+      },
+    },
+    {
+      getEnabled: () => settingsManager.getResolvedSettings().terminalLocalEcho,
+    },
+  );
+
+  const latencyTracker = createLatencyTracker({
+    onSample: (sample) => {
+      // Surface unexpectedly high latencies for manual diagnosis. The threshold
+      // is intentionally conservative (50 ms) so it only fires when the
+      // backend channel is genuinely slow, not during normal operation.
+      if (sample.ms > 50) {
+        console.debug('[latency] backendToFrontendMs:', sample.ms, 'paneId:', paneId);
+      }
+    },
+  });
 
   // ---------------------------------------------------------------------------
   // DOM construction
@@ -452,6 +490,11 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
 
   terminal.onData((data) => {
     if (_sessionReady) {
+      const echoData = localEcho.handleInput(data);
+      if (echoData !== null) {
+        terminal.write(echoData);
+      }
+      latencyTracker.noteInput(data);
       bridge.writeTerminal({ paneId, data });
     }
   });
@@ -589,7 +632,19 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   }
 
   function write(data: string): void {
-    terminal.write(data, noteVisibleTerminalActivity);
+    latencyTracker.noteBackendData(data);
+    const reconciled = localEcho.handleBackendData(data);
+    if (reconciled !== null && reconciled.length > 0) {
+      terminal.write(reconciled, noteVisibleTerminalActivity);
+    }
+  }
+
+  function getLatencyStats(): LatencyStats {
+    return latencyTracker.getStats();
+  }
+
+  function resetLatencyStats(): void {
+    latencyTracker.reset();
   }
 
   function writeLine(text: string): void {
@@ -869,6 +924,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     terminalHost,
     terminal,
     fitAddon,
+    latencyTracker,
     get cwd() {
       return _cwd;
     },
@@ -920,6 +976,8 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     setNeedsFit,
     refreshActivitySnapshot,
     getRecentOutput,
+    getLatencyStats,
+    resetLatencyStats,
     setReady,
 
     // Exited state

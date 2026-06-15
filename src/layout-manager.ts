@@ -75,7 +75,7 @@ export function createLayoutManager({
   let defaultLayoutId: string = '';
   let selectedLayoutId: string | null = null;
   let renamingLayoutId: string | null = null;
-  let pendingLayoutSave: ReturnType<typeof setTimeout> | null = null;
+  let pendingLayoutSave: number | null = null;
   let layoutsDropdownOpen: boolean = false;
   let layoutsDropdownEl: HTMLDivElement | null = null;
   let layoutRestoreComplete: boolean = false;

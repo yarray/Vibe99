@@ -11,6 +11,21 @@ export async function waitForTerminalReady(paneIndex = 0, timeout = 10000) {
   );
 }
 
+export async function waitForTerminalSessionReady(paneIndex = 0, timeout = 15000) {
+  await waitForCondition(
+    async () => {
+      return await browser.execute((idx) => {
+        const tabs = document.querySelectorAll('#tabs-list .tab');
+        const paneId = tabs[idx]?.dataset?.paneId;
+        if (!paneId || !window.__vibe99_test?.paneRenderer) return false;
+        return window.__vibe99_test.paneRenderer.isSessionReady(paneId);
+      }, paneIndex);
+    },
+    timeout,
+    500,
+  );
+}
+
 export async function getTerminalHosts() {
   return await $$('.terminal-host');
 }
@@ -28,7 +43,10 @@ export async function sendKeyToTerminal(key) {
   if (!textarea) {
     throw new Error('No focused xterm textarea found');
   }
-  await textarea.addValue(key);
+  // Use browser.keys() so xterm.js receives proper keydown/keypress events.
+  // addValue() only dispatches input events and does not trigger xterm's onData.
+  await textarea.click();
+  await browser.keys(key);
 }
 
 export async function getTerminalText(paneIndex = 0) {
@@ -37,6 +55,44 @@ export async function getTerminalText(paneIndex = 0) {
     return _getTerminalTextViaBridge(paneIndex);
   }
   return _getTerminalTextViaDom(paneIndex);
+}
+
+export async function getTerminalRecentOutput(paneIndex = 0, maxLines = 20) {
+  return await browser.execute((idx, lines) => {
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const paneId = tabs[idx]?.dataset?.paneId;
+    if (!paneId || !window.__vibe99_test?.paneRenderer) return '';
+    return window.__vibe99_test.paneRenderer.getRecentOutput(paneId, lines);
+  }, paneIndex, maxLines);
+}
+
+export async function getTerminalDebugOutput(paneIndex = 0) {
+  return await browser.execute((idx) => {
+    const tabs = document.querySelectorAll('#tabs-list .tab');
+    const paneId = tabs[idx]?.dataset?.paneId;
+    if (!paneId || !window.__vibe99_test?.paneRenderer) return { error: 'no renderer' };
+    const session = window.__vibe99_test.paneRenderer.getWorkbench().session(paneId);
+    if (!session) return { error: 'no session' };
+    const term = session.terminal;
+    const buf = term.buffer.active;
+    const cursorY = buf.cursorY + buf.viewportY;
+    return {
+      cols: term.cols,
+      rows: term.rows,
+      bufLength: buf.length,
+      cursorY,
+      cursorX: buf.cursorX,
+      currentLine: buf.getLine(cursorY)?.translateToString(true) ?? '',
+      recent10: Array.from({ length: Math.min(10, buf.length) }, (_, i) =>
+        buf.getLine(buf.length - 10 + i)?.translateToString(true) ?? ''
+      ),
+    };
+  }, paneIndex);
+}
+
+export async function getTerminalCurrentLine(paneIndex = 0) {
+  const debug = await getTerminalDebugOutput(paneIndex);
+  return debug.currentLine ?? '';
 }
 
 export async function waitForTerminalOutput(expectedText, paneIndex = 0, timeout = 10000) {
@@ -134,4 +190,32 @@ export async function clearCapturedOutput(paneIndex) {
       window.__e2e_captured[paneId] = '';
     }
   }, paneIndex);
+}
+
+export async function setTerminalLocalEcho(enabled) {
+  await browser.execute((value) => {
+    if (!window.settingsManager) {
+      throw new Error('settingsManager not exposed on window');
+    }
+    window.settingsManager.settings.terminalLocalEcho = Boolean(value);
+    window.settingsManager.applySettings();
+  }, enabled);
+}
+
+export async function getFocusedLatencyStats() {
+  return await browser.execute(() => {
+    if (!window.__vibe99_latency) {
+      throw new Error('__vibe99_latency not exposed on window');
+    }
+    return window.__vibe99_latency.getFocusedStats();
+  });
+}
+
+export async function resetLatencyStats() {
+  await browser.execute(() => {
+    if (!window.__vibe99_latency) {
+      throw new Error('__vibe99_latency not exposed on window');
+    }
+    window.__vibe99_latency.reset();
+  });
 }

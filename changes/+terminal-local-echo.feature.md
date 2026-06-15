@@ -1,0 +1,1 @@
+Added an opt-in "Local echo" setting that reduces perceived typing latency on Linux by echoing safe keystrokes in the terminal before the shell sends them back. Includes a per-session latency tracker to measure backend-to-frontend PTY round-trip time and expose diagnostics via `window.__vibe99_latency`.
