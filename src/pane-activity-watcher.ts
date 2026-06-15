@@ -69,44 +69,6 @@ interface PaneState {
   resizeSettleTimer: ReturnType<typeof setTimeout> | null;
 }
 
-// -- Diagnostic ring buffer (one per pane) --
-interface NoteDataSummary {
-  ts: number;
-  byteSize: number | undefined;
-  intervalMs: number | undefined;
-  state: string;
-}
-
-const DIAG_RING_SIZE = 5;
-
-interface DiagState {
-  ring: NoteDataSummary[];
-  idx: number;
-  lastNoteDataTs: number | undefined;
-}
-
-function createDiagState(): DiagState {
-  return { ring: [], idx: 0, lastNoteDataTs: undefined };
-}
-
-function pushDiag(d: DiagState, entry: NoteDataSummary): void {
-  if (d.ring.length < DIAG_RING_SIZE) {
-    d.ring.push(entry);
-  } else {
-    d.ring[d.idx] = entry;
-  }
-  d.idx = (d.idx + 1) % DIAG_RING_SIZE;
-}
-
-function dumpDiag(d: DiagState): NoteDataSummary[] {
-  if (d.ring.length < DIAG_RING_SIZE) return d.ring;
-  const out: NoteDataSummary[] = [];
-  for (let i = 0; i < DIAG_RING_SIZE; i++) {
-    out.push(d.ring[(d.idx + i) % DIAG_RING_SIZE]);
-  }
-  return out;
-}
-
 /** The public API returned by createPaneActivityWatcher. */
 export interface PaneActivityWatcher {
   /** Update which pane is currently focused (or null if none). */
@@ -166,7 +128,6 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
 
   // paneId -> PaneState
   const states = new Map<string, PaneState>();
-  const diagStates = new Map<string, DiagState>();
   let focusedPaneId: string | null = null;
   let globalEnabled: boolean = options.globalEnabled ?? true;
   let ignoreFocus: boolean = false;
@@ -227,29 +188,10 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
 
     /** Record a chunk of output for `paneId`. */
     noteData(paneId: string, byteSize?: number): void {
-      const now = performance.now();
       const s = ensure(paneId);
-      const isActivePane = isActive(paneId, s);
-      const isFocused = !ignoreFocus && paneId === focusedPaneId;
-
-      // -- Diagnostic: record every noteData call --
-      let diag = diagStates.get(paneId);
-      if (!diag) { diag = createDiagState(); diagStates.set(paneId, diag); }
-      const intervalMs = diag.lastNoteDataTs != null ? now - diag.lastNoteDataTs : undefined;
-      diag.lastNoteDataTs = now;
-      const stateLabel = !isActivePane ? 'disabled'
-        : !s.hasBeenFocused ? 'unfocused-new'
-        : isFocused ? 'focused'
-        : s.alerted ? 'alerted'
-        : s.timer !== null ? 'settling'
-        : s.resizeSettleTimer !== null ? 'resize-settling'
-        : 'settled';
-      pushDiag(diag, { ts: now, byteSize, intervalMs, state: stateLabel });
-      console.debug('[activity] noteData', paneId, `size=${byteSize ?? '?'}`, `interval=${intervalMs != null ? intervalMs.toFixed(0) + 'ms' : 'first'}`, `state=${stateLabel}`);
-
-      if (!isActivePane) return;
+      if (!isActive(paneId, s)) return;
       if (!s.hasBeenFocused) return;
-      if (isFocused) return;
+      if (!ignoreFocus && paneId === focusedPaneId) return;
       // Inside the post-resize window: this chunk is almost certainly
       // SIGWINCH redraw residue. Don't fire an alert and don't even start
       // a settle timer — instead extend the resize window so we keep
@@ -271,9 +213,6 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
         if (!ignoreFocus && paneId === focusedPaneId) return;
         if (!isActive(paneId, s)) return;
         s.alerted = true;
-        const diag = diagStates.get(paneId);
-        const history = diag ? dumpDiag(diag) : [];
-        console.debug('[activity] onAlert', paneId, `pendingTimers=${settleMs}ms`, `history=`, history);
         onAlert?.(paneId);
       }, settleMs);
     },
@@ -293,7 +232,6 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
       if (!s) return;
       clearState(paneId, s);
       states.delete(paneId);
-      diagStates.delete(paneId);
     },
 
     setPaneEnabled(paneId: string, enabled: boolean): void {
@@ -326,9 +264,6 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
             if (!ignoreFocus && paneId === focusedPaneId) return;
             if (!isActive(paneId, s)) return;
             s.alerted = true;
-            const diag = diagStates.get(paneId);
-            const history = diag ? dumpDiag(diag) : [];
-            console.debug('[activity] onAlert (setSettleMs restart)', paneId, `pendingTimers=${settleMs}ms`, `history=`, history);
             onAlert?.(paneId);
           }, settleMs);
         }
