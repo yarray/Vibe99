@@ -1,0 +1,1 @@
+Filter IME composition events from keyboard dispatcher to prevent character duplication on Linux/Tauri with WebkitGTK. Events with `isComposing===true`, `keyCode===229`, or `key==="Process"` are now skipped, allowing Chinese input methods (Fcitx5, iBus) to work correctly without accumulating duplicate characters in xterm.js's hidden textarea.

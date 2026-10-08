@@ -682,6 +682,17 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     return terminal.hasSelection();
   }
 
+  function resetTerminalState(): void {
+    // RIS (ESC c) is the only reset that clears mouse tracking (DECSET
+    // 1000/1002/1003/1006), bracketed paste, alt buffer AND the parser
+    // state machine. terminal.clear() empties the buffer but leaves all
+    // of those set; if the previous app died without DECRST, the next
+    // shell receives mouse reports it never asked for and the SGR
+    // report text leaks into the terminal as visible garbage.
+    terminal.write('\x1bc');
+    terminal.clear();
+  }
+
   function restart(): void {
     const currentProfileId = getPaneSnapshot()?.shellProfileId ?? null;
 
@@ -689,7 +700,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     _shellChangeTime = Date.now();
     _sessionReady = false;
     hideExitedState();
-    terminal.clear();
+    resetTerminalState();
     initializePty(currentProfileId).finally(() => {
       _shellChanging = false;
     });
@@ -703,7 +714,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     _shellChangeTime = Date.now();
     _sessionReady = false;
     hideExitedState();
-    terminal.clear();
+    resetTerminalState();
     initializePty(profileId).finally(() => {
       _shellChanging = false;
       if (!_sessionReady) {

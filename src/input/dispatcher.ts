@@ -57,7 +57,28 @@ export function createDispatcher({
     return parsedKeymap!;
   }
 
+  /**
+   * Check if a keyboard event is part of an IME composition sequence.
+   * IME events must be filtered out to avoid:
+   * - Interfering with composition in xterm.js's hidden textarea
+   * - Accumulating duplicate input on WebkitGTK (Linux/Tauri)
+   *
+   * See: VIB-362
+   */
+  function isImeEvent(event: KeyboardEvent): boolean {
+    return (
+      event.isComposing === true ||
+      event.keyCode === 229 ||
+      event.key === 'Process'
+    );
+  }
+
   return function dispatch(event: KeyboardEvent): void {
+    // Skip IME composition events entirely
+    if (isImeEvent(event)) {
+      return;
+    }
+
     const mode = getMode();
     const inputFocused = isInputFocused();
     const paletteOpen = isCommandPaletteOpen();

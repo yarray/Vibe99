@@ -93,7 +93,7 @@ struct PtySession {
     writer: Box<dyn Write + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
     killed: Arc<AtomicBool>,
-    _reader_thread: std::thread::JoinHandle<()>,
+    reader_thread: Option<std::thread::JoinHandle<()>>,
     exit_thread: std::thread::JoinHandle<()>,
 }
 
@@ -218,7 +218,7 @@ impl PtyManager {
         let app_reader = app.clone();
         let pane_id_reader = pane_id_owned.clone();
         let window_label_reader = window_label.to_string();
-        let _reader_thread = std::thread::spawn(move || {
+        let reader_thread = std::thread::spawn(move || {
             use std::io::Read;
 
             let mut buf = [0u8; 8192];
@@ -292,7 +292,7 @@ impl PtyManager {
             writer,
             killer,
             killed,
-            _reader_thread,
+            reader_thread: Some(reader_thread),
             exit_thread,
         };
 
@@ -402,13 +402,16 @@ impl PtyManager {
             for mut session in sessions_to_clean {
                 session.killed.store(true, Ordering::Release);
                 let _ = session.killer.kill();
+                if let Some(handle) = session.reader_thread.take() {
+                    let _ = handle.join();
+                }
                 let _ = session.exit_thread.join();
             }
         });
     }
 
     fn destroy_by_ref(&self, key: &PaneRef) {
-        let exit_handle = {
+        let (reader_handle, exit_handle) = {
             let mut sessions = match self.sessions.lock() {
                 Ok(s) => s,
                 Err(_) => return,
@@ -419,13 +422,22 @@ impl PtyManager {
             let PtySession {
                 mut killer,
                 killed,
+                mut reader_thread,
                 exit_thread,
                 ..
             } = session;
             killed.store(true, Ordering::Release);
             let _ = killer.kill();
-            exit_thread
+            (reader_thread.take(), exit_thread)
         };
+        // Joining the reader thread guarantees no stale `terminal-data`
+        // event with this pane id is emitted after the replacement session
+        // starts — a new session for the same pane would otherwise inherit
+        // the old PTY's in-flight output (e.g. a TUI's mouse tracking
+        // sequences), corrupting the new terminal's state.
+        if let Some(handle) = reader_handle {
+            let _ = handle.join();
+        }
         let _ = exit_handle.join();
     }
 }
