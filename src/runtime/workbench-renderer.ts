@@ -194,6 +194,12 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   const paneAlert = createBreathingMaskAlert();
   let globalBreathingEnabled = true;
 
+  // Breathing pulses the color card to transparent and back; the peak is the
+  // brightness the card briefly returns to mid-pulse, scaled against the user's
+  // mask opacity so the effect reads consistently at any mask strength.
+  // --pane-bg-mask-opacity is set on :root by applySettings, so referencing it
+  // here substitutes safely (unlike the per-pane --pane-accent, which made the
+  // old glow token resolve to nothing).
   function applyBreathingIntensity(intensity: string): void {
     const root = document.documentElement;
     globalBreathingEnabled = intensity !== 'none';
@@ -201,18 +207,14 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       case 'none':
         root.style.removeProperty('--breathing-peak-opacity');
         root.style.removeProperty('--breathing-duration');
-        root.style.removeProperty('--breathing-glow');
         break;
       case 'mild':
         root.style.setProperty('--breathing-peak-opacity', 'max(0.2, calc(0.6 - var(--pane-bg-mask-opacity)))');
         root.style.setProperty('--breathing-duration', '3.5s');
-        root.style.setProperty('--breathing-glow', 'inset 0 0 14px 2px color-mix(in srgb, var(--pane-accent) 50%, transparent)');
         break;
       case 'intense':
         root.style.setProperty('--breathing-peak-opacity', 'max(0.7, calc(1 - var(--pane-bg-mask-opacity)))');
         root.style.setProperty('--breathing-duration', '2.4s');
-        root.style.setProperty('--breathing-glow',
-          'inset 0 0 0 3px color-mix(in srgb, var(--pane-accent) 90%, white), inset 0 0 28px 6px color-mix(in srgb, var(--pane-accent) 80%, transparent)');
         break;
     }
     if (!globalBreathingEnabled) {
