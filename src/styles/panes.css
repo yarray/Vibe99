@@ -250,18 +250,9 @@ body.is-dragging-tabs {
 
 /* Terminal exited state — overlay with restart button */
 
-/* When exited and focused, hide the color card overlay */
-.pane.is-exited.is-focused::after,
-.pane.is-exited.has-pending-activity.is-focused::after {
-  opacity: 0 !important;
-  animation: none !important;
-}
-
-/* When exited but NOT focused, keep the breathing animation off */
-.pane.is-exited:not(.is-focused)::after,
-.pane.is-exited:not(.is-focused).has-pending-activity::after {
-  animation: none !important;
-}
+/* Exited panes need no extra ::after rules here: the alert pulse suppresses
+   itself for exited panes and returns the card to its resting opacity —
+   see pane-alert-breathing-mask.css. */
 
 .terminal-exit-overlay {
   position: absolute;
