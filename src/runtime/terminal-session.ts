@@ -23,6 +23,7 @@ import type { Pane } from '../pane-state';
 import type { SettingsManager } from '../settings';
 import type { TerminalTheme, Theme } from '../domain/theme';
 import { getTheme, getDefaultTheme } from '../domain/theme';
+import { createTerminalLinkActivation, createTerminalLinkHandler } from './terminal-links';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -285,13 +286,6 @@ function isWindowsCtrlVPasteHotkey(
   );
 }
 
-function isLinkOpenModifierPressed(
-  event: MouseEvent | KeyboardEvent,
-  platform: string,
-): boolean {
-  return event.ctrlKey || (platform === 'darwin' && event.metaKey);
-}
-
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -366,6 +360,12 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   // xterm setup
   // ---------------------------------------------------------------------------
 
+  const linkDeps = {
+    platform: bridge.platform,
+    openExternalUrl: (uri: string) => bridge.openExternalUrl(uri),
+    reportError,
+  };
+
   const terminal = new Terminal({
     allowProposedApi: true,
     allowTransparency: false,
@@ -379,17 +379,14 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     lineHeight: 1.2,
     scrollback: 5000,
     theme: terminalTheme(accentColor),
+    // OSC 8 embedded hyperlinks: without a linkHandler xterm's default
+    // activation runs window.confirm(), which tauri-plugin-dialog overrides
+    // with a plugin:dialog|confirm IPC call our ACL denies (VIB-373).
+    linkHandler: createTerminalLinkHandler(linkDeps),
   });
 
   const fitAddon = new FitAddon();
-  const webLinksAddon = new WebLinksAddon((event: MouseEvent, uri: string) => {
-    if (!isLinkOpenModifierPressed(event, bridge.platform)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    void Promise.resolve(bridge.openExternalUrl(uri)).catch(reportError);
-  });
+  const webLinksAddon = new WebLinksAddon(createTerminalLinkActivation(linkDeps));
 
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(webLinksAddon);
