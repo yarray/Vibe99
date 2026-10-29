@@ -295,6 +295,10 @@ fn sanitize_ui_overrides(candidate: Option<&Value>) -> LayoutUiOverrides {
 /// - `accent` must be a valid hex color (`#RRGGBB`).
 /// - `title` is optional.
 /// - `customColor` and `shellProfileId` are optional.
+/// - `themeId` is optional; must be a non-empty string when present. The
+///   frontend falls back to the layout/default theme for unknown ids, so
+///   existence in the theme registry is not checked here.
+/// - `breathingMonitor` is optional; must be a boolean when present.
 pub(crate) fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
     let obj = candidate.as_object()?;
 
@@ -344,6 +348,23 @@ pub(crate) fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
                 Value::String(shell_profile_id.to_string()),
             );
         }
+    }
+
+    // Preserve the per-pane theme id (VIB-374): this field is part of the
+    // session contract the frontend round-trips (buildSessionData /
+    // restoreSession). Dropping it here silently reset every pane's theme
+    // to the default on the next launch.
+    if let Some(theme_id) = obj.get("themeId").and_then(|v| v.as_str()).map(str::trim) {
+        if !theme_id.is_empty() {
+            result_obj.insert("themeId".into(), Value::String(theme_id.to_string()));
+        }
+    }
+
+    if let Some(breathing_monitor) = obj.get("breathingMonitor").and_then(|v| v.as_bool()) {
+        result_obj.insert(
+            "breathingMonitor".into(),
+            Value::Bool(breathing_monitor),
+        );
     }
 
     Some(result)
@@ -843,4 +864,138 @@ pub fn float_window_state_save(app: AppHandle, state: Value) -> Result<(), Strin
     std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn valid_pane() -> Value {
+        json!({
+            "paneId": "p1",
+            "cwd": "/tmp",
+            "accent": "#9b5de5",
+        })
+    }
+
+    #[test]
+    fn sanitize_layout_pane_preserves_theme_id_and_breathing_monitor() {
+        let pane = json!({
+            "paneId": "p1",
+            "cwd": "/tmp",
+            "accent": "#9b5de5",
+            "themeId": "dracula",
+            "breathingMonitor": false,
+        });
+
+        let sanitized = sanitize_layout_pane(&pane).expect("pane should be valid");
+
+        assert_eq!(sanitized.get("themeId"), Some(&Value::String("dracula".into())));
+        assert_eq!(sanitized.get("breathingMonitor"), Some(&Value::Bool(false)));
+    }
+
+    #[test]
+    fn sanitize_layout_pane_drops_malformed_theme_id() {
+        let empty = json!({
+            "paneId": "p1",
+            "cwd": "/tmp",
+            "accent": "#9b5de5",
+            "themeId": "   ",
+        });
+        let sanitized = sanitize_layout_pane(&empty).expect("pane should be valid");
+        assert!(sanitized.get("themeId").is_none());
+
+        let non_string = json!({
+            "paneId": "p1",
+            "cwd": "/tmp",
+            "accent": "#9b5de5",
+            "themeId": 42,
+        });
+        let sanitized = sanitize_layout_pane(&non_string).expect("pane should be valid");
+        assert!(sanitized.get("themeId").is_none());
+    }
+
+    #[test]
+    fn sanitize_layout_pane_drops_non_bool_breathing_monitor() {
+        let pane = json!({
+            "paneId": "p1",
+            "cwd": "/tmp",
+            "accent": "#9b5de5",
+            "breathingMonitor": "yes",
+        });
+
+        let sanitized = sanitize_layout_pane(&pane).expect("pane should be valid");
+        assert!(sanitized.get("breathingMonitor").is_none());
+    }
+
+    #[test]
+    fn sanitize_layout_keeps_pane_theme_and_layout_theme() {
+        let layout = json!({
+            "id": "default",
+            "name": "Default",
+            "themeId": "solarized-dark",
+            "panes": [
+                {
+                    "paneId": "p1",
+                    "cwd": "/tmp",
+                    "accent": "#9b5de5",
+                    "themeId": "dracula",
+                    "breathingMonitor": false,
+                },
+                valid_pane(),
+            ],
+            "focusedPaneIndex": 0,
+        });
+
+        let sanitized = sanitize_layout(&layout).expect("layout should be valid");
+
+        assert_eq!(
+            sanitized.get("themeId"),
+            Some(&Value::String("solarized-dark".into()))
+        );
+
+        let panes = sanitized.get("panes").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(panes.len(), 2);
+        assert_eq!(
+            panes[0].get("themeId"),
+            Some(&Value::String("dracula".into()))
+        );
+        assert_eq!(panes[0].get("breathingMonitor"), Some(&Value::Bool(false)));
+        assert_eq!(panes[1].get("themeId"), None);
+        // Fields without the flag restore to the enabled default.
+        assert_eq!(panes[1].get("breathingMonitor"), None);
+    }
+
+    #[test]
+    fn sanitize_layout_round_trip_keeps_theme_after_resanitize() {
+        // Simulates the save → load → save cycle: a sanitized layout (as read
+        // back from disk) must survive re-sanitization without losing themes.
+        let layout = json!({
+            "id": "default",
+            "name": "Default",
+            "panes": [
+                {
+                    "paneId": "p1",
+                    "cwd": "/tmp",
+                    "accent": "#9b5de5",
+                    "themeId": "catppuccin-mocha",
+                },
+            ],
+            "focusedPaneIndex": 0,
+        });
+
+        let once = sanitize_layout(&layout).expect("layout should be valid");
+        let twice = sanitize_layout(&once).expect("re-sanitized layout should be valid");
+
+        let pane = twice
+            .get("panes")
+            .and_then(|v| v.as_array())
+            .and_then(|p| p.first())
+            .expect("pane should exist");
+        assert_eq!(
+            pane.get("themeId"),
+            Some(&Value::String("catppuccin-mocha".into()))
+        );
+    }
 }

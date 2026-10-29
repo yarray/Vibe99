@@ -119,20 +119,15 @@ export function createLayoutManager({
   }
 
   function createDefaultLayout(): LayoutData {
-    const currentPanes = paneState.getPanes();
     const layoutSnapshot = paneState.getLayout().snapshot();
+    // Pane entries go through buildSessionData so the default layout carries
+    // the exact same per-pane contract (themeId, breathingMonitor, …) as the
+    // window-layout save path — a hand-rolled mapping here once dropped
+    // fields the restore path expects (VIB-374).
     return {
       id: 'default',
       name: 'Default',
-      panes: currentPanes.map((p) => ({
-        paneId: p.id,
-        title: p.title,
-        cwd: p.cwd,
-        accent: p.accent,
-        customColor: p.customColor,
-        shellProfileId: p.shellProfileId,
-        breathingMonitor: p.breathingMonitor !== false,
-      })) as unknown as LayoutData['panes'],
+      panes: paneState.buildSessionData().panes as unknown as LayoutData['panes'],
       focusedPaneIndex: 0,
       themeId: layoutSnapshot.themeId,
     };

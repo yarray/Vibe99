@@ -1,0 +1,1 @@
+Per-pane terminal themes now survive an app restart. Previously the theme picked via right-click → Change Theme was saved in memory but stripped when the layout was written to disk, so panes fell back to the default (or layout) theme after relaunch. The per-pane background-activity-alert toggle now persists the same way.
