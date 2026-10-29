@@ -278,6 +278,26 @@ describe('Session persistence', () => {
     expect(layout.panes[0].customColor).toBe('#e65100');
   });
 
+  it('saves pane theme and breathing monitor via bridge', async () => {
+    // VIB-374 regression: layout_save used to strip themeId (and
+    // breathingMonitor) from panes, so per-pane themes reset on restart.
+    await waitForAppReady();
+
+    const cwd = await getActualCwd();
+    const savedCount = await saveLayoutViaBridge([
+      { paneId: 'p1', title: null, cwd, accent: '#9b5de5', themeId: 'dracula', breathingMonitor: false },
+      { paneId: 'p2', title: null, cwd, accent: '#ef476f', themeId: 'solarized-dark' },
+      { paneId: 'p3', title: null, cwd, accent: '#fdab0f' },
+    ], 0);
+    expect(savedCount).toBe(3);
+
+    const layout = await readDefaultLayoutFromStorage();
+    expect(layout.panes[0].themeId).toBe('dracula');
+    expect(layout.panes[0].breathingMonitor).toBe(false);
+    expect(layout.panes[1].themeId).toBe('solarized-dark');
+    expect(layout.panes[2].themeId).toBeUndefined();
+  });
+
   it('saves 5 panes via bridge', async () => {
     await waitForAppReady();
 
