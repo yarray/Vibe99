@@ -1033,12 +1033,13 @@ mod tests {
 
         let sanitized = sanitize_layout(&layout).expect("layout should be valid");
 
+        // Numbers normalize to f64 through as_f64, hence 42.0 rather than 42.
         assert_eq!(
             sanitized.get("windowGeometry"),
             Some(&json!({
-                "x": 42,
-                "y": -17,
-                "width": 1280,
+                "x": 42.0,
+                "y": -17.0,
+                "width": 1280.0,
                 "height": 800.5,
                 "fullscreen": false,
             }))
