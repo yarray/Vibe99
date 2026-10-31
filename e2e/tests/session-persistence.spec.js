@@ -30,10 +30,11 @@ async function getActualCwd() {
 
 /**
  * Save a layout with explicit pane data via the Tauri bridge.
+ * `extra` is merged into the layout payload (e.g. windowGeometry, themeId).
  * Returns the number of panes stored (read back from storage), or -1 on failure.
  */
-async function saveLayoutViaBridge(panes, focusedPaneIndex = 0) {
-  return await browser.execute(async (p, fi) => {
+async function saveLayoutViaBridge(panes, focusedPaneIndex = 0, extra = {}) {
+  return await browser.execute(async (p, fi, ex) => {
     // Disable auto-save to prevent race conditions
     if (window.__vibe99_test?.setAutoSaveEnabled) {
       window.__vibe99_test.setAutoSaveEnabled(false);
@@ -46,6 +47,7 @@ async function saveLayoutViaBridge(panes, focusedPaneIndex = 0) {
       name: 'Default',
       panes: p,
       focusedPaneIndex: fi,
+      ...ex,
     };
     await tauri.core.invoke('layout_save', { layout });
     const config = await tauri.core.invoke('layouts_list');
@@ -57,7 +59,7 @@ async function saveLayoutViaBridge(panes, focusedPaneIndex = 0) {
     }
 
     return saved ? saved.panes.length : -1;
-  }, panes, focusedPaneIndex);
+  }, panes, focusedPaneIndex, extra);
 }
 
 /**
@@ -296,6 +298,25 @@ describe('Session persistence', () => {
     expect(layout.panes[0].breathingMonitor).toBe(false);
     expect(layout.panes[1].themeId).toBe('solarized-dark');
     expect(layout.panes[2].themeId).toBeUndefined();
+  });
+
+  it('saves window geometry via bridge', async () => {
+    // VIB-374 follow-up regression: sanitize_layout used to strip
+    // windowGeometry, so "open layout in a window" never had a geometry
+    // to restore.
+    await waitForAppReady();
+
+    const cwd = await getActualCwd();
+    const geometry = { x: 42, y: -17, width: 1280, height: 800, fullscreen: false };
+    const savedCount = await saveLayoutViaBridge([
+      { paneId: 'p1', title: null, cwd, accent: '#9b5de5' },
+      { paneId: 'p2', title: null, cwd, accent: '#ef476f' },
+      { paneId: 'p3', title: null, cwd, accent: '#fdab0f' },
+    ], 0, { windowGeometry: geometry });
+    expect(savedCount).toBe(3);
+
+    const layout = await readDefaultLayoutFromStorage();
+    expect(layout.windowGeometry).toEqual(geometry);
   });
 
   it('saves 5 panes via bridge', async () => {

@@ -370,6 +370,29 @@ pub(crate) fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
     Some(result)
 }
 
+/// Validate a raw `windowGeometry` object: x/y/width/height must be finite
+/// numbers and `fullscreen` a boolean. Returns `None` when absent or
+/// malformed, so partial/corrupt values are dropped instead of persisted.
+fn sanitize_window_geometry(candidate: Option<&Value>) -> Option<Value> {
+    let obj = candidate?.as_object()?;
+    let number = |key: &str| -> Option<f64> {
+        obj.get(key).and_then(|v| v.as_f64()).filter(|n| n.is_finite())
+    };
+    let x = number("x")?;
+    let y = number("y")?;
+    let width = number("width")?;
+    let height = number("height")?;
+    let fullscreen = obj.get("fullscreen").and_then(|v| v.as_bool())?;
+
+    Some(serde_json::json!({
+        "x": x,
+        "y": y,
+        "width": width,
+        "height": height,
+        "fullscreen": fullscreen,
+    }))
+}
+
 /// Sanitize a raw layout into a canonical form.
 ///
 /// - `id` must be non-empty.
@@ -378,6 +401,7 @@ pub(crate) fn sanitize_layout_pane(candidate: &Value) -> Option<Value> {
 /// - `focusedPaneIndex` is clamped to the valid pane range.
 /// - `themeId` is preserved if present and valid.
 /// - `uiOverrides` are sanitized to valid ranges.
+/// - `windowGeometry` is preserved if present and well-formed.
 pub(crate) fn sanitize_layout(candidate: &Value) -> Option<Value> {
     let obj = candidate.as_object()?;
 
@@ -436,6 +460,16 @@ pub(crate) fn sanitize_layout(candidate: &Value) -> Option<Value> {
             .as_object_mut()
             .unwrap()
             .insert("autostart".into(), Value::Bool(autostart));
+    }
+
+    // Preserve windowGeometry if present (VIB-374 follow-up): the frontend
+    // writes it when saving a layout and reads it back when reopening the
+    // layout in a window. Dropping it here silently defeated that restore.
+    if let Some(geometry) = sanitize_window_geometry(obj.get("windowGeometry")) {
+        result
+            .as_object_mut()
+            .unwrap()
+            .insert("windowGeometry".into(), geometry);
     }
 
     Some(result)
@@ -748,6 +782,26 @@ pub fn settings_load(app: AppHandle) -> Result<Value, String> {
     Ok(sanitize_config(&parsed))
 }
 
+/// Backfill top-level settings fields the frontend payload omits from the
+/// previous config on disk, so partial saves never silently wipe user state.
+///
+/// The frontend's `settings_save` caller only ever sends `{version, ui}`;
+/// everything else the app persists (`shell`, `layouts`, `defaultLayoutId`,
+/// `hooks`, `floatWindows`) must survive such a save untouched.
+fn backfill_missing_fields(settings: &mut Value, saved: &Value) {
+    const BACKFILL_KEYS: [&str; 5] =
+        ["shell", "layouts", "defaultLayoutId", "hooks", "floatWindows"];
+
+    for key in BACKFILL_KEYS {
+        if settings.get(key).is_some() {
+            continue;
+        }
+        if let (Some(value), Some(obj)) = (saved.get(key).cloned(), settings.as_object_mut()) {
+            obj.insert(key.into(), value);
+        }
+    }
+}
+
 /// Save application settings to disk.
 ///
 /// The input is sanitized before writing, so the returned value is the
@@ -768,51 +822,14 @@ pub fn settings_save(app: AppHandle, mut settings: Value) -> Result<Value, Strin
             .map_err(|e| format!("failed to create settings directory: {e}"))?;
     }
 
-    // The frontend may send a partial payload (only version and ui)
-    // without the `shell` block. Preserve the existing `shell` block from
-    // disk so that user-edited profiles are not silently wiped.
-    if settings.get("shell").is_none() && path.exists() {
-        let shell = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
-            .and_then(|v| v.get("shell").cloned());
-        if let (Some(shell), Some(obj)) = (shell, settings.as_object_mut()) {
-            obj.insert("shell".into(), shell);
-        }
-    }
-
-    // Similarly, preserve the existing `layouts` block from disk if the
-    // frontend does not send it.
-    if settings.get("layouts").is_none() && path.exists() {
-        let layouts = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
-            .and_then(|v| v.get("layouts").cloned());
-        if let (Some(layouts), Some(obj)) = (layouts, settings.as_object_mut()) {
-            obj.insert("layouts".into(), layouts);
-        }
-    }
-
-    // Preserve the existing `defaultLayoutId` from disk if the frontend does not send it.
-    if settings.get("defaultLayoutId").is_none() && path.exists() {
-        let default_layout_id = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
-            .and_then(|v| v.get("defaultLayoutId").cloned());
-        if let (Some(default_layout_id), Some(obj)) = (default_layout_id, settings.as_object_mut())
-        {
-            obj.insert("defaultLayoutId".into(), default_layout_id);
-        }
-    }
-
-    // Preserve the existing `hooks` array from disk if the frontend does not send it.
-    if settings.get("hooks").is_none() && path.exists() {
-        let hooks = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
-            .and_then(|v| v.get("hooks").cloned());
-        if let (Some(hooks), Some(obj)) = (hooks, settings.as_object_mut()) {
-            obj.insert("hooks".into(), hooks);
+    // The frontend may send a partial payload (only version and ui).
+    // Preserve the blocks it omits from disk so user-edited state
+    // (profiles, layouts, float windows, hooks) is not silently wiped.
+    if path.exists() {
+        if let Ok(contents) = std::fs::read_to_string(&path) {
+            if let Ok(saved) = serde_json::from_str::<Value>(&contents) {
+                backfill_missing_fields(&mut settings, &saved);
+            }
         }
     }
 
@@ -997,5 +1014,103 @@ mod tests {
             pane.get("themeId"),
             Some(&Value::String("catppuccin-mocha".into()))
         );
+    }
+
+    #[test]
+    fn sanitize_layout_preserves_window_geometry() {
+        let layout = json!({
+            "id": "work",
+            "name": "Work",
+            "panes": [valid_pane()],
+            "windowGeometry": {
+                "x": 42,
+                "y": -17,
+                "width": 1280,
+                "height": 800.5,
+                "fullscreen": false,
+            },
+        });
+
+        let sanitized = sanitize_layout(&layout).expect("layout should be valid");
+
+        assert_eq!(
+            sanitized.get("windowGeometry"),
+            Some(&json!({
+                "x": 42,
+                "y": -17,
+                "width": 1280,
+                "height": 800.5,
+                "fullscreen": false,
+            }))
+        );
+    }
+
+    #[test]
+    fn sanitize_layout_drops_malformed_window_geometry() {
+        let base = json!({
+            "id": "work",
+            "name": "Work",
+            "panes": [valid_pane()],
+        });
+
+        let cases = vec![
+            json!({ "x": 1, "y": 2, "width": 100 }),                     // missing height/fullscreen
+            json!({ "x": 1, "y": 2, "width": 100, "height": 50 }),       // missing fullscreen
+            json!({ "x": "1", "y": 2, "width": 100, "height": 50, "fullscreen": false }), // non-number x
+            json!({ "x": 1, "y": 2, "width": 100, "height": 50, "fullscreen": "no" }),    // non-bool fullscreen
+        ];
+        for geometry in cases {
+            let mut layout = base.clone();
+            layout
+                .as_object_mut()
+                .unwrap()
+                .insert("windowGeometry".into(), geometry);
+            let sanitized = sanitize_layout(&layout).expect("layout should be valid");
+            assert!(
+                sanitized.get("windowGeometry").is_none(),
+                "malformed geometry should be dropped: {layout}"
+            );
+        }
+    }
+
+    #[test]
+    fn backfill_preserves_float_windows_from_saved_config() {
+        let saved = json!({
+            "version": 6,
+            "shell": { "profiles": [{ "id": "bash", "command": "/bin/bash" }], "defaultProfile": "bash" },
+            "layouts": [{ "id": "default", "name": "Default", "panes": [] }],
+            "defaultLayoutId": "default",
+            "hooks": [{ "id": "h1" }],
+            "floatWindows": { "layout-a": { "open": true } },
+        });
+        // The payload the frontend actually sends for a UI-settings change.
+        let mut payload = json!({ "version": 6, "ui": { "fontSize": 18 } });
+
+        backfill_missing_fields(&mut payload, &saved);
+
+        assert_eq!(payload.get("floatWindows"), saved.get("floatWindows"));
+        assert_eq!(payload.get("shell"), saved.get("shell"));
+        assert_eq!(payload.get("layouts"), saved.get("layouts"));
+        assert_eq!(payload.get("defaultLayoutId"), saved.get("defaultLayoutId"));
+        assert_eq!(payload.get("hooks"), saved.get("hooks"));
+    }
+
+    #[test]
+    fn backfill_never_overwrites_fields_the_payload_sent() {
+        let saved = json!({
+            "layouts": [{ "id": "old" }],
+            "floatWindows": {},
+            "hooks": [{ "id": "old" }],
+        });
+        let mut payload = json!({
+            "layouts": [{ "id": "new" }],
+            "hooks": [{ "id": "new" }],
+        });
+
+        backfill_missing_fields(&mut payload, &saved);
+
+        assert_eq!(payload.get("layouts"), Some(&json!([{ "id": "new" }])));
+        assert_eq!(payload.get("hooks"), Some(&json!([{ "id": "new" }])));
+        assert_eq!(payload.get("floatWindows"), Some(&json!({})));
     }
 }
