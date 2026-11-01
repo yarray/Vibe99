@@ -415,4 +415,35 @@ describe('Settings Panel', () => {
       expect(before.dotHasActive).toBe(before.checked);
     });
   });
+
+  describe('Float window state persistence', () => {
+    it('settings_save with a partial payload keeps floatWindows', async () => {
+      // VIB-374 follow-up regression: settings_save backfilled shell /
+      // layouts / defaultLayoutId / hooks from disk but not floatWindows,
+      // so any UI-settings change wiped saved float window state.
+      await closeSettingsPanel();
+
+      // Persist a float window state, then save UI settings the way the
+      // frontend does (payload without floatWindows).
+      const loaded = await browser.executeAsync(async (done) => {
+        const tauri = window.__TAURI__;
+        if (!tauri) { done(null); return; }
+        try {
+          await tauri.core.invoke('float_window_state_save', {
+            state: { 'layout-a': { open: true, geometry: { x: 10, y: 20, width: 400, height: 300 } } },
+          });
+          await tauri.core.invoke('settings_save', {
+            settings: { version: 6, ui: { fontSize: 14 } },
+          });
+          done(await tauri.core.invoke('settings_load'));
+        } catch (err) {
+          done({ error: String(err) });
+        }
+      });
+
+      expect(loaded).not.toBeNull();
+      expect(loaded.error).toBeUndefined();
+      expect(loaded.floatWindows?.['layout-a']?.open).toBe(true);
+    });
+  });
 });

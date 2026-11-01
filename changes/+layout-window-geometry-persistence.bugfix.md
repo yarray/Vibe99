@@ -1,0 +1,1 @@
+Saved layouts now remember their window position and size. The geometry written by "Save Layout As…" was silently dropped when the layout was written to disk, so reopening a layout in a window never restored where it used to be.
