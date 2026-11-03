@@ -127,7 +127,7 @@ export const paneMaskOpacitySchema = z
   .min(0.0, { message: 'Pane mask opacity must be at least 0.0' })
   .max(1.0, { message: 'Pane mask opacity must be at most 1.0' })
   .transform((val) => Math.round(val * 100) / 100) // 2 decimal places
-  .default(0.75);
+  .default(0.25); // Keep in sync with the backend default in settings.rs
 
 /**
  * Pane width: 520-2000 pixels, multiples of 10
@@ -396,64 +396,9 @@ export class SilentValidationReporter implements ValidationReporter {
 // Migration Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Legacy settings that may contain deprecated fields.
- *
- * This is the input format from old settings files.
- * Migration logic should transform this before schema validation.
- */
-export interface LegacySettingsInput {
-  version?: number;
-  ui?: Partial<{
-    fontSize?: unknown;
-    fontFamily?: unknown;
-    paneOpacity?: unknown;
-    paneMaskOpacity?: unknown;
-    paneMaskAlpha?: unknown; // Deprecated: replaced by paneMaskOpacity
-    paneWidth?: unknown;
-    webglEnabled?: unknown;
-    breathingAlertEnabled?: boolean; // Deprecated: replaced by breathingIntensity
-    breathingIntensity?: unknown;
-    activityAlertDebounceMs?: unknown;
-    shortcuts?: Record<string, unknown>;
-    layoutHotkeys?: unknown;
-    quakeLayouts?: unknown;
-  }>;
-}
+// Legacy settings migrations (paneMaskAlpha → paneMaskOpacity, version 3
+// inverted mask opacity, breathingAlertEnabled → breathingIntensity) run in
+// the backend (`migrate_legacy_ui` in settings.rs) before sanitization: the
+// backend stamps `version` on every load, so version-gated migrations here
+// can never fire.
 
-/**
- * Migrate legacy settings to current format.
- *
- * Handles:
- * - paneMaskAlpha → paneMaskOpacity
- * - breathingAlertEnabled → breathingIntensity
- * - Version 3 inverted mask opacity
- *
- * @param raw - Raw settings from storage
- * @returns Migrated settings ready for schema validation
- */
-export function migrateLegacySettings(raw: LegacySettingsInput): Partial<AppSettingsUi> {
-  const ui = raw.ui ?? {};
-
-  // Strip non-schema fields, pass everything else through as-is
-  const { paneMaskAlpha, breathingAlertEnabled, shortcuts, ...rest } =
-    ui as Record<string, unknown>;
-  const result = rest as Partial<AppSettingsUi>;
-
-  // Migrate paneMaskAlpha → paneMaskOpacity
-  if (paneMaskAlpha !== undefined && ui.paneMaskOpacity === undefined) {
-    result.paneMaskOpacity = paneMaskAlpha as number;
-  }
-
-  // Migrate version 3 inverted mask opacity
-  if (raw.version !== undefined && raw.version < 4 && result.paneMaskOpacity !== undefined) {
-    result.paneMaskOpacity = 1 - result.paneMaskOpacity;
-  }
-
-  // Migrate breathingAlertEnabled → breathingIntensity
-  if (breathingAlertEnabled !== undefined && result.breathingIntensity === undefined) {
-    result.breathingIntensity = breathingAlertEnabled ? 'intense' : 'none';
-  }
-
-  return result;
-}
