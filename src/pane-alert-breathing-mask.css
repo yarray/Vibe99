@@ -29,6 +29,13 @@
   animation: none;
 }
 
+/* A hidden window (minimized / unmapped) must not keep the compositor
+   ticking: pause the pulse instead of letting the infinite animation run
+   off-screen. renderer.js toggles the body class on visibilitychange. */
+body.is-window-hidden .pane.has-pending-activity::after {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pane.has-pending-activity::after {
     animation: none;

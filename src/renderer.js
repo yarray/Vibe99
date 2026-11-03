@@ -2853,6 +2853,15 @@ window.addEventListener('blur', () => {
   }
 });
 
+// Pause the breathing alert animation while the window is hidden. The pulse
+// is an infinite CSS animation, and an animated layer keeps the compositor
+// ticking even when nothing on screen changes — the GPU cost continues
+// while the window is minimized or unmapped. `animation-play-state: paused`
+// freezes the layer cheaply and CSS resumes it when the class clears.
+document.addEventListener('visibilitychange', () => {
+  document.body.classList.toggle('is-window-hidden', document.visibilityState === 'hidden');
+});
+
 addPaneButtonEl.addEventListener('click', () => {
   try {
     addPane();
