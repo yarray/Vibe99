@@ -6,12 +6,16 @@
  * invoked through the actions table.
  *
  * Filters applied in order:
- *   1. Mode — `'*'` matches everything; otherwise must equal `getMode()`.
- *   2. Palette open — when the command palette is open, only the
+ *   1. IME composition — events flagged as part of an IME composition
+ *      (`isComposing`, `keyCode === 229`, or `key === 'Process'`) are
+ *      dropped entirely: firing a shortcut on them would both swallow the
+ *      composition and duplicate input on WebKitGTK.
+ *   2. Mode — `'*'` matches everything; otherwise must equal `getMode()`.
+ *   3. Palette open — when the command palette is open, only the
  *      `toggleCommandPalette` action is allowed; everything else falls through
  *      to the palette's own input field.
- *   3. Chord — see `matchesChord`.
- *   4. INPUT focus — entries flagged `skipInInput` are passed through when an
+ *   4. Chord — see `matchesChord`.
+ *   5. INPUT focus — entries flagged `skipInInput` are passed through when an
  *      `<input>` has focus, so users typing in the settings modal don't
  *      accidentally fire terminal-level shortcuts.
  *
@@ -42,7 +46,18 @@ export function createDispatcher({
     return parsedKeymap;
   }
 
+  // Check if a keyboard event is part of an IME composition sequence. IME
+  // events must be filtered out to avoid interfering with composition in
+  // xterm.js's hidden textarea and accumulating duplicate input on WebKitGTK.
+  function isImeEvent(event) {
+    return event.isComposing === true || event.keyCode === 229 || event.key === 'Process';
+  }
+
   return function dispatch(event) {
+    if (isImeEvent(event)) {
+      return;
+    }
+
     const mode = getMode();
     const inputFocused = isInputFocused();
     const paletteOpen = isCommandPaletteOpen();
