@@ -58,6 +58,7 @@ function buildManager() {
       defaultProfile: USER_PROFILES[0].id,
     })),
     detectShellProfiles: vi.fn(async () => DETECTED_PROFILES),
+    detectWslProfiles: vi.fn(async () => []),
     addShellProfile: vi.fn(async () => ({
       profiles: USER_PROFILES,
       defaultProfile: USER_PROFILES[0].id,

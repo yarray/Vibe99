@@ -74,6 +74,7 @@ export interface ShellProfilePanel {
 export interface ShellProfileBridge {
   listShellProfiles: () => Promise<ShellProfileConfigResult>;
   detectShellProfiles: () => Promise<ShellProfile[]>;
+  detectWslProfiles: () => Promise<ShellProfile[]>;
   addShellProfile: (profile: ShellProfile) => Promise<ShellProfileConfigResult>;
   reorderShellProfiles: (profileIds: string[]) => Promise<ShellProfileConfigResult>;
   removeShellProfile: (profileId: string) => Promise<ShellProfileConfigResult>;
@@ -187,12 +188,21 @@ export function createShellProfileManager({
     return Promise.all([
       bridge.listShellProfiles(),
       bridge.detectShellProfiles().catch((): ShellProfile[] => []),
-    ]).then(([config, detected]) => {
-      detectedShellProfiles = detected;
+      // WSL discovery runs a separate (bounded) probe on the backend; it is
+      // cached there, so this stays cheap on repeated calls.
+      bridge.detectWslProfiles().catch((): ShellProfile[] => []),
+    ]).then(([config, detected, wslDetected]) => {
+      detectedShellProfiles = [...detected, ...wslDetected];
       const userProfiles = config.profiles ?? [];
       const userIds = new Set(userProfiles.map((p) => p.id));
       // Merge: user profiles first, then detected ones not already present.
-      state.setShellProfiles([...userProfiles, ...detected.filter((p) => !userIds.has(p.id))]);
+      const merged = [...userProfiles];
+      for (const p of detectedShellProfiles) {
+        if (!userIds.has(p.id) && !merged.some((existing) => existing.id === p.id)) {
+          merged.push(p);
+        }
+      }
+      state.setShellProfiles(merged);
       state.setDefaultShellProfileId(config.defaultProfile ?? '');
     }).catch(reportError) as Promise<void>;
   }

@@ -305,7 +305,26 @@ pub fn shell_profiles_reorder(app: AppHandle, profile_ids: Vec<String>) -> Resul
 /// merge them into the profile list so users can see and select them.
 #[tauri::command]
 pub fn shell_profiles_detect() -> Vec<ShellProfile> {
-    let candidates = crate::pty::auto_detected_candidates();
+    candidates_to_profiles(crate::pty::auto_detected_candidates())
+}
+
+/// Detect WSL distributions and return them as profiles.
+///
+/// Deliberately separate from [`shell_profiles_detect`]: discovering WSL
+/// distributions runs a (bounded, cached) `wsl.exe` probe, so it must be
+/// requested explicitly rather than riding along on every shell detection.
+/// Async so the probe runs on a worker thread, not the IPC thread.
+#[tauri::command]
+pub async fn shell_profiles_detect_wsl() -> Vec<ShellProfile> {
+    tauri::async_runtime::spawn_blocking(|| {
+        candidates_to_profiles(crate::pty::wsl_shell_candidates())
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Map shell candidates to detectable profiles, deduplicating by id.
+fn candidates_to_profiles(candidates: Vec<crate::pty::ShellCandidate>) -> Vec<ShellProfile> {
     let mut profiles = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 

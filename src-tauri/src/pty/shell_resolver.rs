@@ -105,8 +105,10 @@ pub fn auto_detected_candidates() -> Vec<ShellCandidate> {
                 });
             }
         }
-        // Append WSL candidates after native Windows shells.
-        push_wsl_candidates(&mut candidates, None);
+        // WSL candidates are deliberately NOT appended here: discovering
+        // them requires running `wsl.exe`, which must stay off the default
+        // shell-resolution path (see `wsl_shell_candidates` — used by the
+        // explicit on-request detection command only).
     } else {
         // Unix (Linux / macOS): $SHELL first (only if absolute), then
         // platform-specific fallbacks, deduplicated.
@@ -146,6 +148,10 @@ pub fn auto_detected_candidates() -> Vec<ShellCandidate> {
 
 /// Append WSL shell candidates to the list — one per detected distribution.
 ///
+/// Uses the bounded, cached distribution probe. WSL profiles always run
+/// `/bin/bash`: probing `$SHELL` inside WSL was removed because it boots
+/// the WSL VM (see `wsl.rs`).
+///
 /// On non-Windows or when WSL is not available this is a no-op.
 /// `distro_override` allows forcing a specific distribution (used by
 /// `VIBE99_WINDOWS_SHELL=wsl.exe`).
@@ -155,7 +161,7 @@ fn push_wsl_candidates(candidates: &mut Vec<ShellCandidate>, distro_override: Op
         return;
     }
 
-    let default_shell = wsl::detect_wsl_default_shell().unwrap_or_else(|| "/bin/bash".into());
+    let default_shell = "/bin/bash".to_string();
 
     if let Some(distro) = distro_override {
         let args = wsl::wsl_shell_args(Some(distro), &default_shell, &["-il".into()]);
@@ -167,7 +173,7 @@ fn push_wsl_candidates(candidates: &mut Vec<ShellCandidate>, distro_override: Op
         return;
     }
 
-    let distros = wsl::list_distributions();
+    let distros = wsl::discover_distributions();
     for distro in &distros {
         let args = wsl::wsl_shell_args(Some(distro), &default_shell, &["-il".into()]);
         candidates.push(ShellCandidate {
@@ -180,6 +186,17 @@ fn push_wsl_candidates(candidates: &mut Vec<ShellCandidate>, distro_override: Op
 
 #[cfg(not(target_os = "windows"))]
 fn push_wsl_candidates(_candidates: &mut Vec<ShellCandidate>, _distro_override: Option<&str>) {}
+
+/// WSL shell candidates for the explicit on-request detection command.
+///
+/// Never called on the pane-spawn or default-resolution path: each call can
+/// run a (bounded) `wsl.exe` probe, so the frontend only invokes it from
+/// the profile manager / explicit re-detect action.
+pub fn wsl_shell_candidates() -> Vec<ShellCandidate> {
+    let mut candidates = Vec::new();
+    push_wsl_candidates(&mut candidates, None);
+    candidates
+}
 
 /// Build a `CommandBuilder` for a shell candidate. Returns an error if
 /// the candidate binary does not exist or is not executable.

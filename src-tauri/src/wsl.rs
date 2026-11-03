@@ -12,11 +12,15 @@
 //!   microsecond-fast and avoids the multi-second hang of `wsl.exe` on
 //!   machines where WSL is not installed (P1: minimal primitives).
 //!
-//! - **Unavailable state is cached.** `list_distributions` and
-//!   `detect_wsl_default_shell` persist an in-memory flag once they
-//!   determine WSL is unavailable, so subsequent calls return instantly.
-//!   `clear_wsl_unavailable_flag` resets the cache so users can re-detect
-//!   after installing WSL.
+//! - **Unavailable state is cached.** `discover_distributions` persists an
+//!   in-memory flag once it determines WSL is unavailable, so subsequent
+//!   calls return instantly. `clear_wsl_unavailable_flag` resets the cache
+//!   so users can re-detect after installing WSL.
+//!
+//! - **Discovery is bounded and on-request.** The `wsl.exe` probe never
+//!   runs on the pane-spawn path: it is capped at 3 seconds, cached for 5,
+//!   and only invoked from explicit detection commands. We never run
+//!   `wsl.exe -- sh …` style probes, because those boot the WSL VM.
 //!
 //! - **Path conversion is pure-string.** `C:\Users\foo → /mnt/c/Users/foo`.
 //!   UNC paths (`\\server\share`) and drive-relative paths (`C:bar`) are
@@ -30,22 +34,40 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_os = "windows")]
 use std::{os::windows::process::CommandExt, process::Command};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 // ----------------------------------------------------------------
 // Detection
 // ----------------------------------------------------------------
 
-/// In-memory flag: once `list_distributions` or `detect_wsl_default_shell`
-/// determines WSL is unavailable, they set this to `true` so subsequent
-/// calls return instantly without touching the registry or `wsl.exe`.
+/// In-memory flag: once distribution discovery determines WSL is
+/// unavailable, it sets this to `true` so subsequent calls return instantly
+/// without touching the registry or `wsl.exe`.
 static WSL_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
 
-/// Clear the cached "WSL unavailable" flag.
+/// How long a `wsl.exe` distribution probe may run before it is killed.
+#[cfg(target_os = "windows")]
+const DISCOVER_DEADLINE: Duration = Duration::from_secs(3);
+
+/// How long a discovery result (success or failure) is reused without
+/// spawning another `wsl.exe` probe.
+const DISCOVER_CACHE_TTL: Duration = Duration::from_secs(5);
+
+/// Single-flight cache for [`discover_distributions`]. Holding the mutex
+/// across the probe means concurrent callers wait for the in-flight probe
+/// instead of spawning duplicate `wsl.exe` processes.
+static DISCOVER_CACHE: Mutex<Option<(Instant, Vec<String>)>> = Mutex::new(None);
+
+/// Clear the cached "WSL unavailable" flag and the discovery cache.
 ///
 /// Call this when the user explicitly requests a re-detection (e.g. after
 /// installing WSL while the application is running).
 pub fn clear_wsl_unavailable_flag() {
     WSL_UNAVAILABLE.store(false, Ordering::Relaxed);
+    if let Ok(mut cache) = DISCOVER_CACHE.lock() {
+        *cache = None;
+    }
 }
 
 /// Whether WSL is available on this system.
@@ -71,15 +93,37 @@ pub fn is_wsl_available() -> bool {
     }
 }
 
-/// List installed WSL distributions.
+/// List installed WSL distributions, bounded in time.
 ///
 /// Returns distribution names (e.g. `["Ubuntu", "Debian"]`). Returns an
 /// empty vec if WSL is not available or no distributions are installed.
 ///
-/// If WSL has previously been determined to be unavailable during this
-/// process lifetime, the function returns immediately without invoking
-/// `wsl.exe`. Call [`clear_wsl_unavailable_flag`] to force a fresh check.
-pub fn list_distributions() -> Vec<String> {
+/// The `wsl.exe` probe is capped at 3 seconds and runs with its stdout
+/// redirected to a temp file so a slow or wedged `wsl.exe` can never block
+/// a caller indefinitely. Results — including empty ones — are cached for
+/// 5 seconds so repeated calls reuse the previous answer. If WSL has
+/// previously been determined to be unavailable during this process
+/// lifetime, the function returns immediately without invoking `wsl.exe`.
+/// Call [`clear_wsl_unavailable_flag`] to force a fresh check.
+pub fn discover_distributions() -> Vec<String> {
+    if let Ok(cache) = DISCOVER_CACHE.lock() {
+        if let Some((at, distros)) = cache.as_ref() {
+            if at.elapsed() < DISCOVER_CACHE_TTL {
+                return distros.clone();
+            }
+        }
+    }
+
+    let distros = probe_distributions();
+
+    if let Ok(mut cache) = DISCOVER_CACHE.lock() {
+        *cache = Some((Instant::now(), distros.clone()));
+    }
+    distros
+}
+
+/// Run one bounded `wsl.exe --list --quiet` probe.
+fn probe_distributions() -> Vec<String> {
     if WSL_UNAVAILABLE.load(Ordering::Relaxed) {
         return Vec::new();
     }
@@ -91,28 +135,82 @@ pub fn list_distributions() -> Vec<String> {
             return Vec::new();
         }
 
-        let output = Command::new("wsl.exe")
+        let Some(launcher) = launcher_path() else {
+            return Vec::new();
+        };
+
+        // Redirect stdout to a temp file: reading from a pipe after an
+        // abnormal kill can deadlock, while a file is always safe to read.
+        let tmp = std::env::temp_dir().join(format!("vibe99-wsl-probe-{}", std::process::id()));
+        let Ok(stdout_file) = std::fs::File::create(&tmp) else {
+            return Vec::new();
+        };
+
+        let child = Command::new(&launcher)
             .args(["--list", "--quiet"])
-            .stdout(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::from(stdout_file))
             .stderr(std::process::Stdio::null())
             .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-            .output();
+            .spawn();
 
-        match output {
-            Ok(out) if out.status.success() => {
-                let text = decode_utf16le(&out.stdout);
-                text.lines()
-                    .map(|line| line.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect()
+        let mut child = match child {
+            Ok(c) => c,
+            Err(_) => {
+                let _ = std::fs::remove_file(&tmp);
+                return Vec::new();
             }
-            _ => Vec::new(),
+        };
+
+        // Poll instead of blocking: after the deadline, kill only this probe.
+        let started = Instant::now();
+        let mut timed_out = false;
+        loop {
+            match child.try_wait() {
+                Ok(Some(_status)) => break,
+                Ok(None) if started.elapsed() >= DISCOVER_DEADLINE => {
+                    timed_out = true;
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break;
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+                Err(_) => break,
+            }
         }
+
+        let text = std::fs::read(&tmp)
+            .map(|bytes| decode_utf16le(&bytes))
+            .unwrap_or_default();
+        let _ = std::fs::remove_file(&tmp);
+
+        if timed_out {
+            WSL_UNAVAILABLE.store(true, Ordering::Relaxed);
+            return Vec::new();
+        }
+
+        text.lines()
+            .map(|line| line.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
     }
     #[cfg(not(target_os = "windows"))]
     {
         Vec::new()
     }
+}
+
+/// Resolve `wsl.exe` without depending on `PATH`: prefer the `Sysnative`
+/// redirect (visible to 32-bit processes) and fall back to `System32`.
+#[cfg(target_os = "windows")]
+fn launcher_path() -> Option<std::path::PathBuf> {
+    let windir = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_string());
+    for sub in ["Sysnative", "System32"] {
+        let p = std::path::Path::new(&windir).join(sub).join("wsl.exe");
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    None
 }
 
 /// Decode UTF-16LE bytes (as emitted by `wsl.exe --list --quiet`) to a Rust
@@ -275,50 +373,11 @@ pub fn wsl_shell_args(distro: Option<&str>, shell_cmd: &str, shell_args: &[Strin
     args
 }
 
-/// Detect the default shell inside WSL by running `wsl.exe -- sh -c
-/// 'echo $SHELL'`.
-///
-/// Returns the shell path (e.g. `/bin/bash`) or `None` if detection fails.
-///
-/// If WSL has previously been determined to be unavailable during this
-/// process lifetime, the function returns immediately without invoking
-/// `wsl.exe`. Call [`clear_wsl_unavailable_flag`] to force a fresh check.
-pub fn detect_wsl_default_shell() -> Option<String> {
-    if WSL_UNAVAILABLE.load(Ordering::Relaxed) {
-        return None;
-    }
+// The old `detect_wsl_default_shell` ran `wsl.exe -- sh -c 'echo $SHELL'`,
+// which boots the WSL VM and made shell detection hang for seconds. WSL
+// profiles now default to `/bin/bash`; users can edit the profile to point
+// at their actual shell (zsh/fish/…).
 
-    #[cfg(target_os = "windows")]
-    {
-        if !is_wsl_available() {
-            WSL_UNAVAILABLE.store(true, Ordering::Relaxed);
-            return None;
-        }
-
-        let output = Command::new("wsl.exe")
-            .args(["--", "sh", "-c", "echo $SHELL"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-            .output()
-            .ok()?;
-
-        if !output.status.success() {
-            return None;
-        }
-
-        let shell = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if shell.is_empty() {
-            return None;
-        }
-
-        Some(shell)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        None
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -8,29 +8,30 @@ use crate::wsl;
 pub struct WslStatus {
     available: bool,
     distributions: Vec<String>,
+    /// Always `None`: probing `$SHELL` inside WSL was removed because it
+    /// boots the WSL VM (see `wsl.rs`). Field kept for API compatibility.
     default_shell: Option<String>,
 }
 
 /// Check WSL availability and return distribution info.
 ///
-/// Always returns `available: false` on non-Windows platforms.
+/// Async so the (bounded, cached) `wsl.exe` probe runs on a worker thread
+/// instead of the IPC thread. Always returns `available: false` on
+/// non-Windows platforms.
 #[tauri::command]
-pub fn wsl_status() -> WslStatus {
+pub async fn wsl_status() -> WslStatus {
     let available = wsl::is_wsl_available();
     let distributions = if available {
-        wsl::list_distributions()
+        tauri::async_runtime::spawn_blocking(wsl::discover_distributions)
+            .await
+            .unwrap_or_default()
     } else {
         Vec::new()
-    };
-    let default_shell = if available {
-        wsl::detect_wsl_default_shell()
-    } else {
-        None
     };
     WslStatus {
         available,
         distributions,
-        default_shell,
+        default_shell: None,
     }
 }
 
@@ -39,9 +40,9 @@ pub fn wsl_status() -> WslStatus {
 /// Use this when the user wants to re-detect WSL after installing it
 /// while the application is already running. Returns the fresh status.
 #[tauri::command]
-pub fn wsl_redetect() -> WslStatus {
+pub async fn wsl_redetect() -> WslStatus {
     wsl::clear_wsl_unavailable_flag();
-    wsl_status()
+    wsl_status().await
 }
 
 /// Convert a Windows path to its WSL equivalent.

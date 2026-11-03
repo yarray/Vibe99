@@ -284,6 +284,7 @@ export interface ShellApi {
   setDefault: (profileId: string) => Promise<void>;
   reorder: (profileIds: string[]) => Promise<ShellProfilesListResult>;
   detect: () => Promise<string[]>;
+  detectWsl: () => Promise<ShellProfileData[]>;
   redetectWsl: () => Promise<{ available: boolean; distributions: string[]; defaultShell: string | null }>;
 }
 
@@ -398,6 +399,7 @@ export interface Bridge {
   removeShellProfile: ShellApi['remove'];
   setDefaultShellProfile: ShellApi['setDefault'];
   detectShellProfiles: ShellApi['detect'];
+  detectWslProfiles: ShellApi['detectWsl'];
   redetectWsl: ShellApi['redetectWsl'];
 
   closeWindow: WindowApi['close'];
@@ -519,6 +521,7 @@ type FlatAliases = {
   removeShellProfile: unknown;
   setDefaultShellProfile: unknown;
   detectShellProfiles: unknown;
+  detectWslProfiles: unknown;
   redetectWsl: unknown;
   closeWindow: unknown;
   focusWindow: unknown;
@@ -588,6 +591,7 @@ function createUnavailableBridge(): Bridge {
       setDefault: fail,
       reorder: fail,
       detect: () => Promise.resolve([]),
+      detectWsl: () => Promise.resolve([]),
       redetectWsl: () => Promise.resolve({ available: false, distributions: [], defaultShell: null }),
     },
     window: {
@@ -650,6 +654,7 @@ function createUnavailableBridge(): Bridge {
     removeShellProfile: fail,
     setDefaultShellProfile: fail,
     detectShellProfiles: () => Promise.resolve([]),
+    detectWslProfiles: () => Promise.resolve([]),
     redetectWsl: () => Promise.resolve({ available: false, distributions: [], defaultShell: null }),
     closeWindow: fail,
     focusWindow: fail,
@@ -1074,6 +1079,7 @@ function createTauriBridge(tauri: TauriGlobal, windowLayoutId: string | null): O
       setDefault: (profileId: string) => invoke('shell_profile_set', { profileId }),
       reorder: (profileIds: string[]) => invoke('shell_profiles_reorder', { profileIds }),
       detect: () => invoke('shell_profiles_detect'),
+      detectWsl: () => invoke('shell_profiles_detect_wsl'),
       redetectWsl: () => invoke('wsl_redetect'),
     },
     window: {
@@ -1177,6 +1183,7 @@ export function createBridge(
       removeShellProfile: partial.shell.remove,
       setDefaultShellProfile: partial.shell.setDefault,
       detectShellProfiles: partial.shell.detect,
+      detectWslProfiles: partial.shell.detectWsl,
       redetectWsl: partial.shell.redetectWsl,
       closeWindow: partial.window.close,
       focusWindow: partial.window.focus,

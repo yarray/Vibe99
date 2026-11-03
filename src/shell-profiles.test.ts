@@ -27,6 +27,7 @@ function createBridge(initialProfiles: ShellProfile[] = []): {
       return result();
     }),
     detectShellProfiles: vi.fn(async () => []),
+    detectWslProfiles: vi.fn(async () => []),
     addShellProfile: vi.fn(async (profile) => {
       addCalls.push({ ...profile });
       const existingIdx = currentProfiles.findIndex(p => p.id === profile.id);
