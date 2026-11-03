@@ -1,10 +1,10 @@
 # Contributing To Vibe99
 
-Vibe99 is a desktop terminal workspace for agentic coding. Contributions should preserve the product’s focus-first interaction model, keep the app buildable on current Electron tooling, and leave behind changelog notes that are clear enough for a human or an agent to review quickly.
+Vibe99 is a desktop terminal workspace for agentic coding. Contributions should preserve the product’s focus-first interaction model, keep the app buildable on current Tauri 2 tooling, and leave behind changelog notes that are clear enough for a human or an agent to review quickly.
 
 ## Local Setup
 
-This repo currently builds and packages cleanly on Node 22, and local app/package commands enforce that requirement.
+This repo currently builds and packages cleanly on Node 22 and a stable Rust toolchain, and local app/build commands enforce the Node requirement.
 
 If you use `nvm`:
 
@@ -15,39 +15,28 @@ nvm use 22
 Install dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
-Run the app in development:
+Run the app in development (Vite serves the frontend and Tauri opens the native shell):
 
 ```bash
-npm start
+npm run tauri:dev
 ```
 
-Build packaged output for the current platform:
+Build packaged installers for the current platform:
 
 ```bash
-npm run package
-npm run make
+npm run tauri:build
 ```
 
-For Linux packaging on Debian or Ubuntu, install the required system tools first:
+On Debian or Ubuntu, install the Tauri system dependencies first (matches what CI installs):
 
 ```bash
-sudo apt install dpkg fakeroot
+sudo apt install libwebkit2gtk-4.1-dev build-essential libappindicator3-dev librsvg2-dev patchelf
 ```
 
-`npm run package` creates an unpackaged app bundle for the current platform.
-
-`npm run make` creates installable artifacts for the current platform:
-
-- macOS: local-only packaging output
-- Windows: portable `.exe` and `.zip` output
-- Linux: `.AppImage`, `.deb`, and `.zip`
-
-RPM packaging is opt-in and only runs when `rpmbuild` is installed and `VIBE99_ENABLE_RPM=1` is set.
-
-GitHub Releases currently target Linux and Windows. macOS release artifacts are paused until enough user demand justifies Apple signing and notarization costs.
+GitHub Releases currently target Linux (`.AppImage`, `.deb`) and Windows (`.msi`, portable `.exe`). macOS release artifacts are paused until enough user demand justifies Apple signing and notarization costs.
 
 ## Changelog Rules
 
@@ -86,7 +75,7 @@ Packaged builds now spawn terminal sessions correctly on macOS.
 Bad fragment:
 
 ```text
-Refactor PTY bootstrap, fix helper path bug, update forge config, and try a different package because previous approach failed.
+Refactor PTY bootstrap, fix helper path bug, update the Tauri build config, and try a different bundler because previous approach failed.
 ```
 
 ## Building The Changelog
