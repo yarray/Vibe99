@@ -29,6 +29,27 @@ function isLinkOpenModifierPressed(event: MouseEvent, platform: string): boolean
 }
 
 /**
+ * Returns the URL to open, or `null` when the URI must not reach the
+ * system opener.
+ *
+ * WebLinksAddon only ever produces http(s) URLs, but OSC 8 hyperlinks can
+ * embed arbitrary URIs (file:, custom schemes, command strings). Only
+ * http(s) URLs with a hostname are allowed through — anything else is
+ * refused instead of being handed to the opener plugin.
+ */
+export function normalizeExternalUrl(raw: string): string | null {
+  try {
+    const parsed = new URL(raw);
+    if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname) {
+      return parsed.toString();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Creates the activation callback shared by WebLinksAddon and the OSC 8
  * linkHandler. Clicks without the open modifier are ignored so they keep
  * reaching the shell (mouse-reporting TUIs); modifier clicks open the URI
@@ -41,9 +62,13 @@ export function createTerminalLinkActivation(
     if (!isLinkOpenModifierPressed(event, deps.platform)) {
       return;
     }
+    const url = normalizeExternalUrl(uri);
+    if (url === null) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
-    void Promise.resolve(deps.openExternalUrl(uri)).catch(deps.reportError);
+    void Promise.resolve(deps.openExternalUrl(url)).catch(deps.reportError);
   };
 }
 

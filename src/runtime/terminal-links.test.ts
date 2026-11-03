@@ -4,6 +4,7 @@ import { Terminal } from '@xterm/xterm';
 import {
   createTerminalLinkActivation,
   createTerminalLinkHandler,
+  normalizeExternalUrl,
 } from './terminal-links';
 
 /**
@@ -139,6 +140,34 @@ describe('createTerminalLinkActivation', () => {
 
     activation(fakeMouse({ ctrlKey: true }), 'https://example.com');
     await vi.waitFor(() => expect(reportError).toHaveBeenCalledWith(expect.any(Error)));
+  });
+
+  it('refuses non-http(s) OSC 8 URIs before they reach the opener', () => {
+    const openExternalUrl = vi.fn().mockResolvedValue(undefined);
+    const activation = createTerminalLinkActivation({
+      platform: 'linux',
+      openExternalUrl,
+      reportError: vi.fn(),
+    });
+
+    // WebLinksAddon only emits http(s), but OSC 8 can embed any URI.
+    for (const uri of [
+      'file:///etc/passwd',
+      'evil-command://rm -rf /',
+      'not a url at all',
+      'javascript:alert(1)',
+    ]) {
+      activation(fakeMouse({ ctrlKey: true }), uri);
+      expect(openExternalUrl).not.toHaveBeenCalled();
+    }
+  });
+
+  it('opens http(s) OSC 8 URIs with a hostname', () => {
+    expect(normalizeExternalUrl('https://example.com/x')).toBe('https://example.com/x');
+    expect(normalizeExternalUrl('http://example.com')).toBe('http://example.com/');
+    expect(normalizeExternalUrl('file:///etc/passwd')).toBeNull();
+    expect(normalizeExternalUrl('')).toBeNull();
+    expect(normalizeExternalUrl('no-scheme')).toBeNull();
   });
 });
 
