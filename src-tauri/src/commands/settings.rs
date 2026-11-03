@@ -650,6 +650,45 @@ fn sanitize_ui_config(ui: Option<&Value>) -> Value {
     result
 }
 
+/// One-time migration of a pre-v4 `ui` block.
+///
+/// The backend stamps `version: CURRENT_CONFIG_VERSION` on every load and
+/// save, so the frontend's version-gated migrations (`migrateLegacySettings`)
+/// never see an old version and can never run. Perform the legacy migrations
+/// here instead, on the raw disk JSON, before sanitization drops the legacy
+/// fields:
+/// - `paneMaskAlpha` → `paneMaskOpacity`
+/// - Version 3 and earlier stored the mask opacity inverted
+/// - `breathingAlertEnabled` → `breathingIntensity`
+///
+/// Returns `None` when the version needs no migration (or there is no `ui`
+/// block to migrate); callers then sanitize the original value.
+fn migrate_legacy_ui(version: u64, ui: Option<&Value>) -> Option<Value> {
+    if version >= 4 {
+        return None;
+    }
+    let mut migrated = ui?.as_object()?.clone();
+
+    if !migrated.contains_key("paneMaskOpacity") {
+        if let Some(alpha) = migrated.get("paneMaskAlpha").and_then(|v| v.as_f64()) {
+            migrated.insert("paneMaskOpacity".into(), Value::from(alpha));
+        }
+    }
+
+    if let Some(opacity) = migrated.get("paneMaskOpacity").and_then(|v| v.as_f64()) {
+        migrated.insert("paneMaskOpacity".into(), Value::from(1.0 - opacity));
+    }
+
+    if !migrated.contains_key("breathingIntensity") {
+        if let Some(enabled) = migrated.get("breathingAlertEnabled").and_then(|v| v.as_bool()) {
+            let intensity = if enabled { "intense" } else { "none" };
+            migrated.insert("breathingIntensity".into(), Value::from(intensity));
+        }
+    }
+
+    Some(Value::Object(migrated))
+}
+
 /// Sanitize an arbitrary config value into the current schema.
 ///
 /// Handles:
@@ -667,6 +706,8 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
         Some(v) if v >= 2 => {
             // Version 2+ format: sanitize ui, shell, layouts, and default layout.
             let obj = candidate.as_object().unwrap();
+            let ui_migrated = migrate_legacy_ui(v, obj.get("ui"));
+            let ui_input = ui_migrated.as_ref().or_else(|| obj.get("ui"));
             let profiles =
                 sanitize_shell_profiles(obj.get("shell").and_then(|s| s.get("profiles")));
             let layouts = sanitize_layouts(obj.get("layouts"));
@@ -675,7 +716,7 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
 
             let mut result = serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
-                "ui": sanitize_ui_config(obj.get("ui")),
+                "ui": sanitize_ui_config(ui_input),
                 "shell": sanitize_shell_config(obj.get("shell"), &profiles),
             });
 
@@ -713,9 +754,11 @@ pub(crate) fn sanitize_config(candidate: &Value) -> Value {
         Some(v) if v == 1 => {
             // Version 1 → current migration: preserve ui, add empty shell block.
             let obj = candidate.as_object().unwrap();
+            let ui_migrated = migrate_legacy_ui(v, obj.get("ui"));
+            let ui_input = ui_migrated.as_ref().or_else(|| obj.get("ui"));
             serde_json::json!({
                 "version": CURRENT_CONFIG_VERSION,
-                "ui": sanitize_ui_config(obj.get("ui")),
+                "ui": sanitize_ui_config(ui_input),
                 "shell": {
                     "profiles": [],
                     "defaultProfile": "",
@@ -1113,5 +1156,93 @@ mod tests {
         assert_eq!(payload.get("layouts"), Some(&json!([{ "id": "new" }])));
         assert_eq!(payload.get("hooks"), Some(&json!([{ "id": "new" }])));
         assert_eq!(payload.get("floatWindows"), Some(&json!({})));
+    }
+
+    #[test]
+    fn version3_mask_opacity_is_uninverted_and_alpha_aliased() {
+        // A v3 file stored the mask opacity inverted; a pre-mask file may
+        // still carry the deprecated `paneMaskAlpha` field.
+        let config = json!({
+            "version": 3,
+            "ui": {
+                "fontSize": 13,
+                "paneMaskOpacity": 0.97,
+                "breathingAlertEnabled": false,
+            },
+        });
+
+        let sanitized = sanitize_config(&config);
+        let ui = sanitized.get("ui").unwrap();
+
+        // 0.97 inverted means the user saw a faint mask; keep it faint.
+        let mask = ui.get("paneMaskOpacity").and_then(|v| v.as_f64()).unwrap();
+        assert!((mask - 0.03).abs() < 1e-9, "expected ~0.03, got {mask}");
+        assert_eq!(ui.get("breathingIntensity"), Some(&Value::String("none".into())));
+    }
+
+    #[test]
+    fn version3_pane_mask_alpha_alias_is_inverted_once() {
+        let config = json!({
+            "version": 3,
+            "ui": {
+                "paneMaskAlpha": 0.25,
+            },
+        });
+
+        let sanitized = sanitize_config(&config);
+        let ui = sanitized.get("ui").unwrap();
+
+        let mask = ui.get("paneMaskOpacity").and_then(|v| v.as_f64()).unwrap();
+        assert!((mask - 0.75).abs() < 1e-9, "expected ~0.75, got {mask}");
+        assert!(ui.get("paneMaskAlpha").is_none());
+    }
+
+    #[test]
+    fn version3_disabled_alerts_migrate_to_none_intensity() {
+        let config = json!({
+            "version": 2,
+            "ui": { "breathingAlertEnabled": false },
+        });
+
+        let sanitized = sanitize_config(&config);
+        assert_eq!(
+            sanitized.get("ui").unwrap().get("breathingIntensity"),
+            Some(&Value::String("none".into()))
+        );
+    }
+
+    #[test]
+    fn version3_explicit_intensity_wins_over_alert_flag() {
+        let config = json!({
+            "version": 3,
+            "ui": {
+                "breathingAlertEnabled": true,
+                "breathingIntensity": "mild",
+            },
+        });
+
+        let sanitized = sanitize_config(&config);
+        assert_eq!(
+            sanitized.get("ui").unwrap().get("breathingIntensity"),
+            Some(&Value::String("mild".into()))
+        );
+    }
+
+    #[test]
+    fn version4plus_ui_is_not_migrated() {
+        let config = json!({
+            "version": 6,
+            "ui": {
+                "paneMaskOpacity": 0.4,
+                "breathingIntensity": "intense",
+            },
+        });
+
+        let sanitized = sanitize_config(&config);
+        let ui = sanitized.get("ui").unwrap();
+
+        let mask = ui.get("paneMaskOpacity").and_then(|v| v.as_f64()).unwrap();
+        assert!((mask - 0.4).abs() < 1e-9, "expected 0.4 untouched, got {mask}");
+        assert_eq!(ui.get("breathingIntensity"), Some(&Value::String("intense".into())));
     }
 }

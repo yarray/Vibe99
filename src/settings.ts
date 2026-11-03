@@ -6,7 +6,6 @@ import {
   type BreathingIntensity,
   ConsoleValidationReporter,
   getDefaultSettings,
-  migrateLegacySettings,
   type ValidationReporter,
   validateAndSanitizeSettings,
   validateField,
@@ -281,11 +280,10 @@ export function createSettingsManager(deps: SettingsManagerDeps): SettingsManage
 
     const raw = nextSettings as RawSettingsFromStorage;
 
-    // Step 1: Migrate legacy settings to current format
-    const migrated = migrateLegacySettings(raw);
-
-    // Step 2: Validate and sanitize against schema
-    const result = validateAndSanitizeSettings(migrated);
+    // Legacy migrations (pre-v4 mask opacity, paneMaskAlpha alias,
+    // breathingAlertEnabled) already ran in the backend before sanitization.
+    // Validate and sanitize against schema.
+    const result = validateAndSanitizeSettings(raw.ui ?? {});
 
     // Step 3: Apply sanitized settings
     Object.assign(settings, result.sanitized);
