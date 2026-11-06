@@ -24,6 +24,7 @@ import type { SettingsManager } from '../settings';
 import type { TerminalTheme, Theme } from '../domain/theme';
 import { getTheme, getDefaultTheme } from '../domain/theme';
 import { createTerminalLinkActivation, createTerminalLinkHandler } from './terminal-links';
+import { registerActivitySignals } from './terminal-signals';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -51,6 +52,7 @@ export type TabRefreshCallback = (paneId: string) => void;
 export interface TerminalActivityWatcher {
   noteResize: (paneId: string) => void;
   noteData: (paneId: string, byteSize?: number) => void;
+  noteSignal: (paneId: string) => void;
   forget: (paneId: string) => void;
 }
 
@@ -498,6 +500,8 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     }
     return true;
   });
+
+  registerActivitySignals(terminal, activityWatcher, paneId);
 
   // -- Visible activity fingerprint --
   // Only note activity if the visible buffer actually changes. This prevents

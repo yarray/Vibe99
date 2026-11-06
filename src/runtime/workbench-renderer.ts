@@ -338,6 +338,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       activityWatcher: {
         noteResize: (paneId) => paneActivityWatcher.noteResize(paneId),
         noteData: (paneId, byteSize?) => paneActivityWatcher.noteData(paneId, byteSize),
+        noteSignal: (paneId) => paneActivityWatcher.noteSignal(paneId),
         forget: (paneId) => paneActivityWatcher.forget(paneId),
       },
       reportError,
