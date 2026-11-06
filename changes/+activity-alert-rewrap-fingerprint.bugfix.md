@@ -1,0 +1,1 @@
+Background activity alerts no longer pulse for a pane when its visible content is unchanged — resizing and the resulting line rewraps, and TUI apps redrawing the same frame, no longer count as new activity.

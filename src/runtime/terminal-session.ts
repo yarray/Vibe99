@@ -25,6 +25,7 @@ import type { TerminalTheme, Theme } from '../domain/theme';
 import { getTheme, getDefaultTheme } from '../domain/theme';
 import { createTerminalLinkActivation, createTerminalLinkHandler } from './terminal-links';
 import { registerActivitySignals } from './terminal-signals';
+import { fingerprintVisibleContent } from '../pane-activity-watcher';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -51,7 +52,7 @@ export type TabRefreshCallback = (paneId: string) => void;
 /** Activity watcher interface used by TerminalSession. */
 export interface TerminalActivityWatcher {
   noteResize: (paneId: string) => void;
-  noteData: (paneId: string, byteSize?: number) => void;
+  noteData: (paneId: string, byteSize?: number, fingerprint?: string) => void;
   noteSignal: (paneId: string) => void;
   forget: (paneId: string) => void;
 }
@@ -516,6 +517,24 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
     });
   };
 
+  // Rewrap-invariant digest of the visible viewport. Unlike `snapshot()` it
+  // does not include the per-line wrap flag as part of a byte comparison; the
+  // flag is used only to decide whether a line continues the previous one, so
+  // a resize that reflows the same character content produces the same
+  // fingerprint.
+  const visibleFingerprint = (): string => {
+    const { active: buf } = terminal.buffer;
+    const y = buf.viewportY;
+    const lines = Array.from({ length: terminal.rows }, (_, i) => {
+      const line = buf.getLine(y + i);
+      return {
+        text: line ? line.translateToString(true) : '',
+        wrapped: line ? line.isWrapped : false,
+      };
+    });
+    return fingerprintVisibleContent(lines);
+  };
+
   let last = snapshot();
 
   function noteVisibleTerminalActivity(): void {
@@ -526,7 +545,7 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
       return sum;
     }, 0);
     last = next;
-    activityWatcher.noteData(paneId, changedBytes);
+    activityWatcher.noteData(paneId, changedBytes, visibleFingerprint());
   }
 
   // ---------------------------------------------------------------------------

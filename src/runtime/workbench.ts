@@ -60,7 +60,7 @@ export interface WorkbenchDeps {
 
   paneActivityWatcher: {
     noteResize: (paneId: string) => void;
-    noteData: (paneId: string, byteSize?: number) => void;
+    noteData: (paneId: string, byteSize?: number, fingerprint?: string) => void;
     setFocus: (paneId: string | null) => void;
     setPaneEnabled: (paneId: string, enabled: boolean) => void;
     isAlerted: (paneId: string) => boolean;

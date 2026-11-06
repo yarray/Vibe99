@@ -11,12 +11,20 @@
 //     notification (BEL, iTerm2 growl OSC 9, xterm notify OSC 777, kitty
 //     notification OSC 99). Unlike passive output, these fire the alert
 //     immediately instead of waiting out the quiet period.
+//   - call `noteData(paneId, byteSize?, fingerprint?)` for every chunk of
+//     PTY output. `fingerprint` is a rewrap-invariant digest of the pane's
+//     current visible content (see `fingerprintVisibleContent`) — it lets
+//     the watcher tell "new content" apart from a reflow or an identical
+//     redraw frame. Content emitted while the pane is focused is treated as
+//     already seen.
 //   - call `noteResize(paneId)` whenever a pane's PTY is resized (window
 //     resize, font-size change, layout change, …) — the SIGWINCH redraw
 //     burst that follows is not "real" new content. Data arriving after
 //     `noteResize` is treated as redraw residue until the pane has been
 //     quiet for `resizeSettleMs`.
-//   - call `setFocus(paneId | null)` whenever the focused pane changes
+//   - call `setFocus(paneId | null)` whenever the focused pane changes —
+//     the newly focused pane's current fingerprint becomes its `lastSeen`
+//     baseline, because the user is now looking at it.
 //   - call `forget(paneId)` when a pane is destroyed
 //
 // Two enable/disable surfaces let the host turn detection off without
@@ -28,9 +36,11 @@
 //
 // The watcher fires `onAlert(paneId)` once per "quiet period after burst",
 // and `onClear(paneId)` whenever the alerted state ends (focus, forget,
-// disable, or programmatic clear). Output that arrives before the user has
-// *ever* focused a pane is ignored, so newly-spawned panes don't pulse
-// from their own startup banner.
+// disable, or programmatic clear). An alert only fires when the settled
+// content still differs from what the user last saw (`lastSeenFingerprint`),
+// so reflows and identical redraw frames never pulse. Output that arrives
+// before the user has *ever* focused a pane is ignored, so newly-spawned
+// panes don't pulse from their own startup banner.
 
 const DEFAULT_SETTLE_MS = 30000;
 // After a resize, ignore incoming chunks until the pane has been silent
@@ -49,6 +59,36 @@ const DEFAULT_SETTLE_MS = 30000;
 // from zellij/tmux redraws are far more annoying than missing a beat of
 // output that just happened to coincide with a window resize.
 const DEFAULT_RESIZE_SETTLE_MS = 1500;
+
+/** A visible viewport line plus whether it continues the previous line. */
+export interface VisibleLine {
+  /** The line's characters (trailing whitespace already trimmed). */
+  text: string;
+  /** True when this line is the continuation of the previous wrapped line. */
+  wrapped: boolean;
+}
+
+/**
+ * Turn a pane's visible viewport lines into a rewrap-invariant fingerprint.
+ *
+ * xterm reflows lines when a pane is resized, so the same character content
+ * can be split across different line boundaries. Continuation lines carry a
+ * `wrapped` flag while genuine newlines do not; concatenating accordingly
+ * (then collapsing each whitespace run to a single space) makes the digest
+ * depend only on the visible character content — a reflow or a redraw of the
+ * identical frame produces the same fingerprint, while genuinely new output
+ * does not.
+ */
+export function fingerprintVisibleContent(lines: readonly VisibleLine[]): string {
+  let joined = '';
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0 && !lines[i].wrapped) {
+      joined += ' ';
+    }
+    joined += lines[i].text;
+  }
+  return joined.replace(/\s+/g, ' ').trim();
+}
 
 /** Options bag for createPaneActivityWatcher. */
 export interface PaneActivityWatcherOptions {
@@ -71,6 +111,10 @@ interface PaneState {
   alerted: boolean;
   paneEnabled: boolean;
   resizeSettleTimer: ReturnType<typeof setTimeout> | null;
+  /** Rewrap-invariant fingerprint of the latest visible content. */
+  currentFingerprint?: string;
+  /** Fingerprint of the content the user last saw (focus / alert fire). */
+  lastSeenFingerprint?: string;
 }
 
 // -- Diagnostic ring buffer (one per pane) --
@@ -115,8 +159,12 @@ function dumpDiag(d: DiagState): NoteDataSummary[] {
 export interface PaneActivityWatcher {
   /** Update which pane is currently focused (or null if none). */
   setFocus: (paneId: string | null) => void;
-  /** Record a chunk of output for `paneId`. */
-  noteData: (paneId: string, byteSize?: number) => void;
+  /**
+   * Record a chunk of output for `paneId`. `fingerprint` is the pane's
+   * current visible-content digest (rewrap-invariant); when omitted the
+   * watcher falls back to the previous "any settled output alerts" behavior.
+   */
+  noteData: (paneId: string, byteSize?: number, fingerprint?: string) => void;
   /**
    * Record an explicit application notification signal (BEL / OSC 9 / 777 /
    * 99) for `paneId`. Bypasses the quiet-period timer and fires `onAlert`
@@ -228,6 +276,28 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
     }, resizeSettleMs);
   }
 
+  // (Re)start the quiet-period countdown for a pane. On expiry we fire the
+  // alert only if the settled content still differs from what the user last
+  // saw — a reflow or an identical redraw frame settles back to the same
+  // fingerprint and must not pulse.
+  function armAlertTimer(paneId: string, s: PaneState): void {
+    if (s.timer !== null) clearTimeout(s.timer);
+    s.timer = setTimeout(() => {
+      s.timer = null;
+      if (!ignoreFocus && paneId === focusedPaneId) return;
+      if (!isActive(paneId, s)) return;
+      if (s.currentFingerprint !== undefined && s.currentFingerprint === s.lastSeenFingerprint) {
+        return;
+      }
+      s.alerted = true;
+      s.lastSeenFingerprint = s.currentFingerprint;
+      const diag = diagStates.get(paneId);
+      const history = diag ? dumpDiag(diag) : [];
+      console.debug('[activity] onAlert', paneId, `pendingTimers=${settleMs}ms`, `history=`, history);
+      onAlert?.(paneId);
+    }, settleMs);
+  }
+
   return {
     /** Update which pane is currently focused (or null if none). */
     setFocus(paneId: string | null): void {
@@ -235,15 +305,23 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
       if (paneId == null) return;
       const s = ensure(paneId);
       s.hasBeenFocused = true;
+      s.lastSeenFingerprint = s.currentFingerprint;
       clearState(paneId, s);
     },
 
     /** Record a chunk of output for `paneId`. */
-    noteData(paneId: string, byteSize?: number): void {
+    noteData(paneId: string, byteSize?: number, fingerprint?: string): void {
       const now = performance.now();
       const s = ensure(paneId);
       const isActivePane = isActive(paneId, s);
       const isFocused = !ignoreFocus && paneId === focusedPaneId;
+
+      if (fingerprint !== undefined) {
+        s.currentFingerprint = fingerprint;
+        // Content emitted while the user is looking at the pane is "seen"
+        // the moment it arrives — it becomes the baseline for later alerts.
+        if (isFocused) s.lastSeenFingerprint = fingerprint;
+      }
 
       // -- Diagnostic: record every noteData call --
       let diag = diagStates.get(paneId);
@@ -278,17 +356,7 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
         s.alerted = false;
         onClear?.(paneId);
       }
-      if (s.timer !== null) clearTimeout(s.timer);
-      s.timer = setTimeout(() => {
-        s.timer = null;
-        if (!ignoreFocus && paneId === focusedPaneId) return;
-        if (!isActive(paneId, s)) return;
-        s.alerted = true;
-        const diag = diagStates.get(paneId);
-        const history = diag ? dumpDiag(diag) : [];
-        console.debug('[activity] onAlert', paneId, `pendingTimers=${settleMs}ms`, `history=`, history);
-        onAlert?.(paneId);
-      }, settleMs);
+      armAlertTimer(paneId, s);
     },
 
     noteResize(paneId: string): void {
@@ -359,17 +427,7 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
       // Restart all pending timers with the new settle time
       for (const [paneId, s] of states) {
         if (s.timer !== null && !s.alerted) {
-          clearTimeout(s.timer);
-          s.timer = setTimeout(() => {
-            s.timer = null;
-            if (!ignoreFocus && paneId === focusedPaneId) return;
-            if (!isActive(paneId, s)) return;
-            s.alerted = true;
-            const diag = diagStates.get(paneId);
-            const history = diag ? dumpDiag(diag) : [];
-            console.debug('[activity] onAlert (setSettleMs restart)', paneId, `pendingTimers=${settleMs}ms`, `history=`, history);
-            onAlert?.(paneId);
-          }, settleMs);
+          armAlertTimer(paneId, s);
         }
       }
     },
