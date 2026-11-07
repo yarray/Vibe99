@@ -17,16 +17,21 @@
  * Both kinds accept a `timeoutMs` request param bounding the passthrough wait
  * (default 5s, capped at 120s); routing metadata is stripped before dispatch.
  *
+ * The set of callable methods lives in `crate::cli_registry` — the single
+ * source of truth shared with `vibe99ctl describe`. A method that is not
+ * registered there is rejected with `-32601` (method not found).
+ *
  * Lifecycle:
  * - Started in `main.rs` `.setup()` via `start_cli_server()`.
  * - Cleaned up automatically when the process exits (socket + PID file removed).
  *
  * @module commands/cli
  */
+
+use crate::cli_registry::{self, Route};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -58,53 +63,15 @@ impl Default for CliState {
 // Path resolution
 // ---------------------------------------------------------------------------
 
-/// Resolve the directory that holds CLI-related files (PID, socket).
-///
-/// Unix  : `$XDG_RUNTIME_DIR/vibe99/` (fallback `/tmp/vibe99-$UID/`)
-/// Windows: `%APPDATA%\vibe99\`
-fn cli_runtime_dir() -> Result<PathBuf, String> {
-    #[cfg(unix)]
-    {
-        let base = std::env::var("XDG_RUNTIME_DIR").ok().or_else(|| {
-            let uid = unsafe { libc::getuid() };
-            Some(format!("/tmp/vibe99-{uid}"))
-        });
-        let base = base.ok_or("cannot determine runtime directory")?;
-        Ok(PathBuf::from(base).join("vibe99"))
-    }
-    #[cfg(windows)]
-    {
-        let appdata = std::env::var("APPDATA").map_err(|e| format!("APPDATA not set: {e}"))?;
-        Ok(PathBuf::from(appdata).join("vibe99"))
-    }
-}
-
-/// Resolve the Unix Domain Socket path (or Named Pipe name on Windows).
-pub fn socket_path() -> Result<PathBuf, String> {
-    #[cfg(unix)]
-    {
-        let dir = cli_runtime_dir()?;
-        Ok(dir.join("vibe99.sock"))
-    }
-    #[cfg(windows)]
-    {
-        // Named pipes live in kernel space; we use a conventional path string.
-        Ok(PathBuf::from(r"\\.\pipe\vibe99"))
-    }
-}
-
-/// Resolve the PID file path.
-pub fn pid_file_path() -> Result<PathBuf, String> {
-    let dir = cli_runtime_dir()?;
-    Ok(dir.join("vibe99.pid"))
-}
+// The socket, PID file and runtime directory are resolved by
+// `crate::cli_registry`, so the server and the CLI always agree on them.
 
 // ---------------------------------------------------------------------------
 // PID file management
 // ---------------------------------------------------------------------------
 
 fn write_pid_file() -> Result<(), String> {
-    let path = pid_file_path()?;
+    let path = cli_registry::pid_file_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("failed to create PID dir: {e}"))?;
     }
@@ -114,7 +81,7 @@ fn write_pid_file() -> Result<(), String> {
 }
 
 fn remove_pid_file() {
-    if let Ok(path) = pid_file_path() {
+    if let Ok(path) = cli_registry::pid_file_path() {
         let _ = std::fs::remove_file(path);
     }
 }
@@ -122,7 +89,7 @@ fn remove_pid_file() {
 fn remove_socket_file() {
     #[cfg(unix)]
     {
-        if let Ok(path) = socket_path() {
+        if let Ok(path) = cli_registry::socket_path() {
             let _ = std::fs::remove_file(path);
         }
     }
@@ -179,42 +146,6 @@ fn err_response(id: Value, code: i32, message: String) -> JsonRpcResponse {
 // Method routing
 // ---------------------------------------------------------------------------
 
-/// Methods that must be forwarded to the TypeScript frontend (passthrough).
-fn is_passthrough(method: &str) -> bool {
-    matches!(
-        method,
-        "pane.create"
-            | "pane.close"
-            | "pane.focus"
-            | "pane.list"
-            | "pane.info"
-            | "pane.move"
-            | "pane.rename.start"
-            | "pane.rename.commit"
-            | "pane.setColor"
-            | "pane.clearColor"
-            | "pane.toggleActivityAlert"
-            | "pane.setTheme"
-            | "pane.requestClose"
-            | "focus.next"
-            | "focus.prev"
-            | "focus.left"
-            | "focus.right"
-            | "focus.recent"
-            | "focus.nextLit"
-            | "focus.at"
-            | "focus.blur"
-            | "focus.refocus"
-            | "focus.commit"
-            | "mode.set"
-            | "layout.save"
-            | "layout.activate"
-            | "layout.active"
-            | "terminal.restart"
-            | "terminal.changeShell"
-    )
-}
-
 /// Resolve the window label that owns `pane_id` for direct PTY access.
 ///
 /// An explicit `windowId` param wins; otherwise the PTY session map is the
@@ -268,104 +199,6 @@ struct SettingsUpdate {
     changed: serde_json::Map<String, Value>,
 }
 
-/// Handle a "direct" method entirely in Rust without touching the frontend.
-async fn handle_direct(app: &AppHandle, method: &str, params: Value) -> Result<Value, String> {
-    match method {
-        "settings.get" => {
-            let config = super::settings::settings_load(app.clone())?;
-            match params.get("key").and_then(|v| v.as_str()) {
-                Some(key) => lookup_setting(&config, key).cloned().ok_or_else(|| {
-                    format!(
-                        "unknown setting `{key}` — run `vibe99ctl settings schema` to list writable keys"
-                    )
-                }),
-                None => Ok(sort_json_keys(config)),
-            }
-        }
-        "settings.set" => {
-            let updates = params.get("settings").cloned().ok_or("missing 'settings' param")?;
-            let updates = updates
-                .as_object()
-                .ok_or("'settings' must be a JSON object")?
-                .clone();
-            let plan = plan_settings_update(&updates)?;
-
-            let current = super::settings::settings_load(app.clone())?;
-            let current_ui = current.get("ui").cloned().unwrap_or_else(|| Value::Object(Default::default()));
-            let merged_ui = deep_merge(current_ui, Value::Object(plan.ui));
-            let mut merged = if plan.top_level.is_empty() {
-                current
-            } else {
-                deep_merge(current, Value::Object(plan.top_level))
-            };
-            if let Some(object) = merged.as_object_mut() {
-                object.insert("ui".into(), merged_ui);
-            }
-
-            let saved = super::settings::settings_save(app.clone(), merged)?;
-
-            // Persisted; now tell every open window to reload and re-apply.
-            // A missing window is not an error (e.g. headless CLI use).
-            if let Err(e) = app.emit(SETTINGS_CHANGED_EVENT, &saved) {
-                eprintln!("[cli] failed to emit {SETTINGS_CHANGED_EVENT}: {e}");
-            }
-
-            Ok(serde_json::json!({"ok": true, "changed": Value::Object(plan.changed)}))
-        }
-        "settings.schema" => Ok(super::settings_schema::schema_document()),
-        "layout.list" => {
-            super::layout::layouts_list(app.clone())
-                .map(|v| serde_json::json!({"ok": true, "value": v}))
-        }
-        "shell.list" | "profile.list" => {
-            super::shell_profile::shell_profiles_list(app.clone())
-                .map(|v| serde_json::json!({"ok": true, "value": v}))
-        }
-        "profile.create" => {
-            let (profile, config) = super::shell_profile::profile_create(app.clone(), &params)?;
-            notify_shell_profiles_changed(app);
-            Ok(profile_write_result(&profile, config))
-        }
-        "profile.update" => {
-            let profile_id = params
-                .get("id")
-                .and_then(|v| v.as_str())
-                .ok_or("missing 'id' param")?;
-            let (profile, config) =
-                super::shell_profile::profile_update(app.clone(), profile_id, &params)?;
-            notify_shell_profiles_changed(app);
-            Ok(profile_write_result(&profile, config))
-        }
-        "profile.delete" => {
-            let profile_id = params
-                .get("id")
-                .and_then(|v| v.as_str())
-                .ok_or("missing 'id' param")?;
-            let (profile, config) = super::shell_profile::profile_delete(app.clone(), profile_id)?;
-            notify_shell_profiles_changed(app);
-            Ok(profile_write_result(&profile, config))
-        }
-        "terminal.send-keys" => {
-            let pane_id = params.get("paneId").and_then(|v| v.as_str()).ok_or("missing 'paneId'")?;
-            let text = params.get("text").and_then(|v| v.as_str()).ok_or("missing 'text'")?;
-            let window_label = resolve_pty_window(app, &params, pane_id)?;
-            let app_state = app.state::<super::terminal::AppState>();
-            app_state.pty.write(&window_label, pane_id, text.as_bytes())?;
-            Ok(serde_json::json!({"ok": true}))
-        }
-        "terminal.resize" => {
-            let pane_id = params.get("paneId").and_then(|v| v.as_str()).ok_or("missing 'paneId'")?;
-            let cols = params.get("cols").and_then(|v| v.as_u64()).ok_or("missing 'cols'")? as u16;
-            let rows = params.get("rows").and_then(|v| v.as_u64()).ok_or("missing 'rows'")? as u16;
-            let window_label = resolve_pty_window(app, &params, pane_id)?;
-            let app_state = app.state::<super::terminal::AppState>();
-            app_state.pty.resize(&window_label, pane_id, cols, rows)?;
-            Ok(serde_json::json!({"ok": true}))
-        }
-        _ => Err(format!("unknown direct method: {method}")),
-    }
-}
-
 /// Tell the renderer that a profile write happened outside its own bridge
 /// call, so its cached list (used by the "Change Profile" menu and the profile
 /// pickers) is reloaded instead of staying stale until the next restart.
@@ -385,6 +218,199 @@ fn profile_write_result(profile: &ShellProfile, config: ShellConfig) -> Value {
             "defaultProfile": config.get("defaultProfile").cloned().unwrap_or(Value::Null),
         }
     })
+}
+
+/// A method failure, carrying the JSON-RPC error code to report.
+pub struct RpcError {
+    /// JSON-RPC error code (see `cli_registry::ERROR_CODES`).
+    pub code: i32,
+    /// Human-readable failure description.
+    pub message: String,
+}
+
+impl RpcError {
+    /// The method exists but its parameters are missing or malformed.
+    fn invalid_params(message: impl Into<String>) -> Self {
+        Self {
+            code: cli_registry::CODE_INVALID_PARAMS,
+            message: message.into(),
+        }
+    }
+
+    /// The method exists but failed while executing.
+    fn internal(message: impl Into<String>) -> Self {
+        Self {
+            code: cli_registry::CODE_INTERNAL_ERROR,
+            message: message.into(),
+        }
+    }
+}
+
+/// A method implemented in Rust, without involving the frontend.
+type DirectHandler = fn(&AppHandle, Value) -> Result<Value, RpcError>;
+
+/// The direct methods, keyed by the name declared in the registry.
+///
+/// The unit tests below keep this table and `cli_registry::METHODS` in sync.
+static DIRECT_HANDLERS: &[(&str, DirectHandler)] = &[
+    ("settings.get", handle_settings_get),
+    ("settings.set", handle_settings_set),
+    ("settings.schema", handle_settings_schema),
+    ("layout.list", handle_layout_list),
+    ("shell.list", handle_shell_list),
+    ("profile.list", handle_profile_list),
+    ("profile.create", handle_profile_create),
+    ("profile.update", handle_profile_update),
+    ("profile.delete", handle_profile_delete),
+    ("terminal.send-keys", handle_terminal_send_keys),
+    ("terminal.resize", handle_terminal_resize),
+];
+
+/// Find the Rust implementation of a direct method.
+fn direct_handler(method: &str) -> Option<DirectHandler> {
+    DIRECT_HANDLERS
+        .iter()
+        .find(|(name, _)| *name == method)
+        .map(|(_, handler)| *handler)
+}
+
+fn handle_settings_get(app: &AppHandle, params: Value) -> Result<Value, RpcError> {
+    let config = super::settings::settings_load(app.clone()).map_err(RpcError::internal)?;
+    match params.get("key").and_then(|v| v.as_str()) {
+        Some(key) => lookup_setting(&config, key).cloned().ok_or_else(|| {
+            RpcError::invalid_params(format!(
+                "unknown setting `{key}` — run `vibe99ctl settings schema` to list writable keys"
+            ))
+        }),
+        None => Ok(sort_json_keys(config)),
+    }
+}
+
+fn handle_settings_set(app: &AppHandle, params: Value) -> Result<Value, RpcError> {
+    let updates = params
+        .get("settings")
+        .cloned()
+        .ok_or_else(|| RpcError::invalid_params("missing 'settings' param"))?;
+    let updates = updates
+        .as_object()
+        .ok_or_else(|| RpcError::invalid_params("'settings' must be a JSON object"))?
+        .clone();
+    let plan = plan_settings_update(&updates).map_err(RpcError::invalid_params)?;
+
+    let current = super::settings::settings_load(app.clone()).map_err(RpcError::internal)?;
+    let current_ui = current.get("ui").cloned().unwrap_or_else(|| Value::Object(Default::default()));
+    let merged_ui = deep_merge(current_ui, Value::Object(plan.ui));
+    let mut merged = if plan.top_level.is_empty() {
+        current
+    } else {
+        deep_merge(current, Value::Object(plan.top_level))
+    };
+    if let Some(object) = merged.as_object_mut() {
+        object.insert("ui".into(), merged_ui);
+    }
+
+    let saved = super::settings::settings_save(app.clone(), merged).map_err(RpcError::internal)?;
+
+    // Persisted; now tell every open window to reload and re-apply.
+    // A missing window is not an error (e.g. headless CLI use).
+    if let Err(e) = app.emit(SETTINGS_CHANGED_EVENT, &saved) {
+        eprintln!("[cli] failed to emit {SETTINGS_CHANGED_EVENT}: {e}");
+    }
+
+    Ok(serde_json::json!({"ok": true, "changed": Value::Object(plan.changed)}))
+}
+
+fn handle_settings_schema(_app: &AppHandle, _params: Value) -> Result<Value, RpcError> {
+    Ok(super::settings_schema::schema_document())
+}
+
+fn handle_layout_list(app: &AppHandle, _params: Value) -> Result<Value, RpcError> {
+    super::layout::layouts_list(app.clone())
+        .map(|v| serde_json::json!({"ok": true, "value": v}))
+        .map_err(RpcError::internal)
+}
+
+fn handle_shell_list(app: &AppHandle, _params: Value) -> Result<Value, RpcError> {
+    super::shell_profile::shell_profiles_list(app.clone())
+        .map(|v| serde_json::json!({"ok": true, "value": v}))
+        .map_err(RpcError::internal)
+}
+
+fn handle_profile_list(app: &AppHandle, _params: Value) -> Result<Value, RpcError> {
+    handle_shell_list(app, _params)
+}
+
+fn handle_profile_create(app: &AppHandle, params: Value) -> Result<Value, RpcError> {
+    let (profile, config) = super::shell_profile::profile_create(app.clone(), &params)
+        .map_err(RpcError::invalid_params)?;
+    notify_shell_profiles_changed(app);
+    Ok(profile_write_result(&profile, config))
+}
+
+fn handle_profile_update(app: &AppHandle, params: Value) -> Result<Value, RpcError> {
+    let profile_id = params
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing 'id' param"))?;
+    let (profile, config) =
+        super::shell_profile::profile_update(app.clone(), profile_id, &params)
+            .map_err(RpcError::invalid_params)?;
+    notify_shell_profiles_changed(app);
+    Ok(profile_write_result(&profile, config))
+}
+
+fn handle_profile_delete(app: &AppHandle, params: Value) -> Result<Value, RpcError> {
+    let profile_id = params
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing 'id' param"))?;
+    let (profile, config) = super::shell_profile::profile_delete(app.clone(), profile_id)
+        .map_err(RpcError::invalid_params)?;
+    notify_shell_profiles_changed(app);
+    Ok(profile_write_result(&profile, config))
+}
+
+fn handle_terminal_send_keys(app: &AppHandle, params: Value) -> Result<Value, RpcError> {
+    let pane_id = params
+        .get("paneId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing 'paneId'"))?;
+    let text = params
+        .get("text")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing 'text'"))?;
+    let window_label =
+        resolve_pty_window(app, &params, pane_id).map_err(RpcError::invalid_params)?;
+    let app_state = app.state::<super::terminal::AppState>();
+    app_state
+        .pty
+        .write(&window_label, pane_id, text.as_bytes())
+        .map_err(RpcError::internal)?;
+    Ok(serde_json::json!({"ok": true}))
+}
+
+fn handle_terminal_resize(app: &AppHandle, params: Value) -> Result<Value, RpcError> {
+    let pane_id = params
+        .get("paneId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing 'paneId'"))?;
+    let cols = params
+        .get("cols")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| RpcError::invalid_params("missing 'cols'"))? as u16;
+    let rows = params
+        .get("rows")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| RpcError::invalid_params("missing 'rows'"))? as u16;
+    let window_label =
+        resolve_pty_window(app, &params, pane_id).map_err(RpcError::invalid_params)?;
+    let app_state = app.state::<super::terminal::AppState>();
+    app_state
+        .pty
+        .resize(&window_label, pane_id, cols, rows)
+        .map_err(RpcError::internal)?;
+    Ok(serde_json::json!({"ok": true}))
+}
 }
 
 fn deep_merge(base: Value, override_val: Value) -> Value {
@@ -668,7 +694,7 @@ mod tests {
 pub fn start_cli_server(app: AppHandle) -> Result<(), String> {
     // Windows Named Pipe resolves its own path inside run_named_pipe_server().
     #[cfg(unix)]
-    let sock_path = socket_path()?;
+    let sock_path = cli_registry::socket_path()?;
 
     #[cfg(unix)]
     {
@@ -753,7 +779,11 @@ async fn handle_connection_unix(
         let request: JsonRpcRequest = match serde_json::from_str(&line) {
             Ok(r) => r,
             Err(e) => {
-                let resp = err_response(Value::Null, -32700, format!("parse error: {e}"));
+                let resp = err_response(
+                    Value::Null,
+                    cli_registry::CODE_PARSE_ERROR,
+                    format!("parse error: {e}"),
+                );
                 if let Ok(s) = serde_json::to_string(&resp) {
                     let _ = writer.write_all(format!("{s}\n").as_bytes()).await;
                 }
@@ -782,7 +812,7 @@ async fn run_named_pipe_server(
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::windows::named_pipe::ServerOptions;
 
-    let pipe_name = match socket_path() {
+    let pipe_name = match cli_registry::socket_path() {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(e) => {
             eprintln!("[cli] pipe path error: {e}");
@@ -820,7 +850,11 @@ async fn run_named_pipe_server(
                 let request: JsonRpcRequest = match serde_json::from_str(&line) {
                     Ok(r) => r,
                     Err(e) => {
-                        let resp = err_response(Value::Null, -32700, format!("parse error: {e}"));
+                        let resp = err_response(
+                    Value::Null,
+                    cli_registry::CODE_PARSE_ERROR,
+                    format!("parse error: {e}"),
+                );
                         if let Ok(s) = serde_json::to_string(&resp) {
                             let _ = writer.write_all(format!("{s}\n").as_bytes()).await;
                         }
@@ -886,7 +920,20 @@ async fn process_request(
     let method = request.method.clone();
     let mut params = request.params.clone().unwrap_or(Value::Object(serde_json::Map::new()));
 
-    if is_passthrough(&method) {
+    // The registry is the single source of truth: an unregistered method is
+    // rejected instead of silently falling through to a handler.
+    let spec = match cli_registry::find(&method) {
+        Some(spec) => spec,
+        None => {
+            return err_response(
+                id,
+                cli_registry::CODE_METHOD_NOT_FOUND,
+                format!("method not found: {method}"),
+            );
+        }
+    };
+
+    if spec.route == Route::Passthrough {
         // Pane and layout state live in a specific window; route the request
         // there instead of broadcasting (every renderer would answer and the
         // fastest, not the correct, one would win).
@@ -899,7 +946,11 @@ async fn process_request(
         strip_param(&mut params, "windowId");
 
         if app.get_webview_window(&window_label).is_none() {
-            return err_response(id, -32603, format!("window not found: {window_label}"));
+            return err_response(
+                id,
+                cli_registry::CODE_INTERNAL_ERROR,
+                format!("window not found: {window_label}"),
+            );
         }
 
         // Generate a unique request ID.
@@ -923,7 +974,11 @@ async fn process_request(
             // Remove the pending entry.
             let mut map = pending.lock().unwrap();
             map.remove(&request_id);
-            return err_response(id, -32603, format!("emit error: {e}"));
+            return err_response(
+                id,
+                cli_registry::CODE_INTERNAL_ERROR,
+                format!("emit error: {e}"),
+            );
         }
 
         // Wait for the response with a timeout.
@@ -933,7 +988,11 @@ async fn process_request(
                 // Sender was dropped without sending (shouldn't happen normally).
                 let mut map = pending.lock().unwrap();
                 map.remove(&request_id);
-                err_response(id, -32603, "response channel closed".to_string())
+                err_response(
+                    id,
+                    cli_registry::CODE_INTERNAL_ERROR,
+                    "response channel closed".to_string(),
+                )
             }
             Err(_) => {
                 // Timeout.
@@ -941,16 +1000,23 @@ async fn process_request(
                 map.remove(&request_id);
                 err_response(
                     id,
-                    -32603,
+                    cli_registry::CODE_INTERNAL_ERROR,
                     format!("request timed out ({})", format_timeout(timeout_ms)),
                 )
             }
         }
     } else {
         // Direct handling in Rust.
-        match handle_direct(app, &method, params).await {
-            Ok(result) => ok_response(id, result),
-            Err(e) => err_response(id, -32603, e),
+        match direct_handler(spec.name) {
+            Some(handler) => match handler(app, params) {
+                Ok(result) => ok_response(id, result),
+                Err(e) => err_response(id, e.code, e.message),
+            },
+            None => err_response(
+                id,
+                cli_registry::CODE_INTERNAL_ERROR,
+                format!("method {method} is registered as direct but has no handler"),
+            ),
         }
     }
 }
@@ -984,6 +1050,73 @@ pub fn cli_respond(app: AppHandle, id: String, result: Value) -> Result<(), Stri
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::collections::BTreeSet;
+
+    // --- registry <-> handler sync ---
+
+    /// The direct handlers and the registry must describe the same methods:
+    /// every direct method in the registry has a handler, and every handler is
+    /// registered as a direct method.
+    #[test]
+    fn direct_handlers_match_the_registry() {
+        let registered: BTreeSet<&str> = cli_registry::METHODS
+            .iter()
+            .filter(|m| m.route == Route::Direct)
+            .map(|m| m.name)
+            .collect();
+        let handled: BTreeSet<&str> = DIRECT_HANDLERS.iter().map(|(name, _)| *name).collect();
+
+        assert_eq!(
+            registered, handled,
+            "the direct handler table and the method registry drifted apart"
+        );
+    }
+
+    #[test]
+    fn every_registered_direct_method_resolves_to_a_handler() {
+        for spec in cli_registry::METHODS.iter() {
+            if spec.route != Route::Direct {
+                continue;
+            }
+            assert!(
+                direct_handler(spec.name).is_some(),
+                "no handler registered for direct method {}",
+                spec.name
+            );
+        }
+    }
+
+    /// Passthrough methods are forwarded to the frontend, which dispatches them
+    /// as `AppCommand`s. Every one of them must exist in the frontend command
+    /// union, otherwise the frontend would answer `unknown-command`.
+    #[test]
+    fn passthrough_methods_exist_in_the_frontend_command_union() {
+        let commands_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../src/domain/commands.ts");
+        let source = std::fs::read_to_string(&commands_path).unwrap_or_else(|e| {
+            panic!(
+                "cannot read {}: {e}",
+                commands_path.to_string_lossy()
+            )
+        });
+
+        for spec in cli_registry::METHODS.iter() {
+            if spec.route != Route::Passthrough {
+                continue;
+            }
+            assert!(
+                source.contains(&format!("'{}'", spec.name)),
+                "passthrough method {} has no AppCommand in src/domain/commands.ts",
+                spec.name
+            );
+        }
+    }
+
+    #[test]
+    fn unregistered_methods_are_rejected() {
+        assert!(cli_registry::find("does.not.exist").is_none());
+        assert!(direct_handler("does.not.exist").is_none());
+    }
 
     // --- deep_merge ---
 
