@@ -25,6 +25,7 @@ import { createFloatWindowManager } from '../float-window';
 import { createPaneRenderer, getTextColorForBackground } from '../pane-renderer';
 import type { PaneRenderer } from '../pane-renderer';
 import { createShellProfileManager } from '../shell-profiles';
+import { initShellProfileSync } from '../shell-profile-sync';
 import { createHookManager } from '../hooks';
 import type { AlertStartPayload, AlertStopPayload } from '../hooks';
 import { createContextMenus } from '../context-menus';
@@ -440,6 +441,15 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     dispatch,
     registerModal: (closeFn) => modalStack.register(closeFn),
     unregisterModal: (closeFn) => modalStack.unregister(closeFn),
+  });
+
+  // CLI-side profile writes (vibe99ctl profile ...) bypass this renderer's
+  // bridge calls, so reload the cached list when the Rust CLI server reports
+  // one. That keeps the Change Profile menu and profile pickers current
+  // without waiting for a restart.
+  const removeShellProfileSyncListener = initShellProfileSync({
+    listen: (event, handler) => bridge.listen(event, handler),
+    reload: () => shellProfileManager?.loadShellProfiles(),
   });
 
   contextMenus = createContextMenus({
@@ -895,6 +905,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     removeTerminalExitListener();
     removeMenuActionListener();
     removeSettingsChangedListener();
+    removeShellProfileSyncListener();
     void floatWindowManager.close({ parentClosing: true });
   }
 
