@@ -153,6 +153,62 @@ Each pane can run a different shell (bash, zsh, SSH, Docker, or any command).
 - `Ctrl+Shift+N` opens a profile picker to create a new pane with a specific shell
 - Each pane's profile is saved in session state and restored on restart
 
+## CLI Control (`vibe99ctl`)
+
+`vibe99ctl` talks to a running Vibe99 instance over a local socket (Unix socket,
+Windows named pipe), so scripts and coding agents can drive the workspace
+without touching the UI. Build it next to the app:
+
+```bash
+cargo build --release --bin vibe99ctl --manifest-path src-tauri/Cargo.toml
+```
+
+Then, with Vibe99 running:
+
+```bash
+vibe99ctl pane list
+vibe99ctl layout list
+vibe99ctl layout activate work
+```
+
+### Settings
+
+`settings get` prints the whole `settings.json` (stable key order) or a single
+value; `settings schema` lists every writable key with its type, range and
+default.
+
+```bash
+vibe99ctl settings get                  # full config
+vibe99ctl settings get fontSize         # one value
+vibe99ctl settings schema               # writable keys, ranges, defaults
+```
+
+`settings set` validates the value, persists it, and tells every open window to
+reload and re-apply it — the change is visible immediately, no restart needed
+(WebGL is the exception: it only takes effect after a restart).
+
+```bash
+vibe99ctl settings set fontSize 16                     # terminal font size
+vibe99ctl settings set breathingIntensity intense      # none | mild | intense
+vibe99ctl settings set activityAlertDebounceMs 15000   # alert debounce (ms)
+vibe99ctl settings set fontFamily "Fira Code"          # font family
+vibe99ctl settings set layoutHotkeys --json '{"work": "F1"}'
+vibe99ctl settings set quakeLayouts --json '{"work": {"position": "bottom", "height": 50}}'
+vibe99ctl settings set '{"fontSize": 16, "paneOpacity": 0.9}'   # several at once
+```
+
+Rules:
+
+- A bare key is a writable UI setting (see `settings schema`). Dotted paths
+  reach other sections: `settings get shell.defaultProfile`.
+- Values are parsed according to the field's type, so `fontSize 16` sets an
+  integer while `fontFamily 999` sets the string `"999"`. Pass `--json` to force
+  JSON parsing (needed for objects, arrays and explicit JSON types).
+- Invalid values are rejected with the field name and accepted range — e.g.
+  `fontSize: expected integer 10-24, got 99` — and nothing is written.
+- On success the command prints `{"ok": true, "changed": {...}}` with the values
+  that were applied.
+
 ## Project Structure
 
 ```
