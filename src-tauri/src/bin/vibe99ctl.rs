@@ -59,18 +59,22 @@ enum Commands {
         #[arg(long, default_value = "{}")]
         params: String,
     },
+    /// Manage panes
     Pane {
         #[command(subcommand)]
         action: PaneAction,
     },
+    /// Manage layouts
     Layout {
         #[command(subcommand)]
         action: LayoutAction,
     },
+    /// Read or write settings
     Settings {
         #[command(subcommand)]
         action: SettingsAction,
     },
+    /// List shell profiles
     Shell {
         #[command(subcommand)]
         action: ShellAction,
@@ -80,10 +84,14 @@ enum Commands {
         #[command(subcommand)]
         action: ProfileAction,
     },
+    /// Send keys or resize a terminal
     Terminal {
         #[command(subcommand)]
         action: TerminalAction,
     },
+    /// Copy this binary to ~/.local/bin so it stays on PATH (idempotent;
+    /// on Windows also adds that directory to the user PATH)
+    InstallCli,
     /// Install Vibe99's attention signal into agent CLIs (does not need the app running)
     Enhance {
         #[command(subcommand)]
@@ -256,6 +264,7 @@ fn resolve_command(cli: &Cli) -> Result<(String, Value), String> {
     match &cli.command {
         Commands::Describe { .. } => Err("`describe` is answered locally".to_string()),
         Commands::Enhance { .. } => Err("`enhance` is answered locally".to_string()),
+        Commands::InstallCli => Err("`install-cli` is answered locally".to_string()),
         Commands::Call { method, params } => {
             let parsed: Value = serde_json::from_str(params)
                 .map_err(|e| format!("invalid JSON params: {e}"))?;
@@ -544,6 +553,106 @@ fn build_nested_setting(key: &str, value: Value) -> Value {
     root
 }
 
+/// Install this binary into `~/.local/bin` (creating the directory if
+/// needed) so it stays on PATH regardless of how Vibe99 itself was
+/// installed. Overwrites any previous copy, so re-running is safe.
+fn install_cli() -> Result<String, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("cannot locate current executable: {e}"))?;
+
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .ok_or("cannot determine home directory (HOME/USERPROFILE not set)")?;
+    let bin_dir = PathBuf::from(home).join(".local").join("bin");
+    std::fs::create_dir_all(&bin_dir).map_err(|e| format!("cannot create {}: {e}", bin_dir.display()))?;
+
+    #[cfg(windows)]
+    let file_name = "vibe99ctl.exe";
+    #[cfg(not(windows))]
+    let file_name = "vibe99ctl";
+
+    let dest = bin_dir.join(file_name);
+    if exe != dest {
+        let tmp = bin_dir.join(format!(".{file_name}.tmp"));
+        std::fs::copy(&exe, &tmp).map_err(|e| format!("cannot copy executable: {e}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o755);
+            std::fs::set_permissions(&tmp, perms).map_err(|e| format!("chmod: {e}"))?;
+        }
+        std::fs::rename(&tmp, &dest).map_err(|e| format!("cannot move into place: {e}"))?;
+    }
+
+    #[cfg(windows)]
+    let path_note = match add_to_user_path(&bin_dir) {
+        Ok(note) => note,
+        Err(e) => {
+            eprintln!("Warning: {e}");
+            format!("\nnote: add {} to your PATH to use vibe99ctl", bin_dir.display())
+        }
+    };
+    #[cfg(not(windows))]
+    let path_note = String::new();
+
+    Ok(format!("vibe99ctl {} installed to {}{path_note}", env!("CARGO_PKG_VERSION"), dest.display()))
+}
+
+/// Append `bin_dir` to the user PATH (HKCU\Environment) if not already
+/// present. Existing processes keep their old environment, so the caller
+/// is told to open a new terminal.
+#[cfg(windows)]
+fn add_to_user_path(bin_dir: &std::path::Path) -> Result<String, String> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let (env, _) = hkcu
+        .create_subkey("Environment")
+        .map_err(|e| format!("cannot open user environment: {e}"))?;
+
+    let dir = bin_dir.display().to_string();
+    let raw = env.get_raw_value("Path").ok();
+    // REG_SZ/REG_EXPAND_SZ payloads are UTF-16LE, NUL-terminated.
+    let current = raw
+        .as_ref()
+        .map(|v| {
+            let units: Vec<u16> = v
+                .bytes
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
+            String::from_utf16_lossy(&units)
+                .trim_end_matches('\0')
+                .to_string()
+        })
+        .unwrap_or_default();
+
+    let present = current
+        .split(';')
+        .any(|entry| entry.trim_end_matches('\\').eq_ignore_ascii_case(&dir));
+    if present {
+        return Ok(String::new());
+    }
+
+    let new_value = if current.is_empty() {
+        dir.clone()
+    } else {
+        format!("{current};{dir}")
+    };
+    let new_raw = winreg::RegValue {
+        vtype: raw.map(|v| v.vtype).unwrap_or(REG_SZ),
+        bytes: new_value
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .flat_map(|c| c.to_le_bytes())
+            .collect(),
+    };
+    env.set_raw_value("Path", &new_raw)
+        .map_err(|e| format!("cannot update user PATH: {e}"))?;
+
+    Ok("\nnote: ~/.local/bin was added to your user PATH; open a new terminal to use vibe99ctl".to_string())
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -557,6 +666,19 @@ fn main() {
     if let Commands::Enhance { action } = &cli.command {
         let socket = resolve_socket_path(&cli.socket).ok();
         std::process::exit(enhance::run(action, socket.as_deref()));
+    }
+
+    if matches!(&cli.command, Commands::InstallCli) {
+        std::process::exit(match install_cli() {
+            Ok(message) => {
+                println!("{message}");
+                0
+            }
+            Err(e) => {
+                eprintln!("Error: {e}");
+                1
+            }
+        });
     }
 
     let socket_path = match resolve_socket_path(&cli.socket) {
@@ -784,5 +906,20 @@ mod tests {
         assert_eq!(method, "pane.create");
         assert_eq!(params["shellProfileId"], json!("ssh-prod"));
         assert!(cli_registry::find(&method).is_some());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// `--version` reports the Cargo package version, which is the same
+    /// source the Tauri bundle uses. This test fails if a version bump
+    /// updates one without the other.
+    #[test]
+    fn version_matches_tauri_config() {
+        let config_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tauri.conf.json");
+        let config = std::fs::read_to_string(config_path).expect("read tauri.conf.json");
+        let config: serde_json::Value = serde_json::from_str(&config).expect("parse tauri.conf.json");
+        let tauri_version = config["version"].as_str().expect("tauri.conf.json has a version");
+        assert_eq!(env!("CARGO_PKG_VERSION"), tauri_version);
     }
 }
