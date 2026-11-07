@@ -18,6 +18,11 @@ vibe99ctl call pane.create --params '{"shellProfileId":"ssh-prod"}'   # any meth
 `vibe99ctl describe` works without a running app — it is static data, and it
 also reports whether an instance is currently reachable.
 
+Each method declares its route: `direct` methods run in Rust, `passthrough`
+methods are answered by the frontend from the live runtime state. Use
+`--window <label>` to target a specific window, and `--timeout <seconds>` to
+bound the wait for the UI.
+
 **[docs/agents.md](./docs/agents.md) is the full guide**: how to tell whether
 the app is running, the transport and error codes, and worked workflows
 (changing settings, opening a pane, running an SSH profile, sending keys).

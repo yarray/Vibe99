@@ -134,6 +134,29 @@ macro_rules! param {
     };
 }
 
+/// Request-level parameters every method accepts, on top of its own.
+///
+/// They are routing metadata rather than part of the command: the server
+/// strips them before the command is dispatched to the frontend.
+pub static REQUEST_PARAMS: &[ParamSpec] = &[
+    ParamSpec {
+        name: "windowId",
+        ty: "string",
+        required: false,
+        nullable: false,
+        description: "Label of the window that executes the command. Defaults to \"main\".",
+        enum_values: &[],
+    },
+    ParamSpec {
+        name: "timeoutMs",
+        ty: "integer",
+        required: false,
+        nullable: false,
+        description: "How long the server waits for the frontend to answer, in milliseconds. Defaults to 5000, capped at 120000. Ignored by direct methods.",
+        enum_values: &[],
+    },
+];
+
 /// Declare a method.
 macro_rules! method {
     ($name:literal, $route:ident, $summary:literal, [$($param:expr),* $(,)?], $example:literal, $cli:expr, $returns:literal $(,)?) => {
@@ -691,7 +714,7 @@ pub fn params_schema(spec: &MethodSpec) -> Value {
     let mut properties = Map::new();
     let mut required = Vec::new();
 
-    for param in spec.params {
+    for param in spec.params.iter().chain(REQUEST_PARAMS.iter()) {
         let mut prop = Map::new();
         if param.nullable {
             prop.insert(
@@ -774,6 +797,26 @@ pub fn error_codes_json() -> Value {
     )
 }
 
+/// Render the request-level parameters (the routing metadata every method
+/// accepts) as a JSON schema.
+pub fn request_params_schema() -> Value {
+    let mut properties = Map::new();
+    for param in REQUEST_PARAMS {
+        properties.insert(
+            param.name.to_string(),
+            json!({
+                "type": param.ty,
+                "description": param.description,
+            }),
+        );
+    }
+    json!({
+        "type": "object",
+        "properties": Value::Object(properties),
+        "required": json!([]),
+    })
+}
+
 /// Render the full capability catalogue as JSON.
 pub fn describe_all() -> Value {
     let methods: Vec<Value> = METHODS.iter().map(method_json).collect();
@@ -790,6 +833,10 @@ pub fn describe_all() -> Value {
             "protocol": "jsonrpc-2.0",
         },
         "transport": transport_json(),
+        "request": {
+            "params": request_params_schema(),
+            "notes": "Routing metadata shared by every method. `windowId` selects the window that runs the command (default \"main\"); `timeoutMs` bounds the wait for the frontend (default 5000, capped at 120000).",
+        },
         "errorCodes": error_codes_json(),
         "examples": [
             json!({
@@ -913,6 +960,7 @@ mod tests {
                 "errorCodes",
                 "examples",
                 "methods",
+                "request",
                 "schemaVersion",
                 "transport",
             ]
@@ -941,6 +989,28 @@ mod tests {
             .collect();
         param_keys.sort_unstable();
         assert_eq!(param_keys, vec!["properties", "required", "type"]);
+    }
+
+    /// Every method accepts the request-level routing parameters, so they
+    /// must show up in every method's parameter schema.
+    #[test]
+    fn request_params_are_documented_on_every_method() {
+        for spec in METHODS {
+            let schema = params_schema(spec);
+            let properties = schema["properties"]
+                .as_object()
+                .unwrap_or_else(|| panic!("{} has no parameter schema", spec.name));
+            assert!(
+                properties.contains_key("windowId"),
+                "{} does not document the `windowId` routing param",
+                spec.name
+            );
+            assert!(
+                properties.contains_key("timeoutMs"),
+                "{} does not document the `timeoutMs` routing param",
+                spec.name
+            );
+        }
     }
 
     #[test]
