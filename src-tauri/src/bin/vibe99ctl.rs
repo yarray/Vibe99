@@ -225,6 +225,24 @@ fn print_result(response: Value) -> ! {
     std::process::exit(0);
 }
 
+/// Build a nested object from a dotted key so `settings set ui.fontSize 15`
+/// becomes `{"ui":{"fontSize":15}}` — the config is nested, and the server's
+/// deep-merge lands the value in the right block. A flat `"ui.fontSize"` key
+/// would be silently dropped by config sanitization.
+fn build_nested_setting(key: &str, value: Value) -> Value {
+    let mut root = Value::Object(serde_json::Map::new());
+    let mut cursor = &mut root;
+    for part in key.split('.') {
+        cursor = cursor
+            .as_object_mut()
+            .expect("walked levels are always freshly created objects")
+            .entry(part.to_string())
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    }
+    *cursor = value;
+    root
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -270,9 +288,7 @@ fn main() {
                 } else {
                     let val: Value = serde_json::from_str(&value.join(" "))
                         .unwrap_or_else(|_| json!(value.join(" ")));
-                    let mut obj = serde_json::Map::new();
-                    obj.insert(settings.clone(), val);
-                    ("settings.set".to_string(), json!({"settings": Value::Object(obj)}))
+                    ("settings.set".to_string(), json!({"settings": build_nested_setting(settings, val)}))
                 }
             }
             SettingsAction::Schema => ("settings.schema".to_string(), json!({})),
@@ -306,5 +322,40 @@ fn main() {
             eprintln!("Error: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn single_key_stays_top_level() {
+        assert_eq!(build_nested_setting("fontSize", json!(15)), json!({"fontSize": 15}));
+    }
+
+    #[test]
+    fn dotted_key_nests_into_config_blocks() {
+        assert_eq!(
+            build_nested_setting("ui.fontSize", json!(15)),
+            json!({"ui": {"fontSize": 15}})
+        );
+    }
+
+    #[test]
+    fn deeply_dotted_key_nests_all_levels() {
+        assert_eq!(
+            build_nested_setting("quakeLayouts.abc.position", json!("top")),
+            json!({"quakeLayouts": {"abc": {"position": "top"}}})
+        );
+    }
+
+    #[test]
+    fn object_value_replaces_leaf() {
+        assert_eq!(
+            build_nested_setting("ui", json!({"fontSize": 15})),
+            json!({"ui": {"fontSize": 15}})
+        );
     }
 }

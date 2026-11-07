@@ -95,18 +95,20 @@ describe('vibe99ctl CLI bridge', () => {
     expect(after.panes.map((p) => p.id)).toEqual(domPaneIds);
     uiCreatedPaneId = domPaneIds[3];
     expect(list.panes.map((p) => p.id)).not.toContain(uiCreatedPaneId);
+    // Adding a pane moves focus to it — the runtime view must track that.
+    expect(after.focusedPaneId).toBe(uiCreatedPaneId);
   });
 
   it('pane info returns live metadata and focus state', async () => {
-    const focused = await runCtl(['pane', 'info', domPaneIds[0]]);
-    expect(focused.id).toBe(domPaneIds[0]);
-    expect(focused.focused).toBe(true);
-    expect(typeof focused.cwd).toBe('string');
-    expect(focused.cwd.length).toBeGreaterThan(0);
+    const background = await runCtl(['pane', 'info', domPaneIds[0]]);
+    expect(background.id).toBe(domPaneIds[0]);
+    expect(background.focused).toBe(false);
+    expect(typeof background.cwd).toBe('string');
+    expect(background.cwd.length).toBeGreaterThan(0);
 
     const created = await runCtl(['pane', 'info', uiCreatedPaneId]);
     expect(created.id).toBe(uiCreatedPaneId);
-    expect(created.focused).toBe(false);
+    expect(created.focused).toBe(true);
   });
 
   it('layout active names the layout this window is running', async () => {
@@ -115,7 +117,7 @@ describe('vibe99ctl CLI bridge', () => {
     expect(active.layoutId.length).toBeGreaterThan(0);
     expect(typeof active.name).toBe('string');
     expect(active.paneCount).toBe(4);
-    expect(active.focusedPaneId).toBe(domPaneIds[0]);
+    expect(active.focusedPaneId).toBe(uiCreatedPaneId);
   });
 
   it('send-keys reaches the PTY and the shell executes the input', async () => {
@@ -147,22 +149,23 @@ describe('vibe99ctl CLI bridge', () => {
   });
 
   it('settings get/set/schema round-trip in Rust', async () => {
-    const set = await runCtl(['settings', 'set', 'fontSize', '15']);
-    expect(set.fontSize).toBe(15);
-    const after = await runCtl(['settings', 'get', 'fontSize']);
+    const set = await runCtl(['settings', 'set', 'ui.fontSize', '15']);
+    expect(set.ui.fontSize).toBe(15);
+    const after = await runCtl(['settings', 'get', 'ui.fontSize']);
     expect(after).toBe(15);
 
     const schema = await runCtl(['settings', 'schema']);
     expect(schema.fields.fontSize.default).toBe(13);
   });
 
-  it('shell list and layout list return arrays', async () => {
+  it('shell list and layout list return profiles and layouts', async () => {
     const shells = await runCtl(['shell', 'list']);
-    expect(Array.isArray(shells)).toBe(true);
+    expect(Array.isArray(shells.profiles)).toBe(true);
+    expect(typeof shells.defaultProfile).toBe('string');
 
     const layouts = await runCtl(['layout', 'list']);
-    expect(Array.isArray(layouts)).toBe(true);
-    expect(layouts.length).toBeGreaterThan(0);
+    expect(Array.isArray(layouts.layouts)).toBe(true);
+    expect(layouts.layouts.length).toBeGreaterThan(0);
   });
 
   it('layout save acknowledges the command', async () => {
