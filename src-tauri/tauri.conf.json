@@ -43,20 +43,6 @@
       "nsis": {
         "installerHooks": "hooks/installer.nsh"
       }
-    },
-    "linux": {
-      "deb": {
-        "files": {
-          "usr/lib/vibe99/bin/vibe99ctl": "target/release/vibe99ctl"
-        },
-        "postInstallScript": "hooks/deb/postinst",
-        "postRemoveScript": "hooks/deb/postrm"
-      },
-      "appimage": {
-        "files": {
-          "usr/bin/vibe99ctl": "target/release/vibe99ctl"
-        }
-      }
     }
   }
 }

@@ -1,6 +1,0 @@
-#!/bin/sh
-set -e
-
-# Link the packaged CLI into PATH; the binary itself stays inside the
-# package directory so it is removed together with the app.
-ln -sfn /usr/lib/vibe99/bin/vibe99ctl /usr/bin/vibe99ctl
