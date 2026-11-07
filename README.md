@@ -58,7 +58,7 @@ Override the socket with `--socket <path>`, and bound slow calls with `--timeout
 |---|---|
 | `.deb` package | Ready to use — the package installs it to `/usr/bin/vibe99ctl` |
 | AppImage | Embedded inside the image: run `Vibe99-*.AppImage --appimage-extract` and use `squashfs-root/usr/bin/vibe99ctl`, or run `vibe99ctl install-cli` once |
-| Windows installer | Not placed on PATH — run `vibe99ctl install-cli` once; it adds the target directory to your user PATH |
+| Windows installer | Installed next to the app but not on PATH — run `vibe99ctl install-cli` once; it adds `~/.local/bin` to your user PATH |
 | Any copy (including extracted AppImage) | `vibe99ctl install-cli` copies it to `~/.local/bin/vibe99ctl` (idempotent, safe to re-run) |
 
 `install-cli` is the fallback for every platform and install method: it works from any copy of the binary, overwrites its previous install, and never touches the app itself.
