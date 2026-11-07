@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 #[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use vibe99_lib::enhance;
 
 /// The method registry — the single source of truth shared with the server.
 ///
@@ -82,6 +83,11 @@ enum Commands {
     Terminal {
         #[command(subcommand)]
         action: TerminalAction,
+    },
+    /// Install Vibe99's attention signal into agent CLIs (does not need the app running)
+    Enhance {
+        #[command(subcommand)]
+        action: enhance::Command,
     },
 }
 
@@ -249,6 +255,7 @@ fn describe(method: Option<&str>) -> ! {
 fn resolve_command(cli: &Cli) -> Result<(String, Value), String> {
     match &cli.command {
         Commands::Describe { .. } => Err("`describe` is answered locally".to_string()),
+        Commands::Enhance { .. } => Err("`enhance` is answered locally".to_string()),
         Commands::Call { method, params } => {
             let parsed: Value = serde_json::from_str(params)
                 .map_err(|e| format!("invalid JSON params: {e}"))?;
@@ -543,6 +550,13 @@ fn main() {
     // `describe` is static data: it works without a running Vibe99.
     if let Commands::Describe { method } = &cli.command {
         describe(method.as_deref());
+    }
+
+    // `enhance` edits the user's agent settings, not Vibe99 state, so it must
+    // work whether or not the app is running. Everything else needs the socket.
+    if let Commands::Enhance { action } = &cli.command {
+        let socket = resolve_socket_path(&cli.socket).ok();
+        std::process::exit(enhance::run(action, socket.as_deref()));
     }
 
     let socket_path = match resolve_socket_path(&cli.socket) {
