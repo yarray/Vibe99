@@ -33,9 +33,11 @@ struct Cli {
     command: Commands,
 
     #[arg(long, global = true)]
+    /// Override the socket path
     socket: Option<String>,
 
     #[arg(long, global = true, default_value = "5")]
+    /// Response timeout in seconds
     timeout: u64,
 
     /// Target window label ("main" or a layout id). Defaults to "main".
