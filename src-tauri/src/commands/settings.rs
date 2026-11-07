@@ -1,3 +1,4 @@
+use super::settings_schema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Mutex;
@@ -15,9 +16,6 @@ pub struct SettingsState {
     pub lock: Mutex<()>,
 }
 
-const DEFAULT_FONT_SIZE: u32 = 13;
-const DEFAULT_PANE_OPACITY: f64 = 0.8;
-const DEFAULT_PANE_WIDTH: u32 = 720;
 // ----------------------------------------------------------------
 // Shell profile types
 // ----------------------------------------------------------------
@@ -534,120 +532,50 @@ pub(super) fn settings_path(app: &AppHandle) -> Result<std::path::PathBuf, Strin
         .map(|p: std::path::PathBuf| p.join("settings.json"))
 }
 
-/// Clamp a UI field from an arbitrary JSON value, falling back to `default`.
-fn get_number(v: &Value, key: &str, default: f64) -> f64 {
-    v.get(key)
-        .and_then(|n| n.as_f64())
-        .filter(|n| n.is_finite())
-        .unwrap_or(default)
-}
-
 /// Sanitize the `ui` block of a config, clamping all values to valid ranges.
+///
+/// The field catalogue (types, ranges, defaults) comes from
+/// [`settings_schema`], the same data that backs `vibe99ctl settings schema`
+/// and `settings.set` validation — so a value the CLI accepts can never be
+/// rewritten by the sanitizer on the next load.
 fn sanitize_ui_config(ui: Option<&Value>) -> Value {
     let ui = ui.unwrap_or(&Value::Null);
 
-    let font_size = get_number(ui, "fontSize", DEFAULT_FONT_SIZE as f64);
-    let font_size = font_size.round().clamp(10.0, 24.0) as u32;
+    let mut source = ui.as_object().cloned().unwrap_or_default();
 
-    let pane_opacity = get_number(ui, "paneOpacity", DEFAULT_PANE_OPACITY);
-    let pane_opacity = ((pane_opacity * 100.0).round() / 100.0).clamp(0.55, 1.0);
+    // Migrate the deprecated `breathingAlertEnabled` boolean to
+    // `breathingIntensity` when the latter was never written.
+    if !source.contains_key("breathingIntensity") {
+        if let Some(enabled) = ui.get("breathingAlertEnabled").and_then(Value::as_bool) {
+            source.insert(
+                "breathingIntensity".into(),
+                Value::String(if enabled { "intense" } else { "none" }.into()),
+            );
+        }
+    }
 
-    let pane_mask_opacity = get_number(ui, "paneMaskOpacity", 0.25);
-    let pane_mask_opacity = ((pane_mask_opacity * 100.0).round() / 100.0).clamp(0.0, 1.0);
+    let mut result = serde_json::Map::new();
+    for key in settings_schema::keys() {
+        result.insert(key.to_string(), settings_schema::coerce(key, source.get(key)));
+    }
 
-    let pane_width = get_number(ui, "paneWidth", DEFAULT_PANE_WIDTH as f64);
-    let pane_width = ((pane_width / 10.0).round() * 10.0).clamp(520.0, 2000.0) as u32;
-
-    let breathing_alert_enabled = ui
+    // Keep the legacy flag for older frontends; it is derived from the raw
+    // file (default on) rather than from the migrated intensity.
+    let breathing_alert_enabled = source
         .get("breathingAlertEnabled")
-        .and_then(|v| v.as_bool())
+        .and_then(Value::as_bool)
         .unwrap_or(true);
+    result.insert(
+        "breathingAlertEnabled".into(),
+        Value::Bool(breathing_alert_enabled),
+    );
 
-    let webgl_enabled = ui
-        .get("webglEnabled")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-
-    let breathing_intensity = ui
-        .get("breathingIntensity")
-        .and_then(|v| v.as_str())
-        .filter(|s| ["none", "mild", "intense"].contains(&s.to_lowercase().as_str()))
-        .unwrap_or("mild");
-
-    let activity_alert_debounce_ms = get_number(ui, "activityAlertDebounceMs", 30_000.0);
-    let activity_alert_debounce_ms =
-        (activity_alert_debounce_ms.round()).clamp(3000.0, 300_000.0) as u64;
-
-    let font_family = ui
-        .get("fontFamily")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("");
-
-    // Preserve layoutHotkeys if present
-    let layout_hotkeys = ui
-        .get("layoutHotkeys")
-        .and_then(|v| v.as_object())
-        .map(|o| {
-            o.iter()
-                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), Value::String(s.to_string()))))
-                .collect::<serde_json::Map<String, Value>>()
-        });
-
-    let mut result = serde_json::json!({
-        "fontSize": font_size,
-        "paneOpacity": pane_opacity,
-        "paneMaskOpacity": pane_mask_opacity,
-        "paneWidth": pane_width,
-        "breathingAlertEnabled": breathing_alert_enabled,
-        "webglEnabled": webgl_enabled,
-        "breathingIntensity": breathing_intensity,
-        "activityAlertDebounceMs": activity_alert_debounce_ms,
-    });
-
-    if !font_family.is_empty() {
-        result
-            .as_object_mut()
-            .unwrap()
-            .insert("fontFamily".into(), Value::String(font_family.to_string()));
+    // Preserve keyboard shortcuts if present.
+    if let Some(shortcuts) = ui.get("shortcuts").and_then(Value::as_object) {
+        result.insert("shortcuts".into(), Value::Object(shortcuts.clone()));
     }
 
-    // Preserve keyboard shortcuts if present
-    if let Some(shortcuts) = ui.get("shortcuts").and_then(|v| v.as_object()) {
-        result
-            .as_object_mut()
-            .unwrap()
-            .insert("shortcuts".into(), Value::Object(shortcuts.clone()));
-    }
-
-    // Always include layoutHotkeys (empty object if not present)
-    if let Some(hotkeys) = layout_hotkeys {
-        result
-            .as_object_mut()
-            .unwrap()
-            .insert("layoutHotkeys".into(), Value::Object(hotkeys));
-    } else {
-        result
-            .as_object_mut()
-            .unwrap()
-            .insert("layoutHotkeys".into(), Value::Object(serde_json::Map::new()));
-    }
-
-    // Always include quakeLayouts (empty object if not present)
-    if let Some(quake_layouts) = ui.get("quakeLayouts").and_then(|v| v.as_object()) {
-        result
-            .as_object_mut()
-            .unwrap()
-            .insert("quakeLayouts".into(), Value::Object(quake_layouts.clone()));
-    } else {
-        result
-            .as_object_mut()
-            .unwrap()
-            .insert("quakeLayouts".into(), Value::Object(serde_json::Map::new()));
-    }
-
-    result
+    Value::Object(result)
 }
 
 /// Sanitize an arbitrary config value into the current schema.

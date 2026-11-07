@@ -215,29 +215,6 @@ fn is_passthrough(method: &str) -> bool {
     )
 }
 
-/// Look up a dotted key path (e.g. `"theme.editor.bg"`) in a settings value.
-fn select_key(config: &Value, key: &str) -> Result<Value, String> {
-    let mut current = config;
-    for part in key.split('.') {
-        current = current
-            .get(part)
-            .ok_or_else(|| format!("key not found: {key}"))?;
-    }
-    Ok(current.clone())
-}
-
-/// Extract and validate the `settings` object from a `settings.set` request.
-fn settings_updates_from_params(params: &Value) -> Result<Value, String> {
-    let updates = params
-        .get("settings")
-        .cloned()
-        .ok_or("missing 'settings' param")?;
-    if !updates.is_object() {
-        return Err("'settings' must be a JSON object".to_string());
-    }
-    Ok(updates)
-}
-
 /// Resolve the window label that owns `pane_id` for direct PTY access.
 ///
 /// An explicit `windowId` param wins; otherwise the PTY session map is the
@@ -271,6 +248,26 @@ fn resolve_pty_window(app: &AppHandle, params: &Value, pane_id: &str) -> Result<
     pick_window_label(explicit, &live_labels, pane_id)
 }
 
+/// Event emitted after settings are written by a CLI request.
+///
+/// The frontend listens for it and re-applies the payload, so
+/// `vibe99ctl settings set …` takes effect without restarting the app. The
+/// payload is the sanitized config, identical in shape to what `settings_load`
+/// returns.
+pub const SETTINGS_CHANGED_EVENT: &str = "vibe99:settings-changed";
+
+/// A `settings.set` payload split into the parts that must be merged at
+/// different depths of `settings.json`.
+#[derive(Debug)]
+struct SettingsUpdate {
+    /// Validated writable fields, merged into the `ui` block.
+    ui: serde_json::Map<String, Value>,
+    /// Other top-level config sections (`shell`, `layouts`, …), merged as-is.
+    top_level: serde_json::Map<String, Value>,
+    /// Canonical values applied, echoed back to the caller.
+    changed: serde_json::Map<String, Value>,
+}
+
 /// Handle a "direct" method entirely in Rust without touching the frontend.
 async fn handle_direct(
     app: &AppHandle,
@@ -281,17 +278,46 @@ async fn handle_direct(
         "settings.get" => {
             let config = super::settings::settings_load(app.clone())?;
             match params.get("key").and_then(|v| v.as_str()) {
-                Some(key) => select_key(&config, key),
-                None => Ok(config),
+                Some(key) => lookup_setting(&config, key).cloned().ok_or_else(|| {
+                    format!(
+                        "unknown setting `{key}` — run `vibe99ctl settings schema` to list writable keys"
+                    )
+                }),
+                None => Ok(sort_json_keys(config)),
             }
         }
         "settings.set" => {
-            let updates = settings_updates_from_params(&params)?;
+            let updates = params.get("settings").cloned().ok_or("missing 'settings' param")?;
+            let updates = updates
+                .as_object()
+                .ok_or("'settings' must be a JSON object")?
+                .clone();
+            let plan = plan_settings_update(&updates)?;
+
+
             let current = super::settings::settings_load(app.clone())?;
-            let merged = deep_merge(current, updates);
-            super::settings::settings_save(app.clone(), merged)
+            let current_ui = current.get("ui").cloned().unwrap_or_else(|| Value::Object(Default::default()));
+            let merged_ui = deep_merge(current_ui, Value::Object(plan.ui));
+            let mut merged = if plan.top_level.is_empty() {
+                current
+            } else {
+                deep_merge(current, Value::Object(plan.top_level))
+            };
+            if let Some(object) = merged.as_object_mut() {
+                object.insert("ui".into(), merged_ui);
+            }
+
+            let saved = super::settings::settings_save(app.clone(), merged)?;
+
+            // Persisted; now tell every open window to reload and re-apply.
+            // A missing window is not an error (e.g. headless CLI use).
+            if let Err(e) = app.emit(SETTINGS_CHANGED_EVENT, &saved) {
+                eprintln!("[cli] failed to emit {SETTINGS_CHANGED_EVENT}: {e}");
+            }
+
+            Ok(serde_json::json!({"ok": true, "changed": Value::Object(plan.changed)}))
         }
-        "settings.schema" => Ok(settings_schema()),
+        "settings.schema" => Ok(super::settings_schema::schema_document()),
         "layout.list" => {
             super::layout::layouts_list(app.clone())
                 .map(|v| serde_json::json!({"ok": true, "value": v}))
@@ -338,78 +364,258 @@ fn deep_merge(base: Value, override_val: Value) -> Value {
     }
 }
 
-fn settings_schema() -> Value {
-    serde_json::json!({
-        "fields": {
-            "fontSize": {
-                "type": "integer",
-                "min": 10,
-                "max": 24,
-                "default": 13,
-                "description": "Terminal font size in pixels"
-            },
-            "fontFamily": {
-                "type": "string",
-                "default": "",
-                "description": "Font family name. Empty string uses platform default"
-            },
-            "paneOpacity": {
-                "type": "number",
-                "min": 0.55,
-                "max": 1.0,
-                "default": 0.8,
-                "description": "Pane background opacity"
-            },
-            "paneMaskOpacity": {
-                "type": "number",
-                "min": 0.0,
-                "max": 1.0,
-                "default": 0.75,
-                "description": "Mask overlay opacity for inactive panes"
-            },
-            "paneWidth": {
-                "type": "integer",
-                "min": 520,
-                "max": 2000,
-                "default": 720,
-                "multipleOf": 10,
-                "description": "Default pane width in pixels"
-            },
-            "webglEnabled": {
-                "type": "boolean",
-                "default": true,
-                "description": "Enable WebGL renderer for terminal canvas"
-            },
-            "breathingIntensity": {
-                "type": "string",
-                "enum": ["none", "mild", "intense"],
-                "default": "mild",
-                "description": "Activity breathing animation intensity"
-            },
-            "activityAlertDebounceMs": {
-                "type": "integer",
-                "min": 3000,
-                "max": 300000,
-                "default": 30000,
-                "description": "Debounce interval for activity alerts (ms)"
-            },
-            "layoutHotkeys": {
-                "type": "object",
-                "additionalProperties": { "type": "string" },
-                "default": {},
-                "description": "Keyboard shortcuts per layout. Key=layoutId, Value=shortcut string (e.g. 'F1', 'Ctrl+Shift+T')"
-            },
-            "quakeLayouts": {
-                "type": "object",
-                "default": {},
-                "description": "Per-layout quake-mode config. Key=layoutId",
-                "properties": {
-                    "position": { "type": "string", "enum": ["top", "bottom"], "default": "top" },
-                    "height": { "type": "integer", "min": 30, "max": 100, "default": 60 }
+/// Top-level `settings.json` sections a `settings.set` payload may merge.
+///
+/// Everything else that is not a writable field is rejected: `sanitize_config`
+/// only persists these sections, so accepting a typo would report success while
+/// silently dropping the value.
+const TOP_LEVEL_SECTIONS: [&str; 6] = [
+    "version",
+    "shell",
+    "layouts",
+    "defaultLayoutId",
+    "hooks",
+    "floatWindows",
+];
+
+/// Split a `settings.set` payload into the levels it must be merged at.
+///
+/// Writable fields (see `settings schema`) live in the `ui` block — that is
+/// where the app reads them — so a bare key like `fontSize` is routed there and
+/// callers never need to know the nesting. Everything else (`shell`, `layouts`,
+/// `defaultLayoutId`, …) keeps merging at the top level, and an explicit `ui`
+/// object from the caller is folded into the same block.
+///
+/// Every writable value is validated up front; all rejection messages are
+/// returned together so one call reports every bad field.
+fn plan_settings_update(
+    updates: &serde_json::Map<String, Value>,
+) -> Result<SettingsUpdate, String> {
+    let mut plan = SettingsUpdate {
+        ui: serde_json::Map::new(),
+        top_level: serde_json::Map::new(),
+        changed: serde_json::Map::new(),
+    };
+    let mut errors = Vec::new();
+
+    for (key, value) in updates {
+        if super::settings_schema::is_field(key) {
+            apply_field(&mut plan, &mut errors, key, value);
+        } else if key == "ui" {
+            match value.as_object() {
+                Some(ui) => {
+                    for (field, field_value) in ui {
+                        if super::settings_schema::is_field(field) {
+                            apply_field(&mut plan, &mut errors, field, field_value);
+                        } else {
+                            // Not a writable field (`shortcuts`, deprecated
+                            // flags, …) — merge it through untouched.
+                            plan.ui.insert(field.clone(), field_value.clone());
+                        }
+                    }
                 }
+                None => errors.push("ui: expected object".to_string()),
             }
+        } else if TOP_LEVEL_SECTIONS.contains(&key.as_str()) {
+            plan.top_level.insert(key.clone(), value.clone());
+            plan.changed.insert(key.clone(), value.clone());
+        } else {
+            errors.push(format!(
+                "unknown setting `{key}` — run `vibe99ctl settings schema` to list writable keys"
+            ));
         }
-    })
+    }
+
+    if errors.is_empty() {
+        Ok(plan)
+    } else {
+        // Sorted so the same bad payload always produces the same message.
+        errors.sort();
+        Err(errors.join("; "))
+    }
+}
+
+fn apply_field(plan: &mut SettingsUpdate, errors: &mut Vec<String>, key: &str, value: &Value) {
+    match super::settings_schema::validate(key, value) {
+        Ok(valid) => {
+            plan.changed.insert(key.to_string(), valid.clone());
+            plan.ui.insert(key.to_string(), valid);
+        }
+        Err(message) => errors.push(message),
+    }
+}
+
+/// Resolve `settings get <key>`.
+///
+/// Writable fields resolve inside the `ui` block (bare name or `ui.<field>`);
+/// anything else is a dotted path into the config.
+fn lookup_setting<'a>(config: &'a Value, key: &str) -> Option<&'a Value> {
+    if super::settings_schema::is_field(key) {
+        return config.get("ui").and_then(|ui| ui.get(key));
+    }
+    let mut current = config;
+    for part in key.split('.') {
+        current = current.get(part)?;
+    }
+    Some(current)
+}
+
+/// Recursively sort object keys so `settings get` output is stable.
+///
+/// `serde_json` is ordered by default, but a dependency can enable its
+/// `preserve_order` feature crate-wide; sorting here makes the CLI contract
+/// independent of that.
+fn sort_json_keys(value: Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut entries: Vec<(String, Value)> = map.into_iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Object(
+                entries
+                    .into_iter()
+                    .map(|(key, value)| (key, sort_json_keys(value)))
+                    .collect(),
+            )
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(sort_json_keys).collect()),
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn deep_merge_recurses_into_objects_and_replaces_leaves() {
+        let base = json!({
+            "ui": {"fontSize": 13, "quakeLayouts": {"a": {"height": 60}}},
+            "version": 6
+        });
+        let update = json!({
+            "ui": {"fontSize": 16, "quakeLayouts": {"b": {"height": 40}}}
+        });
+
+        assert_eq!(
+            deep_merge(base, update),
+            json!({
+                "ui": {
+                    "fontSize": 16,
+                    "quakeLayouts": {"a": {"height": 60}, "b": {"height": 40}}
+                },
+                "version": 6
+            })
+        );
+    }
+
+    #[test]
+    fn deep_merge_replaces_arrays_and_scalars() {
+        assert_eq!(
+            deep_merge(json!({"layouts": [1, 2]}), json!({"layouts": [3]})),
+            json!({"layouts": [3]})
+        );
+        assert_eq!(
+            deep_merge(json!({"defaultLayoutId": "a"}), json!({"defaultLayoutId": "b"})),
+            json!({"defaultLayoutId": "b"})
+        );
+    }
+
+    #[test]
+    fn settings_update_routes_writable_fields_into_ui() {
+        let plan = plan_settings_update(
+            json!({"fontSize": 15, "defaultLayoutId": "work"})
+                .as_object()
+                .unwrap(),
+        )
+        .expect("valid update");
+
+        assert_eq!(plan.ui, json!({"fontSize": 15}).as_object().unwrap().clone());
+        assert_eq!(
+            plan.top_level,
+            json!({"defaultLayoutId": "work"}).as_object().unwrap().clone()
+        );
+        assert_eq!(
+            plan.changed,
+            json!({"fontSize": 15, "defaultLayoutId": "work"})
+                .as_object()
+                .unwrap()
+                .clone()
+        );
+    }
+
+    #[test]
+    fn settings_update_accepts_text_values_from_the_cli() {
+        let plan = plan_settings_update(
+            json!({"fontSize": "18", "webglEnabled": "false"})
+                .as_object()
+                .unwrap(),
+        )
+        .expect("text values are parsed by field type");
+        assert_eq!(plan.ui["fontSize"], json!(18));
+        assert_eq!(plan.ui["webglEnabled"], json!(false));
+    }
+
+    #[test]
+    fn settings_update_folds_an_explicit_ui_block_into_the_same_level() {
+        let plan = plan_settings_update(
+            json!({"ui": {"fontSize": 16, "shortcuts": {"newPane": "Ctrl+T"}}})
+                .as_object()
+                .unwrap(),
+        )
+        .expect("valid update");
+
+        assert_eq!(plan.ui["fontSize"], json!(16));
+        assert_eq!(plan.ui["shortcuts"], json!({"newPane": "Ctrl+T"}));
+        assert!(plan.top_level.is_empty());
+    }
+
+    #[test]
+    fn settings_update_reports_every_invalid_field() {
+        let error = plan_settings_update(
+            json!({"fontSize": 99, "breathingIntensity": "loud", "webglEnabled": true})
+                .as_object()
+                .unwrap(),
+        )
+        .expect_err("both values are invalid");
+
+        assert_eq!(
+            error,
+            "breathingIntensity: expected one of none|mild|intense, got \"loud\"; \
+             fontSize: expected integer 10-24, got 99"
+        );
+    }
+
+    #[test]
+    fn settings_update_rejects_an_unknown_key() {
+        let error = plan_settings_update(json!({"fontSizes": 15}).as_object().unwrap())
+            .expect_err("unknown key");
+        assert!(error.starts_with("unknown setting `fontSizes`"), "{error}");
+    }
+
+    #[test]
+    fn lookup_resolves_writable_fields_and_dotted_paths() {
+        let config = json!({
+            "version": 6,
+            "ui": {"fontSize": 13, "quakeLayouts": {}},
+            "shell": {"defaultProfile": "bash"}
+        });
+
+        assert_eq!(lookup_setting(&config, "fontSize"), Some(&json!(13)));
+        assert_eq!(lookup_setting(&config, "ui.fontSize"), Some(&json!(13)));
+        assert_eq!(
+            lookup_setting(&config, "shell.defaultProfile"),
+            Some(&json!("bash"))
+        );
+        assert_eq!(lookup_setting(&config, "nope"), None);
+    }
+
+    #[test]
+    fn sorted_output_is_stable_at_every_depth() {
+        let sorted = sort_json_keys(json!({"b": {"z": 1, "a": 2}, "a": 3}));
+        let rendered = serde_json::to_string(&sorted).unwrap();
+        assert_eq!(rendered, r#"{"a":3,"b":{"a":2,"z":1}}"#);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -739,69 +945,6 @@ pub fn cli_respond(
 mod tests {
     use super::*;
     use serde_json::json;
-
-    // --- settings.get key lookup ---
-
-    #[test]
-    fn select_key_top_level() {
-        let config = json!({"fontSize": 13});
-        assert_eq!(select_key(&config, "fontSize").unwrap(), json!(13));
-    }
-
-    #[test]
-    fn select_key_nested() {
-        let config = json!({"quakeLayouts": {"abc": {"position": "top"}}});
-        assert_eq!(
-            select_key(&config, "quakeLayouts.abc.position").unwrap(),
-            json!("top")
-        );
-    }
-
-    #[test]
-    fn select_key_missing_leaf() {
-        let config = json!({"fontSize": 13});
-        assert_eq!(
-            select_key(&config, "fontSize.bogus").unwrap_err(),
-            "key not found: fontSize.bogus"
-        );
-    }
-
-    #[test]
-    fn select_key_missing_root() {
-        let config = json!({"fontSize": 13});
-        assert!(select_key(&config, "nope").is_err());
-    }
-
-    // --- settings.set updates validation ---
-
-    #[test]
-    fn settings_updates_accepts_object() {
-        let params = json!({"settings": {"fontSize": 14}});
-        assert_eq!(
-            settings_updates_from_params(&params).unwrap(),
-            json!({"fontSize": 14})
-        );
-    }
-
-    #[test]
-    fn settings_updates_rejects_missing_param() {
-        let params = json!({});
-        assert_eq!(
-            settings_updates_from_params(&params).unwrap_err(),
-            "missing 'settings' param"
-        );
-    }
-
-    #[test]
-    fn settings_updates_rejects_non_object() {
-        for bad in [json!([1, 2]), json!("fontSize"), json!(13)] {
-            let params = json!({"settings": bad});
-            assert_eq!(
-                settings_updates_from_params(&params).unwrap_err(),
-                "'settings' must be a JSON object"
-            );
-        }
-    }
 
     // --- deep_merge ---
 

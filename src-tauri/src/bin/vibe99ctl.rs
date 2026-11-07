@@ -69,14 +69,28 @@ enum LayoutAction {
 
 #[derive(Subcommand)]
 enum SettingsAction {
+    /// Print all settings, or the value of one key
+    ///
+    /// A key is either a writable field name (`fontSize`) or a dotted path
+    /// into the config (`shell.defaultProfile`).
     Get {
         key: Option<String>,
     },
+    /// Set one writable field, or merge a JSON object of settings
     Set {
+        /// Writable field name (e.g. `fontSize`) or a JSON object of settings
         settings: String,
+        /// Value for the field. Omit when passing a JSON object instead
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         value: Vec<String>,
+        /// Parse the value as JSON instead of passing it as text
+        ///
+        /// Needed for values that are JSON objects or must keep a JSON type
+        /// (e.g. `settings set quakeLayouts --json '{"layout-1":{"height":50}}'`).
+        #[arg(long)]
+        json: bool,
     },
+    /// Print every writable setting with its type, range and default
     Schema,
 }
 
@@ -275,20 +289,44 @@ fn main() {
         },
         Commands::Settings { action } => match action {
             SettingsAction::Get { key } => ("settings.get".to_string(), json!({"key": key})),
-            SettingsAction::Set { settings, value } => {
+            SettingsAction::Set { settings, value, json: as_json } => {
                 if value.is_empty() {
                     let parsed: Value = serde_json::from_str(settings)
                         .unwrap_or_else(|e| {
                             eprintln!("Error: invalid JSON — {e}");
                             eprintln!("Usage: vibe99ctl settings set <json-object>");
-                            eprintln!("   or: vibe99ctl settings set <key> <value>");
+                            eprintln!("   or: vibe99ctl settings set <key> <value> [--json]");
                             std::process::exit(1);
                         });
+                    if !parsed.is_object() {
+                        eprintln!("Error: settings must be a JSON object");
+                        std::process::exit(1);
+                    }
                     ("settings.set".to_string(), json!({"settings": parsed}))
                 } else {
-                    let val: Value = serde_json::from_str(&value.join(" "))
-                        .unwrap_or_else(|_| json!(value.join(" ")));
-                    ("settings.set".to_string(), json!({"settings": build_nested_setting(settings, val)}))
+                    let raw = value.join(" ");
+                    // Without --json the value is passed as text and the server
+                    // parses it per the field's type, so `set fontSize 15` and
+                    // `set fontFamily 999` both do the obvious thing.
+                    let parsed: Value = if *as_json {
+                        serde_json::from_str(&raw).unwrap_or_else(|e| {
+                            eprintln!("Error: --json value is not valid JSON — {e}");
+                            std::process::exit(1);
+                        })
+                    } else {
+                        Value::String(raw)
+                    };
+                    // Dotted keys address one leaf of a map-typed field
+                    // (e.g. `quakeLayouts.<id>.position`); nest them so the
+                    // server-side objectMap validation can check the leaf.
+                    let payload = if settings.contains('.') {
+                        build_nested_setting(settings, parsed)
+                    } else {
+                        let mut obj = serde_json::Map::new();
+                        obj.insert(settings.clone(), parsed);
+                        Value::Object(obj)
+                    };
+                    ("settings.set".to_string(), json!({"settings": payload}))
                 }
             }
             SettingsAction::Schema => ("settings.schema".to_string(), json!({})),

@@ -606,6 +606,23 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     }
   });
 
+  // Settings written from outside this window (`vibe99ctl settings set …`)
+  // arrive as the saved config. Re-apply them so the change is visible — and
+  // the terminals refit — without restarting the app.
+  const removeSettingsChangedListener = bridge.listen<Record<string, unknown>>(
+    'vibe99:settings-changed',
+    (payload) => {
+      try {
+        settingsManager.applyPersistedSettings(payload);
+        settingsManager.applySettings();
+        render(true);
+        void hotkeyHandler.sync(settingsManager.settings.layoutHotkeys ?? {});
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
+
   // -- Core helpers -----------------------------------------------------------
 
   function reportError(error: unknown): void {
@@ -877,6 +894,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     removeTerminalDataListener();
     removeTerminalExitListener();
     removeMenuActionListener();
+    removeSettingsChangedListener();
     void floatWindowManager.close({ parentClosing: true });
   }
 

@@ -1,0 +1,82 @@
+{
+  "$comment": "Single source of truth for the agent-writable UI settings. Consumed by src-tauri/src/commands/settings_schema.rs (CLI validation, `vibe99ctl settings schema`, and settings sanitization) and cross-checked against the zod schema in src/domain/settings-schema.ts by src/domain/settings-fields.test.ts.",
+  "fields": {
+    "fontSize": {
+      "type": "integer",
+      "min": 10,
+      "max": 24,
+      "default": 13,
+      "description": "Terminal font size in pixels"
+    },
+    "fontFamily": {
+      "type": "string",
+      "default": "",
+      "description": "Font family name. Empty string uses the platform default"
+    },
+    "paneOpacity": {
+      "type": "number",
+      "min": 0.55,
+      "max": 1.0,
+      "decimals": 2,
+      "default": 0.8,
+      "description": "Pane background opacity (0.55-1.0)"
+    },
+    "paneMaskOpacity": {
+      "type": "number",
+      "min": 0.0,
+      "max": 1.0,
+      "decimals": 2,
+      "default": 0.75,
+      "description": "Mask overlay opacity for inactive panes (0.0-1.0, 0 = transparent)"
+    },
+    "paneWidth": {
+      "type": "integer",
+      "min": 520,
+      "max": 2000,
+      "step": 10,
+      "default": 720,
+      "description": "Default pane width in pixels, rounded to the nearest 10"
+    },
+    "webglEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable the WebGL terminal renderer (takes effect after restart)"
+    },
+    "breathingIntensity": {
+      "type": "enum",
+      "values": ["none", "mild", "intense"],
+      "default": "mild",
+      "description": "Activity breathing animation intensity"
+    },
+    "activityAlertDebounceMs": {
+      "type": "integer",
+      "min": 3000,
+      "max": 300000,
+      "default": 30000,
+      "description": "Idle debounce before a pane is flagged as having background activity (ms)"
+    },
+    "layoutHotkeys": {
+      "type": "stringMap",
+      "default": {},
+      "description": "Global shortcut per layout id, e.g. {\"layout-1\": \"F1\"}"
+    },
+    "quakeLayouts": {
+      "type": "objectMap",
+      "default": {},
+      "itemProperties": {
+        "position": {
+          "type": "enum",
+          "values": ["top", "bottom"],
+          "default": "top"
+        },
+        "height": {
+          "type": "integer",
+          "min": 30,
+          "max": 100,
+          "default": 60
+        }
+      },
+      "description": "Per-layout quake-mode config keyed by layout id, e.g. {\"layout-1\": {\"position\": \"top\", \"height\": 60}}. Presence of a layout id enables quake for that layout"
+    }
+  }
+}

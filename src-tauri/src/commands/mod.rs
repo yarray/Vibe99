@@ -4,6 +4,7 @@ pub mod hook;
 pub mod hotkey;
 pub mod layout;
 pub mod settings;
+pub mod settings_schema;
 pub mod shell_profile;
 pub mod terminal;
 pub mod window;
