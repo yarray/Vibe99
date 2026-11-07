@@ -150,7 +150,7 @@ describe('vibe99ctl CLI bridge', () => {
 
   it('settings get/set/schema round-trip in Rust', async () => {
     const set = await runCtl(['settings', 'set', 'ui.fontSize', '15']);
-    expect(set.ui.fontSize).toBe(15);
+    expect(set.changed.fontSize).toBe(15);
     const after = await runCtl(['settings', 'get', 'ui.fontSize']);
     expect(after).toBe(15);
 

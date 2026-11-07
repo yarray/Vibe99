@@ -75,6 +75,20 @@ vibe99ctl terminal resize <pane-id> <cols> <rows>
 Every shortcut maps to a method of the same catalogue, so `vibe99ctl pane list`
 is `pane.list` and `vibe99ctl describe --method pane.list` documents it.
 
+### Windows and timeouts
+
+Vibe99 can run several windows, each with its own panes and layouts. A command
+is executed in the window named by `--window` (default `main`):
+
+```bash
+vibe99ctl --window layout-2 pane list
+vibe99ctl --window layout-2 terminal send-keys pane-1 'npm test'
+```
+
+`--timeout <seconds>` bounds how long the server waits for the frontend to
+answer (default 5, capped at 120). It only matters for passthrough methods,
+whose work happens in the UI.
+
 ### The generic call
 
 `call` reaches any registered method, including the ones without a shortcut:
@@ -104,7 +118,18 @@ printf '{"jsonrpc":"2.0","id":1,"method":"pane.list","params":{}}\n' \
 Methods are either handled in Rust (`route: "direct"`) or forwarded to the
 frontend workbench (`route: "passthrough"`). A passthrough call waits for the
 UI to answer and fails with `-32603` when the frontend does not respond within
-five seconds.
+the timeout.
+
+Both kinds accept two routing parameters, which the server strips before the
+command reaches the frontend:
+
+| Param | Meaning |
+|-------|---------|
+| `windowId` | Label of the window that runs the command. Defaults to `main`. |
+| `timeoutMs` | How long to wait for the frontend, in milliseconds. Defaults to 5000, capped at 120000. |
+
+`describe` lists them under `request.params`, and every method's parameter
+schema includes them. The CLI sets them from `--window` and `--timeout`.
 
 ## The catalogue
 
@@ -143,8 +168,19 @@ The methods, grouped by what they act on:
 | Shell profiles | `shell.list`, `profile.list`, `profile.create`, `profile.update`, `profile.delete` |
 | Workbench mode | `mode.set` |
 
+The `route` of each method says where it runs:
+
+- `direct` — handled in Rust, without the UI. `settings.*`, `layout.list`,
+  `shell.list`, `profile.*`, `terminal.send-keys` and `terminal.resize` are
+  direct: they read the saved configuration or the PTY session directly.
+- `passthrough` — forwarded to the frontend workbench, which answers from the
+  **live runtime state**. `pane.list`, `pane.info` and `layout.active` are
+  passthrough, so they report the panes and the layout as they are right now,
+  not what was last written to disk.
+
 The top-level `schemaVersion` field is bumped whenever the shape of this JSON
-changes, so a consumer can detect an incompatible update.
+changes, so a consumer can detect an incompatible update. The `request` field
+documents the routing parameters shared by every method.
 
 ## Errors
 
@@ -162,6 +198,10 @@ carry a JSON-RPC error code:
 method that cannot do what was asked answers with `{"ok": false, "reason": "..."}`
 inside a successful response — for example `reason: "last-pane"` when closing
 the only pane, or `reason: "no-lit"` when no pane has a pending alert.
+
+A request aimed at a window that does not exist fails with `-32603` and
+`window not found: <label>`. The label is `main` for the primary window and
+`layout-<layout-id>` for a window opened from a layout.
 
 ## Typical workflows
 
@@ -223,7 +263,7 @@ embed. Adding a method means adding one entry there:
 
 - the method name, its route (`direct` or `passthrough`), a one-line summary,
   the parameter list and an example;
-- the Rust handler, when the route is `direct` — the table in
+- the Rust handler, when the route is `direct` — `DIRECT_HANDLERS` in
   `src-tauri/src/commands/cli.rs` maps each direct method to its implementation;
 - the frontend command, when the route is `passthrough` — the method name has
   to match an `AppCommand` in `src/domain/commands.ts`.
@@ -232,3 +272,11 @@ Unit tests keep the three in sync: the registry and the handler table must
 describe the same methods, and every passthrough method must exist as an
 `AppCommand`. A method that is not registered is rejected with `-32601`, so a
 half-added method fails loudly instead of silently doing nothing.
+
+The routing parameters every method accepts (`windowId`, `timeoutMs`) are
+declared once, in `REQUEST_PARAMS`, next to the methods they apply to.
+
+A direct method reads the saved configuration or the PTY session; a
+passthrough method is answered by the frontend from the live runtime state.
+That is why `pane.list` is a passthrough method: the panes live in the
+frontend, not in the Rust backend.
