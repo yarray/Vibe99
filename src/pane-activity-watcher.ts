@@ -7,6 +7,10 @@
 //
 // Lifecycle expected from the host:
 //   - call `noteData(paneId)` for every chunk of PTY output
+//   - call `noteSignal(paneId)` when the PTY emits an explicit "look at me"
+//     notification (BEL, iTerm2 growl OSC 9, xterm notify OSC 777, kitty
+//     notification OSC 99). Unlike passive output, these fire the alert
+//     immediately instead of waiting out the quiet period.
 //   - call `noteResize(paneId)` whenever a pane's PTY is resized (window
 //     resize, font-size change, layout change, …) — the SIGWINCH redraw
 //     burst that follows is not "real" new content. Data arriving after
@@ -113,6 +117,15 @@ export interface PaneActivityWatcher {
   setFocus: (paneId: string | null) => void;
   /** Record a chunk of output for `paneId`. */
   noteData: (paneId: string, byteSize?: number) => void;
+  /**
+   * Record an explicit application notification signal (BEL / OSC 9 / 777 /
+   * 99) for `paneId`. Bypasses the quiet-period timer and fires `onAlert`
+   * immediately, subject to the same suppression rules as the settle path:
+   * the pane must have been focused at least once, must not currently be
+   * focused (unless `ignoreFocus` is set), and both the global and per-pane
+   * switches must be on.
+   */
+  noteSignal: (paneId: string) => void;
   /**
    * Mark a pane as having just been resized. Opens a quiet window that
    * stays open as long as redraw chunks keep arriving (each chunk
@@ -285,6 +298,32 @@ export function createPaneActivityWatcher(options: PaneActivityWatcherOptions = 
         s.timer = null;
       }
       armResizeSettle(s);
+    },
+
+    /**
+     * Record an explicit application notification signal for `paneId`.
+     *
+     * This is the "immediate" twin of the quiet-period path: it fires
+     * `onAlert` right away instead of arming a settle timer, but only after
+     * passing the same gates the settle timer's callback would check. We also
+     * require `hasBeenFocused` (matching `noteData`'s gate) so a pane that has
+     * never been on screen can't pulse from its own startup banner.
+     */
+    noteSignal(paneId: string): void {
+      const s = ensure(paneId);
+      if (!isActive(paneId, s)) return;
+      if (!s.hasBeenFocused) return;
+      if (!ignoreFocus && paneId === focusedPaneId) return;
+      if (s.alerted) return;
+      if (s.timer !== null) {
+        clearTimeout(s.timer);
+        s.timer = null;
+      }
+      s.alerted = true;
+      const diag = diagStates.get(paneId);
+      const history = diag ? dumpDiag(diag) : [];
+      console.debug('[activity] onAlert (noteSignal)', paneId, `history=`, history);
+      onAlert?.(paneId);
     },
 
     /** Drop all state for `paneId` (clears any pending timer or alert). */
