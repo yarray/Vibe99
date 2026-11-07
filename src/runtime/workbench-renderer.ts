@@ -393,6 +393,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
       }
     },
     getShellProfiles: () => shellProfiles,
+    getActiveLayoutId: () => layoutManager.getWindowLayoutId(),
   });
 
   paneRenderer = createPaneRenderer({

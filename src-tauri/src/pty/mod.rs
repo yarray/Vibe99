@@ -364,6 +364,25 @@ impl PtyManager {
         Ok(())
     }
 
+    /// Distinct window labels that currently hold a live session for `pane_id`.
+    ///
+    /// Pane IDs are UUIDs in practice, but restored layouts can produce the
+    /// same sequential IDs (p1, p2, …) in different windows — multiple labels
+    /// mean the caller must disambiguate.
+    pub fn window_labels_for_pane(&self, pane_id: &str) -> Vec<String> {
+        let sessions = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut labels: Vec<String> = Vec::new();
+        for key in sessions.keys() {
+            if key.pane_id == pane_id && !labels.contains(&key.window_label) {
+                labels.push(key.window_label.clone());
+            }
+        }
+        labels
+    }
+
     pub fn destroy(&self, window_label: &str, pane_id: &str) {
         let key = PaneRef {
             window_label: window_label.to_string(),

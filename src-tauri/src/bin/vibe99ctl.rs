@@ -17,6 +17,10 @@ struct Cli {
 
     #[arg(long, global = true, default_value = "5")]
     timeout: u64,
+
+    /// Target window label ("main" or a layout id). Defaults to "main".
+    #[arg(long, global = true)]
+    window: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -124,7 +128,9 @@ fn send_request(
             .map_err(|e| format!("cannot connect to Vibe99 at {}: {e}", socket_path.display()))?;
 
         stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(timeout_secs)))
+            // One extra second of grace so the server's structured timeout
+            // error arrives instead of an opaque local read failure.
+            .set_read_timeout(Some(std::time::Duration::from_secs(timeout_secs + 1)))
             .map_err(|e| format!("set timeout: {e}"))?;
 
         let request = json!({
@@ -180,7 +186,7 @@ fn send_request(
             let mut reader = tokio::io::BufReader::new(client);
             let mut line = String::new();
             tokio::time::timeout(
-                std::time::Duration::from_secs(timeout_secs),
+                std::time::Duration::from_secs(timeout_secs + 1),
                 reader.read_line(&mut line)
             ).await
             .map_err(|_| "read timeout".to_string())?
@@ -203,15 +209,38 @@ fn print_result(response: Value) -> ! {
 
     let result = response.get("result").cloned().unwrap_or(Value::Null);
 
+    // Passthrough failures arrive as a CommandResult, not a JSON-RPC error.
+    if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        let reason = result.get("reason").and_then(|v| v.as_str()).unwrap_or("unknown error");
+        eprintln!("Error: {reason}");
+        std::process::exit(1);
+    }
+
     if let Some(inner) = result.get("value") {
         println!("{}", serde_json::to_string_pretty(inner).unwrap_or_default());
-    } else if result.is_object() && result.get("ok").is_some() {
-        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
     } else {
         println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
     }
 
     std::process::exit(0);
+}
+
+/// Build a nested object from a dotted key so `settings set ui.fontSize 15`
+/// becomes `{"ui":{"fontSize":15}}` — the config is nested, and the server's
+/// deep-merge lands the value in the right block. A flat `"ui.fontSize"` key
+/// would be silently dropped by config sanitization.
+fn build_nested_setting(key: &str, value: Value) -> Value {
+    let mut root = Value::Object(serde_json::Map::new());
+    let mut cursor = &mut root;
+    for part in key.split('.') {
+        cursor = cursor
+            .as_object_mut()
+            .expect("walked levels are always freshly created objects")
+            .entry(part.to_string())
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    }
+    *cursor = value;
+    root
 }
 
 fn main() {
@@ -259,9 +288,7 @@ fn main() {
                 } else {
                     let val: Value = serde_json::from_str(&value.join(" "))
                         .unwrap_or_else(|_| json!(value.join(" ")));
-                    let mut obj = serde_json::Map::new();
-                    obj.insert(settings.clone(), val);
-                    ("settings.set".to_string(), json!({"settings": Value::Object(obj)}))
+                    ("settings.set".to_string(), json!({"settings": build_nested_setting(settings, val)}))
                 }
             }
             SettingsAction::Schema => ("settings.schema".to_string(), json!({})),
@@ -281,11 +308,54 @@ fn main() {
         },
     };
 
+    // Routing metadata: which window executes the command, and how long the
+    // server may wait on the frontend before giving up.
+    let mut params = params;
+    if let Some(window) = &cli.window {
+        params["windowId"] = json!(window);
+    }
+    params["timeoutMs"] = json!(cli.timeout.saturating_mul(1000));
+
     match send_request(&socket_path, &method, params, cli.timeout) {
         Ok(response) => print_result(response),
         Err(e) => {
             eprintln!("Error: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn single_key_stays_top_level() {
+        assert_eq!(build_nested_setting("fontSize", json!(15)), json!({"fontSize": 15}));
+    }
+
+    #[test]
+    fn dotted_key_nests_into_config_blocks() {
+        assert_eq!(
+            build_nested_setting("ui.fontSize", json!(15)),
+            json!({"ui": {"fontSize": 15}})
+        );
+    }
+
+    #[test]
+    fn deeply_dotted_key_nests_all_levels() {
+        assert_eq!(
+            build_nested_setting("quakeLayouts.abc.position", json!("top")),
+            json!({"quakeLayouts": {"abc": {"position": "top"}}})
+        );
+    }
+
+    #[test]
+    fn object_value_replaces_leaf() {
+        assert_eq!(
+            build_nested_setting("ui", json!({"fontSize": 15})),
+            json!({"ui": {"fontSize": 15}})
+        );
     }
 }
