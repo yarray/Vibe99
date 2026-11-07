@@ -1,12 +1,31 @@
+/**
+ * vibe99ctl — CLI control for a running Vibe99 instance.
+ *
+ * The binary speaks JSON-RPC 2.0 over a Unix Domain Socket (a Named Pipe on
+ * Windows). `vibe99ctl describe` prints the machine-readable catalogue of
+ * every callable method — its parameters, its route and an example — so an
+ * agent can discover the whole surface without reading the source.
+ *
+ * @module vibe99ctl
+ */
+
 use clap::{Parser, Subcommand};
 use serde_json::{json, Value};
 #[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 
+/// The method registry — the single source of truth shared with the server.
+///
+/// It is included by path so that `vibe99ctl` stays a standalone binary that
+/// does not link the desktop app.
+#[path = "../cli_registry.rs"]
+mod cli_registry;
+
 #[derive(Parser)]
 #[command(name = "vibe99ctl")]
 #[command(about = "CLI control for Vibe99 terminal workspace")]
+#[command(long_about = "CLI control for Vibe99 terminal workspace.\n\nRun `vibe99ctl describe` for the machine-readable catalogue of every callable method, its parameters and an example call.")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -25,6 +44,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Print the catalogue of callable methods as JSON.
+    Describe {
+        /// Print the details of a single method instead of the whole catalogue.
+        #[arg(long)]
+        method: Option<String>,
+    },
+    /// Call any registered method with explicit JSON params.
+    Call {
+        /// Method name, as listed by `vibe99ctl describe`.
+        method: String,
+        /// JSON object with the method params.
+        #[arg(long, default_value = "{}")]
+        params: String,
+    },
     Pane {
         #[command(subcommand)]
         action: PaneAction,
@@ -177,18 +210,154 @@ fn resolve_socket_path(cli_socket: &Option<String>) -> Result<PathBuf, String> {
         return Ok(PathBuf::from(s));
     }
 
-    #[cfg(unix)]
-    {
-        let uid = unsafe { libc::getuid() };
-        let runtime_dir =
-            std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| format!("/tmp/vibe99-{uid}"));
-        Ok(PathBuf::from(runtime_dir)
-            .join("vibe99")
-            .join("vibe99.sock"))
+    cli_registry::socket_path()
+}
+
+/// Print the capability catalogue, or the details of a single method.
+///
+/// Works without a running Vibe99: the catalogue is static data.
+fn describe(method: Option<&str>) -> ! {
+    match method {
+        Some(name) => match cli_registry::describe_method(name) {
+            Some(details) => {
+                println!("{}", serde_json::to_string_pretty(&details).unwrap_or_default());
+                std::process::exit(0);
+            }
+            None => {
+                let error = json!({
+                    "error": {
+                        "code": cli_registry::CODE_METHOD_NOT_FOUND,
+                        "message": format!("method not found: {name}"),
+                    }
+                });
+                println!("{}", serde_json::to_string_pretty(&error).unwrap_or_default());
+                std::process::exit(1);
+            }
+        },
+        None => {
+            let catalogue = cli_registry::describe_all();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&catalogue).unwrap_or_default()
+            );
+            std::process::exit(0);
+        }
     }
-    #[cfg(windows)]
-    {
-        Ok(PathBuf::from(r"\\.\pipe\vibe99"))
+}
+
+/// Map a parsed command line to the method it calls.
+fn resolve_command(cli: &Cli) -> Result<(String, Value), String> {
+    match &cli.command {
+        Commands::Describe { .. } => Err("`describe` is answered locally".to_string()),
+        Commands::Call { method, params } => {
+            let parsed: Value = serde_json::from_str(params)
+                .map_err(|e| format!("invalid JSON params: {e}"))?;
+            if !parsed.is_object() {
+                return Err("params must be a JSON object".to_string());
+            }
+            Ok((method.clone(), parsed))
+        }
+        Commands::Pane { action } => match action {
+            PaneAction::List => Ok(("pane.list".to_string(), json!({}))),
+            PaneAction::Info { id } => Ok(("pane.info".to_string(), json!({"paneId": id}))),
+            PaneAction::Create { profile } => Ok((
+                "pane.create".to_string(),
+                json!({"shellProfileId": profile}),
+            )),
+            PaneAction::Close { id } => Ok(("pane.close".to_string(), json!({"paneId": id}))),
+            PaneAction::Focus { id } => Ok(("pane.focus".to_string(), json!({"paneId": id}))),
+        },
+        Commands::Layout { action } => match action {
+            LayoutAction::List => Ok(("layout.list".to_string(), json!({}))),
+            LayoutAction::Active => Ok(("layout.active".to_string(), json!({}))),
+            LayoutAction::Activate { id } => {
+                Ok(("layout.activate".to_string(), json!({"layoutId": id})))
+            }
+            LayoutAction::Save => Ok(("layout.save".to_string(), json!({}))),
+        },
+        Commands::Settings { action } => match action {
+            SettingsAction::Get { key } => Ok(("settings.get".to_string(), json!({"key": key}))),
+            SettingsAction::Set {
+                settings,
+                value,
+                json: as_json,
+            } => {
+                if value.is_empty() {
+                    let parsed: Value = serde_json::from_str(settings).map_err(|e| {
+                        format!("invalid JSON — {e}\nUsage: vibe99ctl settings set <json-object>\n   or: vibe99ctl settings set <key> <value> [--json]")
+                    })?;
+                    if !parsed.is_object() {
+                        return Err("settings must be a JSON object".to_string());
+                    }
+                    Ok(("settings.set".to_string(), json!({"settings": parsed})))
+                } else {
+                    let raw = value.join(" ");
+                    // Without --json the value is passed as text and the server
+                    // parses it per the field's type, so `set fontSize 15` and
+                    // `set fontFamily 999` both do the obvious thing.
+                    let parsed: Value = if *as_json {
+                        serde_json::from_str(&raw)
+                            .map_err(|e| format!("--json value is not valid JSON — {e}"))?
+                    } else {
+                        Value::String(raw)
+                    };
+                    // Dotted keys address one leaf of a map-typed field
+                    // (e.g. `quakeLayouts.<id>.position`); nest them so the
+                    // server-side objectMap validation can check the leaf.
+                    let payload = if settings.contains('.') {
+                        build_nested_setting(settings, parsed)
+                    } else {
+                        let mut obj = serde_json::Map::new();
+                        obj.insert(settings.clone(), parsed);
+                        Value::Object(obj)
+                    };
+                    Ok(("settings.set".to_string(), json!({"settings": payload})))
+                }
+            }
+            SettingsAction::Schema => Ok(("settings.schema".to_string(), json!({}))),
+        },
+        Commands::Shell { action } => match action {
+            ShellAction::List => Ok(("shell.list".to_string(), json!({}))),
+        },
+        Commands::Profile { action } => match action {
+            ProfileAction::List => Ok(("profile.list".to_string(), json!({}))),
+            ProfileAction::Create {
+                name,
+                command,
+                id,
+                open: _,
+                args,
+            } => {
+                let mut payload = json!({"name": name, "command": command, "id": id});
+                if !args.is_empty() {
+                    payload["args"] = json!(join_args(args));
+                }
+                Ok(("profile.create".to_string(), payload))
+            }
+            ProfileAction::Update {
+                id,
+                name,
+                command,
+                args,
+            } => {
+                let mut payload = json!({"id": id, "name": name, "command": command});
+                if !args.is_empty() {
+                    payload["args"] = json!(join_args(args));
+                }
+                Ok(("profile.update".to_string(), payload))
+            }
+            ProfileAction::Delete { id } => Ok(("profile.delete".to_string(), json!({"id": id}))),
+        },
+        Commands::Terminal { action } => match action {
+            TerminalAction::SendKeys { id, text } => Ok((
+                "terminal.send-keys".to_string(),
+                json!({"paneId": id, "text": text}),
+            )),
+            TerminalAction::Resize { id, cols, rows } => Ok((
+                "terminal.resize".to_string(),
+                json!({"paneId": id, "cols": cols, "rows": rows}),
+            )),
+        },
     }
 }
 
@@ -330,7 +499,8 @@ fn unwrap_result(response: Value) -> Value {
             .get("message")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown error");
-        eprintln!("Error: {msg}");
+        let code = error.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+        eprintln!("Error [{code}]: {msg}");
         std::process::exit(1);
     }
 
@@ -370,6 +540,11 @@ fn build_nested_setting(key: &str, value: Value) -> Value {
 fn main() {
     let cli = Cli::parse();
 
+    // `describe` is static data: it works without a running Vibe99.
+    if let Commands::Describe { method } = &cli.command {
+        describe(method.as_deref());
+    }
+
     let socket_path = match resolve_socket_path(&cli.socket) {
         Ok(p) => p,
         Err(e) => {
@@ -393,112 +568,25 @@ fn main() {
         }
     );
 
-    let (method, params) = match &cli.command {
-        Commands::Pane { action } => match action {
-            PaneAction::List => ("pane.list".to_string(), json!({})),
-            PaneAction::Info { id } => ("pane.info".to_string(), json!({"paneId": id})),
-            PaneAction::Create { profile } => (
-                "pane.create".to_string(),
-                json!({"shellProfileId": profile}),
-            ),
-            PaneAction::Close { id } => ("pane.close".to_string(), json!({"paneId": id})),
-            PaneAction::Focus { id } => ("pane.focus".to_string(), json!({"paneId": id})),
-        },
-        Commands::Layout { action } => match action {
-            LayoutAction::List => ("layout.list".to_string(), json!({})),
-            LayoutAction::Active => ("layout.active".to_string(), json!({})),
-            LayoutAction::Activate { id } => {
-                ("layout.activate".to_string(), json!({"layoutId": id}))
-            }
-            LayoutAction::Save => ("layout.save".to_string(), json!({})),
-        },
-        Commands::Settings { action } => match action {
-            SettingsAction::Get { key } => ("settings.get".to_string(), json!({"key": key})),
-            SettingsAction::Set { settings, value, json: as_json } => {
-                if value.is_empty() {
-                    let parsed: Value = serde_json::from_str(settings)
-                        .unwrap_or_else(|e| {
-                            eprintln!("Error: invalid JSON — {e}");
-                            eprintln!("Usage: vibe99ctl settings set <json-object>");
-                            eprintln!("   or: vibe99ctl settings set <key> <value> [--json]");
-                            std::process::exit(1);
-                        });
-                    if !parsed.is_object() {
-                        eprintln!("Error: settings must be a JSON object");
-                        std::process::exit(1);
-                    }
-                    ("settings.set".to_string(), json!({"settings": parsed}))
-                } else {
-                    let raw = value.join(" ");
-                    // Without --json the value is passed as text and the server
-                    // parses it per the field's type, so `set fontSize 15` and
-                    // `set fontFamily 999` both do the obvious thing.
-                    let parsed: Value = if *as_json {
-                        serde_json::from_str(&raw).unwrap_or_else(|e| {
-                            eprintln!("Error: --json value is not valid JSON — {e}");
-                            std::process::exit(1);
-                        })
-                    } else {
-                        Value::String(raw)
-                    };
-                    // Dotted keys address one leaf of a map-typed field
-                    // (e.g. `quakeLayouts.<id>.position`); nest them so the
-                    // server-side objectMap validation can check the leaf.
-                    let payload = if settings.contains('.') {
-                        build_nested_setting(settings, parsed)
-                    } else {
-                        let mut obj = serde_json::Map::new();
-                        obj.insert(settings.clone(), parsed);
-                        Value::Object(obj)
-                    };
-                    ("settings.set".to_string(), json!({"settings": payload}))
-                }
-            }
-            SettingsAction::Schema => ("settings.schema".to_string(), json!({})),
-        },
-        Commands::Shell { action } => match action {
-            ShellAction::List => ("shell.list".to_string(), json!({})),
-        },
-        Commands::Profile { action } => match action {
-            ProfileAction::List => ("profile.list".to_string(), json!({})),
-            ProfileAction::Create {
-                name,
-                command,
-                id,
-                open: _,
-                args,
-            } => {
-                let mut payload = json!({"name": name, "command": command, "id": id});
-                if !args.is_empty() {
-                    payload["args"] = json!(join_args(args));
-                }
-                ("profile.create".to_string(), payload)
-            }
-            ProfileAction::Update {
-                id,
-                name,
-                command,
-                args,
-            } => {
-                let mut payload = json!({"id": id, "name": name, "command": command});
-                if !args.is_empty() {
-                    payload["args"] = json!(join_args(args));
-                }
-                ("profile.update".to_string(), payload)
-            }
-            ProfileAction::Delete { id } => ("profile.delete".to_string(), json!({"id": id})),
-        },
-        Commands::Terminal { action } => match action {
-            TerminalAction::SendKeys { id, text } => (
-                "terminal.send-keys".to_string(),
-                json!({"paneId": id, "text": text}),
-            ),
-            TerminalAction::Resize { id, cols, rows } => (
-                "terminal.resize".to_string(),
-                json!({"paneId": id, "cols": cols, "rows": rows}),
-            ),
-        },
+    let (method, params) = match resolve_command(&cli) {
+        Ok(resolved) => resolved,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
     };
+
+    // Refuse to call a method the server does not know about.
+    if cli_registry::find(&method).is_none() {
+        let error = json!({
+            "error": {
+                "code": cli_registry::CODE_METHOD_NOT_FOUND,
+                "message": format!("method not found: {method}"),
+            }
+        });
+        println!("{}", serde_json::to_string_pretty(&error).unwrap_or_default());
+        std::process::exit(1);
+    }
 
     // Routing metadata: which window executes the command, and how long the
     // server may wait on the frontend before giving up.
@@ -554,9 +642,14 @@ fn main() {
     std::process::exit(0);
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn args(tokens: &[&str]) -> Vec<String> {
         tokens.iter().map(|t| t.to_string()).collect()
@@ -587,12 +680,6 @@ mod tests {
     fn empty_args_stay_empty() {
         assert_eq!(join_args(&args(&[""])), "");
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
 
     #[test]
     fn single_key_stays_top_level() {
@@ -621,5 +708,67 @@ mod tests {
             build_nested_setting("ui", json!({"fontSize": 15})),
             json!({"ui": {"fontSize": 15}})
         );
+    }
+
+    /// Every CLI shortcut must call a method that the registry knows about.
+    #[test]
+    fn cli_shortcuts_target_registered_methods() {
+        let cases: &[(&[&str], &str)] = &[
+            (&["pane", "list"], "pane.list"),
+            (&["pane", "info", "pane-1"], "pane.info"),
+            (&["pane", "create"], "pane.create"),
+            (&["pane", "create", "--shell", "bash"], "pane.create"),
+            (&["pane", "close", "pane-1"], "pane.close"),
+            (&["pane", "focus", "pane-1"], "pane.focus"),
+            (&["layout", "list"], "layout.list"),
+            (&["layout", "active"], "layout.active"),
+            (&["layout", "activate", "default"], "layout.activate"),
+            (&["layout", "save"], "layout.save"),
+            (&["settings", "get"], "settings.get"),
+            (&["settings", "get", "fontSize"], "settings.get"),
+            (&["settings", "set", "fontSize", "14"], "settings.set"),
+            (&["settings", "schema"], "settings.schema"),
+            (&["shell", "list"], "shell.list"),
+            (&["profile", "list"], "profile.list"),
+            (
+                &["profile", "create", "--name", "work", "--command", "ssh"],
+                "profile.create",
+            ),
+            (
+                &["profile", "update", "work", "--command", "ssh"],
+                "profile.update",
+            ),
+            (&["profile", "delete", "work"], "profile.delete"),
+            (&["terminal", "send-keys", "pane-1", "ls"], "terminal.send-keys"),
+            (&["terminal", "resize", "pane-1", "120", "40"], "terminal.resize"),
+        ];
+
+        for (args, expected) in cases {
+            let argv: Vec<&str> = std::iter::once("vibe99ctl").chain(args.iter().copied()).collect();
+            let cli = Cli::parse_from(argv);
+            let (method, _) = resolve_command(&cli)
+                .unwrap_or_else(|e| panic!("{args:?} did not resolve: {e}"));
+            assert_eq!(method, *expected);
+            assert!(
+                cli_registry::find(&method).is_some(),
+                "{method} is not registered in the method registry"
+            );
+        }
+    }
+
+    /// `call` accepts any registered method and passes the params through.
+    #[test]
+    fn call_passes_params_through() {
+        let cli = Cli::parse_from([
+            "vibe99ctl",
+            "call",
+            "pane.create",
+            "--params",
+            r#"{"shellProfileId":"ssh-prod"}"#,
+        ]);
+        let (method, params) = resolve_command(&cli).expect("call resolves");
+        assert_eq!(method, "pane.create");
+        assert_eq!(params["shellProfileId"], json!("ssh-prod"));
+        assert!(cli_registry::find(&method).is_some());
     }
 }
