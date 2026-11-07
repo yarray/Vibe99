@@ -1,0 +1,1 @@
+`vibe99ctl settings` now validates every change against a shared schema and applies it to the running app immediately — no restart needed. `settings schema` lists every writable key with its type, range and default, and invalid values are rejected with the field name and accepted range (e.g. `fontSize: expected integer 10-24, got 99`).
