@@ -84,6 +84,8 @@ export interface WorkbenchDeps {
   render: (refit?: boolean) => void;
   setPaneActivityAlertEnabled: (paneId: string, enabled: boolean) => void;
   getShellProfiles: () => { id: string; themeId?: string }[];
+  /** Id of the persisted layout this window is running (null before restore). */
+  getActiveLayoutId: () => string | null;
 }
 
 export interface Workbench {
@@ -133,7 +135,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
     layout: layoutInput, terminalSessionDeps, stageEl, paneActivityWatcher,
     paneAlert, tabBar, tabBarState, entryNeedsTabRefresh,
     paneState, setMode, getCurrentMode, scheduleSave, bridge, render: externalRender, setPaneActivityAlertEnabled,
-    getShellProfiles,
+    getShellProfiles, getActiveLayoutId,
   } = deps;
 
   const resolveLayout = typeof layoutInput === 'function'
@@ -476,6 +478,35 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
         const session = sessionMap.get(command.paneId);
         const isReady = session?.isReady() ?? false;
         return ok(isReady);
+      }
+
+      case 'pane.list': {
+        return ok({
+          panes: paneState.getPanes(),
+          focusedPaneId: paneState.getFocusedPaneId(),
+        });
+      }
+
+      case 'pane.info': {
+        const pane = paneState.getPaneById(command.paneId);
+        if (!pane) return fail('not-found');
+        return ok({
+          ...pane,
+          focused: paneState.getFocusedPaneId() === command.paneId,
+          ready: sessionMap.get(command.paneId)?.isReady() ?? false,
+          alerted: paneActivityWatcher.isAlerted(command.paneId),
+        });
+      }
+
+      case 'layout.active': {
+        const layout = resolveLayout();
+        return ok({
+          layoutId: getActiveLayoutId(),
+          name: layout.name,
+          themeId: layout.snapshot().themeId ?? null,
+          paneCount: layout.panes().length,
+          focusedPaneId: layout.focusedPaneId(),
+        });
       }
 
       case 'focus.next': {

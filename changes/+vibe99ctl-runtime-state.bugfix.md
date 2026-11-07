@@ -1,0 +1,1 @@
+vibe99ctl now reports live runtime state: `pane list` sees panes created after launch, `pane info` and `layout active` return the running window's current pane/layout, and `terminal send-keys`/`resize` reach panes in any window (new global `--window` flag). Failed commands exit non-zero, and the server honors the CLI's `--timeout` instead of a fixed 5s wait.

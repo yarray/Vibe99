@@ -17,6 +17,10 @@ struct Cli {
 
     #[arg(long, global = true, default_value = "5")]
     timeout: u64,
+
+    /// Target window label ("main" or a layout id). Defaults to "main".
+    #[arg(long, global = true)]
+    window: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -124,7 +128,9 @@ fn send_request(
             .map_err(|e| format!("cannot connect to Vibe99 at {}: {e}", socket_path.display()))?;
 
         stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(timeout_secs)))
+            // One extra second of grace so the server's structured timeout
+            // error arrives instead of an opaque local read failure.
+            .set_read_timeout(Some(std::time::Duration::from_secs(timeout_secs + 1)))
             .map_err(|e| format!("set timeout: {e}"))?;
 
         let request = json!({
@@ -180,7 +186,7 @@ fn send_request(
             let mut reader = tokio::io::BufReader::new(client);
             let mut line = String::new();
             tokio::time::timeout(
-                std::time::Duration::from_secs(timeout_secs),
+                std::time::Duration::from_secs(timeout_secs + 1),
                 reader.read_line(&mut line)
             ).await
             .map_err(|_| "read timeout".to_string())?
@@ -203,10 +209,15 @@ fn print_result(response: Value) -> ! {
 
     let result = response.get("result").cloned().unwrap_or(Value::Null);
 
+    // Passthrough failures arrive as a CommandResult, not a JSON-RPC error.
+    if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        let reason = result.get("reason").and_then(|v| v.as_str()).unwrap_or("unknown error");
+        eprintln!("Error: {reason}");
+        std::process::exit(1);
+    }
+
     if let Some(inner) = result.get("value") {
         println!("{}", serde_json::to_string_pretty(inner).unwrap_or_default());
-    } else if result.is_object() && result.get("ok").is_some() {
-        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
     } else {
         println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
     }
@@ -280,6 +291,14 @@ fn main() {
             ),
         },
     };
+
+    // Routing metadata: which window executes the command, and how long the
+    // server may wait on the frontend before giving up.
+    let mut params = params;
+    if let Some(window) = &cli.window {
+        params["windowId"] = json!(window);
+    }
+    params["timeoutMs"] = json!(cli.timeout.saturating_mul(1000));
 
     match send_request(&socket_path, &method, params, cli.timeout) {
         Ok(response) => print_result(response),
