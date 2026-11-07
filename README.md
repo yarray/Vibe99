@@ -1,97 +1,3 @@
-## CLI Control (`vibe99ctl`)
-
-`vibe99ctl` talks to a running Vibe99 instance over a local socket (Unix socket,
-Windows named pipe), so scripts and coding agents can drive the workspace
-without touching the UI. Build it next to the app:
-
-```bash
-cargo build --release --bin vibe99ctl --manifest-path src-tauri/Cargo.toml
-```
-
-Then, with Vibe99 running:
-
-```bash
-vibe99ctl pane list
-vibe99ctl layout list
-vibe99ctl layout activate work
-```
-
-### Settings
-
-`settings get` prints the whole `settings.json` (stable key order) or a single
-value; `settings schema` lists every writable key with its type, range and
-default.
-
-```bash
-vibe99ctl settings get                  # full config
-vibe99ctl settings get fontSize         # one value
-vibe99ctl settings schema               # writable keys, ranges, defaults
-```
-
-`settings set` validates the value, persists it, and tells every open window to
-reload and re-apply it — the change is visible immediately, no restart needed
-(WebGL is the exception: it only takes effect after a restart).
-
-```bash
-vibe99ctl settings set fontSize 16                     # terminal font size
-vibe99ctl settings set breathingIntensity intense      # none | mild | intense
-vibe99ctl settings set activityAlertDebounceMs 15000   # alert debounce (ms)
-vibe99ctl settings set fontFamily "Fira Code"          # font family
-vibe99ctl settings set layoutHotkeys --json '{"work": "F1"}'
-vibe99ctl settings set quakeLayouts --json '{"work": {"position": "bottom", "height": 50}}'
-vibe99ctl settings set '{"fontSize": 16, "paneOpacity": 0.9}'   # several at once
-```
-
-Rules:
-
-- A bare key is a writable UI setting (see `settings schema`). Dotted paths
-  reach other sections: `settings get shell.defaultProfile`.
-- Values are parsed according to the field's type, so `fontSize 16` sets an
-  integer while `fontFamily 999` sets the string `"999"`. Pass `--json` to force
-  JSON parsing (needed for objects, arrays and explicit JSON types).
-- Invalid values are rejected with the field name and accepted range — e.g.
-  `fontSize: expected integer 10-24, got 99` — and nothing is written.
-- On success the command prints `{"ok": true, "changed": {...}}` with the values
-  that were applied.
-
-### Profiles
-
-`vibe99ctl` controls a running Vibe99 window over a local socket
-(`$XDG_RUNTIME_DIR/vibe99/vibe99.sock`, or a named pipe on Windows). It is
-designed to be driven by agents and scripts.
-
-```bash
-# tmux resume: ssh in and attach (or create) the "work" session
-vibe99ctl profile create --name work --command ssh --open --args -t host "tmux new -A -s work"
-
-# zellij resume
-vibe99ctl profile create --name zellij --command ssh --open --args -t host "zellij attach --create work"
-
-# The same thing in two steps
-vibe99ctl profile create --name work --command ssh --args '-t host "tmux new -A -s work"'
-vibe99ctl pane create --profile work
-
-vibe99ctl profile list          # alias of `shell list`
-vibe99ctl profile update work --name Work --command ssh --args -t host "tmux new -A -s work"
-vibe99ctl profile delete work
-```
-
-- `--args` consumes everything after it, so put the other flags first. Spell the
-  arguments as a single quoted token when the remote command itself contains
-  quotes (`--args '-t host "tmux new -A -s work"'`); a single token is stored
-  verbatim. With separate tokens, the CLI re-quotes tokens containing spaces
-  before saving.
-- Profiles written by the CLI go through the same settings path as the UI and
-  appear immediately in `profile list`, the **Shell Profiles** modal, and the
-  **Change Profile** menu.
-- Auto-detected profiles (system shells, WSL distributions) are read-only:
-  `profile update` / `profile delete` refuse them, so create a copy under a new
-  id instead.
-- Creating a profile whose id or display name is already in use fails instead
-  of silently overwriting the existing profile.
-- `profile create --open` creates the profile and opens a pane with it in one
-  call; `pane create --profile <id>` does the same in two steps (`--shell` is an
-  alias).
 ## Agent Integration
 
 Vibe99 ships `vibe99ctl`, a CLI that controls a running instance over a local
@@ -109,6 +15,19 @@ instance, and reports whether one is currently reachable.
 
 See [docs/agents.md](./docs/agents.md) for the full guide, and [AGENTS.md](./AGENTS.md)
 for the agent entry point.
+### Agent Enhancements
+
+`vibe99ctl enhance` wires an agent CLI into Vibe99's activity alert: when the agent finishes a turn or waits for your input, its pane lights up. It works whether or not Vibe99 is running, because it edits the agent's own settings rather than Vibe99 state.
+
+```bash
+vibe99ctl enhance list                            # supported agents and their signals
+vibe99ctl enhance install claude-code --dry-run   # show the exact merge, write nothing
+vibe99ctl enhance install claude-code             # merge the hooks into ~/.claude/settings.json
+vibe99ctl enhance doctor                          # app reachable? hooks installed and usable?
+vibe99ctl enhance uninstall claude-code           # remove only the hooks Vibe99 added
+```
+
+Install merges hooks into `~/.claude/settings.json` without touching the rest of the file, backs it up to `settings.json.bak-<timestamp>` first, is idempotent, and refuses to modify a file it cannot parse. See [docs/enhance.md](./docs/enhance.md) for the hook shape, the signal format, and how to add another agent.
 
 ## Project Structure
 
