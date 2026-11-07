@@ -209,6 +209,45 @@ Rules:
 - On success the command prints `{"ok": true, "changed": {...}}` with the values
   that were applied.
 
+### Profiles
+
+`vibe99ctl` controls a running Vibe99 window over a local socket
+(`$XDG_RUNTIME_DIR/vibe99/vibe99.sock`, or a named pipe on Windows). It is
+designed to be driven by agents and scripts.
+
+```bash
+# tmux resume: ssh in and attach (or create) the "work" session
+vibe99ctl profile create --name work --command ssh --open --args -t host "tmux new -A -s work"
+
+# zellij resume
+vibe99ctl profile create --name zellij --command ssh --open --args -t host "zellij attach --create work"
+
+# The same thing in two steps
+vibe99ctl profile create --name work --command ssh --args '-t host "tmux new -A -s work"'
+vibe99ctl pane create --profile work
+
+vibe99ctl profile list          # alias of `shell list`
+vibe99ctl profile update work --name Work --command ssh --args -t host "tmux new -A -s work"
+vibe99ctl profile delete work
+```
+
+- `--args` consumes everything after it, so put the other flags first. Spell the
+  arguments as a single quoted token when the remote command itself contains
+  quotes (`--args '-t host "tmux new -A -s work"'`); a single token is stored
+  verbatim. With separate tokens, the CLI re-quotes tokens containing spaces
+  before saving.
+- Profiles written by the CLI go through the same settings path as the UI and
+  appear immediately in `profile list`, the **Shell Profiles** modal, and the
+  **Change Profile** menu.
+- Auto-detected profiles (system shells, WSL distributions) are read-only:
+  `profile update` / `profile delete` refuse them, so create a copy under a new
+  id instead.
+- Creating a profile whose id or display name is already in use fails instead
+  of silently overwriting the existing profile.
+- `profile create --open` creates the profile and opens a pane with it in one
+  call; `pane create --profile <id>` does the same in two steps (`--shell` is an
+  alias).
+
 ## Project Structure
 
 ```

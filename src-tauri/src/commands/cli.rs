@@ -23,13 +23,15 @@
  *
  * @module commands/cli
  */
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
+
+use super::settings::ShellProfile;
+use super::shell_profile::ShellConfig;
 
 // ---------------------------------------------------------------------------
 // State
@@ -104,12 +106,10 @@ pub fn pid_file_path() -> Result<PathBuf, String> {
 fn write_pid_file() -> Result<(), String> {
     let path = pid_file_path()?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("failed to create PID dir: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("failed to create PID dir: {e}"))?;
     }
     let pid = std::process::id();
-    std::fs::write(&path, pid.to_string())
-        .map_err(|e| format!("failed to write PID file: {e}"))?;
+    std::fs::write(&path, pid.to_string()).map_err(|e| format!("failed to write PID file: {e}"))?;
     Ok(())
 }
 
@@ -269,11 +269,7 @@ struct SettingsUpdate {
 }
 
 /// Handle a "direct" method entirely in Rust without touching the frontend.
-async fn handle_direct(
-    app: &AppHandle,
-    method: &str,
-    params: Value,
-) -> Result<Value, String> {
+async fn handle_direct(app: &AppHandle, method: &str, params: Value) -> Result<Value, String> {
     match method {
         "settings.get" => {
             let config = super::settings::settings_load(app.clone())?;
@@ -293,7 +289,6 @@ async fn handle_direct(
                 .ok_or("'settings' must be a JSON object")?
                 .clone();
             let plan = plan_settings_update(&updates)?;
-
 
             let current = super::settings::settings_load(app.clone())?;
             let current_ui = current.get("ui").cloned().unwrap_or_else(|| Value::Object(Default::default()));
@@ -322,9 +317,33 @@ async fn handle_direct(
             super::layout::layouts_list(app.clone())
                 .map(|v| serde_json::json!({"ok": true, "value": v}))
         }
-        "shell.list" => {
+        "shell.list" | "profile.list" => {
             super::shell_profile::shell_profiles_list(app.clone())
                 .map(|v| serde_json::json!({"ok": true, "value": v}))
+        }
+        "profile.create" => {
+            let (profile, config) = super::shell_profile::profile_create(app.clone(), &params)?;
+            notify_shell_profiles_changed(app);
+            Ok(profile_write_result(&profile, config))
+        }
+        "profile.update" => {
+            let profile_id = params
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'id' param")?;
+            let (profile, config) =
+                super::shell_profile::profile_update(app.clone(), profile_id, &params)?;
+            notify_shell_profiles_changed(app);
+            Ok(profile_write_result(&profile, config))
+        }
+        "profile.delete" => {
+            let profile_id = params
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or("missing 'id' param")?;
+            let (profile, config) = super::shell_profile::profile_delete(app.clone(), profile_id)?;
+            notify_shell_profiles_changed(app);
+            Ok(profile_write_result(&profile, config))
         }
         "terminal.send-keys" => {
             let pane_id = params.get("paneId").and_then(|v| v.as_str()).ok_or("missing 'paneId'")?;
@@ -345,6 +364,27 @@ async fn handle_direct(
         }
         _ => Err(format!("unknown direct method: {method}")),
     }
+}
+
+/// Tell the renderer that a profile write happened outside its own bridge
+/// call, so its cached list (used by the "Change Profile" menu and the profile
+/// pickers) is reloaded instead of staying stale until the next restart.
+fn notify_shell_profiles_changed(app: &AppHandle) {
+    let _ = app.emit("vibe99:shell-profiles-changed", ());
+}
+
+/// Shape a profile write result for the CLI: the affected profile plus the
+/// full sanitized list, so a caller can verify the write in one round trip.
+fn profile_write_result(profile: &ShellProfile, config: ShellConfig) -> Value {
+    let config = serde_json::to_value(&config).unwrap_or(Value::Null);
+    serde_json::json!({
+        "ok": true,
+        "value": {
+            "profile": serde_json::to_value(profile).unwrap_or(Value::Null),
+            "profiles": config.get("profiles").cloned().unwrap_or(Value::Null),
+            "defaultProfile": config.get("defaultProfile").cloned().unwrap_or(Value::Null),
+        }
+    })
 }
 
 fn deep_merge(base: Value, override_val: Value) -> Value {
@@ -924,13 +964,12 @@ async fn process_request(
 /// The frontend calls `invoke("cli_respond", { id, result })` after
 /// `dispatch(command)` completes.
 #[tauri::command]
-pub fn cli_respond(
-    app: AppHandle,
-    id: String,
-    result: Value,
-) -> Result<(), String> {
+pub fn cli_respond(app: AppHandle, id: String, result: Value) -> Result<(), String> {
     let state = app.state::<CliState>();
-    let mut map = state.pending.lock().map_err(|e| format!("lock error: {e}"))?;
+    let mut map = state
+        .pending
+        .lock()
+        .map_err(|e| format!("lock error: {e}"))?;
     if let Some(sender) = map.remove(&id) {
         let _ = sender.send(result);
     }
