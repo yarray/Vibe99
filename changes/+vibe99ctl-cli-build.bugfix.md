@@ -1,0 +1,1 @@
+The Rust backend builds again: a stray brace and duplicated test modules — leftovers from the `describe` refactor — broke the compile of `src-tauri/src/commands/cli.rs` and `src-tauri/src/bin/vibe99ctl.rs` after it landed on `main`.
