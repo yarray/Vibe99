@@ -1,0 +1,1 @@
+The Windows installer now leaves `vibe99ctl` ready to use: it copies the CLI to `%USERPROFILE%\.local\bin` and appends that directory to your user PATH, so a newly opened terminal finds the command without running `install-cli` yourself. `install-cli` is safe to re-run and now reports a PATH update it could not perform instead of exiting successfully.
