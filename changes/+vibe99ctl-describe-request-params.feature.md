@@ -1,0 +1,1 @@
+The `vibe99ctl describe` catalogue now lists the routing parameters every method accepts — `windowId` (which window runs the command) and `timeoutMs` (how long the server waits for the frontend) — under `request.params` and in each method's parameter schema, so an agent can target a window and bound the wait without reading the source.

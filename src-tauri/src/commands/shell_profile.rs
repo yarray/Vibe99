@@ -1,5 +1,6 @@
 use super::settings::{sanitize_config, settings_path, SettingsState, ShellProfile};
 use serde_json::Value;
+use std::collections::HashSet;
 use tauri::{AppHandle, Manager};
 
 /// Friendly names for common shell executables.
@@ -73,6 +74,37 @@ fn write_config(app: &AppHandle, config: &Value) -> Result<(), String> {
     std::fs::write(&path, serialized).map_err(|e| format!("failed to write settings: {e}"))
 }
 
+/// Persist a profile list and its default id, then return the sanitized shell
+/// block that was actually written.
+///
+/// Every profile mutation funnels through here so the file format,
+/// default-profile fallbacks and sanitization stay identical no matter which
+/// caller performed the write (UI bridge commands or the CLI server).
+fn persist_shell_config(
+    app: &AppHandle,
+    mut config: Value,
+    profiles: Vec<ShellProfile>,
+    default_profile: String,
+) -> Result<ShellConfig, String> {
+    if let Some(obj) = config.as_object_mut() {
+        obj.insert(
+            "shell".to_string(),
+            serde_json::json!({
+                "profiles": profiles,
+                "defaultProfile": default_profile,
+            }),
+        );
+    }
+
+    let sanitized = sanitize_config(&config);
+    write_config(app, &sanitized)?;
+
+    Ok(ShellConfig {
+        profiles: extract_profiles(&sanitized),
+        default_profile: extract_default_profile(&sanitized),
+    })
+}
+
 fn extract_profiles(config: &Value) -> Vec<ShellProfile> {
     config
         .get("shell")
@@ -118,32 +150,13 @@ pub fn shell_profile_set(app: AppHandle, profile_id: String) -> Result<ShellConf
         .lock()
         .map_err(|e| format!("settings lock poisoned: {e}"))?;
 
-    let (mut config, mut shell_config) = read_shell_config(&app)?;
+    let (config, shell_config) = read_shell_config(&app)?;
 
     if !shell_config.profiles.iter().any(|p| p.id == profile_id) {
         return Err(format!("profile not found: {profile_id}"));
     }
 
-    shell_config.default_profile = profile_id;
-
-    // Patch the shell block in the config and re-sanitize for consistency.
-    if let Some(obj) = config.as_object_mut() {
-        obj.insert(
-            "shell".to_string(),
-            serde_json::json!({
-                "profiles": shell_config.profiles,
-                "defaultProfile": shell_config.default_profile,
-            }),
-        );
-    }
-
-    let sanitized = sanitize_config(&config);
-    write_config(&app, &sanitized)?;
-
-    Ok(ShellConfig {
-        profiles: extract_profiles(&sanitized),
-        default_profile: extract_default_profile(&sanitized),
-    })
+    persist_shell_config(&app, config, shell_config.profiles, profile_id)
 }
 
 /// Add a new shell profile. If a profile with the same `id` already
@@ -159,7 +172,7 @@ pub fn shell_profile_add(app: AppHandle, profile: Value) -> Result<ShellConfig, 
         .lock()
         .map_err(|e| format!("settings lock poisoned: {e}"))?;
 
-    let (mut config, mut shell_config) = read_shell_config(&app)?;
+    let (config, mut shell_config) = read_shell_config(&app)?;
 
     let new_profile = ShellProfile::sanitize(&profile)
         .ok_or("invalid profile: 'id' and 'command' are required")?;
@@ -180,23 +193,12 @@ pub fn shell_profile_add(app: AppHandle, profile: Value) -> Result<ShellConfig, 
         shell_config.default_profile = shell_config.profiles[0].id.clone();
     }
 
-    if let Some(obj) = config.as_object_mut() {
-        obj.insert(
-            "shell".to_string(),
-            serde_json::json!({
-                "profiles": shell_config.profiles,
-                "defaultProfile": shell_config.default_profile,
-            }),
-        );
-    }
-
-    let sanitized = sanitize_config(&config);
-    write_config(&app, &sanitized)?;
-
-    Ok(ShellConfig {
-        profiles: extract_profiles(&sanitized),
-        default_profile: extract_default_profile(&sanitized),
-    })
+    persist_shell_config(
+        &app,
+        config,
+        shell_config.profiles,
+        shell_config.default_profile,
+    )
 }
 
 /// Remove a shell profile by `profile_id`.
@@ -211,7 +213,7 @@ pub fn shell_profile_remove(app: AppHandle, profile_id: String) -> Result<ShellC
         .lock()
         .map_err(|e| format!("settings lock poisoned: {e}"))?;
 
-    let (mut config, mut shell_config) = read_shell_config(&app)?;
+    let (config, mut shell_config) = read_shell_config(&app)?;
 
     let before_len = shell_config.profiles.len();
     shell_config.profiles.retain(|p| p.id != profile_id);
@@ -229,23 +231,12 @@ pub fn shell_profile_remove(app: AppHandle, profile_id: String) -> Result<ShellC
             .unwrap_or_default();
     }
 
-    if let Some(obj) = config.as_object_mut() {
-        obj.insert(
-            "shell".to_string(),
-            serde_json::json!({
-                "profiles": shell_config.profiles,
-                "defaultProfile": shell_config.default_profile,
-            }),
-        );
-    }
-
-    let sanitized = sanitize_config(&config);
-    write_config(&app, &sanitized)?;
-
-    Ok(ShellConfig {
-        profiles: extract_profiles(&sanitized),
-        default_profile: extract_default_profile(&sanitized),
-    })
+    persist_shell_config(
+        &app,
+        config,
+        shell_config.profiles,
+        shell_config.default_profile,
+    )
 }
 
 /// Reorder shell profiles to match the given list of profile IDs.
@@ -255,14 +246,17 @@ pub fn shell_profile_remove(app: AppHandle, profile_id: String) -> Result<ShellC
 /// and are appended at the end. This preserves auto-detected profiles
 /// that may not be part of the user's explicit ordering.
 #[tauri::command]
-pub fn shell_profiles_reorder(app: AppHandle, profile_ids: Vec<String>) -> Result<ShellConfig, String> {
+pub fn shell_profiles_reorder(
+    app: AppHandle,
+    profile_ids: Vec<String>,
+) -> Result<ShellConfig, String> {
     let state = app.state::<SettingsState>();
     let _guard = state
         .lock
         .lock()
         .map_err(|e| format!("settings lock poisoned: {e}"))?;
 
-    let (mut config, mut shell_config) = read_shell_config(&app)?;
+    let (config, shell_config) = read_shell_config(&app)?;
 
     // Build the reordered list: first the explicitly ordered profiles,
     // then any remaining ones in their original order.
@@ -277,25 +271,7 @@ pub fn shell_profiles_reorder(app: AppHandle, profile_ids: Vec<String>) -> Resul
     // Append any profiles not in the reorder list (retain original order)
     reordered.append(&mut remaining);
 
-    shell_config.profiles = reordered;
-
-    if let Some(obj) = config.as_object_mut() {
-        obj.insert(
-            "shell".to_string(),
-            serde_json::json!({
-                "profiles": shell_config.profiles,
-                "defaultProfile": shell_config.default_profile,
-            }),
-        );
-    }
-
-    let sanitized = sanitize_config(&config);
-    write_config(&app, &sanitized)?;
-
-    Ok(ShellConfig {
-        profiles: extract_profiles(&sanitized),
-        default_profile: extract_default_profile(&sanitized),
-    })
+    persist_shell_config(&app, config, reordered, shell_config.default_profile)
 }
 
 /// Detect available shells on the system and return them as profiles.
@@ -333,4 +309,329 @@ pub fn shell_profiles_detect() -> Vec<ShellProfile> {
     }
 
     profiles
+}
+
+// ----------------------------------------------------------------
+// Validated write operations for the CLI server
+// ----------------------------------------------------------------
+//
+// The UI editor is an upsert: saving replaces the profile with the same id and
+// the list redraws immediately, so the user sees the result. A CLI caller has
+// no such feedback, so its write methods validate first — a create that would
+// overwrite an existing profile or shadow an auto-detected shell is an error
+// instead of a silent replace.
+//
+// These functions take the same settings lock and go through the same
+// `persist_shell_config` path as the Tauri commands above; only the
+// preconditions differ.
+
+/// Auto-detected shells are environment probes, not settings entries. The UI
+/// shows them as read-only, so a CLI write must refuse instead of shadowing
+/// the detected shell with a settings profile of the same id.
+fn auto_detected_error(id: &str) -> String {
+    format!(
+        "profile '{id}' is auto-detected and read-only; create a copy under a new id instead (e.g. '{id}-custom')"
+    )
+}
+
+/// All profiles a user can see: settings profiles plus auto-detected shells
+/// that no settings profile shadows. Mirrors the merge the renderer performs.
+fn visible_profiles<'a>(
+    profiles: &'a [ShellProfile],
+    detected: &'a [ShellProfile],
+) -> Vec<&'a ShellProfile> {
+    let user_ids: HashSet<&str> = profiles.iter().map(|p| p.id.as_str()).collect();
+    profiles
+        .iter()
+        .chain(
+            detected
+                .iter()
+                .filter(|p| !user_ids.contains(p.id.as_str())),
+        )
+        .collect()
+}
+
+/// Return the id of a visible profile already using `name` (case-insensitive),
+/// ignoring `exclude_id`. Profiles with an empty name display their id, so the
+/// display name is what must stay unique.
+fn name_conflict(
+    profiles: &[ShellProfile],
+    detected: &[ShellProfile],
+    exclude_id: Option<&str>,
+    name: &str,
+) -> Option<String> {
+    if name.is_empty() {
+        return None;
+    }
+    visible_profiles(profiles, detected)
+        .into_iter()
+        .filter(|p| Some(p.id.as_str()) != exclude_id)
+        .find(|p| p.display_name().eq_ignore_ascii_case(name))
+        .map(|p| p.id.clone())
+}
+
+fn existing_user_profile<'a>(profiles: &'a [ShellProfile], id: &str) -> Option<&'a ShellProfile> {
+    profiles.iter().find(|p| p.id == id)
+}
+
+/// Create a profile from a CLI request (`{id?, name?, command, args?, themeId?}`).
+///
+/// The id is derived from the name when omitted, matching what the UI does when
+/// the user types a name. Returns the created profile together with the
+/// sanitized shell block.
+pub fn profile_create(
+    app: AppHandle,
+    request: &Value,
+) -> Result<(ShellProfile, ShellConfig), String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let (config, shell_config) = read_shell_config(&app)?;
+
+    if request
+        .get("command")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+    {
+        return Err("profile needs a non-empty 'command'".to_string());
+    }
+
+    let name = request
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .unwrap_or("");
+    let id = match request
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(id) => id.to_string(),
+        None => crate::pty::display_name_to_id(name),
+    };
+    if id.is_empty() {
+        return Err("profile needs an id or a name".to_string());
+    }
+
+    let candidate_json = serde_json::json!({
+        "id": id,
+        "name": name,
+        "command": request.get("command").cloned().unwrap_or(Value::Null),
+        "args": request.get("args").cloned().unwrap_or(Value::Null),
+        "themeId": request.get("themeId").cloned().unwrap_or(Value::Null),
+    });
+    let candidate = ShellProfile::sanitize(&candidate_json)
+        .ok_or("invalid profile: 'id' and 'command' are required")?;
+
+    if existing_user_profile(&shell_config.profiles, &candidate.id).is_some() {
+        return Err(format!(
+            "profile id '{}' already exists; use `profile update {}` to change it",
+            candidate.id, candidate.id
+        ));
+    }
+
+    let detected = shell_profiles_detect();
+    if detected.iter().any(|p| p.id == candidate.id) {
+        return Err(auto_detected_error(&candidate.id));
+    }
+    if let Some(owner) = name_conflict(
+        &shell_config.profiles,
+        &detected,
+        None,
+        candidate.display_name(),
+    ) {
+        return Err(format!(
+            "profile name '{}' is already used by profile '{owner}'",
+            candidate.display_name()
+        ));
+    }
+
+    let mut profiles = shell_config.profiles;
+    let default_profile = if shell_config.default_profile.is_empty() {
+        candidate.id.clone()
+    } else {
+        shell_config.default_profile
+    };
+    profiles.push(candidate.clone());
+
+    let config = persist_shell_config(&app, config, profiles, default_profile)?;
+    Ok((candidate, config))
+}
+
+/// Update an existing profile. `patch` may contain `name`, `command`, `args`
+/// and `themeId`; keys that are absent or null keep their current value. The
+/// path id is authoritative — ids are not renamable.
+pub fn profile_update(
+    app: AppHandle,
+    profile_id: &str,
+    patch: &Value,
+) -> Result<(ShellProfile, ShellConfig), String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let (config, shell_config) = read_shell_config(&app)?;
+
+    let existing = match existing_user_profile(&shell_config.profiles, profile_id) {
+        Some(profile) => profile.clone(),
+        None => {
+            if shell_profiles_detect().iter().any(|p| p.id == profile_id) {
+                return Err(auto_detected_error(profile_id));
+            }
+            return Err(format!("profile not found: {profile_id}"));
+        }
+    };
+
+    let mut merged =
+        serde_json::to_value(&existing).map_err(|e| format!("serialize profile: {e}"))?;
+    if let (Some(obj), Some(patch_obj)) = (merged.as_object_mut(), patch.as_object()) {
+        for (key, value) in patch_obj {
+            if key == "id" || value.is_null() {
+                continue;
+            }
+            obj.insert(key.clone(), value.clone());
+        }
+    }
+    merged["id"] = Value::String(profile_id.to_string());
+
+    let updated = ShellProfile::sanitize(&merged)
+        .ok_or("invalid profile: 'command' must be a non-empty string")?;
+
+    let detected = shell_profiles_detect();
+    if let Some(owner) = name_conflict(
+        &shell_config.profiles,
+        &detected,
+        Some(profile_id),
+        updated.display_name(),
+    ) {
+        return Err(format!(
+            "profile name '{}' is already used by profile '{owner}'",
+            updated.display_name()
+        ));
+    }
+
+    let profiles: Vec<ShellProfile> = shell_config
+        .profiles
+        .into_iter()
+        .map(|p| {
+            if p.id == profile_id {
+                updated.clone()
+            } else {
+                p
+            }
+        })
+        .collect();
+
+    let config = persist_shell_config(&app, config, profiles, shell_config.default_profile)?;
+    Ok((updated, config))
+}
+
+/// Delete a settings profile. Auto-detected shells are rejected; they are not
+/// settings entries and deleting one from the UI is impossible too.
+pub fn profile_delete(
+    app: AppHandle,
+    profile_id: &str,
+) -> Result<(ShellProfile, ShellConfig), String> {
+    let state = app.state::<SettingsState>();
+    let _guard = state
+        .lock
+        .lock()
+        .map_err(|e| format!("settings lock poisoned: {e}"))?;
+
+    let (config, shell_config) = read_shell_config(&app)?;
+
+    let removed = match existing_user_profile(&shell_config.profiles, profile_id) {
+        Some(profile) => profile.clone(),
+        None => {
+            if shell_profiles_detect().iter().any(|p| p.id == profile_id) {
+                return Err(auto_detected_error(profile_id));
+            }
+            return Err(format!("profile not found: {profile_id}"));
+        }
+    };
+
+    let profiles: Vec<ShellProfile> = shell_config
+        .profiles
+        .into_iter()
+        .filter(|p| p.id != profile_id)
+        .collect();
+    let default_profile = if shell_config.default_profile == profile_id {
+        profiles.first().map(|p| p.id.clone()).unwrap_or_default()
+    } else {
+        shell_config.default_profile
+    };
+
+    let config = persist_shell_config(&app, config, profiles, default_profile)?;
+    Ok((removed, config))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn profile(id: &str, name: &str) -> ShellProfile {
+        ShellProfile {
+            id: id.to_string(),
+            name: name.to_string(),
+            command: "bash".to_string(),
+            args: String::new(),
+            theme_id: String::new(),
+        }
+    }
+
+    #[test]
+    fn name_conflict_skips_the_profile_being_updated() {
+        let profiles = vec![profile("work", "Work"), profile("home", "Home")];
+
+        assert_eq!(name_conflict(&profiles, &[], Some("home"), "home"), None);
+        assert_eq!(
+            name_conflict(&profiles, &[], Some("home"), "WORK"),
+            Some("work".to_string())
+        );
+    }
+
+    #[test]
+    fn empty_names_fall_back_to_the_id_for_conflict_checks() {
+        let profiles = vec![profile("work", "")];
+
+        // "work" displays as "work", so another visible profile cannot be
+        // called "work" even though the stored name is empty.
+        assert_eq!(
+            name_conflict(&profiles, &[], None, "Work"),
+            Some("work".to_string())
+        );
+    }
+
+    #[test]
+    fn auto_detected_profiles_participate_in_name_conflicts() {
+        let detected = vec![profile("bash", "Bash")];
+
+        assert_eq!(
+            name_conflict(&[], &detected, None, "bash"),
+            Some("bash".to_string())
+        );
+    }
+
+    #[test]
+    fn settings_entry_shadows_detected_profile() {
+        let profiles = vec![profile("bash", "My Bash")];
+        let detected = vec![profile("bash", "Bash"), profile("zsh", "Zsh")];
+
+        let visible: Vec<&str> = visible_profiles(&profiles, &detected)
+            .into_iter()
+            .map(|p| p.id.as_str())
+            .collect();
+
+        // The auto-detected "bash" is shadowed by the settings entry, but the
+        // unshadowed "zsh" remains visible.
+        assert_eq!(visible, vec!["bash", "zsh"]);
+    }
 }

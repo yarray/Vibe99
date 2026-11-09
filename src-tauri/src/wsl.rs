@@ -139,7 +139,7 @@ fn decode_utf16le(bytes: &[u8]) -> String {
 
 /// Convert a Windows path to its WSL equivalent.
 ///
-/// ```
+/// ```text
 /// C:\Users\foo     → /mnt/c/Users/foo
 /// C:/Users/foo     → /mnt/c/Users/foo
 /// D:\project       → /mnt/d/project
@@ -192,7 +192,7 @@ pub fn windows_to_wsl_path(windows_path: &str) -> Option<String> {
 
 /// Convert a WSL path back to a Windows path.
 ///
-/// ```
+/// ```text
 /// /mnt/c/Users/foo → C:\Users\foo
 /// ```
 ///
@@ -212,7 +212,7 @@ pub fn wsl_to_windows_path(wsl_path: &str) -> Option<String> {
 
 /// Convert a Linux path inside WSL to a Windows UNC path.
 ///
-/// ```
+/// ```text
 /// wsl_path_to_unc("Ubuntu", "/home/user/projects")
 /// → \\wsl.localhost\Ubuntu\home\user\projects
 /// ```

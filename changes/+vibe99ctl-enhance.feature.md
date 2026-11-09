@@ -1,0 +1,1 @@
+`vibe99ctl enhance install claude-code` wires Claude Code's Stop and Notification hooks into Vibe99's breathing activity alert, so a finished turn lights its pane. Installs are backed up, idempotent, documented in `vibe99ctl enhance list`, and reversible with `enhance uninstall`.

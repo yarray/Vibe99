@@ -138,6 +138,25 @@ export interface QueryTerminalIsReadyCommand {
   paneId: string;
 }
 
+/**
+ * List the panes this window is currently running (runtime state, not the
+ * persisted layout snapshot). Answered by the CLI bridge.
+ */
+export interface QueryPaneListCommand {
+  type: 'pane.list';
+}
+
+/** Full runtime detail for one pane. Answered by the CLI bridge. */
+export interface QueryPaneInfoCommand {
+  type: 'pane.info';
+  paneId: string;
+}
+
+/** Which layout this window is running. Answered by the CLI bridge. */
+export interface QueryLayoutActiveCommand {
+  type: 'layout.active';
+}
+
 // ---------------------------------------------------------------------------
 // Focus commands
 // ---------------------------------------------------------------------------
@@ -230,6 +249,9 @@ export type AppCommand =
   | TerminalChangeShellCommand
   | QueryTerminalHasSelectionCommand
   | QueryTerminalIsReadyCommand
+  | QueryPaneListCommand
+  | QueryPaneInfoCommand
+  | QueryLayoutActiveCommand
   | FocusNextCommand
   | FocusPrevCommand
   | FocusLeftCommand
