@@ -411,7 +411,6 @@ fn handle_terminal_resize(app: &AppHandle, params: Value) -> Result<Value, RpcEr
         .map_err(RpcError::internal)?;
     Ok(serde_json::json!({"ok": true}))
 }
-}
 
 fn deep_merge(base: Value, override_val: Value) -> Value {
     match (base, override_val) {
@@ -549,7 +548,7 @@ fn sort_json_keys(value: Value) -> Value {
 }
 
 #[cfg(test)]
-mod tests {
+mod settings_tests {
     use super::*;
     use serde_json::json;
 

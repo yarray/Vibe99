@@ -278,7 +278,10 @@ vibe99ctl pane list                       # call a method
 
 `vibe99ctl describe` is the machine-readable catalogue of the whole surface:
 methods, parameters, examples and error codes. It works without a running
-instance, and reports whether one is currently reachable.
+instance, and reports whether one is currently reachable. Each method also
+declares its route — answered by the Rust backend or by the frontend from the
+live runtime state — and the `--window` / `--timeout` flags select the target
+window and the wait budget.
 
 See [docs/agents.md](./docs/agents.md) for the full guide, and [AGENTS.md](./AGENTS.md)
 for the agent entry point.

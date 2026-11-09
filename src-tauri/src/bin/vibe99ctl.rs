@@ -912,7 +912,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod tests {
+mod version_tests {
     /// `--version` reports the Cargo package version, which is the same
     /// source the Tauri bundle uses. This test fails if a version bump
     /// updates one without the other.
