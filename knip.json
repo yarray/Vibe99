@@ -12,6 +12,7 @@
     "e2e/tests/context-menu.spec.js",
     "e2e/tests/float-window.spec.js",
     "e2e/tests/hooks.spec.js",
+    "e2e/tests/install-cli-panel.spec.js",
     "e2e/tests/layout.spec.js",
     "e2e/tests/pane-management.spec.js",
     "e2e/tests/pty-lifecycle.spec.js",
