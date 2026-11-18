@@ -1,1 +1,0 @@
-Add pane with profile selection: click the ▼ arrow next to the + button to open a dropdown of shell profiles and create a new pane using the selected profile. The + button itself still creates a pane with the default profile. (VIB-53)

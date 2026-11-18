@@ -1,1 +1,0 @@
-Fixed "switches terminal shell from context menu" e2e test timeout in Docker/Xvfb by replacing unreliable `moveTo()` hover with JS-forced submenu display (CSS `:hover` doesn't fire in headless WebKitGTK).

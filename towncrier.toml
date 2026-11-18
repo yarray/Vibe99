@@ -10,18 +10,22 @@ issue_pattern = "\\+[a-z0-9][a-z0-9._-]*"
 
 [[tool.towncrier.type]]
 directory = "feature"
+showcontent = true
 name = "Added"
 
 [[tool.towncrier.type]]
 directory = "bugfix"
+showcontent = true
 name = "Fixed"
 
 [[tool.towncrier.type]]
 directory = "doc"
+showcontent = true
 name = "Documentation"
 
 [[tool.towncrier.type]]
 directory = "removal"
+showcontent = true
 name = "Removed"
 
 [[tool.towncrier.type]]

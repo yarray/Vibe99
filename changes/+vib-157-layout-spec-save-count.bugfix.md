@@ -1,1 +1,0 @@
-Fixed a race condition in `clearAllLayouts()` E2E helper that caused layout count mismatches in `layout.spec.js`. The helper now flushes pending frontend layout saves and resets the window layout binding before deleting backend layouts, preventing stale `windowLayoutId` from recreating a deleted layout.

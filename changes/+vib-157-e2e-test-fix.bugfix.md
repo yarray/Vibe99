@@ -1,3 +1,0 @@
-## Fix e2e tests for Lucide icon migration in shell-profile.spec.js
-
-Update `clickProfileAction` calls to match button text labels (`'Delete'`, `'Clone'`, `'Set as default'`) instead of Unicode symbols (`'✕'`, `'⧉'`, `'★'`) that are no longer used after Lucide icon migration. The `clickProfileAction` helper already supports `title.includes(label)` matching, so the helper function itself required no changes.

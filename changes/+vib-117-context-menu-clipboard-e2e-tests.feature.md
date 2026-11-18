@@ -1,1 +1,0 @@
-Added E2E tests for right-click context menu and clipboard operations: terminal context menu (Copy, Paste, Paste Image, Change Color, Background activity alert, Select All, Change Profile), tab context menu (Change Color, Rename Tab, Close Tab), and keyboard shortcuts (Ctrl+Shift+C for copy, Ctrl+Shift+V for paste).

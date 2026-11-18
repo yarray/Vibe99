@@ -1,1 +1,0 @@
-Extracted tab bar rendering, drag-and-drop reordering, and inline renaming logic from `renderer.js` into a new `tab-bar.js` module (VIB-152). This is part of the ongoing frontend refactoring to improve code organization and maintainability.

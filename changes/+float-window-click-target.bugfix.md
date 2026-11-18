@@ -1,1 +1,0 @@
-Float window pane blocks now correctly resolve click targets via delegated event handling (data-pane-id), fixing a bug where reusing DOM blocks after a mid-array pane insertion left stale click handlers referencing the wrong pane.

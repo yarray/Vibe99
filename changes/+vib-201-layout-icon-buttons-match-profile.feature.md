@@ -1,1 +1,0 @@
-Increase Layout sidebar item action button icon size from 12px to 14px and add `aria-label` attributes, matching the Profile editing panel icon button style from VIB-200. Buttons now use `icon()` directly (consistent with Profile panel) instead of `setIcon()`.

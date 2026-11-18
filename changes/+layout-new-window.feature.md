@@ -1,1 +1,0 @@
-Layout switching now opens a new window instead of replacing panes in the current window. The target layout is passed via URL query parameter (`?layoutId=...`) so the new window loads it automatically on startup. Updated dropdown tooltips, Command Palette labels, and Layout Manager modal to reflect the new behavior.

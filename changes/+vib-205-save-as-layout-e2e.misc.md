@@ -1,1 +1,0 @@
-Added e2e test for "Save As Layout" behavior. Test verifies that clicking "default" in the layouts dropdown after using "Save Layout As..." opens a new window with the default layout instead of reusing the main window (VIB-205).

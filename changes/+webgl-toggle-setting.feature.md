@@ -1,1 +1,0 @@
-Add a "3D acceleration" toggle in settings to control whether the WebGL renderer is used. Disabling it falls back to the canvas renderer, which avoids CJK glyph-atlas rendering glitches on some systems.

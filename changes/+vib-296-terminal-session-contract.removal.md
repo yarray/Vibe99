@@ -1,1 +1,0 @@
-Remove `terminalHost`, `terminal`, and `fitAddon` from the exported `TerminalSession` interface. These xterm.js implementation details are now internal to `terminal-session.ts`. External code uses only the public domain methods (I/O, clipboard, sizing, shell management, state queries).

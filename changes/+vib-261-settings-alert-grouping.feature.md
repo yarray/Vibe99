@@ -1,1 +1,0 @@
-Settings UI reorganized with section titles: "Appearance" groups font/pane/display settings, "Alert Settings" groups breathing alert and debounce options. Row spacing increased from 8px to 12px for better readability.

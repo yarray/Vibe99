@@ -1,1 +1,0 @@
-Background panes now light up immediately when the running program sends an explicit notification (terminal bell, or iTerm2/xterm/kitty OSC notifications), instead of waiting for the 30-second quiet period.

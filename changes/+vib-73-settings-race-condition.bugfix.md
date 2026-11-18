@@ -1,1 +1,0 @@
-Fixed a race condition where settings could occasionally load stale values after toggling the settings panel. Added a `SettingsState` mutex to serialize all `settings.json` read/write operations on the backend, and ensured the settings UI is refreshed from in-memory state every time the panel is opened.

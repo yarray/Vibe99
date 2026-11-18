@@ -1,1 +1,0 @@
-Add GitHub Actions E2E test workflow (`e2e.yml`) with `workflow_dispatch` and weekly schedule triggers. The workflow builds the Tauri app, installs `tauri-driver`, and runs the full E2E test suite on Linux. Build bundles and failure screenshots are uploaded as artifacts.
