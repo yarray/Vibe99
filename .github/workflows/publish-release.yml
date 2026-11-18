@@ -1,0 +1,58 @@
+name: Publish Release
+
+# Publishing is a manual step. The tag push (see release.yml) builds every
+# platform's artifacts into a draft release so they can be inspected first;
+# this workflow turns that draft into a published release once someone has.
+#
+# The release notes come from CHANGELOG.md, so it must already contain a
+# `## <version>` section for the tag — generate it with
+# `python3 -m towncrier build --yes --version <version>` and commit it.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag of the draft release to publish (e.g. v0.23.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Require a draft release for the tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          is_draft=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
+          if [ "$is_draft" != "true" ]; then
+            echo "Release $TAG is not a draft (already published?). Nothing to do."
+            exit 1
+          fi
+
+      - name: Extract release notes
+        env:
+          TAG: ${{ inputs.tag }}
+        run: node ./scripts/extract-release-notes.mjs "$TAG" > release-notes.md
+
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release edit "$TAG" --notes-file release-notes.md --draft=false

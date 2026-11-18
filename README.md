@@ -38,7 +38,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 | Platform | Formats |
 |----------|---------|
 | Linux | `.AppImage`, `.deb` |
-| Windows | `.msi`, `.exe` (portable) |
+| Windows | `.exe` (NSIS installer) |
 
 macOS builds are paused until signing and notarization demand justifies the cost.
 
@@ -251,14 +251,14 @@ vibe99ctl profile delete work
 ### Installing vibe99ctl
 
 `vibe99ctl` ships with every Vibe99 install and reports the same version as the
-app. Where you find it depends on the install method:
+app. The installers put it on PATH themselves, so a fresh terminal can run it
+right after installing:
 
 | How Vibe99 was installed | Where `vibe99ctl` comes from |
 |---|---|
 | `.deb` package | Ready to use — installed to `/usr/bin/vibe99ctl` |
-| AppImage | Embedded inside the image: run `Vibe99-*.AppImage --appimage-extract` and use `squashfs-root/usr/bin/vibe99ctl`, or run `vibe99ctl install-cli` once |
-| Windows installer | Not placed on PATH — run `vibe99ctl install-cli` once; it adds the target directory to your user PATH |
-| Any copy (including extracted AppImage) | `vibe99ctl install-cli` copies it to `~/.local/bin/vibe99ctl` (idempotent, safe to re-run) |
+| Windows installer | Copied to `%USERPROFILE%\.local\bin\vibe99ctl.exe` and that directory is appended to your user PATH — open a new terminal to use it. If the installer could not do it (it says so in the last step), run `"%LOCALAPPDATA%\Vibe99\vibe99ctl.exe" install-cli` once |
+| AppImage | Embedded inside the image at `usr/bin/vibe99ctl`: run `./Vibe99-*.AppImage --appimage-extract` and use `squashfs-root/usr/bin/vibe99ctl`, or run `install-cli` from that copy to get it onto your PATH |
 
 `install-cli` is the fallback for every platform and install method: it works
 from any copy of the binary, overwrites its previous install, and never touches

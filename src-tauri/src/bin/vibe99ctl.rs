@@ -558,12 +558,20 @@ fn build_nested_setting(key: &str, value: Value) -> Value {
 /// Install this binary into `~/.local/bin` (creating the directory if
 /// needed) so it stays on PATH regardless of how Vibe99 itself was
 /// installed. Overwrites any previous copy, so re-running is safe.
+///
+/// The Windows installer runs this same command, so "already installed" and
+/// "PATH already correct" are normal outcomes, not failures.
 fn install_cli() -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| format!("cannot locate current executable: {e}"))?;
 
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .ok_or("cannot determine home directory (HOME/USERPROFILE not set)")?;
+    // On Windows the target is the user whose PATH gets the new entry, which
+    // is what USERPROFILE names. HOME can be a POSIX path inherited from a
+    // MSYS shell (`/home/me`, read as `C:\home\me`), so it is only the fallback.
+    #[cfg(windows)]
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+    #[cfg(not(windows))]
+    let home = std::env::var_os("HOME");
+    let home = home.ok_or("cannot determine home directory (HOME/USERPROFILE not set)")?;
     let bin_dir = PathBuf::from(home).join(".local").join("bin");
     std::fs::create_dir_all(&bin_dir).map_err(|e| format!("cannot create {}: {e}", bin_dir.display()))?;
 
@@ -573,7 +581,7 @@ fn install_cli() -> Result<String, String> {
     let file_name = "vibe99ctl";
 
     let dest = bin_dir.join(file_name);
-    if exe != dest {
+    if !is_same_file(&exe, &dest) {
         let tmp = bin_dir.join(format!(".{file_name}.tmp"));
         std::fs::copy(&exe, &tmp).map_err(|e| format!("cannot copy executable: {e}"))?;
         #[cfg(unix)]
@@ -585,18 +593,53 @@ fn install_cli() -> Result<String, String> {
         std::fs::rename(&tmp, &dest).map_err(|e| format!("cannot move into place: {e}"))?;
     }
 
+    // On Windows the point of the command is being on PATH, so a failure to
+    // register the directory is an error, not a footnote: the installer relies
+    // on the exit code to tell the user what to do.
     #[cfg(windows)]
-    let path_note = match add_to_user_path(&bin_dir) {
-        Ok(note) => note,
-        Err(e) => {
-            eprintln!("Warning: {e}");
-            format!("\nnote: add {} to your PATH to use vibe99ctl", bin_dir.display())
-        }
-    };
+    let path_note = add_to_user_path(&bin_dir)?;
     #[cfg(not(windows))]
     let path_note = String::new();
 
     Ok(format!("vibe99ctl {} installed to {}{path_note}", env!("CARGO_PKG_VERSION"), dest.display()))
+}
+
+/// Whether `a` and `b` name the same file, tolerating the different spellings
+/// Windows hands out (`C:\Users\x\..\x\bin\vibe99ctl.exe`, 8.3 names, case).
+/// Re-copying onto a running executable fails on Windows, so this check is what
+/// keeps `install-cli` idempotent there.
+fn is_same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        // `b` does not exist yet: nothing to overwrite.
+        _ => false,
+    }
+}
+
+/// The value `current` should become so that `dir` is on the PATH, or `None`
+/// when it already is.
+///
+/// Windows PATH entries are case-insensitive and may carry a trailing
+/// backslash, so both are normalised before comparing. Pure string policy: the
+/// registry read and write happen in [`add_to_user_path`].
+#[cfg(any(windows, test))]
+fn with_path_entry(current: &str, dir: &str) -> Option<String> {
+    let normalise = |entry: &str| entry.trim().trim_end_matches('\\').to_lowercase();
+    let wanted = normalise(dir);
+
+    if current
+        .split(';')
+        .any(|entry| !entry.trim().is_empty() && normalise(entry) == wanted)
+    {
+        return None;
+    }
+
+    let trimmed = current.trim().trim_end_matches(';');
+    Some(if trimmed.is_empty() {
+        dir.to_string()
+    } else {
+        format!("{trimmed};{dir}")
+    })
 }
 
 /// Append `bin_dir` to the user PATH (HKCU\Environment) if not already
@@ -629,18 +672,12 @@ fn add_to_user_path(bin_dir: &std::path::Path) -> Result<String, String> {
         })
         .unwrap_or_default();
 
-    let present = current
-        .split(';')
-        .any(|entry| entry.trim_end_matches('\\').eq_ignore_ascii_case(&dir));
-    if present {
+    let Some(new_value) = with_path_entry(&current, &dir) else {
         return Ok(String::new());
-    }
-
-    let new_value = if current.is_empty() {
-        dir.clone()
-    } else {
-        format!("{current};{dir}")
     };
+
+    // Keep the value type: rewriting an expanded PATH as REG_SZ would freeze
+    // every %VAR% in it at its current value.
     let new_raw = winreg::RegValue {
         vtype: raw.map(|v| v.vtype).unwrap_or(REG_SZ),
         bytes: new_value
@@ -908,6 +945,46 @@ mod tests {
         assert_eq!(method, "pane.create");
         assert_eq!(params["shellProfileId"], json!("ssh-prod"));
         assert!(cli_registry::find(&method).is_some());
+    }
+
+    #[test]
+    fn path_entry_is_appended_once() {
+        assert_eq!(
+            with_path_entry(r"C:\Windows;C:\Windows\System32", r"C:\Users\me\.local\bin"),
+            Some(r"C:\Windows;C:\Windows\System32;C:\Users\me\.local\bin".to_string())
+        );
+    }
+
+    #[test]
+    fn path_entry_matches_case_and_trailing_separator() {
+        let dir = r"C:\Users\me\.local\bin";
+        for existing in [
+            r"C:\Users\Me\.Local\Bin",
+            r"c:\users\me\.local\bin\",
+            r"C:\Windows;C:\Users\me\.local\bin\",
+        ] {
+            assert_eq!(with_path_entry(existing, dir), None, "{existing}");
+        }
+    }
+
+    #[test]
+    fn path_entry_handles_missing_or_ragged_values() {
+        let dir = r"C:\Users\me\.local\bin";
+        assert_eq!(with_path_entry("", dir), Some(dir.to_string()));
+        // A trailing separator must not produce an empty entry.
+        assert_eq!(
+            with_path_entry(r"C:\Windows;", dir),
+            Some(r"C:\Windows;C:\Users\me\.local\bin".to_string())
+        );
+    }
+
+    #[test]
+    fn path_entry_does_not_match_on_a_prefix() {
+        // "C:\Users\me\.local\bin2" must not satisfy a request for "...\bin".
+        assert_eq!(
+            with_path_entry(r"C:\Users\me\.local\bin2", r"C:\Users\me\.local\bin"),
+            Some(r"C:\Users\me\.local\bin2;C:\Users\me\.local\bin".to_string())
+        );
     }
 }
 
