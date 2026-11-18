@@ -1,0 +1,145 @@
+/* ============================================================
+   install-cli-panel.css — "Install CLI" info panel
+   ============================================================ */
+
+.install-cli-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.install-cli-modal {
+  width: min(560px, calc(100vw - 48px));
+  max-width: 560px;
+  max-height: calc(100vh - 48px);
+}
+
+.install-cli-modal .settings-modal-body {
+  max-height: min(560px, calc(100vh - 140px));
+}
+
+.install-cli-body {
+  gap: 12px;
+}
+
+.install-cli-intro {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.install-cli-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.install-cli-group.is-current {
+  border-color: rgba(255, 196, 93, 0.4);
+  background: rgba(255, 196, 93, 0.06);
+}
+
+.install-cli-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.install-cli-group-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.install-cli-group-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 196, 93, 0.15);
+  color: #ffc45d;
+}
+
+.install-cli-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.install-cli-command {
+  display: grid;
+  gap: 4px;
+}
+
+.install-cli-command-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.install-cli-command-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.install-cli-code {
+  flex: 1;
+  min-width: 0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.install-cli-shell {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.install-cli-copy-btn {
+  flex-shrink: 0;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.install-cli-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.install-cli-copy-btn.is-copied {
+  color: #7ddc7d;
+}

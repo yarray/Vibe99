@@ -1,0 +1,1 @@
+Added an "Install CLI" panel (command palette → Install CLI, or Settings → Install CLI) that explains how to put `vibe99ctl` on your PATH on Windows, Linux and WSL, with a one-click copy button for every command.

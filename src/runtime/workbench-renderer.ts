@@ -42,6 +42,7 @@ import { createQuakeView } from './quake-view.js';
 
 import * as ShortcutsRegistry from '../shortcuts-registry';
 import * as ShortcutsUI from '../shortcuts-ui';
+import * as InstallCliPanel from '../install-cli-panel';
 import * as ColorsRegistry from '../colors-registry';
 import { createPaneState } from '../pane-state';
 import { setIcon } from '../icons';
@@ -75,6 +76,7 @@ export interface WorkbenchRendererDeps {
   hooksSettingsBtn: HTMLElement;
   layoutsSettingsBtn: HTMLElement;
   keyboardShortcutsSettingsBtn: HTMLElement;
+  installCliSettingsBtn: HTMLElement;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +103,7 @@ export interface WorkbenchRenderer {
   onShellProfilesSettingsClick: () => void;
   onHooksSettingsClick: () => void;
   onKeyboardShortcutsSettingsClick: () => void;
+  onInstallCliSettingsClick: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +125,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     hooksSettingsBtn,
     layoutsSettingsBtn,
     keyboardShortcutsSettingsBtn,
+    installCliSettingsBtn,
   } = deps;
 
   // -- Mutable bootstrap state ------------------------------------------------
@@ -739,6 +743,15 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
   }
 
+  function openInstallCliPanel(): void {
+    InstallCliPanel.openInstallCliPanel({
+      platform: bridge.platform,
+      copyText: (text) => bridge.writeClipboardText(text),
+      registerModal: (close) => modalStack.register(close),
+      unregisterModal: (close) => modalStack.unregister(close),
+    });
+  }
+
   // -- Keyboard dispatcher ----------------------------------------------------
 
   const keyboardActions = createActions({
@@ -981,6 +994,9 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     },
     onKeyboardShortcutsSettingsClick: () => {
       openShortcutsModal();
+    },
+    onInstallCliSettingsClick: () => {
+      openInstallCliPanel();
     },
   };
 }

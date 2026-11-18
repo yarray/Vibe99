@@ -7,6 +7,7 @@ import type { ModalStack } from './modal-stack';
 import type { ShellProfileManager, ShellProfile } from './shell-profiles';
 import type { AppCommand, CommandResult, WorkbenchMode } from './domain/commands';
 import * as ShortcutsUI from './shortcuts-ui';
+import * as InstallCliPanel from './install-cli-panel';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -130,6 +131,7 @@ export function createCommandPaletteEntries({
       { id: 'toggle-float', label: 'Toggle float window' },
       { id: 'profile-settings', label: 'Profile settings' },
       { id: 'shortcuts-settings', label: 'Shortcuts settings' },
+      { id: 'install-cli', label: 'Install CLI' },
       { id: 'layout-default', label: 'Layout: Open Default' },
       ...layoutManager.getLayouts()
         .filter((l) => l.id !== 'default')
@@ -155,6 +157,13 @@ export function createCommandPaletteEntries({
         closeKeyboardShortcutsModal();
         modalStack.register(closeKeyboardShortcutsModal);
         ShortcutsUI.openKeyboardShortcutsModal(bridge, settingsManager.scheduleSettingsSave);
+      } else if (commandId === 'install-cli') {
+        InstallCliPanel.openInstallCliPanel({
+          platform: bridge.platform,
+          copyText: (text) => bridge.writeClipboardText(text),
+          registerModal: (close) => modalStack.register(close),
+          unregisterModal: (close) => modalStack.unregister(close),
+        });
       } else if (commandId === 'layout-default') {
         dispatch({ type: 'layout.activate', layoutId: 'default' });
       } else if (commandId.startsWith('layout-open:')) {
