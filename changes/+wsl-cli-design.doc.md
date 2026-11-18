@@ -1,0 +1,1 @@
+Added the WSL design document `docs/design/wsl-cli.md`: evaluation of interop-wrapper vs loopback-TCP vs pipe-bridge options, the security-model analysis (no-auth socket, WSL boundary, token scope), the client transport resolution order, distribution plan, phased implementation and a risk table.
