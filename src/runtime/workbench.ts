@@ -86,6 +86,19 @@ export interface WorkbenchDeps {
   getShellProfiles: () => { id: string; themeId?: string }[];
   /** Id of the persisted layout this window is running (null before restore). */
   getActiveLayoutId: () => string | null;
+
+  /**
+   * The window's floating pane-indicator window.
+   *
+   * `setOpen` only accepts the request: Tauri creates the webview
+   * asynchronously, so the new state is not observable synchronously. That is
+   * why the CLI exposes `float.status` next to `float.set` — a retrying agent
+   * asks instead of assuming.
+   */
+  floatWindow: {
+    isOpen: () => boolean;
+    setOpen: (open: boolean) => void;
+  };
 }
 
 export interface Workbench {
@@ -135,7 +148,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
     layout: layoutInput, terminalSessionDeps, stageEl, paneActivityWatcher,
     paneAlert, tabBar, tabBarState, entryNeedsTabRefresh,
     paneState, setMode, getCurrentMode, scheduleSave, bridge, render: externalRender, setPaneActivityAlertEnabled,
-    getShellProfiles, getActiveLayoutId,
+    getShellProfiles, getActiveLayoutId, floatWindow,
   } = deps;
 
   const resolveLayout = typeof layoutInput === 'function'
@@ -622,6 +635,19 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
 
       case 'layout.activate': {
         void bridge.openLayoutWindow(command.layoutId).catch(() => {});
+        return ok();
+      }
+
+      case 'float.status': {
+        return ok({ open: floatWindow.isOpen() });
+      }
+
+      case 'float.set': {
+        // Idempotent: only ask the UI to change state when it has to, so a
+        // retried `float on` does not open a second window or steal focus.
+        if (command.open !== floatWindow.isOpen()) {
+          floatWindow.setOpen(command.open);
+        }
         return ok();
       }
 

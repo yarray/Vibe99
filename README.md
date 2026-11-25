@@ -169,6 +169,7 @@ Then, with Vibe99 running:
 vibe99ctl pane list
 vibe99ctl layout list
 vibe99ctl layout activate work
+vibe99ctl float on                 # show the floating pane indicator
 ```
 
 ### Settings
@@ -265,6 +266,18 @@ from any copy of the binary, overwrites its previous install, and never touches
 the app itself. Override the socket with `--socket <path>`, and bound slow calls
 with `--timeout <secs>` (default 5).
 
+`install-cli` also offers the **agent skill**: a generated `SKILL.md` that
+teaches Claude Code, Codex or Antigravity to drive the CLI. It asks once per
+agent it finds on the machine; with no terminal attached (the Windows installer
+runs it hidden) nothing is prompted and nothing is written. Install or refresh
+it later with:
+
+```bash
+vibe99ctl skill list       # targets, directories, what is installed
+vibe99ctl skill install    # every detected agent environment
+vibe99ctl skill show       # print the generated SKILL.md
+```
+
 ## Agent Integration
 
 Vibe99 ships `vibe99ctl`, a CLI that controls a running instance over a local
@@ -284,7 +297,8 @@ live runtime state — and the `--window` / `--timeout` flags select the target
 window and the wait budget.
 
 See [docs/agents.md](./docs/agents.md) for the full guide, and [AGENTS.md](./AGENTS.md)
-for the agent entry point.
+for the agent entry point. [docs/cli-coverage.md](./docs/cli-coverage.md) records
+which UI capabilities have a method and why the rest are UI-only.
 
 ### Agent Enhancements
 

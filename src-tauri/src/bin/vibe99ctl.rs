@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 #[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use vibe99_lib::enhance;
+use vibe99_lib::{enhance, skill};
 
 /// The method registry — the single source of truth shared with the server.
 ///
@@ -91,9 +91,26 @@ enum Commands {
         #[command(subcommand)]
         action: TerminalAction,
     },
+    /// Show or hide the floating pane indicator of a window
+    Float {
+        #[command(subcommand)]
+        action: FloatAction,
+    },
     /// Copy this binary to ~/.local/bin so it stays on PATH (idempotent;
     /// on Windows also adds that directory to the user PATH)
-    InstallCli,
+    InstallCli {
+        /// Also install the agent skill: `ask` (default, prompts for the
+        /// agents found on this machine), `none`, `all`, or a comma-separated
+        /// list of target ids
+        #[arg(long, default_value = "ask", value_name = "SPEC")]
+        skill: String,
+    },
+    /// Install the agent skill that teaches Claude Code, Codex and
+    /// Antigravity to drive this CLI (does not need the app running)
+    Skill {
+        #[command(subcommand)]
+        action: skill::Command,
+    },
     /// Install Vibe99's attention signal into agent CLIs (does not need the app running)
     Enhance {
         #[command(subcommand)]
@@ -221,6 +238,16 @@ enum TerminalAction {
     Resize { id: String, cols: u16, rows: u16 },
 }
 
+#[derive(Subcommand)]
+enum FloatAction {
+    /// Show the float window
+    On,
+    /// Hide the float window
+    Off,
+    /// Report whether the float window is open
+    Status,
+}
+
 fn resolve_socket_path(cli_socket: &Option<String>) -> Result<PathBuf, String> {
     if let Some(s) = cli_socket {
         return Ok(PathBuf::from(s));
@@ -266,7 +293,8 @@ fn resolve_command(cli: &Cli) -> Result<(String, Value), String> {
     match &cli.command {
         Commands::Describe { .. } => Err("`describe` is answered locally".to_string()),
         Commands::Enhance { .. } => Err("`enhance` is answered locally".to_string()),
-        Commands::InstallCli => Err("`install-cli` is answered locally".to_string()),
+        Commands::Skill { .. } => Err("`skill` is answered locally".to_string()),
+        Commands::InstallCli { .. } => Err("`install-cli` is answered locally".to_string()),
         Commands::Call { method, params } => {
             let parsed: Value = serde_json::from_str(params)
                 .map_err(|e| format!("invalid JSON params: {e}"))?;
@@ -375,6 +403,11 @@ fn resolve_command(cli: &Cli) -> Result<(String, Value), String> {
                 "terminal.resize".to_string(),
                 json!({"paneId": id, "cols": cols, "rows": rows}),
             )),
+        },
+        Commands::Float { action } => match action {
+            FloatAction::On => Ok(("float.set".to_string(), json!({"open": true}))),
+            FloatAction::Off => Ok(("float.set".to_string(), json!({"open": false}))),
+            FloatAction::Status => Ok(("float.status".to_string(), json!({}))),
         },
     }
 }
@@ -561,18 +594,13 @@ fn build_nested_setting(key: &str, value: Value) -> Value {
 ///
 /// The Windows installer runs this same command, so "already installed" and
 /// "PATH already correct" are normal outcomes, not failures.
-fn install_cli() -> Result<String, String> {
+fn install_cli(skill_spec: &str) -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| format!("cannot locate current executable: {e}"))?;
 
-    // On Windows the target is the user whose PATH gets the new entry, which
-    // is what USERPROFILE names. HOME can be a POSIX path inherited from a
-    // MSYS shell (`/home/me`, read as `C:\home\me`), so it is only the fallback.
-    #[cfg(windows)]
-    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
-    #[cfg(not(windows))]
-    let home = std::env::var_os("HOME");
-    let home = home.ok_or("cannot determine home directory (HOME/USERPROFILE not set)")?;
-    let bin_dir = PathBuf::from(home).join(".local").join("bin");
+    // The user whose PATH gets the new entry, resolved the same way as every
+    // other agent-facing path (USERPROFILE first on Windows).
+    let home = cli_registry::home_dir()?;
+    let bin_dir = home.join(".local").join("bin");
     std::fs::create_dir_all(&bin_dir).map_err(|e| format!("cannot create {}: {e}", bin_dir.display()))?;
 
     #[cfg(windows)]
@@ -601,7 +629,24 @@ fn install_cli() -> Result<String, String> {
     #[cfg(not(windows))]
     let path_note = String::new();
 
-    Ok(format!("vibe99ctl {} installed to {}{path_note}", env!("CARGO_PKG_VERSION"), dest.display()))
+    let mut message = format!(
+        "vibe99ctl {} installed to {}{path_note}",
+        env!("CARGO_PKG_VERSION"),
+        dest.display()
+    );
+
+    // Installing the binary is the moment the skill becomes useful, so offer it
+    // here. With no terminal (the Windows installer runs this hidden) nothing
+    // is prompted and nothing is written: the skill is opt-in.
+    let choice = skill::parse_choice(skill_spec)?;
+    if let Some(report) = skill::offer_install(&choice)? {
+        for line in skill::summary_lines(&report) {
+            message.push('\n');
+            message.push_str(&line);
+        }
+    }
+
+    Ok(message)
 }
 
 /// Whether `a` and `b` name the same file, tolerating the different spellings
@@ -707,8 +752,14 @@ fn main() {
         std::process::exit(enhance::run(action, socket.as_deref()));
     }
 
-    if matches!(&cli.command, Commands::InstallCli) {
-        std::process::exit(match install_cli() {
+    // `skill` writes into agent directories, so like `enhance` it works with
+    // the app closed.
+    if let Commands::Skill { action } = &cli.command {
+        std::process::exit(skill::run(action));
+    }
+
+    if let Commands::InstallCli { skill } = &cli.command {
+        std::process::exit(match install_cli(skill) {
             Ok(message) => {
                 println!("{message}");
                 0
@@ -916,6 +967,9 @@ mod tests {
             (&["profile", "delete", "work"], "profile.delete"),
             (&["terminal", "send-keys", "pane-1", "ls"], "terminal.send-keys"),
             (&["terminal", "resize", "pane-1", "120", "40"], "terminal.resize"),
+            (&["float", "on"], "float.set"),
+            (&["float", "off"], "float.set"),
+            (&["float", "status"], "float.status"),
         ];
 
         for (args, expected) in cases {
