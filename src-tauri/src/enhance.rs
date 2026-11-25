@@ -120,15 +120,6 @@ pub fn find_agent(id: &str) -> Result<&'static Agent, String> {
     })
 }
 
-fn home_dir() -> Result<PathBuf, String> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .ok_or_else(|| {
-            "cannot determine the home directory (HOME/USERPROFILE is not set)".to_string()
-        })
-}
-
 fn config_path(agent: &Agent, home: &Path) -> PathBuf {
     agent
         .config_path
@@ -285,6 +276,10 @@ pub enum Command {
         /// Print the exact changes without touching any file
         #[arg(long)]
         dry_run: bool,
+        /// Also install the vibe99ctl agent skill: `ask` (default), `none`,
+        /// `all`, or a comma-separated list of target ids
+        #[arg(long, default_value = "ask", value_name = "SPEC")]
+        skill: String,
     },
     /// Remove the hooks Vibe99 added, leaving everything else in place
     Uninstall {
@@ -315,7 +310,11 @@ pub enum Command {
 pub fn run(command: &Command, socket: Option<&Path>) -> i32 {
     let result = match command {
         Command::List => Ok(list()),
-        Command::Install { agent, dry_run } => install(agent, *dry_run),
+        Command::Install {
+            agent,
+            dry_run,
+            skill,
+        } => install(agent, *dry_run, skill),
         Command::Uninstall { agent, dry_run } => uninstall(agent, *dry_run),
         Command::Notify { event, message } => {
             return match notify(*event, message.as_deref()) {
@@ -369,9 +368,12 @@ fn list() -> Value {
     })
 }
 
-fn install(agent_id: &str, dry_run: bool) -> Result<Value, String> {
+fn install(agent_id: &str, dry_run: bool, skill_spec: &str) -> Result<Value, String> {
     let agent = find_agent(agent_id)?;
-    let file = config_path(agent, &home_dir()?);
+    // Validate the flag before touching disk: a bad --skill value must fail
+    // before the hooks are merged, not after.
+    let skill_choice = crate::skill::parse_choice(skill_spec)?;
+    let file = config_path(agent, &crate::cli_registry::home_dir()?);
     let exe = current_exe()?;
     let plan = plan_install(agent, &exe, &file)?;
 
@@ -387,19 +389,28 @@ fn install(agent_id: &str, dry_run: bool) -> Result<Value, String> {
     }
 
     let outcome = apply(plan, false)?;
-    Ok(json!({
+    let mut report = json!({
         "agent": agent.id,
         "file": outcome.plan.file.display().to_string(),
         "action": outcome.plan.kind.slug(),
         "changes": outcome.plan.changes,
         "backup": outcome.backup.map(|path| path.display().to_string()),
         "warnings": outcome.warnings,
-    }))
+    });
+
+    // Hooks and the skill are independent — each works without the other — but
+    // a user wiring an agent up in one command wants both, so the install
+    // offers the skill instead of leaving it for a second command.
+    if let Some(skill) = crate::skill::offer_for_agent(agent.id, &skill_choice)? {
+        report["skill"] = skill;
+    }
+
+    Ok(report)
 }
 
 fn uninstall(agent_id: &str, dry_run: bool) -> Result<Value, String> {
     let agent = find_agent(agent_id)?;
-    let file = config_path(agent, &home_dir()?);
+    let file = config_path(agent, &crate::cli_registry::home_dir()?);
     let plan = plan_uninstall(agent, &file)?;
 
     if dry_run {
@@ -472,7 +483,7 @@ fn write_terminal(bytes: &[u8]) -> Result<(), String> {
 }
 
 fn doctor(socket: Option<&Path>, only: Option<&str>) -> i32 {
-    let home = match home_dir() {
+    let home = match crate::cli_registry::home_dir() {
         Ok(home) => home,
         Err(error) => {
             eprintln!("Error: {error}");
@@ -966,7 +977,7 @@ fn prune_backups(file: &Path, warnings: &mut Vec<String>) {
 
 /// Write through a sibling temp file so a failed write cannot leave the
 /// user's settings truncated, and keep the original file mode.
-fn write_atomic(file: &Path, contents: &[u8]) -> Result<(), String> {
+pub(crate) fn write_atomic(file: &Path, contents: &[u8]) -> Result<(), String> {
     let directory = file
         .parent()
         .ok_or_else(|| format!("{} has no parent directory", file.display()))?;

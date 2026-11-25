@@ -12,6 +12,15 @@ vibe99ctl enhance uninstall claude-code           # remove only the hooks Vibe99
 
 `enhance` works whether or not Vibe99 is running — it edits the agent's own config, not Vibe99 state.
 
+`enhance install` also offers `vibe99ctl`'s **agent skill** for the same agent:
+a generated `SKILL.md` that teaches the agent to drive Vibe99 (panes, layouts,
+settings, the float window) instead of discovering the CLI call by call. The
+two are independent — the hooks work without the skill and the skill without
+the hooks — so the offer is a convenience, not a prerequisite. Answer `n`, or
+pass `--skill none` / `--skill all` / `--skill <ids>`, to decide without a
+prompt; the prompt is skipped when stdin is not a terminal. See
+[agents.md](./agents.md#install-the-skill) for the target directories.
+
 ## How the signal works
 
 Vibe99 lights the breathing alert the moment a pane's terminal emits BEL (`0x07`) or an OSC notification sequence (OSC 9 / 777 / 99) — see VIB-375. Agent CLIs emit none of these on their own, so the installer adds hooks to the agent's settings:

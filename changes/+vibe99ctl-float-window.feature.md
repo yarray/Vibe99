@@ -1,0 +1,1 @@
+`vibe99ctl` can now show and hide the floating pane indicator: `float.set {open}` and `float.status`, or the shortcuts `vibe99ctl float on|off|status`. Both methods appear in `vibe99ctl describe` and in the generated agent skill.

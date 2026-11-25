@@ -600,6 +600,24 @@ pub static METHODS: &[MethodSpec] = &[
         None,
         "Ok."
     ),
+    method!(
+        "float.set",
+        Passthrough,
+        "Show or hide the floating pane indicator window of a window.",
+        [param!("open", "boolean", true, "true shows the float window, false hides it.")],
+        r#"{"open":true}"#,
+        Some("vibe99ctl float on"),
+        "Ok once the request is accepted. The float window is created asynchronously, so read `float.status` for the live state."
+    ),
+    method!(
+        "float.status",
+        Passthrough,
+        "Report whether the floating pane indicator window is open.",
+        [],
+        "{}",
+        Some("vibe99ctl float status"),
+        "An object with `open` (boolean)."
+    ),
 ];
 
 // ---------------------------------------------------------------------------
@@ -614,6 +632,27 @@ pub fn find(name: &str) -> Option<&'static MethodSpec> {
 // ---------------------------------------------------------------------------
 // Runtime paths
 // ---------------------------------------------------------------------------
+
+/// The user's home directory.
+///
+/// `USERPROFILE` wins on Windows: a POSIX shell there may export `HOME` as
+/// `/home/me`, which Windows reads as `C:\home\me`. Everywhere else `HOME` is
+/// the answer, with `USERPROFILE` as the fallback for a bare `cmd.exe`
+/// environment. Everything that writes into an agent's configuration — the
+/// skill, `enhance`, `install-cli` — resolves through here.
+pub fn home_dir() -> Result<PathBuf, String> {
+    let candidates: &[&str] = if cfg!(windows) {
+        &["USERPROFILE", "HOME"]
+    } else {
+        &["HOME", "USERPROFILE"]
+    };
+    for name in candidates {
+        if let Some(value) = std::env::var_os(name) {
+            return Ok(PathBuf::from(value));
+        }
+    }
+    Err("cannot determine the home directory (HOME/USERPROFILE is not set)".to_string())
+}
 
 /// Resolve the directory that holds CLI-related files (PID, socket).
 ///

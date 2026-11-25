@@ -19,6 +19,39 @@ vibe99ctl call pane.create --params '{"shellProfileId":"ssh-prod"}'   # any meth
 `describe` is static data: it works even when Vibe99 is not running. Every
 other command needs a running instance.
 
+## Install the skill
+
+`vibe99ctl` can install itself as a skill, so an agent starts out knowing the
+CLI instead of discovering it call by call:
+
+```bash
+vibe99ctl skill list      # targets, their directories, what is installed
+vibe99ctl skill install   # every agent environment detected on this machine
+vibe99ctl skill install claude-code codex
+vibe99ctl skill install --all --dry-run   # show what would change, write nothing
+vibe99ctl skill show      # print the generated SKILL.md
+vibe99ctl skill uninstall # remove it again
+```
+
+| Target id | Agent | Skill directories |
+|-----------|-------|-------------------|
+| `claude-code` | Claude Code | `~/.claude/skills/vibe99ctl/` |
+| `codex` | Codex | `~/.codex/skills/vibe99ctl/` |
+| `antigravity` | Antigravity | `~/.gemini/antigravity-cli/skills/vibe99ctl/` (agent CLI) and `~/.gemini/config/skills/vibe99ctl/` (2.0 app/IDE) |
+
+`vibe99ctl install-cli` asks whether to install the skill, one target at a
+time, for the agents it finds (`--skill none|all|claude-code,codex` skips the
+question). `vibe99ctl enhance install claude-code` offers the matching skill
+after it merges the hooks. Neither prompts when stdin is not a terminal — the
+Windows installer runs `install-cli` without a console, and a prompt there
+would hang it — so unprompted installs stay opt-in and never write into agent
+directories on their own.
+
+The `SKILL.md` catalogue is **generated from the same method registry** that
+`describe` renders, so it covers every method, its parameters and a runnable
+call; a unit test fails if a registered method is missing. Re-run
+`vibe99ctl skill install` after upgrading Vibe99 to refresh the copy.
+
 ## Is Vibe99 running?
 
 `describe` reports the runtime it would talk to:
@@ -70,6 +103,8 @@ vibe99ctl settings schema
 vibe99ctl shell list
 vibe99ctl terminal send-keys <pane-id> <text>
 vibe99ctl terminal resize <pane-id> <cols> <rows>
+vibe99ctl float on | off | status
+vibe99ctl skill list | install | uninstall | show
 ```
 
 Every shortcut maps to a method of the same catalogue, so `vibe99ctl pane list`
@@ -167,6 +202,7 @@ The methods, grouped by what they act on:
 | Terminal | `terminal.send-keys`, `terminal.resize`, `terminal.restart`, `terminal.changeShell` |
 | Shell profiles | `shell.list`, `profile.list`, `profile.create`, `profile.update`, `profile.delete` |
 | Workbench mode | `mode.set` |
+| Float window | `float.set`, `float.status` |
 
 The `route` of each method says where it runs:
 
@@ -255,6 +291,30 @@ programmatic equivalent of the `Ctrl+\`` shortcut. It answers
 vibe99ctl call terminal.changeShell --params '{"paneId":"pane-1","profileId":"zsh"}'
 ```
 
+### Show or hide the floating pane indicator
+
+The float window is the small always-on-top strip that mirrors every pane's
+color and alert state. `float.set` takes `open` rather than toggling, so a
+retried call cannot flip it the wrong way:
+
+```bash
+vibe99ctl float on
+vibe99ctl float status      # {"open": true}
+vibe99ctl float off
+```
+
+The window is created asynchronously, so `float.set` reports acceptance and
+`float.status` reports the live state.
+
+### Teach the agent about the CLI
+
+```bash
+vibe99ctl skill install
+```
+
+This writes `SKILL.md` into every detected agent environment. See
+[Install the skill](#install-the-skill).
+
 ## For Vibe99 developers
 
 The catalogue is generated from a single table,
@@ -272,6 +332,13 @@ Unit tests keep the three in sync: the registry and the handler table must
 describe the same methods, and every passthrough method must exist as an
 `AppCommand`. A method that is not registered is rejected with `-32601`, so a
 half-added method fails loudly instead of silently doing nothing.
+
+The agent skill (`src-tauri/src/skill.rs`) renders its catalogue from the same
+table, and a test asserts that every method and error code appears in it, so
+the installed SKILL.md cannot fall behind `describe`. The gap between what the
+UI can do and what the CLI exposes is tracked in
+[cli-coverage.md](./cli-coverage.md), together with the reason each remaining
+UI-only capability stays that way.
 
 The routing parameters every method accepts (`windowId`, `timeoutMs`) are
 declared once, in `REQUEST_PARAMS`, next to the methods they apply to.
