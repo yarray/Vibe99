@@ -1,3 +1,15 @@
+## 0.24.0 - 2026-11-25
+
+### Added
+
+- `vibe99ctl` can install itself as an agent skill. `vibe99ctl skill list|install|uninstall|show` writes a `SKILL.md` into Claude Code, Codex and Antigravity environments (each target selectable), and `install-cli` / `enhance install` offer it during the install. The catalogue is generated from the same method registry as `vibe99ctl describe`, so the skill always covers every method, its parameters and a runnable call; installs are idempotent and refuse to overwrite a hand-written skill.
+- `vibe99ctl` can now show and hide the floating pane indicator: `float.set {open}` and `float.status`, or the shortcuts `vibe99ctl float on|off|status`. Both methods appear in `vibe99ctl describe` and in the generated agent skill.
+
+### Documentation
+
+- Added `docs/cli-coverage.md`, an inventory of UI capabilities against the `vibe99ctl` method catalogue with a verdict and reason for every capability that stays UI-only.
+
+
 ## 0.23.0 - 2026-11-18
 
 ### Added
