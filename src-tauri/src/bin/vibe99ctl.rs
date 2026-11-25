@@ -460,7 +460,7 @@ fn send_request(
         use tokio::net::windows::named_pipe::ClientOptions;
 
         let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_io()
+            .enable_all()
             .build()
             .map_err(|e| format!("failed to create tokio runtime: {e}"))?;
 
