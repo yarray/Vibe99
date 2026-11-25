@@ -50,6 +50,24 @@ function runCtl(args) {
   });
 }
 
+/** Run vibe99ctl without parsing stdout (for commands that print text). */
+function runCtlRaw(args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      ctlBinary,
+      args,
+      { timeout: 30000, windowsHide: true, ...options },
+      (err, stdout, stderr) => {
+        if (err) {
+          reject(new Error(`vibe99ctl ${args.join(' ')} failed: ${(stderr || err.message).trim()}`));
+        } else {
+          resolve(stdout);
+        }
+      },
+    );
+  });
+}
+
 /** Wait until the CLI server is up and `pane list` answers. */
 async function waitUntilCtlResponds() {
   await waitForCondition(async () => {
@@ -171,6 +189,71 @@ describe('vibe99ctl CLI bridge', () => {
   it('layout save acknowledges the command', async () => {
     const saved = await runCtl(['layout', 'save']);
     expect(saved.ok).toBe(true);
+  });
+
+  it('float status reports the float window and float set shows and hides it', async () => {
+    const catalogue = await runCtl(['describe']);
+    const floatSet = catalogue.methods.find((method) => method.name === 'float.set');
+    expect(floatSet).toBeTruthy();
+    expect(floatSet.route).toBe('passthrough');
+    expect(catalogue.methods.map((method) => method.name)).toContain('float.status');
+
+    // Start from a known state: the float window is a persisted preference.
+    await runCtl(['float', 'off']);
+    expect((await runCtl(['float', 'status'])).open).toBe(false);
+
+    await runCtl(['float', 'on']);
+    await waitForCondition(
+      async () => (await runCtl(['float', 'status'])).open === true,
+      10000,
+      300,
+    );
+    // The UI agrees with the CLI, and the webview really exists.
+    await browser.waitUntil(() => browser.execute(() => window.__floatWindowManager.isOpen()), {
+      timeout: 10000,
+      interval: 200,
+    });
+
+    await runCtl(['float', 'off']);
+    await waitForCondition(
+      async () => (await runCtl(['float', 'status'])).open === false,
+      10000,
+      300,
+    );
+  });
+
+  it('skill install writes the generated SKILL.md into the selected agent environment', async () => {
+    // Isolated home so the test never touches the machine's real agent config.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'vibe99-skill-e2e-'));
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
+    const skillFile = path.join(home, '.claude', 'skills', 'vibe99ctl', 'SKILL.md');
+
+    try {
+      const report = JSON.parse(await runCtlRaw(['skill', 'install', 'claude-code'], { env }));
+      expect(report.targets[0].files[0].path).toBe(skillFile);
+      expect(report.targets[0].files[0].action).toBe('create');
+
+      // Generated from the method registry: the catalogue covers the methods
+      // `describe` reports, including the ones added for the float window.
+      const skill = fs.readFileSync(skillFile, 'utf8');
+      expect(skill).toContain('name: vibe99ctl');
+      expect(skill).toContain('float.set');
+      expect(skill).toContain('pane.create');
+      expect(skill).toContain('vibe99ctl float on');
+
+      const listed = JSON.parse(await runCtlRaw(['skill', 'list'], { env }));
+      const claude = listed.targets.find((target) => target.id === 'claude-code');
+      expect(claude.files[0].installed).toBe(true);
+      expect(claude.files[0].current).toBe(true);
+
+      const again = JSON.parse(await runCtlRaw(['skill', 'install', 'claude-code'], { env }));
+      expect(again.targets[0].files[0].action).toBe('unchanged');
+
+      JSON.parse(await runCtlRaw(['skill', 'uninstall', 'claude-code'], { env }));
+      expect(fs.existsSync(skillFile)).toBe(false);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 
   after(async () => {

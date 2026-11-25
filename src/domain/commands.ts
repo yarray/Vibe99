@@ -226,6 +226,28 @@ export interface LayoutActivateCommand {
 }
 
 // ---------------------------------------------------------------------------
+// Float window commands
+// ---------------------------------------------------------------------------
+
+/**
+ * Show or hide the window's floating pane-indicator window.
+ *
+ * `set` (not `toggle`) keeps the call idempotent: an agent that retries after
+ * a timeout cannot flip the window the wrong way. The float window is created
+ * asynchronously, so this reports acceptance, not the final state — read
+ * `float.status` for that.
+ */
+export interface FloatSetCommand {
+  type: 'float.set';
+  open: boolean;
+}
+
+/** Whether the window's floating pane-indicator window is open. */
+export interface FloatStatusCommand {
+  type: 'float.status';
+}
+
+// ---------------------------------------------------------------------------
 // Union type
 // ---------------------------------------------------------------------------
 
@@ -264,7 +286,9 @@ export type AppCommand =
   | FocusCommitCommand
   | ModeSetCommand
   | LayoutSaveCommand
-  | LayoutActivateCommand;
+  | LayoutActivateCommand
+  | FloatSetCommand
+  | FloatStatusCommand;
 
 // ---------------------------------------------------------------------------
 // Command result

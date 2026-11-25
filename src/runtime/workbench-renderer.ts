@@ -399,6 +399,15 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     },
     getShellProfiles: () => shellProfiles,
     getActiveLayoutId: () => layoutManager.getWindowLayoutId(),
+    // Same late-bound access as `settingsManager` above: the manager is
+    // created after the workbench, and dispatch only runs once init() has.
+    floatWindow: {
+      isOpen: () => floatWindowManager.isOpen(),
+      setOpen: (open) => {
+        const action = open ? floatWindowManager.open() : floatWindowManager.close();
+        void action.catch(reportError);
+      },
+    },
   });
 
   paneRenderer = createPaneRenderer({

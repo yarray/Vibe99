@@ -23,6 +23,11 @@ methods are answered by the frontend from the live runtime state. Use
 `--window <label>` to target a specific window, and `--timeout <seconds>` to
 bound the wait for the UI.
 
+`vibe99ctl skill install` writes a `SKILL.md` — generated from the same
+catalogue — into Claude Code, Codex and Antigravity, so this knowledge is
+available to an agent that never sees this repository. `vibe99ctl install-cli`
+offers it as part of the install.
+
 **[docs/agents.md](./docs/agents.md) is the full guide**: how to tell whether
 the app is running, the transport and error codes, and worked workflows
 (changing settings, opening a pane, running an SSH profile, sending keys).

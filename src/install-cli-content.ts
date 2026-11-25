@@ -141,11 +141,16 @@ const DISCOVER_SECTION: InstallCliSection = {
   platforms: [],
   notes: [
     'vibe99ctl describe prints every callable method as JSON — it is the entry point for finding out what the CLI can do, and it works even when Vibe99 is not running. The full guide lives in docs/agents.md.',
+    'vibe99ctl skill install writes a SKILL.md into Claude Code, Codex and Antigravity, so those agents know the CLI without being told.',
   ],
   commands: [
     {
       label: 'List every command',
       command: 'vibe99ctl describe',
+    },
+    {
+      label: 'Teach your coding agent',
+      command: 'vibe99ctl skill install',
     },
   ],
 };
