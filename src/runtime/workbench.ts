@@ -57,6 +57,8 @@ export interface WorkbenchDeps {
   };
 
   stageEl: HTMLElement;
+  /** Whether the focused terminal's cursor should blink right now (VIB-391). */
+  cursorBlink: { blinking: () => boolean };
 
   paneActivityWatcher: {
     noteResize: (paneId: string) => void;
@@ -148,7 +150,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
     layout: layoutInput, terminalSessionDeps, stageEl, paneActivityWatcher,
     paneAlert, tabBar, tabBarState, entryNeedsTabRefresh,
     paneState, setMode, getCurrentMode, scheduleSave, bridge, render: externalRender, setPaneActivityAlertEnabled,
-    getShellProfiles, getActiveLayoutId, floatWindow,
+    getShellProfiles, getActiveLayoutId, floatWindow, cursorBlink,
   } = deps;
 
   const resolveLayout = typeof layoutInput === 'function'
@@ -252,7 +254,7 @@ export function createWorkbench(deps: WorkbenchDeps): Workbench {
       session.root.classList.toggle('is-focused', isFocused);
       session.setAccent(accentColor);
       session.setTheme(pane.themeId());
-      session.setCursorBlink(isFocused && document.visibilityState === 'visible');
+      session.setCursorBlink(isFocused && cursorBlink.blinking());
 
       if (refit || session.needsFit()) {
         session.fit({ force: true });

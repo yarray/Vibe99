@@ -17,6 +17,7 @@ import {
 } from '../command-palette';
 import { createPaneActivityWatcher } from '../pane-activity-watcher';
 import { createBreathingMaskAlert } from '../pane-alert-breathing-mask';
+import { createCursorBlinkPolicy } from './cursor-blink-policy';
 import {
   clearLayoutWindowBinding,
 } from '../bridge';
@@ -199,6 +200,13 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   const paneAlert = createBreathingMaskAlert();
   let globalBreathingEnabled = true;
 
+  // Cursor blink is a continuous repaint, so it is only worth running while
+  // the user is actually interacting; see cursor-blink-policy for the why
+  // (VIB-391).
+  const cursorBlink = createCursorBlinkPolicy({
+    onChange: () => paneRenderer?.refreshCursorBlink(),
+  });
+
   // Breathing pulses the color card to transparent and back; the peak is the
   // brightness the card briefly returns to mid-pulse, scaled against the user's
   // mask opacity so the effect reads consistently at any mask strength.
@@ -337,6 +345,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
 
   workbench = createWorkbench({
     layout: () => paneState.getLayout(),
+    cursorBlink,
     terminalSessionDeps: {
       bridge,
       settingsManager,
@@ -414,6 +423,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     paneState,
     settingsManager,
     paneAlert,
+    cursorBlink,
     paneActivityWatcher,
     stageEl,
     getMode: () => currentMode,
@@ -527,21 +537,36 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
     paneActivityWatcher.setIgnoreFocus(floatWindowManager.isOpen() && !document.hasFocus());
   }
 
+  // Any key, click or scroll re-arms the cursor blink window; once it lapses
+  // the cursor goes solid and the terminal stops repainting (VIB-391).
+  const noteUserActivity = (): void => cursorBlink.noteActivity();
+  window.addEventListener('keydown', noteUserActivity, true);
+  window.addEventListener('pointerdown', noteUserActivity, true);
+  window.addEventListener('wheel', noteUserActivity, { capture: true, passive: true });
+
   window.addEventListener('focus', () => {
     syncIgnoreFocus();
+    cursorBlink.setWindowActive(true);
+    cursorBlink.noteActivity();
     paneActivityWatcher.setFocus(paneState.getFocusedPaneId());
     paneRenderer?.refreshActivitySnapshots();
     if (document.visibilityState === 'visible') {
       render();
     }
   });
-  window.addEventListener('blur', () => syncIgnoreFocus());
+  window.addEventListener('blur', () => {
+    syncIgnoreFocus();
+    cursorBlink.setWindowActive(false);
+  });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       document.body.classList.add('is-window-hidden');
+      cursorBlink.setWindowActive(false);
     } else {
       document.body.classList.remove('is-window-hidden');
+      cursorBlink.setWindowActive(true);
+      cursorBlink.noteActivity();
       render();
     }
   });
@@ -920,6 +945,7 @@ export function createWorkbenchRenderer(deps: WorkbenchRendererDeps): WorkbenchR
   function dispose(): void {
     layoutManager.flushWindowLayoutSave();
     settingsManager.flushSettingsSave();
+    cursorBlink.dispose();
     hotkeyHandler.dispose();
     quakeView?.dispose();
     clearLayoutWindowBinding(layoutManager.getWindowLayoutId() ?? undefined, bridge.currentWindowLabel);

@@ -2,6 +2,7 @@ import type { PaneState } from './pane-state';
 import type { PaneAlertStrategy } from './pane-alert-breathing-mask';
 import type { SettingsManager } from './settings';
 import type { Workbench } from './runtime/workbench';
+import type { CursorBlinkPolicy } from './runtime/cursor-blink-policy';
 
 // ---------------------------------------------------------------------------
 // Exported types
@@ -11,6 +12,8 @@ export interface PaneRendererDeps {
   paneState: PaneState;
   settingsManager: SettingsManager;
   paneAlert: PaneAlertStrategy;
+  /** Decides whether the focused terminal's cursor should blink (VIB-391). */
+  cursorBlink: CursorBlinkPolicy;
   paneActivityWatcher: {
     setFocus: (paneId: string | null) => void;
   };
@@ -23,6 +26,8 @@ export interface PaneRenderer {
   /** Ensure sessions are synchronized with Layout's pane collection. */
   ensureSessions: () => void;
   renderPanes: (refit?: boolean) => void;
+  /** Re-apply the cursor blink decision without rebuilding the layout. */
+  refreshCursorBlink: () => void;
   fitTerminal: (paneId: string, force?: boolean) => void;
   write: (paneId: string, data: string) => void;
   clearTerminal: (paneId: string) => void;
@@ -62,6 +67,7 @@ export function createPaneRenderer({
   paneState,
   settingsManager,
   paneAlert,
+  cursorBlink,
   paneActivityWatcher,
   stageEl,
   getMode,
@@ -109,6 +115,20 @@ export function createPaneRenderer({
     return Boolean(pane && pane.title === null);
   }
 
+  // -- Cursor blink -------------------------------------------------------------
+
+  // Blink only the focused pane, and only while the user is interacting with
+  // the window — a solid cursor at idle keeps the app from repainting forever
+  // (VIB-391).
+  function refreshCursorBlink(): void {
+    const focusedPaneId = paneState.getFocusedPaneId();
+    for (const pane of paneState.getPanes()) {
+      const session = workbench.session(pane.id);
+      if (!session) continue;
+      session.setCursorBlink(pane.id === focusedPaneId && cursorBlink.blinking());
+    }
+  }
+
   // -- Rendering ----------------------------------------------------------------
 
   function renderPanes(refit = false): void {
@@ -137,7 +157,7 @@ export function createPaneRenderer({
 
       session.setAccent(accentColor);
       session.setTheme(pane.themeId);
-      session.setCursorBlink(isFocused && document.visibilityState === 'visible');
+      session.setCursorBlink(isFocused && cursorBlink.blinking());
 
       if (refit || session.needsFit()) {
         session.fit({ force: true });
@@ -150,6 +170,7 @@ export function createPaneRenderer({
   return {
     ensureSessions: () => workbench.ensureSessions(),
     renderPanes,
+    refreshCursorBlink,
     fitTerminal: (paneId, force = false) => {
       const session = workbench.session(paneId);
       if (!session) return;

@@ -798,6 +798,13 @@ export function createTerminalSession(deps: TerminalSessionDeps): TerminalSessio
   }
 
   function setCursorBlink(enabled: boolean): void {
+    // Render passes run on every layout/focus change; writing the option
+    // unconditionally would restart xterm's blink timer each time. Read the
+    // live value instead of caching so an application that turned blink on
+    // via DECSET 12 is still switched back off (VIB-391).
+    if (terminal.options.cursorBlink === enabled) {
+      return;
+    }
     terminal.options.cursorBlink = enabled;
   }
 
