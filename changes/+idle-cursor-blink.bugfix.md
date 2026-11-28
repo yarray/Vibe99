@@ -1,0 +1,1 @@
+Vibe99 no longer keeps a CPU core busy while idle: the focused terminal's cursor stops blinking a few seconds after the last key, click or scroll, and resumes on the next input or when the window regains focus.
